@@ -28,7 +28,9 @@ enum riscv_abi_type {
   ABI_ILP32D,
   ABI_LP64,
   ABI_LP64F,
-  ABI_LP64D
+  ABI_LP64D,
+  ABI_LP64DV,
+  ABI_LP64V
 };
 extern enum riscv_abi_type riscv_abi;
 
@@ -39,10 +41,18 @@ enum riscv_code_model {
 };
 extern enum riscv_code_model riscv_cmodel;
 
+enum riscv_vlen_bits {
+  VLEN_64 = 64,
+  VLEN_128 = 128
+};
+extern enum riscv_vlen_bits riscv_vlen;
+
 /* Keep this list in sync with define_attr "tune" in riscv.md.  */
 enum riscv_microarchitecture_type {
   generic,
-  sifive_7
+  sifive_7,
+  c910,
+  c906
 };
 extern enum riscv_microarchitecture_type riscv_microarchitecture;
 

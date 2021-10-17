@@ -11863,6 +11863,14 @@ cat >>confdefs.h <<_ACEOF
 #define IFUNC_RESOLVER_ARGS $IFUNC_RESOLVER_ARGS
 _ACEOF
 
+xthead_CFLAGS=
+for i in $save_CFLAGS;
+do
+if [ "$i" != "-pthread" ];then
+xthead_CFLAGS="$xthead_CFLAGS $i"
+fi
+done
+save_CFLAGS=$xthead_CFLAGS
 
 # Disable fallbacks to __sync routines from libgcc.  Otherwise we'll
 # make silly decisions about what the cpu can do.

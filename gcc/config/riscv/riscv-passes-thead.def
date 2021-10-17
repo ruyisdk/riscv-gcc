@@ -1,0 +1,2 @@
+INSERT_PASS_AFTER (pass_cse, 1, pass_delete_redundancy_fsrm);
+INSERT_PASS_AFTER (pass_ree, 1, pass_delete_redundancy_sext);

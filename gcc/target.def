@@ -6781,6 +6781,10 @@ following it should not be run.  Usually true only for virtual assembler\n\
 targets.",
 bool, false)
 
+DEFHOOK
+(iv_gen_load_index, "*",
+bool, (HOST_WIDE_INT loop_niter, machine_mode mem_mode), NULL)
+
 /* Leave the boolean fields at the end.  */
 
 /* Functions related to mode switching.  */

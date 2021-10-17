@@ -4663,6 +4663,10 @@ get_address_cost (struct ivopts_data *data, struct iv_use *use,
 
   if (!aff_combination_const_p (aff_inv))
     {
+      if (targetm.iv_gen_load_index == NULL
+	 || targetm.iv_gen_load_index (avg_loop_niter (data->current_loop),
+				       mem_mode))
+      {
       parts.index = integer_one_node;
       /* Addressing mode "base + index".  */
       ok_without_ratio_p = valid_mem_ref_p (mem_mode, as, &parts);
@@ -4706,6 +4710,7 @@ get_address_cost (struct ivopts_data *data, struct iv_use *use,
 	}
       else
 	parts.index = NULL_TREE;
+      }
     }
   else
     {
@@ -4764,8 +4769,16 @@ get_address_cost (struct ivopts_data *data, struct iv_use *use,
 	 generated invariant expression may not be hoisted out of loop by
 	 following pass.  We penalize the cost by rounding up in order to
 	 neutralize such effects.  */
+      #ifdef TARGET_XTHEAD_IV_ADJUST_ADDR_COST
+      if (TARGET_XTHEAD_IV_ADJUST_ADDR_COST)
+        {
+          cost.cost = adjust_setup_cost (data, cost.cost, true);
+          cost.scratch = cost.cost;
+        }
+      #else
       cost.cost = adjust_setup_cost (data, cost.cost, true);
       cost.scratch = cost.cost;
+      #endif
     }
 
   cost += var_cost;

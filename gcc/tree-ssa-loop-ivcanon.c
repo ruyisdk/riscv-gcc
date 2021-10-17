@@ -163,7 +163,13 @@ struct loop_size
 static bool
 constant_after_peeling (tree op, gimple *stmt, class loop *loop)
 {
+#ifdef TARGET_XTHEAD_INVARIANT_AS_CONSTANT
+  if (CONSTANT_CLASS_P (op) || (TARGET_XTHEAD_INVARIANT_AS_CONSTANT
+				&& TREE_CODE (op) == ADDR_EXPR
+				&& is_gimple_invariant_address (op)))
+#else
   if (CONSTANT_CLASS_P (op))
+#endif
     return true;
 
   /* We can still fold accesses to constant arrays when index is known.  */

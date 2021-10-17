@@ -139,6 +139,10 @@
   switch (GET_CODE (op))
     {
     case CONST_INT:
+      #ifdef TARGET_XTHEAD_EXPAND_SPLIT_IMM
+      if (!TARGET_XTHEAD_EXPAND_SPLIT_IMM)
+	return true;
+      #endif
       return !splittable_const_int_operand (op, mode);
 
     case CONST:

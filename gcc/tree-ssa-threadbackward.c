@@ -805,6 +805,11 @@ public:
 bool
 pass_thread_jumps::gate (function *fun ATTRIBUTE_UNUSED)
 {
+  #ifdef TARGET_XTHEAD_THREAD1
+  static int pass_thread_jumps_xck = 0;
+  if (!TARGET_XTHEAD_THREAD1 && !(pass_thread_jumps_xck++ % 4))
+    return 0;
+  #endif
   return flag_expensive_optimizations;
 }
 

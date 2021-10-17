@@ -527,6 +527,7 @@ riscv*)
 	cpu_type=riscv
 	extra_objs="riscv-builtins.o riscv-c.o riscv-sr.o riscv-shorten-memrefs.o"
 	d_target_objs="riscv-d.o"
+	extra_headers="riscv-vector.h riscv-dsp.h"
 	;;
 rs6000*-*-*)
 	extra_options="${extra_options} g.opt fused-madd.opt rs6000/rs6000-tables.opt"
@@ -4552,13 +4553,15 @@ case "${target}" in
 		# pick a default based on the ISA, preferring soft-float
 		# unless the D extension is present.
 		case "${with_abi}" in
-		ilp32 | ilp32e | ilp32f | ilp32d | lp64 | lp64f | lp64d)
+		ilp32 | ilp32e | ilp32f | ilp32d | lp64 | lp64f | lp64d | lp64v | lp64dv)
 			;;
 		"")
 			case "${with_arch}" in
 			rv32*d* | rv32g*) with_abi=ilp32d ;;
 			rv32e*) with_abi=ilp32e ;;
 			rv32*) with_abi=ilp32 ;;
+			rv64*d*v* | rv64g*v*) with_abi=lp64dv ;;
+			rv64*v*) with_abi=lp64v ;;
 			rv64*d* | rv64g*) with_abi=lp64d ;;
 			rv64*) with_abi=lp64 ;;
 			esac
@@ -4576,7 +4579,8 @@ case "${target}" in
 		| ilp32d,rv32*d* | ilp32d,rv32g* \
 		| lp64,rv64* \
 		| lp64f,rv64*f* | lp64f,rv64g* \
-		| lp64d,rv64*d* | lp64d,rv64g*)
+		| lp64d,rv64*d* | lp64d,rv64g* \
+		| lp64dv,rv64*d*v* | lp64dv,rv64g*v* | lp64v,rv64*v*)
 			;;
 		*)
 			echo "--with-abi=${with_abi} is not supported for ISA ${with_arch}" 1>&2

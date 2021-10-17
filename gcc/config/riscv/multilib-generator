@@ -92,10 +92,19 @@ def arch_canonicalize(arch):
 
   # Single letter extension might appear in the long_exts list,
   # becasue we just append extensions list to the arch string.
-  std_exts += list(filter(lambda x:len(x) == 1, long_exts))
+  std_exts += list(filter(lambda x:len(x.lstrip('_')) == 1, long_exts))
+
+  def longext_sort (exts):
+    if not exts.startswith("zxm") and exts.startswith("z"):
+      if exts[1] not in canonical_order:
+        raise Exception("Unsupported extension `%s`" % exts)
+      canonical_sort = canonical_order.index(exts[1])
+    else:
+      canonical_sort = -1
+    return (exts.startswith("x"), exts.startswith("zxm"), LONG_EXT_PREFIXES.index(exts[0]), canonical_sort, exts[1:])
 
   # Multi-letter extension must be in lexicographic order.
-  long_exts = list(sorted(filter(lambda x:len(x) != 1, long_exts)))
+  long_exts = list(sorted(filter(lambda x:len(x) != 1, long_exts), key=longext_sort))
 
   # Put extensions in canonical order.
   for ext in canonical_order:
@@ -134,14 +143,13 @@ def add_underline_prefix(ext):
 def _expand_combination(ext):
   exts = list(ext.split("*"))
 
-  # No need to expand if there is no `*`.
-  if len(exts) == 1:
-    return [(exts[0],)]
-
   # Add underline to every extension.
   # e.g.
   #  _b * zvamo => _b * _zvamo
   exts = list(map(lambda x: '_' + x, exts))
+  # No need to expand if there is no `*`.
+  if len(exts) == 1:
+    return [(exts[0],)]
 
   # Generate combination!
   ext_combs = []
@@ -213,7 +221,9 @@ for cfg in sys.argv[1:]:
   # Drop duplicated entry.
   alts = unique(alts)
 
-  for alt in alts[1:]:
+  for alt in alts:
+    if alt == arch:
+      continue
     arches[alt] = 1
     reuse.append('march.%s/mabi.%s=march.%s/mabi.%s' % (arch, abi, alt, abi))
   required.append('march=%s/mabi=%s' % (arch, abi))

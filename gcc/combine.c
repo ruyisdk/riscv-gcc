@@ -15054,7 +15054,12 @@ make_more_copies (void)
 static unsigned int
 rest_of_handle_combine (void)
 {
+#ifdef TARGET_XTHEAD_COMBINE_COPY
+  if (TARGET_XTHEAD_COMBINE_COPY)
+    make_more_copies ();
+#else
   make_more_copies ();
+#endif
 
   df_set_flags (DF_LR_RUN_DCE + DF_DEFER_INSN_RESCAN);
   df_note_add_problem ();

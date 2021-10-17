@@ -59,7 +59,7 @@
 
 ;; Implement atomic stores with amoswap.  Fall back to fences for atomic loads.
 (define_insn "atomic_store<mode>"
-  [(set (match_operand:GPR 0 "memory_operand" "=A")
+  [(set (match_operand:GPR 0 "riscv_sync_memory_operand" "=A")
     (unspec_volatile:GPR
       [(match_operand:GPR 1 "reg_or_0_operand" "rJ")
        (match_operand:SI 2 "const_int_operand")]      ;; model
@@ -69,7 +69,7 @@
   [(set (attr "length") (const_int 8))])
 
 (define_insn "atomic_<atomic_optab><mode>"
-  [(set (match_operand:GPR 0 "memory_operand" "+A")
+  [(set (match_operand:GPR 0 "riscv_sync_memory_operand" "+A")
 	(unspec_volatile:GPR
 	  [(any_atomic:GPR (match_dup 0)
 		     (match_operand:GPR 1 "reg_or_0_operand" "rJ"))
@@ -81,7 +81,7 @@
 
 (define_insn "atomic_fetch_<atomic_optab><mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&r")
-	(match_operand:GPR 1 "memory_operand" "+A"))
+	(match_operand:GPR 1 "riscv_sync_memory_operand" "+A"))
    (set (match_dup 1)
 	(unspec_volatile:GPR
 	  [(any_atomic:GPR (match_dup 1)
@@ -95,7 +95,7 @@
 (define_insn "atomic_exchange<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&r")
 	(unspec_volatile:GPR
-	  [(match_operand:GPR 1 "memory_operand" "+A")
+	  [(match_operand:GPR 1 "riscv_sync_memory_operand" "+A")
 	   (match_operand:SI 3 "const_int_operand")] ;; model
 	  UNSPEC_SYNC_EXCHANGE))
    (set (match_dup 1)
@@ -106,7 +106,7 @@
 
 (define_insn "atomic_cas_value_strong<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&r")
-	(match_operand:GPR 1 "memory_operand" "+A"))
+	(match_operand:GPR 1 "riscv_sync_memory_operand" "+A"))
    (set (match_dup 1)
 	(unspec_volatile:GPR [(match_operand:GPR 2 "reg_or_0_operand" "rJ")
 			      (match_operand:GPR 3 "reg_or_0_operand" "rJ")
@@ -121,7 +121,7 @@
 (define_expand "atomic_compare_and_swap<mode>"
   [(match_operand:SI 0 "register_operand" "")   ;; bool output
    (match_operand:GPR 1 "register_operand" "")  ;; val output
-   (match_operand:GPR 2 "memory_operand" "")    ;; memory
+   (match_operand:GPR 2 "riscv_sync_memory_operand" "")    ;; memory
    (match_operand:GPR 3 "reg_or_0_operand" "")  ;; expected value
    (match_operand:GPR 4 "reg_or_0_operand" "")  ;; desired value
    (match_operand:SI 5 "const_int_operand" "")  ;; is_weak
@@ -154,7 +154,7 @@
 
 (define_expand "atomic_test_and_set"
   [(match_operand:QI 0 "register_operand" "")     ;; bool output
-   (match_operand:QI 1 "memory_operand" "+A")    ;; memory
+   (match_operand:QI 1 "riscv_sync_memory_operand" "+A")    ;; memory
    (match_operand:SI 2 "const_int_operand" "")]   ;; model
   "TARGET_ATOMIC"
 {

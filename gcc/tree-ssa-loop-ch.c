@@ -180,6 +180,10 @@ should_duplicate_loop_header_p (basic_block header, class loop *loop,
 	}
     }
 
+#ifdef TARGET_XTHEAD_DUP_LOOP_HEADER
+  if (!TARGET_XTHEAD_DUP_LOOP_HEADER)
+    {
+#endif
   /* If the condition tests a non-IV loop variant we do not want to rotate
      the loop further.  Unless this is the original loop header.  */
   tree lhs = gimple_cond_lhs (last);
@@ -201,6 +205,9 @@ should_duplicate_loop_header_p (basic_block header, class loop *loop,
 		 " variant.\n", header->index);
       return false;
     }
+#ifdef TARGET_XTHEAD_DUP_LOOP_HEADER
+    }
+#endif
 
   if (dump_file && (dump_flags & TDF_DETAILS))
     fprintf (dump_file, "    Will duplicate bb %i\n", header->index); 

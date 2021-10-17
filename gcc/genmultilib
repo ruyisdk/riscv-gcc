@@ -187,6 +187,7 @@ EOF
 chmod +x tmpmultilib
 
 combinations=`initial=/ ./tmpmultilib ${options}`
+echo ${combinations} > t-comb
 
 # If there exceptions, weed them out now
 if [ -n "${exceptions}" ]; then
@@ -196,7 +197,7 @@ if [ -n "${exceptions}" ]; then
 # switches that should not be generated.  The output looks like
 # a list of subdirectory names with leading and trailing slashes.
 
-  for opt in $@; do
+  for opt in $`cat $1`; do
     case "$opt" in
 EOF
 
@@ -210,7 +211,7 @@ cat >>tmpmultilib2 <<\EOF
   done
 EOF
   chmod +x tmpmultilib2
-  combinations=`./tmpmultilib2 ${combinations}`
+  combinations=`./tmpmultilib2 t-comb`
 fi
 
 # If the MULTILIB_REQUIRED list are provided,
@@ -221,7 +222,7 @@ if [ -n "${multilib_required}" ]; then
 # This recursive script weeds out any combination of multilib
 # switches that not in the expected list.
 
-  for opt in $@; do
+  for opt in $`cat $1`; do
     case "$opt" in
 EOF
 
@@ -236,9 +237,11 @@ cat >>tmpmultilib2 <<\EOF
 EOF
 
    chmod +x tmpmultilib2
-   combinations=`./tmpmultilib2 ${combinations}`
+   combinations=`./tmpmultilib2 t-comb`
 
 fi
+
+rm t-comb
 
 # Construct a sed pattern which will convert option names to directory
 # names.

@@ -19,10 +19,10 @@ along with GCC; see the file COPYING3.  If not see
 
 #define TARGET_OS_CPP_BUILTINS()				\
   do {								\
-    GNU_USER_TARGET_OS_CPP_BUILTINS();				\
+    GNU_USER_TARGET_OS_CPP_BUILTINS ();				\
   } while (0)
 
-#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux-riscv" XLEN_SPEC "-" ABI_SPEC ".so.1"
+#define GLIBC_DYNAMIC_LINKER "/lib/ld-linux-riscv" XLEN_SPEC ARCH_SPEC "-" ABI_SPEC ".so.1"
 
 #define MUSL_ABI_SUFFIX \
   "%{mabi=ilp32:-sf}" \
@@ -69,8 +69,8 @@ along with GCC; see the file COPYING3.  If not see
 
 #define TARGET_ASM_FILE_END file_end_indicate_exec_stack
 
-#define STARTFILE_PREFIX_SPEC 			\
-   "/lib" XLEN_SPEC "/" ABI_SPEC "/ "		\
-   "/usr/lib" XLEN_SPEC "/" ABI_SPEC "/ "	\
+#define STARTFILE_PREFIX_SPEC				\
+   "/lib" XLEN_SPEC ARCH_SPEC "/" ABI_SPEC "/ "		\
+   "/usr/lib" XLEN_SPEC ARCH_SPEC "/" ABI_SPEC "/ "	\
    "/lib/ "					\
    "/usr/lib/ "

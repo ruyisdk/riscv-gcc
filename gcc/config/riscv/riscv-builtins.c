@@ -37,6 +37,9 @@ along with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "langhooks.h"
 
+#include "stringpool.h"
+#include "riscv-builtins-thead.h"
+
 /* Macros to create an enumeration identifier for a function prototype.  */
 #define RISCV_FTYPE_NAME0(A) RISCV_##A##_FTYPE
 #define RISCV_FTYPE_NAME1(A, B) RISCV_##A##_FTYPE_##B
@@ -45,6 +48,8 @@ along with GCC; see the file COPYING3.  If not see
 enum riscv_function_type {
 #define DEF_RISCV_FTYPE(NARGS, LIST) RISCV_FTYPE_NAME##NARGS LIST,
 #include "config/riscv/riscv-ftypes.def"
+#include "config/riscv/riscv-ftypes-v.def"
+#include "config/riscv/riscv-ftypes-p.def"
 #undef DEF_RISCV_FTYPE
   RISCV_MAX_FTYPE_MAX
 };
@@ -85,7 +90,19 @@ struct riscv_builtin_description {
   unsigned int (*avail) (void);
 };
 
+AVAIL (dsp, TARGET_XTHEAD_DSP)
+AVAIL (zpsfoperand, TARGET_XTHEAD_ZPSFOPERAND)
+AVAIL (dsp32, TARGET_XTHEAD_DSP && !TARGET_64BIT)
+AVAIL (dsp64, TARGET_XTHEAD_DSP && TARGET_64BIT)
+
 AVAIL (hard_float, TARGET_HARD_FLOAT)
+AVAIL (vector, TARGET_XTHEAD_VECTOR)
+AVAIL (vector64, TARGET_XTHEAD_VLEN (64))
+AVAIL (vector128, TARGET_XTHEAD_VLEN (128))
+AVAIL (vector64_hardfloat, TARGET_XTHEAD_VLEN (64) && TARGET_HARD_FLOAT)
+AVAIL (vector128_hardfloat, TARGET_XTHEAD_VLEN (128) && TARGET_HARD_FLOAT)
+AVAIL (vector64_fp16, TARGET_XTHEAD_VLEN (64) && TARGET_XTHEAD_FP16)
+AVAIL (vector128_fp16, TARGET_XTHEAD_VLEN (128) && TARGET_XTHEAD_FP16)
 
 /* Construct a riscv_builtin_description from the given arguments.
 
@@ -129,7 +146,11 @@ AVAIL (hard_float, TARGET_HARD_FLOAT)
 
 static const struct riscv_builtin_description riscv_builtins[] = {
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
-  DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float)
+  DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
+  DIRECT_BUILTIN (frrm, RISCV_USI_FTYPE, hard_float),
+  DIRECT_NO_TARGET_BUILTIN (fsrm, RISCV_VOID_FTYPE_USI, hard_float),
+  #include "config/riscv/riscv-builtins-v.def"
+  #include "config/riscv/riscv-builtins-p.def"
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the
@@ -142,6 +163,8 @@ static GTY(()) int riscv_builtin_decl_index[NUM_INSN_CODES];
 
 #define GET_BUILTIN_DECL(CODE) \
   riscv_builtin_decls[riscv_builtin_decl_index[(CODE)]]
+
+#include "riscv-builtins-thead.c"
 
 /* Return the function type associated with function prototype TYPE.  */
 
@@ -160,6 +183,8 @@ riscv_build_function_type (enum riscv_function_type type)
 				  NULL_TREE);				\
     break;
 #include "config/riscv/riscv-ftypes.def"
+#include "config/riscv/riscv-ftypes-v.def"
+#include "config/riscv/riscv-ftypes-p.def"
 #undef DEF_RISCV_FTYPE
       default:
 	gcc_unreachable ();
@@ -173,14 +198,18 @@ riscv_build_function_type (enum riscv_function_type type)
 void
 riscv_init_builtins (void)
 {
+  riscv_init_fp16_types ();
+  riscv_init_vector_types ();
+
   for (size_t i = 0; i < ARRAY_SIZE (riscv_builtins); i++)
     {
       const struct riscv_builtin_description *d = &riscv_builtins[i];
       if (d->avail ())
 	{
 	  tree type = riscv_build_function_type (d->prototype);
+	  size_t fcode = TARGET_XTHEAD_VECTOR ? 0 : i;
 	  riscv_builtin_decls[i]
-	    = add_builtin_function (d->name, type, i, BUILT_IN_MD, NULL, NULL);
+	    = add_builtin_function (d->name, type, fcode, BUILT_IN_MD, NULL, NULL);
 	  riscv_builtin_decl_index[d->icode] = i;
 	}
     }
@@ -217,7 +246,11 @@ static rtx
 riscv_expand_builtin_insn (enum insn_code icode, unsigned int n_ops,
 			   struct expand_operand *ops, bool has_target_p)
 {
-  if (!maybe_expand_insn (icode, n_ops, ops))
+  /* The "clrov" has no operand. And this case can't be treated well at
+     "maybe_expand_insn", so we treat it specially. */
+  if (n_ops == 0)
+    emit_insn (GEN_FCN (icode) ());
+  else if (!maybe_expand_insn (icode, n_ops, ops))
     {
       error ("invalid argument to built-in function");
       return has_target_p ? gen_reg_rtx (ops[0].mode) : const0_rtx;
@@ -259,8 +292,32 @@ riscv_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
 		      int ignore ATTRIBUTE_UNUSED)
 {
   tree fndecl = TREE_OPERAND (CALL_EXPR_FN (exp), 0);
-  unsigned int fcode = DECL_MD_FUNCTION_CODE (fndecl);
-  const struct riscv_builtin_description *d = &riscv_builtins[fcode];
+  const struct riscv_builtin_description *d;
+
+  if (TARGET_XTHEAD_VECTOR)
+    {
+      tree name_id = DECL_NAME (fndecl);
+      size_t i;
+
+      for (i = 0; i < ARRAY_SIZE (riscv_builtins); i++)
+	{
+	  d = &riscv_builtins[i];
+	  if (d->avail () && name_id == get_identifier (d->name))
+	      break;
+	}
+
+      if (!d->avail () || name_id != get_identifier (d->name))
+	  gcc_unreachable ();
+
+      extra_argument_check (d, exp);
+    }
+  else
+    {
+      unsigned int fcode = DECL_FUNCTION_CODE (fndecl);
+      d = &riscv_builtins[fcode];
+    }
+
+  riscv_warning_builtin_args (d->prototype, exp);
 
   switch (d->builtin_type)
     {

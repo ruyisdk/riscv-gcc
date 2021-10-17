@@ -30,7 +30,7 @@ Target Report Var(TARGET_PLT) Init(1)
 When generating -fpic code, allow the use of PLTs. Ignored for fno-pic.
 
 mabi=
-Target Report RejectNegative Joined Enum(abi_type) Var(riscv_abi) Init(ABI_ILP32)
+Target Report RejectNegative Joined Enum(abi_type) Var(riscv_abi) Init(ABI_ILP32) Negative(mabi=)
 Specify integer and floating-point calling convention.
 
 mpreferred-stack-boundary=
@@ -62,6 +62,12 @@ Enum(abi_type) String(lp64f) Value(ABI_LP64F)
 EnumValue
 Enum(abi_type) String(lp64d) Value(ABI_LP64D)
 
+EnumValue
+Enum(abi_type) String(lp64v) Value(ABI_LP64V)
+
+EnumValue
+Enum(abi_type) String(lp64dv) Value(ABI_LP64DV)
+
 mfdiv
 Target Report Mask(FDIV)
 Use hardware floating-point divide and square root instructions.
@@ -71,7 +77,7 @@ Target Report Mask(DIV)
 Use hardware instructions for integer division.
 
 march=
-Target Report RejectNegative Joined
+Target Report RejectNegative Joined Negative(march=)
 -march=	Generate code for given RISC-V ISA (e.g. RV64IM).  ISA strings must be
 lower-case.
 
@@ -137,6 +143,158 @@ Mask(DOUBLE_FLOAT)
 Mask(RVC)
 
 Mask(RVE)
+
+; T-Head mask
+
+Mask(XTHEAD)
+
+Mask(XTHEAD_C)
+
+Mask(XTHEAD_E)
+
+Mask(XTHEAD_SE)
+
+Mask(VECTOR)
+
+Mask(DSP)
+
+Mask(ZPSFOPERAND)
+
+; T-Head extension
+
+mldr
+Target Report Var(riscv_insn_ldr) Init(1) Undocumented
+Enable ldr and str instructions.
+
+mldi
+Target Report Var(riscv_insn_ldi) Init(1) Undocumented
+Enable ldib/ldia and stib/stia instructions.
+
+mfldr
+Target Report Var(riscv_insn_fldr) Init(1) Undocumented
+Enable float ldr and str instructions.
+
+mext
+Target Report Var(riscv_insn_ext) Init(1) Undocumented
+Enable ext and extu instructions.
+
+mmula
+Target Report Var(riscv_insn_mula) Init(1) Undocumented
+Enable multiply accumulate instructions.
+
+maddsl
+Target Report Var(riscv_insn_addsl) Init(1) Undocumented
+Enable addsl instructions.
+
+maddsluw
+Target Report Var(riscv_insn_addsluw) Init(0) Undocumented
+Enable addsluw instructions.
+
+mrev
+Target Report Var(riscv_insn_rev) Init(1) Undocumented
+Enable rev instructions.
+
+mrevw
+Target Report Var(riscv_insn_revw) Init(1) Undocumented
+Enable revw instructions.
+
+msrri
+Target Report Var(riscv_insn_srri) Init(1) Undocumented
+Enable srri instructions.
+
+msrriw
+Target Report Var(riscv_insn_srriw) Init(1) Undocumented
+Enable srriw instructions.
+
+mcondmv
+Target Report Var(riscv_insn_condmv) Init(1) Undocumented
+Enable mveqz and mvnez instructions.
+
+mldd
+Target Report Var(riscv_insn_ldd) Init(1) Undocumented
+Enable ldd and sdd instructions.
+
+mxor-combine
+Target Report Var(riscv_xor_combine) Init(1) Undocumented
+Optimize xor combine operation with constant.
+
+mfp16
+Target Report Var(riscv_insn_fp16) Init(1) Undocumented
+Enable __fp16 type.
+
+mfclass
+Target Report Var(riscv_insn_fclass) Init(1) Undocumented
+Enable fclass instruction.
+
+mfmvhw32
+Target Report Var(riscv_insn_fmvhw32) Init(1) Undocumented
+Enable 32 bit fmv.x.hw and fmv.hw.x instructions.
+
+mipush
+Target Report Var(riscv_insn_ipush) Init(1) Undocumented
+Enable ipush and ipop instructions.
+
+mvlen=
+Target Report RejectNegative Joined Enum(vlen_bits) Var(riscv_vlen) Init(VLEN_128)
+Specify bits of vector register.
+
+Enum
+Name(vlen_bits) Type(enum riscv_vlen_bits)
+Supported VLEN (for use with the -mvlen= option):
+
+EnumValue
+Enum(vlen_bits) String(64) Value(VLEN_64)
+
+EnumValue
+Enum(vlen_bits) String(128) Value(VLEN_128)
+
+mdelete-fsrm
+Target Report Var(riscv_insn_dfsrm) Init(1) Undocumented
+Optimize code by deleting redundancy fsrm.
+
+mdelete-sext
+Target Report Var(riscv_insn_dsext) Init(1) Undocumented
+Optimize code by deleting redundancy sext.
+
+mcombine-copy
+Target Report Var(riscv_combine_copy) Init(0) Undocumented
+Enable copy feature in pass combine.
+
+Wbuiltin-const-overflow
+Target Var(warn_builtin_const_overflow) Init(1) Warning
+Warn if the const value for the builtin was overflowed.
+
+mdup-loop-header
+Target Var(riscv_dup_loop_header) Init(1) Undocumented
+Enable duplicate header block that has non-IV loop variant in ch2 pass.
+
+mipa-unhot-inline
+Target Report Var(riscv_ipa_unhot_inline) Init(0) Undocumented
+Make not big speedup code inline more.
+
+minvariant-as-constant
+Target Var(riscv_invariant_as_constant) Init(1) Undocumented
+Treat invariant as constant when compute the cost of unroll loop.
+
+m4k-opts
+Target Report Var(riscv_4k_optimize) Init(0)
+Optimize load instruction generation of loop.
+
+msignedness-cmpiv
+Target Bool Var(riscv_signedness_comparison_iv) Init(1) Undocumented
+Enable signedness comparison when canonicalize induce varaible.
+
+mthread-jumps1
+Target Bool Var(riscv_thread_jumps1) Init(1)
+Enable first pass of thread jumps optimization.
+
+miv-adjust-addr-cost
+Target Bool Var(riscv_iv_adjust_addr_cost) Init(1)
+Enable address cost adjustment in pass loop-ivopts.
+
+mexpand-split-imm
+Target Bool Var(riscv_expand_split_imm) Init(1) Undocumented
+Enable split immediate operand in expand.
 
 mriscv-attribute
 Target Report Var(riscv_emit_attribute_p) Init(-1)

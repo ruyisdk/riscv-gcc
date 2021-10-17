@@ -270,42 +270,38 @@ riscv_subset_list::parsing_subset_version (const char *p,
   unsigned version = 0;
   unsigned major = 0;
   unsigned minor = 0;
-  char np;
   *explicit_version_p = false;
 
-  for (; *p; ++p)
-    {
-      if (*p == 'p')
-	{
-	  np = *(p + 1);
+  /* If we got `p`, that means we are still parsing standard extension.  */
+  gcc_assert (std_ext_p || *p != 'p');
 
-	  if (!ISDIGIT (np))
-	    {
-	      /* Might be beginning of `p` extension.  */
-	      if (std_ext_p)
-		{
-		  *major_version = version;
-		  *minor_version = 0;
-		  *explicit_version_p = true;
-		  return p;
-		}
-	      else
-		{
-		  error_at (m_loc, "%<-march=%s%>: Expect number "
-			    "after %<%dp%>.", m_arch, version);
-		  return NULL;
-		}
-	    }
-
-	  major = version;
-	  major_p = false;
-	  version = 0;
-	}
-      else if (ISDIGIT (*p))
-	version = (version * 10) + (*p - '0');
-      else
-	break;
-    }
+  if (*p != 'p') {
+    for (; *p; ++p)
+      {
+	if (*p == 'p')
+	  {
+	    if (!ISDIGIT (*(p+1)))
+	      {
+		error_at (m_loc, "%<-march=%s%>: Expect number "
+			  "after %<%dp%>.", m_arch, version);
+		return NULL;
+	      }
+	    if (!major_p)
+	      {
+		error_at (m_loc, "%<-march=%s%>: ISA version with more than 2 "
+			  "level is not supported.", m_arch);
+		return NULL;
+	      }
+	    major = version;
+	    major_p = false;
+	    version = 0;
+	  }
+	else if (ISDIGIT (*p))
+	  version = (version * 10) + (*p - '0');
+	else
+	  break;
+      }
+  }
 
   if (major_p)
     major = version;
@@ -399,7 +395,7 @@ riscv_subset_list::parse_std_ext (const char *p)
       return NULL;
     }
 
-  while (*p)
+  while (p != NULL && *p)
     {
       char subset[2] = {0, 0};
 
@@ -455,14 +451,14 @@ riscv_subset_list::parse_std_ext (const char *p)
    explicitly given by user or not.  */
 void
 riscv_subset_list::handle_implied_ext (const char *ext,
-				       int major_version,
-				       int minor_version,
-				       bool explicit_version_p)
+					int major_version,
+					int minor_version,
+					bool explicit_version_p)
 {
   riscv_implied_info_t *implied_info;
   for (implied_info = &riscv_implied_info[0];
-       implied_info->ext;
-       ++implied_info)
+	implied_info->ext;
+	++implied_info)
     {
       if (strcmp (ext, implied_info->ext) != 0)
 	continue;
@@ -521,6 +517,8 @@ riscv_subset_list::parse_multiletter_ext (const char *p,
 				  /* default_minor_version= */ 0,
 				  /* std_ext_p= */ FALSE,
 				  &explicit_version_p);
+      if (end_of_version == NULL)
+	return NULL;
 
       *q = '\0';
 
@@ -533,6 +531,7 @@ riscv_subset_list::parse_multiletter_ext (const char *p,
 	}
 
       add (subset, major_version, minor_version, explicit_version_p);
+
       free (subset);
       p += end_of_version - subset;
 
@@ -604,9 +603,22 @@ riscv_subset_list::parse (const char *arch, location_t loc)
   if (*p != '\0')
     {
       error_at (loc, "%<-march=%s%>: unexpected ISA string at end: %qs",
-               arch, p);
+		arch, p);
       goto fail;
     }
+
+  /* Compatible with X-Thead old extension instruction names.  */
+  riscv_subset_t *implied_subset;
+  if ((implied_subset = subset_list->lookup ("xthead")))
+    {
+      if (subset_list->m_xlen == 32)
+	 if (subset_list->lookup ("e"))
+	   implied_subset->name = "xtheadse";
+	 else
+	   implied_subset->name = "xtheade";
+      else if (subset_list->m_xlen == 64)
+	 implied_subset->name = "xtheadc";
+  }
 
   return subset_list;
 
@@ -645,6 +657,14 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"f", &gcc_options::x_target_flags, MASK_HARD_FLOAT},
   {"d", &gcc_options::x_target_flags, MASK_DOUBLE_FLOAT},
   {"c", &gcc_options::x_target_flags, MASK_RVC},
+
+  {"xtheadc", &gcc_options::x_target_flags, MASK_XTHEAD_C | MASK_XTHEAD},
+  {"xtheade", &gcc_options::x_target_flags, MASK_XTHEAD_E | MASK_XTHEAD},
+  {"xtheadse", &gcc_options::x_target_flags, MASK_XTHEAD_SE |MASK_XTHEAD},
+  {"v", &gcc_options::x_target_flags, MASK_VECTOR},
+  {"p", &gcc_options::x_target_flags, MASK_DSP},
+  {"zpsfoperand", &gcc_options::x_target_flags, MASK_ZPSFOPERAND},
+
   {NULL, NULL, 0}
 };
 
@@ -675,7 +695,6 @@ riscv_parse_arch_string (const char *isa,
       else if (subset_list->xlen () == 64)
 	opts->x_target_flags |= MASK_64BIT;
 
-
       for (arch_ext_flag_tab = &riscv_ext_flag_table[0];
 	   arch_ext_flag_tab->ext;
 	   ++arch_ext_flag_tab)
@@ -683,7 +702,16 @@ riscv_parse_arch_string (const char *isa,
 	  if (subset_list->lookup (arch_ext_flag_tab->ext))
 	    opts->*arch_ext_flag_tab->var_ref |= arch_ext_flag_tab->mask;
 	}
+
+      if (subset_list->lookup ("p") && subset_list->xlen () == 64)
+	opts->x_target_flags |= MASK_ZPSFOPERAND;
     }
+
+  if (subset_list->lookup ("xcki"))
+    error_at (loc, "The ISA name 'xcki' is no longer maintained, please use 'xthead{c,e,se}' instead");
+
+  if (subset_list->lookup ("xcrypto"))
+    error_at (loc, "The ISA name 'xcrypto' is no longer maintained, please use 'xtheade' instead");
 
   if (current_subset_list)
     delete current_subset_list;

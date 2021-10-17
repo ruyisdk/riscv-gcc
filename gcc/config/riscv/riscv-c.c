@@ -36,6 +36,20 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
 {
   builtin_define ("__riscv");
 
+  if (TARGET_XTHEAD)
+    builtin_define ("__riscv_xthead");
+  if (TARGET_XTHEAD_C)
+    builtin_define ("__riscv_xtheadc");
+  if (TARGET_XTHEAD_E)
+    builtin_define ("__riscv_xtheade");
+  if (TARGET_XTHEAD_SE)
+    builtin_define ("__riscv_xtheadse");
+
+  if (TARGET_XTHEAD_VECTOR)
+    builtin_define_with_int_value ("__riscv_vector", riscv_vlen);
+  if (TARGET_XTHEAD_FP16)
+    builtin_define ("__riscv_fp16");
+
   if (TARGET_RVC)
     builtin_define ("__riscv_compressed");
 
@@ -62,6 +76,16 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__riscv_fsqrt");
     }
 
+  if (TARGET_XTHEAD_DSP)
+    {
+      builtin_define ("__riscv_dsp");
+    }
+
+  if (TARGET_XTHEAD_ZPSFOPERAND)
+    {
+      builtin_define ("__riscv_zpsfoperand");
+    }
+
   switch (riscv_abi)
     {
     case ABI_ILP32E:
@@ -70,7 +94,10 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
 
     case ABI_ILP32:
     case ABI_LP64:
+    case ABI_LP64V:
       builtin_define ("__riscv_float_abi_soft");
+      if (riscv_abi == ABI_LP64V)
+	builtin_define ("__riscv_vector_abi_v");
       break;
 
     case ABI_ILP32F:
@@ -80,7 +107,10 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
 
     case ABI_ILP32D:
     case ABI_LP64D:
+    case ABI_LP64DV:
       builtin_define ("__riscv_float_abi_double");
+      if (riscv_abi == ABI_LP64DV)
+	builtin_define ("__riscv_vector_abi_v");
       break;
     }
 

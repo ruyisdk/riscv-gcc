@@ -19,4 +19,30 @@ You should have received a copy of the GNU General Public License
 along with GCC; see the file COPYING3.  If not see
 <http://www.gnu.org/licenses/>.  */
 
+FLOAT_MODE (HF, 2, ieee_half_format);
 FLOAT_MODE (TF, 16, ieee_quad_format);
+
+/* Vector modes. */
+VECTOR_MODES (INT, 4);		/*              V4QI V2HI */
+VECTOR_MODES (INT, 8);		/*         V8QI V4HI V2SI */
+VECTOR_MODES (INT, 16);		/*   V16QI V8HI V4SI V2DI */
+VECTOR_MODES (INT, 32);		/*  V32QI V16HI V8SI V4DI V2TI*/
+VECTOR_MODES (INT, 64);		/* V64QI V32HI V16SI V8DI V4TI*/
+VECTOR_MODES (INT, 128);	/* V128QI V64HI V32SI V16DI V8TI*/
+
+VECTOR_MODES (FLOAT, 8);	/*                   V2SF */
+VECTOR_MODES (FLOAT, 16);	/*              V4SF V2DF */
+VECTOR_MODES (FLOAT, 32);	/*         V8SF V4DF V2TF */
+VECTOR_MODES (FLOAT, 64);	/*        V16SF V8DF V4TF */
+VECTOR_MODES (FLOAT, 128);	/*       V32SF V16DF V8TF */
+
+VECTOR_MODE (FLOAT, DF, 1);	/* V1DF */
+VECTOR_MODE (FLOAT, TF, 1);	/* V1TF */
+VECTOR_MODE (INT, DI, 1);	/* V1DI */
+VECTOR_MODE (INT, TI, 1);	/* V1TI */
+
+INT_MODE (OI, 32);
+INT_MODE (XI, 64);
+INT_MODE (ZI, 128);
+
+#include "config/riscv/riscv-seg-modes.def"
