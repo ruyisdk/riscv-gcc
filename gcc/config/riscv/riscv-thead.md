@@ -1079,3 +1079,4 @@
   "ipush")
 
 (include "c906.md")
+(include "c910.md")
