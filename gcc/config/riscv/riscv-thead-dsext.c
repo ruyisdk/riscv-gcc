@@ -1,6 +1,15 @@
 
 static sbitmap sext_marked;
 
+static void mark_insn (rtx_insn *insn)
+{
+  bitmap_set_bit (sext_marked, INSN_UID (insn));
+
+  if (dump_file)
+    fprintf (dump_file, "Add insn %d to sext queue.\n",
+	     INSN_UID (insn));
+}
+
 static void init_dsext_data (void)
 {
   basic_block bb;
@@ -22,32 +31,33 @@ static void init_dsext_data (void)
 	    {
 	      rtx source = SET_SRC (PATTERN (insn));
 	      enum rtx_code code = GET_CODE (source);
+	      machine_mode mode = GET_MODE (SET_DEST (PATTERN (insn)));
 
-	      if (GET_MODE (SET_DEST (PATTERN (insn))) == SImode)
+	      if (mode == SImode)
 		{
 		  if (code == PLUS || code == MINUS
 		      || code == MULT || code == DIV
 		      || code == UDIV || code == BSWAP
 		      || code == ASHIFT || code == ASHIFTRT
-		      || code == LSHIFTRT || code == ROTATERT)
-		    {
-		      bitmap_set_bit (sext_marked, INSN_UID (insn));
-
-		      if (dump_file)
-			fprintf (dump_file, "Add insn %d to sext queue.\n",
-				 INSN_UID (insn));
-		    }
+		      || code == LSHIFTRT || code == ROTATERT
+		      || code == CONST_INT)
+		    mark_insn (insn);
 		}
-	      else if (GET_MODE (SET_DEST (PATTERN (insn))) == DImode
-		       && code == SIGN_EXTEND
-		       && GET_MODE (XEXP (source, 0)) == SImode)
+	      else if (CONST_INT_P (source))
 		{
-		  bitmap_set_bit (sext_marked, INSN_UID (insn));
-
-		  if (dump_file)
-		    fprintf (dump_file, "Add insn %d to sext queue.\n",
-			     INSN_UID (insn));
+		  /* If the mode is DI, or when the sign bit is 0 for other mode,
+		     we assume the dest reg is sign extened.  */
+		  if (mode == DImode && !(INTVAL (source) &
+					  HOST_WIDE_INT_C (0xffffffff80000000)))
+		    mark_insn (insn);
+		  else if (!(INTVAL (source) &
+			     ~((HOST_WIDE_INT_C (1) <<
+				(GET_MODE_SIZE (mode) - 1)) - 1)))
+		    mark_insn (insn);
 		}
+	      else if (mode == DImode && code == SIGN_EXTEND
+		       && GET_MODE (XEXP (source, 0)) == SImode)
+		mark_insn (insn);
 	    }
 	}
     }
