@@ -130,9 +130,37 @@ Target Bool Var(riscv_mrelax) Init(1)
 Take advantage of linker relaxations to reduce the number of instructions
 required to materialize symbol addresses.
 
+Enum
+Name(rvv_vector_bits) Type(enum riscv_rvv_vector_bits_enum)
+The possible RVV vector lengths:
+
+EnumValue
+Enum(rvv_vector_bits) String(scalable) Value(RVV_SCALABLE)
+
+EnumValue
+Enum(rvv_vector_bits) String(64) Value(RVV_64)
+
+EnumValue
+Enum(rvv_vector_bits) String(128) Value(RVV_128)
+
+EnumValue
+Enum(rvv_vector_bits) String(256) Value(RVV_256)
+
+EnumValue
+Enum(rvv_vector_bits) String(512) Value(RVV_512)
+
+EnumValue
+Enum(rvv_vector_bits) String(1024) Value(RVV_1024)
+
+mrvv-vector-bits=
+Target RejectNegative Joined Enum(rvv_vector_bits) Var(riscv_rvv_vector_bits) Init(RVV_SCALABLE)
+-mrvv-vector-bits=<number>	Set the number of bits in an RVV vector register to N.
+
 Mask(64BIT)
 
 Mask(MUL)
+
+Mask(BITMANIP)
 
 Mask(ATOMIC)
 
@@ -144,6 +172,18 @@ Mask(RVC)
 
 Mask(RVE)
 
+Mask(DSP)
+
+Mask(ZPN)
+
+Mask(ZPSFOPERAND)
+
+Mask(ZPRVSFEXTRA)
+
+Mask(VECTOR)
+
+Mask(RVZFH)
+
 ; T-Head mask
 
 Mask(XTHEAD)
@@ -154,11 +194,7 @@ Mask(XTHEAD_E)
 
 Mask(XTHEAD_SE)
 
-Mask(VECTOR)
-
-Mask(DSP)
-
-Mask(ZPSFOPERAND)
+Mask(XTHEAD_V)
 
 ; T-Head extension
 
@@ -234,31 +270,65 @@ mipush
 Target Report Var(riscv_insn_ipush) Init(1) Undocumented
 Enable ipush and ipop instructions.
 
-mvlen=
-Target Report RejectNegative Joined Enum(vlen_bits) Var(riscv_vlen) Init(VLEN_128)
-Specify bits of vector register.
+mdelete-vsetvl
+Target Report Var(riscv_insn_dvsetvl) Init(1) Undocumented
+Optimize code by deleting redundancy vsetvl.
 
-Enum
-Name(vlen_bits) Type(enum riscv_vlen_bits)
-Supported VLEN (for use with the -mvlen= option):
+mdelete-vsetvl2
+Target Report Var(riscv_insn_dvsetvl2) Init(1) Undocumented
+Optimize code by deleting redundancy vsetvl.
 
-EnumValue
-Enum(vlen_bits) String(64) Value(VLEN_64)
+mdelete-vsetvl-globally
+Target Report Var(riscv_insn_dvsetvl_globally) Init(1) Undocumented
+Deleting redundancy vsetvl globally.
 
-EnumValue
-Enum(vlen_bits) String(128) Value(VLEN_128)
+mdelete-read-vlenb
+Target Report Var(riscv_insn_dread_vlenb) Init(1) Undocumented
+Optimize code by deleting redundant reads of vlenb.
+
+mmove-loop-vsetvl
+Target Report Var(riscv_move_loop_vsetvl) Init(1) Undocumented
+Move loop vsetvl computations out of loops.
+
+mdelete-vsetvl-zero
+Target Report Var(riscv_insn_dvsetvl_zero) Init(1) Undocumented
+Optimize code by deleting redundancy vsetvl with x0 reg.
+
+mdelete-vsetvl-zero-bbs
+Target Report Var(riscv_insn_dvsetvl_zero_bbs) Init(1) Undocumented
+Optimize code by deleting redundancy vsetvl with x0 reg in all blocks.
+
+mdelete-vsetvl-v0p7
+Target Report Var(riscv_insn_dvsetvl_v0p7) Init(1) Undocumented
+Optimize code by deleting redundancy vsetvl.
+
+mfwprop-vmov-v0p7
+Target Report Var(riscv_fwprop_vmov_v0p7) Init(1) Undocumented
+Forward propagrate whole register vmov for v0p7.
 
 mdelete-fsrm
 Target Report Var(riscv_insn_dfsrm) Init(1) Undocumented
 Optimize code by deleting redundancy fsrm.
 
 mdelete-sext
-Target Report Var(riscv_insn_dsext) Init(1) Undocumented
-Optimize code by deleting redundancy sext.
+Target Report Var(riscv_insn_dsext1) Init(1) Undocumented
+Optimize code by deleting redundancy sext, insert before ree pass.
+
+mdelete-sext2
+Target Report Var(riscv_insn_dsext2) Init(1) Undocumented
+Optimize code by deleting redundancy sext, insert after ree pass.
 
 mcombine-copy
 Target Report Var(riscv_combine_copy) Init(0) Undocumented
 Enable copy feature in pass combine.
+
+mload-merging
+Target Report Var(riscv_load_merging) Init(0) Undocumented
+Enable adjacent loads, and then extract for each element.
+
+mccrt
+Target Report Var(riscv_libcc_runtime)
+Use code-size first compiler runtime instead of libgcc, it's only supported in rv32.
 
 Wbuiltin-const-overflow
 Target Var(warn_builtin_const_overflow) Init(1) Warning
@@ -275,6 +345,16 @@ Make not big speedup code inline more.
 minvariant-as-constant
 Target Var(riscv_invariant_as_constant) Init(1) Undocumented
 Treat invariant as constant when compute the cost of unroll loop.
+
+mrnreg-delete-noop-move
+Target Report Var(riscv_rnreg_delete_noop_move) Init(0) Undocumented
+Optimize code by deleting redundancy noop move.
+
+mcombine-cse
+Target Var(riscv_combine_cse) Init(1) Undocumented
+Do CSE optimization when the result of combine are two SET insns.
+
+; T-Head compatibility
 
 m4k-opts
 Target Report Var(riscv_4k_optimize) Init(0)
@@ -313,3 +393,26 @@ Enum(riscv_align_data) String(xlen) Value(riscv_align_data_type_xlen)
 
 EnumValue
 Enum(riscv_align_data) String(natural) Value(riscv_align_data_type_natural)
+
+TargetVariable
+int riscv_bitmanip_subext
+
+TargetVariable
+int riscv_zi_subext
+
+Enum
+Name(isa_spec_class) Type(enum riscv_isa_spec_class)
+Supported ISA specs (for use with the -misa-spec= option):
+
+EnumValue
+Enum(isa_spec_class) String(2.2) Value(ISA_SPEC_CLASS_2P2)
+
+EnumValue
+Enum(isa_spec_class) String(20190608) Value(ISA_SPEC_CLASS_20190608)
+
+EnumValue
+Enum(isa_spec_class) String(20191213) Value(ISA_SPEC_CLASS_20191213)
+
+misa-spec=
+Target Report RejectNegative Joined Enum(isa_spec_class) Var(riscv_isa_spec) Init(TARGET_DEFAULT_ISA_SPEC)
+Set the version of RISC-V ISA spec.

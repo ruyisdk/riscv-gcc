@@ -33,7 +33,7 @@ along with GCC; see the file COPYING3.  If not see
   "%{mabi=lp64d:}"
 
 #undef MUSL_DYNAMIC_LINKER
-#define MUSL_DYNAMIC_LINKER "/lib/ld-musl-riscv" XLEN_SPEC MUSL_ABI_SUFFIX ".so.1"
+#define MUSL_DYNAMIC_LINKER "/lib/ld-musl-riscv" XLEN_SPEC ARCH_SPEC MUSL_ABI_SUFFIX ".so.1"
 
 /* Because RISC-V only has word-sized atomics, it requries libatomic where
    others do not.  So link libatomic by default, as needed.  */
@@ -72,5 +72,9 @@ along with GCC; see the file COPYING3.  If not see
 #define STARTFILE_PREFIX_SPEC				\
    "/lib" XLEN_SPEC ARCH_SPEC "/" ABI_SPEC "/ "		\
    "/usr/lib" XLEN_SPEC ARCH_SPEC "/" ABI_SPEC "/ "	\
+   "/lib" XLEN_SPEC "/" ABI_SPEC "/ "		\
+   "/usr/lib" XLEN_SPEC "/" ABI_SPEC "/ "	\
    "/lib/ "					\
    "/usr/lib/ "
+
+#define TARGET_LINUX

@@ -7088,6 +7088,11 @@ two SET insns or a compare and a conditional jump and this hook should
 validate any dependencies needed to fuse the two insns together.
 @end deftypefn
 
+@deftypefn {Target Hook} bool TARGET_SCHED_MISC_FUSION_PAIR_P (rtx_insn *@var{prev}, rtx_insn *@var{curr})
+Like @samp{TARGET_SCHED_MACRO_FUSION_PAIR_P}. But there is no need that
+  (@var{prev} and @var{curr}) are both single set or @var{curr}) is a condjump.
+@end deftypefn
+
 @deftypefn {Target Hook} void TARGET_SCHED_DEPENDENCIES_EVALUATION_HOOK (rtx_insn *@var{head}, rtx_insn *@var{tail})
 This hook is called after evaluation forward dependencies of insns in
 chain given by two parameter values (@var{head} and @var{tail}
@@ -10177,6 +10182,10 @@ following it should not be run.  Usually true only for virtual assembler
 targets.
 @end deftypevr
 
+@deftypefn {Target Hook} void TARGET_FWPROP_LEGITIMIZE_SET (rtx *@var{def_set})
+Legitmize define insn @var{def_set} to enbale forward propagate.
+@end deftypefn
+
 @defmac ASM_OUTPUT_DWARF_DELTA (@var{stream}, @var{size}, @var{label1}, @var{label2})
 A C statement to issue assembly directives that create a difference
 @var{lab1} minus @var{lab2}, using an integer of the given @var{size}.
@@ -12200,4 +12209,10 @@ This target hook can be used to generate a target-specific code
 
 @deftypefn {Target Hook} void TARGET_RUN_TARGET_SELFTESTS (void)
 If selftests are enabled, run any selftests for this target.
+@end deftypefn
+
+@deftypefn {Target Hook} bool TARGET_REGISTER_REJECT_INIT_P (rtx @var{reg})
+This target hook should return @code{true} if reject initialization for a uninitialized @var{reg}.
+
+The default value of this hook is @code{NULL}.
 @end deftypefn

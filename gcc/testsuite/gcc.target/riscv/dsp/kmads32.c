@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-intXLEN_t test_kmads32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t test_kmads32(int64_t t, uint64_t a, uint64_t b) {
     return __rv__kmads32 (t, a, b);
 }
 

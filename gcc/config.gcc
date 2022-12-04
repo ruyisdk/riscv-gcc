@@ -527,7 +527,7 @@ riscv*)
 	cpu_type=riscv
 	extra_objs="riscv-builtins.o riscv-c.o riscv-sr.o riscv-shorten-memrefs.o"
 	d_target_objs="riscv-d.o"
-	extra_headers="riscv-vector.h riscv-dsp.h"
+	extra_headers="riscv_vector.h riscv_vector_itr.h riscv-dsp.h"
 	;;
 rs6000*-*-*)
 	extra_options="${extra_options} g.opt fused-madd.opt rs6000/rs6000-tables.opt"
@@ -2430,10 +2430,22 @@ microblaze*-*-elf)
 	tmake_file="${tmake_file} microblaze/t-microblaze"
         ;;
 riscv*-*-linux*)
-	tm_file="elfos.h gnu-user.h linux.h glibc-stdint.h ${tm_file} riscv/linux.h"
+	tm_file="elfos.h gnu-user.h linux.h glibc-stdint.h ${tm_file} riscv/linux.h riscv/riscv-thead.h"
 	case "x${enable_multilib}" in
 	xno) ;;
-	xyes) tmake_file="${tmake_file} riscv/t-linux-multilib" ;;
+	xyes)
+		case ${target} in
+		riscv64-*-linux-musl*)
+			tmake_file="${tmake_file} riscv/t-linux-musl64-multilib"
+			;;
+		riscv32-*-linux-musl*)
+			tmake_file="${tmake_file} riscv/t-linux-musl32-multilib"
+			;;
+		*)
+			tmake_file="${tmake_file} riscv/t-linux-multilib"
+			;;
+		esac
+		;;
 	*) echo "Unknown value for enable_multilib"; exit 1
 	esac
 	tmake_file="${tmake_file} riscv/t-riscv riscv/t-linux"
@@ -2444,7 +2456,7 @@ riscv*-*-linux*)
 	gcc_cv_initfini_array=yes
 	;;
 riscv*-*-elf* | riscv*-*-rtems*)
-	tm_file="elfos.h newlib-stdint.h ${tm_file} riscv/elf.h"
+	tm_file="elfos.h newlib-stdint.h ${tm_file} riscv/elf.h riscv/riscv-thead.h"
 	case ${target} in
 	*-*-rtems*)
 	  tm_file="${tm_file} rtems.h riscv/rtems.h"
@@ -2458,6 +2470,7 @@ riscv*-*-elf* | riscv*-*-rtems*)
 		  *) echo "Unknown value for enable_multilib"; exit 1
 		  esac
 	  fi
+	  extra_options="${extra_options} riscv/thead-elf.opt"
 	esac
 	tmake_file="${tmake_file} riscv/t-riscv"
 	gnu_ld=yes
@@ -2467,7 +2480,7 @@ riscv*-*-elf* | riscv*-*-rtems*)
 	gcc_cv_initfini_array=yes
 	;;
 riscv*-*-freebsd*)
-	tm_file="${tm_file} elfos.h ${fbsd_tm_file} riscv/freebsd.h"
+	tm_file="${tm_file} elfos.h ${fbsd_tm_file} riscv/freebsd.h riscv/riscv-thead.h"
 	tmake_file="${tmake_file} riscv/t-riscv"
 	gnu_ld=yes
 	gas=yes
@@ -4497,12 +4510,27 @@ case "${target}" in
 		;;
 
 	riscv*-*-*)
-		supported_defaults="abi arch tune riscv_attribute"
+		supported_defaults="abi arch tune riscv_attribute isa_spec"
 
 		case "${target}" in
 		riscv-* | riscv32*) xlen=32 ;;
 		riscv64*) xlen=64 ;;
 		*) echo "Unsupported RISC-V target ${target}" 1>&2; exit 1 ;;
+		esac
+
+		case "${with_isa_spec}" in
+		""|default|2.2)
+			tm_defines="${tm_defines} TARGET_DEFAULT_ISA_SPEC=ISA_SPEC_CLASS_2P2"
+			;;
+		20191213 | 201912)
+			tm_defines="${tm_defines} TARGET_DEFAULT_ISA_SPEC=ISA_SPEC_CLASS_20191213"
+			;;
+		20190608 | 201906)
+			tm_defines="${tm_defines} TARGET_DEFAULT_ISA_SPEC=ISA_SPEC_CLASS_20190608"
+			;;
+		*)
+			echo "--with-isa-spec only accept 2.2, 20191213, 201912, 20190608 or 201906" 1>&2
+			exit 1
 		esac
 
 		case "${with_riscv_attribute}" in
@@ -4558,11 +4586,13 @@ case "${target}" in
 		"")
 			case "${with_arch}" in
 			rv32*d* | rv32g*) with_abi=ilp32d ;;
+			rv32*f*) with_abi=ilp32f ;;
 			rv32e*) with_abi=ilp32e ;;
 			rv32*) with_abi=ilp32 ;;
 			rv64*d*v* | rv64g*v*) with_abi=lp64dv ;;
 			rv64*v*) with_abi=lp64v ;;
 			rv64*d* | rv64g*) with_abi=lp64d ;;
+			rv64*f*) with_abi=lp64f ;;
 			rv64*) with_abi=lp64 ;;
 			esac
 			;;

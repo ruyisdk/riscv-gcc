@@ -129,19 +129,35 @@
 # matches the multilib_default args.
 
 # Copy the positional parameters into variables.
-options=$1
-dirnames=$2
-matches=$3
-exceptions=$4
-extra=$5
-exclusions=$6
-osdirnames=$7
-multilib_required=$8
-multiarch=$9
-multilib_reuse=${10}
-enable_multilib=${11}
+# Read arguments from file to avoid "Argument list too long" problem.
+if [ "$1" = "--from-file" ]; then
+  args_file=$2
+  options=`awk 'NR==1' $args_file`
+  dirnames=`awk 'NR==2' $args_file`
+  matches=`awk 'NR==3' $args_file`
+  exceptions=`awk 'NR==4' $args_file`
+  extra=`awk 'NR==5' $args_file`
+  exclusions=`awk 'NR==6' $args_file`
+  osdirnames=`awk 'NR==7' $args_file`
+  multilib_required=`awk 'NR==8' $args_file`
+  multiarch=`awk 'NR==9' $args_file`
+  multilib_reuse=`awk 'NR==10' $args_file`
+  enable_multilib=`awk 'NR==11' $args_file`
+else
+  options=$1
+  dirnames=$2
+  matches=$3
+  exceptions=$4
+  extra=$5
+  exclusions=$6
+  osdirnames=$7
+  multilib_required=$8
+  multiarch=$9
+  multilib_reuse=${10}
+  enable_multilib=${11}
+fi;
 
-echo "static const char *const multilib_raw[] = {"
+echo "static const char * multilib_raw = \"\\"
 
 mkdir tmpmultilib.$$ || exit 1
 # Use cd ./foo to avoid CDPATH output.
@@ -339,7 +355,7 @@ cat >tmpmultilib2 <<\EOF
 # ${dirout} is the directory name and ${optout} is the current list of
 # options.
 if [ "$#" = "0" ]; then
-  echo "\"${dirout} ${optout};\","
+  echo "${dirout} ${optout};\\"
 else
   first=$1
   shift
@@ -362,8 +378,8 @@ for set in ${options}; do
   done
 done
 optout=`echo ${optout} | sed -e 's/^ //'`
-echo "\".${defaultosdirname} ${optout};\","
-[ -n "${defaultosdirname2}" ] && echo "\".${defaultosdirname2} ${optout};\","
+echo ".${defaultosdirname} ${optout};\\"
+[ -n "${defaultosdirname2}" ] && echo ".${defaultosdirname2} ${optout};\\"
 
 # This part of code convert an option combination to
 # its corresponding directory names.
@@ -459,8 +475,7 @@ for combo in ${combinations}; do
 done
 
 # Terminate the list of string.
-echo "NULL"
-echo "};"
+echo "\";"
 
 # Generate a regular expression to validate option combinations.
 options_re=
@@ -473,7 +488,7 @@ options_re="^/((${options_re})/)*\$"
 
 # Output rules used for multilib reuse.
 echo ""
-echo "static const char *const multilib_reuse_raw[] = {"
+echo "static const char * multilib_reuse_raw = \"\\"
 for rrule in ${multilib_reuse}; do
   # The left part of the rule are the options we used to build multilib.
   # The right part of the rule are the options that can reuse this multilib.
@@ -502,27 +517,25 @@ for rrule in ${multilib_reuse}; do
 done
 
 # Terminate the list of string.
-echo "NULL"
-echo "};"
+echo "\";"
 
 # Output all of the matches now as option and that is the same as that, with
 # a semicolon trailer.  Include all of the normal options as well.
 # Note, the format of the matches is reversed compared
 # to what we want, so switch them around.
 echo ""
-echo "static const char *const multilib_matches_raw[] = {"
+echo "static const char * multilib_matches_raw = \"\\"
 for match in ${matches}; do
   l=`echo ${match} | sed -e 's/=.*$//' -e 's/?/=/g'`
   r=`echo ${match} | sed -e 's/^.*=//' -e 's/?/=/g'`
-  echo "\"${r} ${l};\","
+  echo "${r} ${l};\\"
 done
 for set in ${options}; do
   for opt in `echo ${set} | sed -e 's_[/|]_ _'g`; do
-    echo "\"${opt} ${opt};\","
+    echo "${opt} ${opt};\\"
   done
 done
-echo "NULL"
-echo "};"
+echo "\";"
 
 # Output the default options now
 echo ""

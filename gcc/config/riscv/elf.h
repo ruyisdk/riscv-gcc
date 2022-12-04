@@ -27,6 +27,8 @@ along with GCC; see the file COPYING3.  If not see
 #undef  LIB_SPEC
 #define LIB_SPEC "--start-group -lc %{!specs=nosys.specs:-lgloss} --end-group"
 
+#define LIBGCC_SPEC "%{mccrt: -lgcc_tf -lcc-rt;!mccrt: -lgcc}"
+
 #undef  STARTFILE_SPEC
 #define STARTFILE_SPEC "crt0%O%s crtbegin%O%s"
 

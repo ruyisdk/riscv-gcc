@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_ksll32(uintXLEN_t a, uint32_t b) {
+uint64_t test_ksll32(uint64_t a, uint32_t b) {
     return __rv__ksll32 (a, b);
 }
 

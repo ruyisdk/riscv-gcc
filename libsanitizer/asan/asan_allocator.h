@@ -15,10 +15,11 @@
 #define ASAN_ALLOCATOR_H
 
 #include "asan_flags.h"
-#include "asan_internal.h"
 #include "asan_interceptors.h"
+#include "asan_internal.h"
 #include "sanitizer_common/sanitizer_allocator.h"
 #include "sanitizer_common/sanitizer_list.h"
+#include "sanitizer_common/sanitizer_platform.h"
 
 namespace __asan {
 
@@ -127,6 +128,10 @@ typedef DefaultSizeClassMap SizeClassMap;
 const uptr kAllocatorSpace = ~(uptr)0;
 const uptr kAllocatorSize  =  0x20000000000ULL;  // 2T.
 typedef DefaultSizeClassMap SizeClassMap;
+#elif SANITIZER_RISCV64
+const uptr kAllocatorSpace = ~(uptr)0;
+const uptr kAllocatorSize = 0x2000000000ULL;  // 128G.
+typedef VeryDenseSizeClassMap SizeClassMap;
 # elif defined(__aarch64__) && SANITIZER_ANDROID
 // Android needs to support 39, 42 and 48 bit VMA.
 const uptr kAllocatorSpace =  ~(uptr)0;

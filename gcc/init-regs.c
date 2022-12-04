@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "backend.h"
+#include "target.h"
 #include "rtl.h"
 #include "tree.h"
 #include "df.h"
@@ -100,6 +101,10 @@ initialize_uninitialized_regs (void)
 		{
 		  rtx_insn *move_insn;
 		  rtx reg = DF_REF_REAL_REG (use);
+
+		  if (targetm.register_reject_init_p
+		      && targetm.register_reject_init_p (reg))
+		    continue;
 
 		  bitmap_set_bit (already_genned, regno);
 

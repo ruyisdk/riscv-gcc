@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_kabs32(uintXLEN_t a) {
+uint64_t test_kabs32(uint64_t a) {
     return __rv__kabs32 (a);
 }
 

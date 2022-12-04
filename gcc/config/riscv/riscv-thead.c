@@ -1,11 +1,15 @@
 
+#define INCLUDE_STRING
 #include "opts.h"
 #include "riscv-thead-tune.h"
-#include "backend.h"
-#include "pass_manager.h"
-#include "context.h"
-#include "cfgrtl.h"
-#include "cfghooks.h"
+#include "insn-attr.h"
+#include "riscv-subset.h"
+
+bool
+target_subset_version_p (const char *subset, int major, int minor)
+{
+  return TARGET_SUBSET_VERSION_P (subset, major, minor);
+}
 
 void
 riscv_xthead_option_override (const struct riscv_tune_param *tune_param,
@@ -48,32 +52,30 @@ riscv_xthead_option_override (const struct riscv_tune_param *tune_param,
 	opts->x_str_align_functions = tune_param->function_align;
     }
 
-  /* Set the defualt max-rtl-if-conversion-unpredictable-cost to 100
-     to generate more conditional move instructions.  */
-  if (!opts->x_optimize_size
-      && TARGET_XTHEAD_C)
-    {
-      SET_OPTION_IF_UNSET (opts, opts_set,
-			   param_max_rtl_if_conversion_unpredictable_cost,
-			   tune_param->ifcvt_unpred);
-    }
-
   if (!opts_set->x_riscv_4k_optimize && riscv_microarchitecture == c910)
     opts->x_riscv_4k_optimize = 1;
+
+  if (riscv_libcc_runtime && TARGET_64BIT)
+    warning (0, "mccrt is only supported in rv32* arch");
+
+  if (target_subset_version_p ("v", 0, 7))
+    SET_OPTION_IF_UNSET (opts, opts_set,
+			 riscv_rvv_vector_bits,
+			 RVV_128);
 }
 
 bool
-riscv_xthead_rtx_costs (rtx x, machine_mode mode, int outer_code,
+riscv_xthead_rtx_costs (rtx x, machine_mode mode ATTRIBUTE_UNUSED, int outer_code,
 			int opno ATTRIBUTE_UNUSED, int *total,
 			bool speed ATTRIBUTE_UNUSED)
 {
   switch (GET_CODE (x))
     {
     case IF_THEN_ELSE:
-      if (!optimize_size && TARGET_XTHEAD_C
+      if (!optimize_size && TARGET_XTHEAD_CONDMV
 	  && GET_CODE (XEXP (x, 1)) == REG && GET_CODE (XEXP (x, 2)) == REG)
 	{
-	  *total = tune_param->if_then_else;
+	  *total = COSTS_N_INSNS (1);
 	  return true;
 	}
       return false;
@@ -107,16 +109,6 @@ riscv_xthead_rtx_costs (rtx x, machine_mode mode, int outer_code,
 	    }
 	}
       return false;
-    case SET:
-      if (riscv_vector_mode_vext_except_pext_supported_p (mode)
-	  && REG_P (XEXP (x, 0))
-	  && REG_P (XEXP (x, 1)))
-	{
-	  *total = COSTS_N_INSNS (3);
-	  return true;
-	}
-      else
-	return false;
     default:
       return false;
     }
@@ -145,7 +137,7 @@ riscv_classify_address_index (struct riscv_address_info *info, rtx x,
 	return false;
       if (!TARGET_XTHEAD_FLDR)
 	return false;
-      if (GET_MODE_SIZE (mode) == 2)
+      if (GET_MODE_SIZE (mode).to_constant () == 2)
 	return false;
     }
 
@@ -245,7 +237,7 @@ riscv_classify_address_modify (struct riscv_address_info *info, rtx x,
   if (!TARGET_XTHEAD_LDI)
     return false;
 
-  if (!SCALAR_INT_MODE_P (mode) && !riscv_vector_mode_pext_supported_p (mode))
+  if (!(INTEGRAL_MODE_P (mode) && GET_MODE_SIZE (mode).to_constant () <= 8))
     return false;
 
   if (!TARGET_64BIT && mode == DImode)
@@ -299,7 +291,7 @@ riscv_output_move_modify (rtx x, machine_mode mode, bool ldi)
 {
   static char buf[128] = {0};
 
-  int index = exact_log2 (GET_MODE_SIZE (mode));
+  int index = exact_log2 (GET_MODE_SIZE (mode).to_constant ());
   if (!IN_RANGE (index, 0, 3))
     return NULL;
 
@@ -357,7 +349,7 @@ riscv_output_move_index (rtx x, machine_mode mode, bool ldr)
 {
   static char buf[128] = {0};
 
-  int index = exact_log2 (GET_MODE_SIZE (mode));
+  int index = exact_log2 (GET_MODE_SIZE (mode).to_constant ());
   if (!IN_RANGE (index, 0, 3))
     return NULL;
 
@@ -392,7 +384,7 @@ riscv_output_move_index_float (rtx x, machine_mode mode, bool ldr)
 {
   static char buf[128] = {0};
 
-  int index = exact_log2 (GET_MODE_SIZE (mode));
+  int index = exact_log2 (GET_MODE_SIZE (mode).to_constant ());
   if (!IN_RANGE (index, 0, 3))
     return NULL;
 
@@ -404,10 +396,10 @@ riscv_output_move_index_float (rtx x, machine_mode mode, bool ldr)
   const char *const insn[][4] =
   {
     {
-      "fs%srb\t%%1,%%0",
-      "fs%srh\t%%1,%%0",
-      "fs%srw\t%%1,%%0",
-      "fs%srd\t%%1,%%0"
+      "fs%srb\t%%z1,%%0",
+      "fs%srh\t%%z1,%%0",
+      "fs%srw\t%%z1,%%0",
+      "fs%srd\t%%z1,%%0"
     },
     {
       "fl%srb\t%%0,%%1",
@@ -438,7 +430,7 @@ riscv_classify_address_pair (struct riscv_address_info *info, rtx x,
     {
       info->reg = XEXP (x, 0);
       info->offset = XEXP (x, 1);
-      if (INTVAL (info->offset) % (2 * GET_MODE_SIZE (mode)) != 0)
+      if (INTVAL (info->offset) % (2 * GET_MODE_SIZE (mode).to_constant ()) != 0)
 	return false;
       return (riscv_valid_base_register_p (info->reg, mode, strict_p)
 	      && CONST_INT_P (info->offset)
@@ -469,37 +461,52 @@ int
 riscv_expand_movcc (rtx *operands)
 {
   enum rtx_code code = GET_CODE (operands[1]);
-  enum rtx_code new_code = code;
   machine_mode cmp0_mode = GET_MODE (XEXP (operands[1], 0));
   rtx cmp_op0 = XEXP (operands[1], 0);
   rtx cmp_op1 = XEXP (operands[1], 1);
   rtx tmp;
+  bool reverse = false;
 
   if (GET_MODE_CLASS (cmp0_mode) != MODE_INT)
     return -1;
-  else if ((GET_CODE (operands[1]) == EQ || GET_CODE (operands[1]) == NE)
-	   && cmp_op1 == const0_rtx)
+  else
     {
       riscv_extend_comparands (code, &cmp_op0, &cmp_op1);
       cmp_op0 = force_reg (word_mode, cmp_op0);
-      XEXP (operands[1], 0) = cmp_op0;
-      /* If the operands[1] rtx is already (eq X 0) or (ne X 0),
-	 we have gcc generate original template rtx.  */
-      return 1;
-    }
-  else
-    {
-      bool reverse = false;
 
-      tmp = gen_reg_rtx (TARGET_64BIT ? DImode : SImode);
-
-      riscv_expand_int_scc (tmp, new_code,
-			    cmp_op0, cmp_op1);
+      if (code == EQ || code == NE)
+	{
+	  if (cmp_op1 == const0_rtx)
+	    {
+	      XEXP (operands[1], 0) = cmp_op0;
+	      /* If the operands[1] rtx is already (eq X 0) or (ne X 0),
+		 use the original rtx.  */
+	      return 1;
+	    }
+	  tmp = riscv_zero_if_equal (cmp_op0, cmp_op1);
+	  reverse = (code == EQ) ? true : false;
+	}
+      else
+	{
+	  tmp = gen_reg_rtx (TARGET_64BIT ? DImode : SImode);
+	  riscv_emit_int_order_test (code, &reverse, tmp, cmp_op0, cmp_op1);
+	}
 
       operands[1] = gen_rtx_fmt_ee (reverse ? EQ : NE,
 				    VOIDmode, tmp, const0_rtx);
     }
+
   return 1;
+}
+
+/* Return TRUE if X is a legitimate address reg + offset.  */
+
+bool
+riscv_legitimize_address_classic_p (rtx x, machine_mode mode)
+{
+  struct riscv_address_info addr;
+  return riscv_classify_address (&addr, x, mode, false)
+	 && addr.type == ADDRESS_REG;
 }
 
 /* Return true if address is a valid vector.  If it is, fill in INFO
@@ -509,14 +516,6 @@ bool
 riscv_classify_address_vector (struct riscv_address_info *info, rtx x,
   machine_mode mode, bool strict_p)
 {
-  if (reload_completed
-      && (GET_CODE (x) == LABEL_REF
-	  || (GET_CODE (x) == CONST
-	      && GET_CODE (XEXP (x, 0)) == PLUS
-	      && GET_CODE (XEXP (XEXP (x, 0), 0)) == LABEL_REF
-	      && CONST_INT_P (XEXP (XEXP (x, 0), 1)))))
-    return true;
-
   switch (GET_CODE (x))
     {
     case REG:
@@ -535,16 +534,6 @@ riscv_classify_address_vector (struct riscv_address_info *info, rtx x,
     default:
       return false;
     }
-}
-
-/* Return TRUE if X is a legitimate address vector.  */
-
-bool
-riscv_legitimize_address_vector_p (rtx x, machine_mode mode)
-{
-  struct riscv_address_info addr;
-  return riscv_vector_mode_vext_supported_p (mode)
-	 && riscv_classify_address_vector (&addr, x, mode, false);
 }
 
 bool
@@ -595,439 +584,12 @@ riscv_adjust_ipush_cfi_prologue ()
   return dwarf;
 }
 
-/* Implement TARGET_MANGLE_TYPE.  */
-
-extern const char *riscv_mangle_builtin_type (const_tree type);
-
-static const char *
-riscv_mangle_type (const_tree type)
-{
-  /* Mangle riscv-specific internal types.  TYPE_NAME is non-NULL_TREE for
-    builtin types.  */
-  if (TYPE_NAME (type) != NULL)
-    return riscv_mangle_builtin_type (type);
-
-  /* Use the default mangling.  */
-  return NULL;
-}
-
-/* Implement TARGET_SCALAR_MODE_SUPPORTED_P - return TRUE
-   if MODE is HFmode, and punt to the generic implementation otherwise.  */
-
-static bool
-riscv_scalar_mode_supported_p (scalar_mode mode)
-{
-  return (TARGET_XTHEAD_FP16 && mode == HFmode)
-	 || default_scalar_mode_supported_p (mode);
-}
-
-/* Implement TARGET_LIBGCC_FLOATING_POINT_MODE_SUPPORTED_P - return TRUE
-   if MODE is HFmode, and punt to the generic implementation otherwise.  */
-
-static bool
-riscv_libgcc_floating_mode_supported_p (scalar_float_mode mode)
-{
-  return (TARGET_XTHEAD_FP16 && mode == HFmode
-    ? true
-    : default_libgcc_floating_mode_supported_p (mode));
-}
-
-/* Set the value of FLT_EVAL_METHOD.
-   ISO/IEC TS 18661-3 defines two values that we'd like to make use of:
-
-    0: evaluate all operations and constants, whose semantic type has at
-       most the range and precision of type float, to the range and
-       precision of float; evaluate all other operations and constants to
-       the range and precision of the semantic type;
-
-    N, where _FloatN is a supported interchange floating type
-       evaluate all operations and constants, whose semantic type has at
-       most the range and precision of _FloatN type, to the range and
-       precision of the _FloatN type; evaluate all other operations and
-       constants to the range and precision of the semantic type;
-*/
-
-static enum flt_eval_method
-riscv_c_excess_precision (enum excess_precision_type type)
-{
-  switch (type)
-    {
-    case EXCESS_PRECISION_TYPE_FAST:
-    case EXCESS_PRECISION_TYPE_STANDARD:
-      /* We can calculate either in 16-bit range and precision or
-	  32-bit range and precision. */
-      return (TARGET_XTHEAD_FP16
-	      ? FLT_EVAL_METHOD_PROMOTE_TO_FLOAT16
-	      : FLT_EVAL_METHOD_PROMOTE_TO_FLOAT);
-    case EXCESS_PRECISION_TYPE_IMPLICIT:
-      return FLT_EVAL_METHOD_PROMOTE_TO_FLOAT16;
-    default:
-      gcc_unreachable ();
-    }
-  return FLT_EVAL_METHOD_UNPREDICTABLE;
-}
-
-#undef TARGET_C_EXCESS_PRECISION
-#define TARGET_C_EXCESS_PRECISION riscv_c_excess_precision
-
-#undef TARGET_LIBGCC_FLOATING_MODE_SUPPORTED_P
-#define TARGET_LIBGCC_FLOATING_MODE_SUPPORTED_P \
-  riscv_libgcc_floating_mode_supported_p
-
-#undef TARGET_SCALAR_MODE_SUPPORTED_P
-#define TARGET_SCALAR_MODE_SUPPORTED_P riscv_scalar_mode_supported_p
-
-#undef TARGET_MANGLE_TYPE
-#define TARGET_MANGLE_TYPE riscv_mangle_type
-
-static unsigned
-riscv_pass_mode_in_vr_p (machine_mode mode)
-{
-  if (GET_MODE_SIZE (mode) <= UNITS_PER_VR_ARG
-      && riscv_vector_mode_vext_supported_p (mode))
-    {
-      return (GET_MODE_SIZE (mode) + UNITS_PER_VR_REG - 1) / UNITS_PER_VR_REG;
-    }
-
-  return 0;
-}
-
-/* Helper function for riscv_get_arg_info(); deal with v-ext arg.  */
-
-rtx
-riscv_get_varg_info (struct riscv_arg_info *info,
-		     machine_mode mode, const_tree type,
-		     bool return_p)
-{
-  rtx ret = NULL_RTX;
-
-  /* Don't mess wih P-ext's rules. */
-  if (riscv_vector_mode_pext_supported_p (mode))
-    return ret;
-
-  unsigned vr_base = return_p ? VR_RETURN : VR_ARG_FIRST;
-  unsigned vregno = vr_base + info->vr_offset;
-
-  info->num_vrs = riscv_pass_mode_in_vr_p (mode);
-  if (!info->num_vrs)
-    return ret;
-
-  if (info->vr_offset + info->num_vrs > MAX_ARGS_IN_VREGISTERS)
-    {
-      info->num_vrs = 0;
-      return ret;
-    }
-
-  ret = gen_rtx_REG (mode, vregno);
-  return ret;
-}
-
-void
-riscv_save_vreg (rtx reg, rtx mem)
-{
-  if (GET_CODE (XEXP (mem, 0)) == PLUS)
-    {
-      rtx tmp = RISCV_PROLOGUE_TEMP (word_mode), insn, dest;
-      riscv_emit_move (tmp, XEXP (XEXP (mem, 0), 1));
-      insn = emit_insn (gen_add3_insn (tmp, stack_pointer_rtx, tmp));
-      dest = gen_rtx_MEM (GET_MODE (reg), tmp);
-      riscv_emit_move (dest, reg);
-      add_reg_note (insn, REG_FRAME_RELATED_EXPR, gen_rtx_SET (mem, reg));
-      RTX_FRAME_RELATED_P (insn) = 1;
-    }
-  else
-    {
-      rtx tmp = gen_rtx_REG (SImode, 0);
-      if (TARGET_XTHEAD_VLEN (128))
-	{
-	  riscv_emit_vsetvli (V4SImode, tmp, tmp);
-	  emit_insn (gen_riscv_vsev_v4si_internal (mem, reg, tmp));
-	}
-      riscv_set_frame_expr (riscv_frame_set (mem, reg));
-    }
-}
-
-void
-riscv_restore_vreg (rtx reg, rtx mem)
-{
-  rtx insn;
-
-  if (GET_CODE (XEXP (mem, 0)) == PLUS)
-    {
-      rtx tmp = RISCV_PROLOGUE_TEMP (word_mode), src;
-      riscv_emit_move (tmp, XEXP (XEXP (mem, 0), 1));
-      insn = emit_insn (gen_add3_insn (tmp, stack_pointer_rtx, tmp));
-      src = gen_rtx_MEM (GET_MODE (reg), tmp);
-      riscv_emit_move (reg, src);
-      add_reg_note (insn, REG_CFA_RESTORE, reg);
-      RTX_FRAME_RELATED_P (insn) = 1;
-    }
-  else
-    {
-      rtx tmp = gen_rtx_REG (SImode, 0);
-      if (TARGET_XTHEAD_VLEN (128))
-	{
-	  riscv_emit_vsetvli (V4SImode, tmp, tmp);
-	  insn = emit_insn (gen_riscv_vlev_v4si_internal (reg, mem, tmp));
-	}
-      add_reg_note (insn, REG_CFA_RESTORE, reg);
-      RTX_FRAME_RELATED_P (insn) = 1;
-    }
-}
-
-rtx
-riscv_emit_vsetvli_base (machine_mode mode, rtx gvl, rtx avl, rtx nf)
-{
-  int isew = -1;
-  riscv_classify_vext_mode (mode, &isew, NULL, false);
-  gcc_assert (isew != -1);
-  rtx sew = gen_rtx_CONST_INT (VOIDmode, isew);
-
-  int mul = (GET_MODE_SIZE (mode) + UNITS_PER_VR_REG - 1) / UNITS_PER_VR_REG;
-
-  if (nf)
-    {
-      int nf_value = INTVAL (nf);
-      mul /= nf_value;
-    }
-
-  gcc_assert (exact_log2 (mul) != -1);
-  rtx lmul = gen_rtx_CONST_INT (VOIDmode, exact_log2 (mul));
-
-  if (avl == NULL_RTX
-      || (REG_P (avl) && REGNO (avl) == 0))
-    emit_insn (gen_riscv_vsetvli_max (gvl, sew, lmul));
-  else
-    emit_insn (gen_riscv_vsetvli (gvl, avl, sew, lmul));
-  return gvl;
-}
-
-rtx
-riscv_emit_vsetvli (machine_mode mode, rtx gvl, rtx avl)
-{
-  return riscv_emit_vsetvli_base (mode, gvl, avl, NULL);
-}
-
-rtx
-riscv_emit_vsetvli_max (machine_mode mode)
-{
-  rtx gvl = gen_rtx_REG (SImode, 0);
-  return riscv_emit_vsetvli (mode, gvl, NULL_RTX);
-}
-
-const char *
-riscv_output_vector_sew (int index)
-{
-  const char *sew[] = {"e8", "e16", "e32", "e64"};
-  return sew[index];
-}
-
-const char *
-riscv_output_vector_lmul (int index)
-{
-  const char *lmul[] = {"m1", "m2", "m4", "m8"};
-  return lmul[index];
-}
-
-const char *
-riscv_output_vector_insn (machine_mode mode ATTRIBUTE_UNUSED, const char *insn)
-{
-  return insn;
-  #if 0
-  static char buf[128] = {0};
-  const char *pattern = "vsetvli\tx0,x0,%s,%s\n\t%s";
-
-  int sew = -1;
-  riscv_classify_vext_mode (mode, &sew, NULL, false);
-  gcc_assert (sew != -1);
-  int lmul = exact_log2 ((GET_MODE_SIZE (mode) + UNITS_PER_VR_REG - 1) / UNITS_PER_VR_REG);
-
-  snprintf (buf, sizeof (buf), pattern,
-	    riscv_output_vector_sew (sew),
-	    riscv_output_vector_lmul (lmul),
-	    insn);
-  return buf;
-  #endif
-}
-
-rtx
-riscv_legitimize_vector_address (rtx x, machine_mode mode)
-{
-  rtx addr;
-
-  /* Handle BASE + OFFSET.  */
-  if (GET_CODE (x) == PLUS && CONST_INT_P (XEXP (x, 1))
-      && INTVAL (XEXP (x, 1)) != 0)
-    {
-      rtx base = XEXP (x, 0);
-      HOST_WIDE_INT offset = INTVAL (XEXP (x, 1));
-
-      if (!riscv_valid_base_register_p (base, mode, false))
-	base = copy_to_mode_reg (Pmode, base);
-
-	rtx base_reg = gen_reg_rtx (Pmode);
-	rtx val = force_operand (plus_constant (Pmode, base, offset), NULL_RTX);
-	emit_move_insn (base_reg, val);
-	base = base_reg;
-	offset = 0;
-
-      addr = riscv_add_offset (NULL, base, offset);
-      return riscv_force_address (addr, mode);
-    }
-  return x;
-}
-
-machine_mode
-riscv_vector_register_mode (machine_mode mode)
-{
-  if ((GET_MODE_SIZE (mode) * BITS_PER_UNIT) < riscv_vlen
-      || !(TARGET_XTHEAD_VLEN (128) || TARGET_XTHEAD_VLEN (64)))
-      gcc_unreachable ();
-
-  switch (mode)
-  {
-    case E_V1DImode:
-    case E_V2DImode:
-    case E_V4DImode:
-    case E_V8DImode:
-    case E_V16DImode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V2DImode : V1DImode);
-    case E_V2SImode:
-    case E_V4SImode:
-    case E_V8SImode:
-    case E_V16SImode:
-    case E_V32SImode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V4SImode : E_V2SImode);
-    case E_V4HImode:
-    case E_V8HImode:
-    case E_V16HImode:
-    case E_V32HImode:
-    case E_V64HImode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V8HImode : E_V4HImode);
-    case E_V8QImode:
-    case E_V16QImode:
-    case E_V32QImode:
-    case E_V64QImode:
-    case E_V128QImode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V16QImode : E_V8QImode);
-    case E_V1DFmode:
-    case E_V2DFmode:
-    case E_V4DFmode:
-    case E_V8DFmode:
-    case E_V16DFmode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V2DFmode : E_V1DFmode);
-    case E_V2SFmode:
-    case E_V4SFmode:
-    case E_V8SFmode:
-    case E_V16SFmode:
-    case E_V32SFmode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V4SFmode : E_V2SFmode);
-    case E_V4HFmode:
-    case E_V8HFmode:
-    case E_V16HFmode:
-    case E_V32HFmode:
-    case E_V64HFmode:
-      return (TARGET_XTHEAD_VLEN (128) ? E_V8HFmode : E_V4HFmode);
-    default:
-      gcc_unreachable ();
-  }
-}
-
-void *
-riscv_classify_vext_mode (machine_mode mode, int *sew, int *lmul,
-			  bool enabled)
-{
-  typedef struct {
-    int lmul;
-    int sew;
-    machine_mode mode;
-    int enabled;
-  } vmode_t;
-
-  static vmode_t vmode[] = {
-    { -1, RVV_E8,  V8QImode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E8,  V16QImode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E8,  V32QImode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E8,  V64QImode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E8,  V128QImode, TARGET_XTHEAD_VECTOR },
-
-    { -1, RVV_E16, V4HImode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E16, V8HImode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E16, V16HImode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E16, V32HImode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E16, V64HImode , TARGET_XTHEAD_VECTOR },
-
-    { -1, RVV_E32, V2SImode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E32, V4SImode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E32, V8SImode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E32, V16SImode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E32, V32SImode , TARGET_XTHEAD_VECTOR },
-
-    { -1, RVV_E64, V1DImode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E64, V2DImode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E64, V4DImode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E64, V8DImode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E64, V16DImode , TARGET_XTHEAD_VECTOR },
-
-    { -1, -1, V1TImode , 0 },
-    { -1, -1, V2TImode , 0 },
-    { -1, -1, V4TImode , 0 },
-    { -1, -1, V8TImode , 0 },
-
-    { -1, RVV_E16, V4HFmode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E16, V8HFmode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E16, V16HFmode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E16, V32HFmode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E16, V64HFmode , TARGET_XTHEAD_VECTOR },
-
-    { -1, RVV_E32, V2SFmode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E32, V4SFmode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E32, V8SFmode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E32, V16SFmode , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E32, V32SFmode , TARGET_XTHEAD_VECTOR },
-
-    { -1, RVV_E64, V1DFmode  , TARGET_XTHEAD_VLEN (64) },
-    { -1, RVV_E64, V2DFmode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E64, V4DFmode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E64, V8DFmode  , TARGET_XTHEAD_VECTOR },
-    { -1, RVV_E64, V16DFmode , TARGET_XTHEAD_VECTOR },
-
-#define RVV_VECTOR_SEG_TYPE_DEF(MODE, ELTYPE, LMUL, NF, AVAIL, SEW, VLEN, UNSIGNED) \
-  { LMUL, RVV_E##SEW, MODE,  TARGET_XTHEAD_VLEN (VLEN)},
-#include "config/riscv/riscv-vector-seg-type.def"
-#undef RVV_VECTOR_SEG_TYPE_DEF
-
-  };
-
-  if (!(TARGET_XTHEAD_VECTOR || enabled))
-    return NULL;
-
-  for (unsigned int i = 0; i < ARRAY_SIZE (vmode); i++)
-    {
-      if (!(vmode[i].enabled || enabled))
-	continue;
-      if (vmode[i].mode != mode)
-	continue;
-      if (sew)
-	*sew = vmode[i].sew;
-      if (lmul)
-	*lmul = vmode[i].lmul;
-      return &vmode[i];
-    }
-
-  return NULL;
-}
+/* Implement DSP extension.  */
 
 bool
-riscv_vector_mode_vext_supported_p (machine_mode mode)
+riscv_dsp_mode (machine_mode mode)
 {
-  return riscv_classify_vext_mode (mode, NULL, NULL, false) != NULL;
-}
-
-bool
-riscv_vector_mode_pext_supported_p (machine_mode mode)
-{
-  if (TARGET_XTHEAD_DSP || TARGET_XTHEAD_ZPSFOPERAND)
+  if (TARGET_XTHEAD_ZPN || TARGET_XTHEAD_ZPSFOPERAND)
     {
       switch (mode)
       {
@@ -1044,67 +606,10 @@ riscv_vector_mode_pext_supported_p (machine_mode mode)
   return false;
 }
 
-/* Implement TARGET_VECTOR_MODE_SUPPORTED_P.  */
-
-bool
-riscv_vector_mode_supported_p (machine_mode mode)
+machine_mode
+riscv_dsp_preferred_mode (scalar_mode mode)
 {
-  return riscv_vector_mode_pext_supported_p (mode)
-	 ||riscv_vector_mode_vext_supported_p (mode);
-}
-
-/* In many cases, the mode supported by P-ext shouldn't be treat as the mode
-   supported by V-ext.  */
-
-bool
-riscv_vector_mode_vext_except_pext_supported_p (machine_mode mode)
-{
-  return riscv_vector_mode_vext_supported_p (mode)
-	 && !riscv_vector_mode_pext_supported_p (mode);
-}
-
-/* Implement TARGET_VECTORIZE_PREFERRED_SIMD_MODE.  */
-
-static machine_mode
-riscv_preferred_simd_mode (scalar_mode mode)
-{
-  if (TARGET_XTHEAD_VECTOR)
-    {
-      if (TARGET_XTHEAD_VLEN (64))
-	switch (mode)
-	  {
-	  case E_SFmode:
-	    return V4SFmode;
-	  case E_HFmode:
-	    return V8HFmode;
-	  case E_SImode:
-	    return V4SImode;
-	  case E_HImode:
-	    return V8HImode;
-	  case E_QImode:
-	    return V16QImode;
-	  default:
-	    break;
-	  }
-      else if (TARGET_XTHEAD_VLEN (128))
-	switch (mode)
-	  {
-	  case E_SFmode:
-	    return V8SFmode;
-	  case E_HFmode:
-	    return V16HFmode;
-	  case E_SImode:
-	    return V8SImode;
-	  case E_HImode:
-	    return V16HImode;
-	  case E_QImode:
-	    return V32QImode;
-	  default:
-	    break;
-	  }
-    }
-
-  if (TARGET_XTHEAD_DSP)
+  if (TARGET_XTHEAD_ZPN)
     {
       if (TARGET_64BIT)
 	switch (mode)
@@ -1133,56 +638,516 @@ riscv_preferred_simd_mode (scalar_mode mode)
   if (TARGET_XTHEAD_ZPSFOPERAND)
     if (mode == E_HImode) return E_V2HImode;
 
-  return word_mode;
+  return VOIDmode;
 }
 
-/* Implement TARGET_ARRAY_MODE_SUPPORTED_P.  */
+/* Implement TARGET_IV_GEN_LOAD_INDEX.
+   Don't generate index for induction variables for the loop when
+   4k-optimize is enable and loop size is larger than 4k.  */
 
 static bool
-riscv_array_mode_supported_p (machine_mode mode,
-			      unsigned HOST_WIDE_INT nelems ATTRIBUTE_UNUSED)
+riscv_iv_gen_load_index (HOST_WIDE_INT loop_niter,
+			 machine_mode mem_mode)
 {
-  return riscv_vector_mode_supported_p (mode);
+  HOST_WIDE_INT mem_size = GET_MODE_SIZE (mem_mode).to_constant ();
+
+  if (!riscv_4k_optimize)
+    return true;
+
+  if (loop_niter * mem_size > 4048)
+    return false;
+  return true;
 }
 
-/* Implement TARGET_DWARF_REGISTER_SPAN.  */
 
-static rtx
-riscv_dwarf_register_span (rtx rtl)
+/* Implement TARGET_REGISTER_REJECT_INIT_P.  */
+
+static bool
+riscv_register_reject_init_p (rtx reg)
 {
-  machine_mode mode = GET_MODE (rtl);
-  unsigned regno = REGNO (rtl);
-  rtx parts[16];
+  if (TARGET_VECTOR && VECTOR_MODE_P (GET_MODE (reg)))
+    return true;
+  return false;
+}
 
-  if (riscv_vector_mode_vext_supported_p (mode)
-      && UNITS_PER_VR_ARG
-      && TARGET_XTHEAD_VLEN (128) && TARGET_64BIT
-      && VR_RESERVE_REG_P (regno + 8))
+static bool
+function_has_vector_ops_p (tree fntype)
+{
+  /* Check function's return type.  */
+  if(builtin_vector_type_p (TREE_TYPE (fntype)))
+    return true;
+
+  /* Check function args' type.  */
+  tree argtype;
+  function_args_iterator iter;
+  FOREACH_FUNCTION_ARGS (fntype, argtype, iter)
+    if(builtin_vector_type_p (argtype))
+      return true;
+
+  return false;
+}
+
+/* Implement TARGET_EXPAND_TO_RTL_HOOK.  */
+
+static void
+riscv_expand_to_rtl_hook (void)
+{
+  /* If any of function's args or return type is vector type, we set
+     has_vector_ops_p to true and reinit regs.  */
+  if (function_has_vector_ops_p (TREE_TYPE (cfun->decl)))
     {
-      int nregs = GET_MODE_SIZE (mode) / 8;
-      for (int i = 0; i < nregs; i += 2)
+      cfun->machine->has_vector_ops_p = true;
+      reinit_regs ();
+    }
+}
+
+#include "backend.h"
+#include "pass_manager.h"
+#include "context.h"
+#include "cfgrtl.h"
+#include "cfghooks.h"
+#include "cfganal.h"
+
+static void
+replace_insn_regnum(rtx *pattern_ref,
+                    rtx old_reg,
+                    unsigned int new_regnum)
+{
+  const char *fmt;
+  int i, j;
+  enum rtx_code code = GET_CODE(*pattern_ref);
+
+  fmt = GET_RTX_FORMAT(code);
+  for (i = GET_RTX_LENGTH(code) - 1; i >= 0; i--)
+    if (fmt[i] == 'e')
+      replace_insn_regnum(&XEXP(*pattern_ref, i), old_reg, new_regnum);
+    else if (fmt[i] == 'E')
+      for (j = 0; j < XVECLEN(*pattern_ref, i); j++)
+        replace_insn_regnum(&XVECEXP(*pattern_ref, i, j), old_reg,
+                            new_regnum);
+    else if (fmt[i] == 'r')
+    {
+      if (REGNO(*pattern_ref) == REGNO(old_reg))
+        *pattern_ref = gen_rtx_REG(GET_MODE(*pattern_ref), new_regnum);
+    }
+}
+
+static void
+do_ud_du_analysis(void)
+{
+  basic_block bb;
+  rtx_insn *insn;
+  FOR_EACH_BB_FN (bb, cfun)
+    FOR_BB_INSNS (bb, insn)
+      set_block_for_insn (insn, bb);
+
+  df_set_flags (DF_RD_PRUNE_DEAD_DEFS);
+  df_chain_add_problem (DF_UD_CHAIN | DF_DU_CHAIN);
+  df_insn_rescan_all ();
+  df_analyze ();
+  df_set_flags (DF_DEFER_INSN_RESCAN);
+}
+
+rtx riscv_di_high_part_subreg(rtx reg)
+{
+  poly_uint64 high_part_offset = subreg_highpart_offset (SImode, DImode);
+
+  return simplify_gen_subreg (
+	   SImode, reg,
+	   DImode, high_part_offset);
+}
+
+rtx riscv_di_low_part_subreg(rtx reg)
+{
+  poly_uint64 low_part_offset = subreg_lowpart_offset (SImode, DImode);
+
+  return simplify_gen_subreg (
+	   SImode, reg,
+	   DImode, low_part_offset);
+}
+
+static void
+riscv_split_shiftrtdi3 (rtx dst, rtx src, rtx shiftamount, bool logic_shift_p)
+{
+  rtx src_high_part;
+  rtx dst_high_part, dst_low_part;
+
+  dst_high_part = riscv_di_high_part_subreg (dst);
+  src_high_part = riscv_di_high_part_subreg (src);
+  dst_low_part = riscv_di_low_part_subreg (dst);
+
+  if (INTVAL (shiftamount) < 32)
+    {
+      if (logic_shift_p)
 	{
-	  parts[i] = gen_rtx_REG (DImode, regno);
-	  parts[i + 1] = gen_rtx_REG (DImode, regno + 8);
-	  regno++;
+	  emit_insn (gen_riscv_uwexti_si (dst_low_part, src,
+					  shiftamount));
+	  emit_insn (gen_lshrsi3 (dst_high_part, src_high_part,
+				  shiftamount));
 	}
-      return gen_rtx_PARALLEL (VOIDmode, gen_rtvec_v (nregs, parts));
+      else
+	{
+	  emit_insn (gen_riscv_wexti_si (dst_low_part, src,
+					 shiftamount));
+	  emit_insn (gen_ashrsi3 (dst_high_part, src_high_part,
+				  shiftamount));
+	}
+    }
+  else
+    {
+      rtx new_shift_amout = gen_int_mode(INTVAL (shiftamount) - 32, SImode);
+
+      if (logic_shift_p)
+	{
+	  emit_insn (gen_lshrsi3 (dst_low_part, src_high_part,
+				  new_shift_amout));
+	  emit_move_insn (dst_high_part, const0_rtx);
+	}
+      else
+	{
+	  emit_insn (gen_ashrsi3 (dst_low_part, src_high_part,
+				  new_shift_amout));
+	  emit_insn (gen_ashrsi3 (dst_high_part, src_high_part,
+				  GEN_INT (31)));
+	}
+    }
+}
+
+void
+riscv_split_ashiftdi3 (rtx dst, rtx src, rtx shiftamount)
+{
+  rtx src_low_part;
+  rtx dst_high_part, dst_low_part;
+
+  dst_high_part = riscv_di_high_part_subreg (dst);
+  dst_low_part = riscv_di_low_part_subreg (dst);
+
+  src_low_part = riscv_di_low_part_subreg (src);
+
+  if (INTVAL (shiftamount) < 32)
+    {
+      rtx ext_start;
+      ext_start = gen_int_mode(32 - INTVAL (shiftamount), SImode);
+      emit_insn (gen_riscv_wexti_si (dst_high_part, src, ext_start));
+      emit_insn (gen_ashlsi3 (dst_low_part, src_low_part, shiftamount));
+    }
+  else
+    {
+      rtx new_shift_amout = gen_int_mode(INTVAL (shiftamount) - 32, SImode);
+      emit_insn (gen_ashlsi3 (dst_high_part, src_low_part,
+			      new_shift_amout));
+      emit_move_insn (dst_low_part, GEN_INT (0));
+    }
+}
+
+void
+riscv_split_ashiftrtdi3 (rtx dst, rtx src, rtx shiftamount)
+{
+  riscv_split_shiftrtdi3 (dst, src, shiftamount, false);
+}
+
+void
+riscv_split_lshiftrtdi3 (rtx dst, rtx src, rtx shiftamount)
+{
+  riscv_split_shiftrtdi3 (dst, src, shiftamount, true);
+}
+
+/* Depth first traverse the preds of CUR_BB, if a block set REG
+   is found, return TRUE. VISITED_BB record the blocks that has
+   been traversed.  */
+
+static bool
+reg_set_by_preds (basic_block cur_bb, bitmap visited_bb, const_rtx reg)
+{
+  edge_iterator ei;
+  edge e;
+
+  FOR_EACH_EDGE (e, ei, cur_bb->preds)
+    {
+      basic_block bb = e->src;
+      class df_lr_bb_info *bb_info = df_lr_get_bb_info (bb->index);
+
+      if (bitmap_bit_p (visited_bb, bb->index))
+	continue;
+
+      if (!bb_info)
+	return true;
+
+      if (bitmap_bit_p (&bb_info->def, REGNO (reg)))
+	return true;
+
+      bitmap_set_bit (visited_bb, bb->index);
+      if (reg_set_by_preds (bb, visited_bb, reg))
+	return true;
+    }
+  return false;
+}
+
+/* Check if the RGE is set between FROM and TO, return TRUE if it is set.  */
+
+static bool
+reg_set_trace_p (const_rtx reg, rtx_insn *from, rtx_insn *to)
+{
+  bool set = false;
+  rtx_insn *insn;
+  basic_block from_bb = BLOCK_FOR_INSN (from);
+  basic_block to_bb = BLOCK_FOR_INSN (to);
+  bitmap visited_blocks = BITMAP_ALLOC (NULL);
+
+  /* The x0 can never be set.  */
+  if (REGNO (reg) == GP_REG_FIRST)
+    return false;
+
+  if (from == to)
+    return false;
+
+  /* Case 1: FROM and TO are in the same block, and FROM is before TO.  */
+  if (from_bb == to_bb && DF_INSN_LUID (from) < DF_INSN_LUID (to))
+    {
+      for (insn = NEXT_INSN (from); insn != to; insn = NEXT_INSN (insn))
+	if (INSN_P (insn) && reg_set_p (reg, insn))
+	  return true;
+      return false;
     }
 
-  return NULL_RTX;
+  /* Case 2: FROM and TO are in different blocks
+	     or they are in same block and FROM follows TO. */
+
+  /* Check if the REG is set from FROM to the end of the block.  */
+  for (insn = NEXT_INSN (from); insn != NEXT_INSN (BB_END (from_bb));
+       insn = NEXT_INSN (insn))
+    if (INSN_P (insn) && reg_set_p (reg, insn))
+      return true;
+
+  /* Check if the REG is set from the start of block to TO.  */
+  for (insn = BB_HEAD (to_bb); insn != to; insn = NEXT_INSN (insn))
+    if (INSN_P (insn) && reg_set_p (reg, insn))
+      return true;
+
+  /* Check if the REG is set in every path from FROM_BB to TO_BB.  */
+  bitmap_set_bit (visited_blocks, from_bb->index);
+  set = reg_set_by_preds (to_bb, visited_blocks, reg);
+  BITMAP_FREE (visited_blocks);
+  return set;
 }
 
-#undef  TARGET_DWARF_REGISTER_SPAN
-#define TARGET_DWARF_REGISTER_SPAN riscv_dwarf_register_span
+/* If REG is defined in INSN and used by other insns, return TRUE.
+   Else return FALSE.  */
 
-#undef TARGET_ARRAY_MODE_SUPPORTED_P
-#define TARGET_ARRAY_MODE_SUPPORTED_P riscv_array_mode_supported_p
+static bool
+reg_used_following (rtx_insn *insn, rtx reg, bool samebb = true)
+{
+  df_ref def;
 
-#undef TARGET_VECTOR_MODE_SUPPORTED_P
-#define TARGET_VECTOR_MODE_SUPPORTED_P riscv_vector_mode_supported_p
+  /* Ignore the use of x0.  */
+  if (REGNO (reg) == GP_REG_FIRST)
+    return false;
 
-#undef TARGET_VECTORIZE_PREFERRED_SIMD_MODE
-#define TARGET_VECTORIZE_PREFERRED_SIMD_MODE riscv_preferred_simd_mode
+  FOR_EACH_INSN_DEF (def, insn)
+    {
+      struct df_link *reg_use;
 
-#include "riscv-thead-dfsrm.c"
+      if (DF_REF_REGNO (def) == REGNO (reg))
+	for (reg_use = DF_REF_CHAIN (def); reg_use; reg_use = reg_use->next)
+	  {
+	    if (!samebb && DF_REF_BB(reg_use->ref) == BLOCK_FOR_INSN (insn))
+	      continue;
+	    if (DF_REF_IS_ARTIFICIAL (reg_use->ref))
+	      continue;
+	    else
+	      return true;
+	  }
+    }
+  return false;
+}
+
+/* Scheduling pass is now finished.  */
+int sched_finish_global = -1;
+static void
+riscv_sched_finish_global (FILE *dump ATTRIBUTE_UNUSED,
+			   int sched_verbose ATTRIBUTE_UNUSED)
+{
+  if (reload_completed)
+    sched_finish_global++;
+}
+
+static void
+riscv_asm_function_prologue (FILE *)
+{
+  sched_finish_global = -1;
+}
+
+/* Implement TARGET_FWPROP_LEGITIMIZE_SET.
+   Try to legitimize DEF_SET to fit forward propagration.  */
+
+static void
+riscv_fwprop_legitimize_set (rtx *def_set)
+{
+  rtx set = *def_set;
+  if (riscv_fwprop_vmov_v0p7 &&
+      GET_CODE (SET_SRC (set)) == UNSPEC && XINT (SET_SRC (set), 1) == UNSPEC_VWLDST)
+    {
+      *def_set = gen_rtx_SET (SET_DEST (set), XVECEXP (SET_SRC (set), 0, 0));
+    }
+}
+
+/* Return nozero if OPERAND is a nnan const double. */
+
+static int
+riscv_is_nnan_rtx (rtx operand)
+{
+  if (operand && CONST_DOUBLE_P (operand)
+      && !REAL_VALUE_ISNAN (*CONST_DOUBLE_REAL_VALUE (operand)))
+    return 1;
+  return 0;
+}
+
+/* Return true if find the insn with nnan REG_EQUAL or REG_EQUIV note form MEM or
+   CONST_DOUBLE 0.If it is a register, try to look up. When Nan or not found, it
+   means that instruction 'fclass' deletion cannot be performed, and only false is
+   returned. */
+
+static bool
+riscv_find_nnan_eq_note (rtx_insn *insn, unsigned int regno)
+{
+  rtx insn_set = single_set (insn);
+  if (!(insn_set && REG_P (SET_DEST (insn_set))
+      && REGNO (SET_DEST (insn_set)) == regno))
+    return false;
+
+  rtx src = SET_SRC  (insn_set);
+  if (REG_P (src))
+    {
+      df_ref use;
+      rtx_insn *def_insn = NULL;
+
+      unsigned int use_regno = REGNO (src);
+      FOR_EACH_INSN_USE (use, insn)
+	{
+	  unsigned int def_regno = DF_REF_REGNO (use);
+	  if (use_regno != def_regno)
+	    continue;
+
+	  struct df_link *temp = DF_REF_CHAIN (use);
+	  for (; temp; temp = temp->next)
+	    {
+	      if (!DF_REF_INSN_INFO (temp->ref))
+		continue;
+
+	      def_insn = DF_REF_INSN (temp->ref);
+
+	      if (!riscv_find_nnan_eq_note (def_insn, use_regno))
+		return false;
+	    }
+	}
+
+      return def_insn ? true : false;
+    }
+
+  if (MEM_P (src))
+    {
+      rtx link = find_reg_equal_equiv_note (insn);
+
+      if (link && riscv_is_nnan_rtx (XEXP (link, 0)))
+	return true;
+    }
+
+  if (const_0_operand (src, GET_MODE (src)))
+    return true;
+
+  return false;
+}
+
+/* Try to set non Nan constant note for register, which makes it possible
+   to optimize the register instructions later. */
+
+void
+riscv_optimize_quiet_comparison ()
+{
+  rtx_insn *insn;
+  rtx src;
+  df_ref use;
+
+  do_ud_du_analysis ();
+
+  for (insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    {
+      if (!INSN_P (insn) || !single_set (insn))
+	continue;
+
+      src = SET_SRC (single_set (insn));
+
+      if (GET_CODE (src) != UNSPEC || !(XINT (src, 1) == UNSPEC_FLT_QUIET || XINT (src, 1) == UNSPEC_FLE_QUIET))
+	continue;
+
+      unsigned int nnan_regno = 0;
+      FOR_EACH_INSN_USE (use, insn)
+	{
+	  struct df_link *temp = DF_REF_CHAIN (use);
+	  for (; temp; temp = temp->next)
+	    {
+	      if (!DF_REF_INSN_INFO (temp->ref))
+		continue;
+
+	      rtx_insn *def_insn = DF_REF_INSN (temp->ref);
+
+	      if (!riscv_find_nnan_eq_note (def_insn, DF_REF_REGNO (use)))
+		{
+		  nnan_regno = 0;
+		  break;
+		}else
+		  nnan_regno = DF_REF_REGNO (use);
+	    }
+	  if (nnan_regno)
+	    {
+	      /* TODO: clobber unused. */
+	      rtx new_pat = copy_rtx (PATTERN (insn));
+	      rtx new_set = XVECEXP (new_pat, 0, 0);
+
+	      rtvec temp = rtvec_alloc (3);
+	      RTVEC_ELT (temp, 0) = XVECEXP (src, 0, 0);
+	      RTVEC_ELT (temp, 1) = XVECEXP (src, 0, 1);
+	      if (REGNO (XVECEXP (src, 0, 0)) == nnan_regno)
+		RTVEC_ELT (temp, 2) = const0_rtx;
+	      else
+		RTVEC_ELT (temp, 2) = const1_rtx;
+
+	      XVEC (XEXP (new_set, 1), 0) = temp;
+	      rtx_insn * new_insn = emit_insn_before (new_pat, insn);
+	      if (REG_NOTES (insn))
+		REG_NOTES (new_insn) = copy_rtx (REG_NOTES (insn));
+
+	      extract_insn (new_insn);
+	      remove_insn (insn);
+	      break;
+	    }
+	}
+    }
+
+  df_finish_pass (false);
+}
+
+
 #include "riscv-thead-dsext.c"
+#include "riscv-thead-dvsetvl.c"
+#include "riscv-thead-dvsetvl-v0p7.c"
+#include "riscv-thead-dread-vlenb.c"
+
+#undef TARGET_IV_GEN_LOAD_INDEX
+#define TARGET_IV_GEN_LOAD_INDEX riscv_iv_gen_load_index
+
+#undef TARGET_REGISTER_REJECT_INIT_P
+#define TARGET_REGISTER_REJECT_INIT_P riscv_register_reject_init_p
+
+#undef TARGET_EXPAND_TO_RTL_HOOK
+#define TARGET_EXPAND_TO_RTL_HOOK riscv_expand_to_rtl_hook
+
+#undef TARGET_SCHED_FINISH_GLOBAL
+#define TARGET_SCHED_FINISH_GLOBAL riscv_sched_finish_global
+
+#undef  TARGET_ASM_FUNCTION_PROLOGUE
+#define TARGET_ASM_FUNCTION_PROLOGUE riscv_asm_function_prologue
+
+#undef TARGET_FWPROP_LEGITIMIZE_SET
+#define TARGET_FWPROP_LEGITIMIZE_SET riscv_fwprop_legitimize_set
+

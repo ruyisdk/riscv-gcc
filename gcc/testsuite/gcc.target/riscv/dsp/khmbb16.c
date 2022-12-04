@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_khmbb16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t test_khmbb16(uint64_t a, uint64_t b) {
     return __rv__khmbb16 (a, b);
 }
 

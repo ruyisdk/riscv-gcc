@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_sll32(uintXLEN_t a, uint32_t b) {
+uint64_t test_sll32(uint64_t a, uint32_t b) {
     return __rv__sll32 (a, b);
 }
 

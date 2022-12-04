@@ -45,15 +45,20 @@ along with GCC; see the file COPYING3.  If not see
 extern const char *riscv_expand_arch (int argc, const char **argv);
 extern const char *riscv_expand_arch_from_cpu (int argc, const char **argv);
 extern const char *riscv_default_mtune (int argc, const char **argv);
+extern const char *riscv_expand_abi_from_arch (int argc, const char **argv);
+extern const char *riscv_expand_abi_from_cpu (int argc, const char **argv);
 
 # define EXTRA_SPEC_FUNCTIONS						\
   { "riscv_expand_arch", riscv_expand_arch },				\
   { "riscv_expand_arch_from_cpu", riscv_expand_arch_from_cpu },		\
-  { "riscv_default_mtune", riscv_default_mtune },
+  { "riscv_default_mtune", riscv_default_mtune },			\
+  { "riscv_expand_abi_from_arch", riscv_expand_abi_from_arch },		\
+  { "riscv_expand_abi_from_cpu", riscv_expand_abi_from_cpu },
 
 /* Support for a compile-time default CPU, et cetera.  The rules are:
    --with-arch is ignored if -march or -mcpu is specified.
-   --with-abi is ignored if -mabi is specified.
+   --with-abi is ignored if -mabi is specified. If -mcpu or -march is specified,
+     suitable -mabi will be selected from arch string.
    --with-tune is ignored if -mtune or -mcpu is specified.
 
    But using default -march/-mtune value if -mcpu don't have valid option.  */
@@ -64,7 +69,11 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   {"arch", "%{!march=*:"						\
 	   "  %{!mcpu=*:-march=%(VALUE)}"				\
 	   "  %{mcpu=*:%:riscv_expand_arch_from_cpu(%* %(VALUE))}}" },	\
-  {"abi", "%{!mabi=*:-mabi=%(VALUE)}" }, \
+  {"abi", "%{!mabi=*:"							\
+	   "  %{!march=*:"						\
+	   "    %{!mcpu=*:-mabi=%(VALUE)}"				\
+	   "    %{mcpu=*:%:riscv_expand_abi_from_cpu(%* %(VALUE))}}"	\
+	   "  %{march=*:%:riscv_expand_abi_from_arch(%*)}}" }
 
 #ifdef IN_LIBGCC2
 #undef TARGET_64BIT
@@ -72,13 +81,20 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 #define TARGET_64BIT (__riscv_xlen == 64)
 #endif /* IN_LIBGCC2 */
 
+#ifdef HAVE_AS_MISA_SPEC
+#define ASM_MISA_SPEC "%{misa-spec=*}"
+#else
+#define ASM_MISA_SPEC ""
+#endif
+
 #undef ASM_SPEC
 #define ASM_SPEC "\
 %(subtarget_asm_debugging_spec) \
 %{" FPIE_OR_FPIC_SPEC ":-fpic} \
 %{march=*} \
 %{mabi=*} \
-%(subtarget_asm_spec)"
+%(subtarget_asm_spec)" \
+ASM_MISA_SPEC
 
 #undef DRIVER_SELF_SPECS
 #define DRIVER_SELF_SPECS					\
@@ -97,8 +113,7 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 
 /* The mapping from gcc register number to DWARF 2 CFA column number.  */
 #define DWARF_FRAME_REGNUM(REGNO) \
-  (GP_REG_P (REGNO) || FP_REG_P (REGNO) \
-   || VR_REG_P (REGNO) || VR_RESERVE_REG_P (REGNO) \
+  (GP_REG_P (REGNO) || FP_REG_P (REGNO) || VECT_REG_P (REGNO)	\
    ? REGNO : INVALID_REGNUM)
 
 /* The DWARF 2 CFA column which tracks the return address.  */
@@ -127,12 +142,13 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 
 /* The `Q' extension is not yet supported.  */
 #define UNITS_PER_FP_REG (TARGET_DOUBLE_FLOAT ? 8 : 4)
+#define UNITS_PER_V_REG (GET_MODE_SIZE (VNx2DImode))
 
 /* The largest type that can be passed in floating-point registers.  */
 #define UNITS_PER_FP_ARG						\
   ((riscv_abi == ABI_ILP32 || riscv_abi == ABI_ILP32E			\
-    || riscv_abi == ABI_LP64 || riscv_abi == ABI_LP64V)			\
-   ? 0									\
+    || riscv_abi == ABI_LP64)						\
+   ? 0 									\
    : ((riscv_abi == ABI_ILP32F || riscv_abi == ABI_LP64F) ? 4 : 8))
 
 /* Set the sizes of the core types.  */
@@ -261,9 +277,13 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
    - 32 floating point registers
    - 2 fake registers:
 	- ARG_POINTER_REGNUM
-	- FRAME_POINTER_REGNUM */
+	- FRAME_POINTER_REGNUM
+	- VECTOR_LENGTH_REGNUM
+	- VECTOR_TYPE_REGNUM
+   - 30 unused registers for future expansion
+   - 32 vector registers */
 
-#define FIRST_PSEUDO_REGISTER 108
+#define FIRST_PSEUDO_REGISTER 128
 
 /* x0, sp, gp, and tp are fixed.  */
 
@@ -275,14 +295,11 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
   /* Others.  */							\
-  1, 1,									\
+  1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   /* Vector registers.  */						\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
-  /* reserved for vector */						\
-  1, 1, 1, 1, 1, 1, 1, 1,						\
-  /* system. */								\
-  1, 1,									\
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0			\
 }
 
 /* a0-a7, t0-t6, fa0-fa7, and ft0-ft11 are volatile across calls.
@@ -296,14 +313,11 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1,			\
   1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,			\
   /* Others.  */							\
-  1, 1,									\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   /* Vector registers.  */						\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
-  1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0,			\
-  /* reserved for vector */						\
-  1, 1, 1, 1, 1, 1, 1, 1,						\
-  /* system. */								\
-  1, 1,									\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1			\
 }
 
 /* Select a register mode required for caller save of hard regno REGNO.
@@ -323,6 +337,10 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
 #define FP_REG_LAST  63
 #define FP_REG_NUM   (FP_REG_LAST - FP_REG_FIRST + 1)
 
+#define VECT_REG_FIRST 96
+#define VECT_REG_LAST  127
+#define VECT_REG_NUM   (VECT_REG_LAST - VECT_REG_FIRST + 1)
+
 /* The DWARF 2 CFA column which tracks the return address from a
    signal handler context.  This means that to maintain backwards
    compatibility, no hard register can be assigned this column if it
@@ -333,6 +351,8 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
   ((unsigned int) ((int) (REGNO) - GP_REG_FIRST) < GP_REG_NUM)
 #define FP_REG_P(REGNO) \
   ((unsigned int) ((int) (REGNO) - FP_REG_FIRST) < FP_REG_NUM)
+#define VECT_REG_P(REGNO) \
+  ((unsigned int) ((int) (REGNO) - VECT_REG_FIRST) < VECT_REG_NUM)
 
 /* True when REGNO is in SIBCALL_REGS set.  */
 #define SIBCALL_REG_P(REGNO)	\
@@ -350,6 +370,10 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
    the stack or hard frame pointer.  */
 #define ARG_POINTER_REGNUM 64
 #define FRAME_POINTER_REGNUM 65
+/* These two registers don't really exist: they are used for vector
+   operations.  */
+#define VECTOR_LENGTH_REGNUM 66
+#define VECTOR_TYPE_REGNUM 67
 
 /* Register in which static-chain is passed to a function.  */
 #define STATIC_CHAIN_REGNUM (GP_TEMP_FIRST + 2)
@@ -361,8 +385,14 @@ extern const char *riscv_default_mtune (int argc, const char **argv);
    The epilogue temporary mustn't conflict with the return registers,
    the frame pointer, the EH stack adjustment, or the EH data registers. */
 
-#define RISCV_PROLOGUE_TEMP_REGNUM (GP_TEMP_FIRST + 1)
+#define RISCV_PROLOGUE_TEMP_REGNUM (GP_TEMP_FIRST)
 #define RISCV_PROLOGUE_TEMP(MODE) gen_rtx_REG (MODE, RISCV_PROLOGUE_TEMP_REGNUM)
+#define RISCV_PROLOGUE_TEMP2_REGNUM (GP_TEMP_FIRST + 2)
+#define RISCV_PROLOGUE_TEMP2(MODE) gen_rtx_REG (MODE, RISCV_PROLOGUE_TEMP2_REGNUM)
+
+#define RISCV_CALL_ADDRESS_TEMP_REGNUM (GP_TEMP_FIRST + 1)
+#define RISCV_CALL_ADDRESS_TEMP(MODE) \
+  gen_rtx_REG (MODE, RISCV_CALL_ADDRESS_TEMP_REGNUM)
 
 #define MCOUNT_NAME "_mcount"
 
@@ -413,11 +443,10 @@ enum reg_class
   GR_REGS,			/* integer registers */
   FP_REGS,			/* floating-point registers */
   FRAME_REGS,			/* arg pointer and frame pointer */
-  VMASK_REGS,			/* vector mask register */
-  V_NOMASK_REGS,		/* Vector registers except vector mask register */
-  V_REGS,			/* Vector registers */
-  RESERVE_VREGS,		/* reserved vector registers */
-  RESERVE_SYSREGS,		/* reserved system registers */
+  VECTOR_MASK_REGS,		/* vector mask registers */
+  VECTOR_NO_MASK_REGS,		/* vector registers except mask registers */
+  VECTOR_REGS,			/* vector registers */
+  VTYPE_REGS,			/* vype register */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
 };
@@ -438,11 +467,10 @@ enum reg_class
   "GR_REGS",								\
   "FP_REGS",								\
   "FRAME_REGS",								\
-  "VMASK_REGS",								\
-  "V_NOMASK_REGS",							\
-  "V_REGS",								\
-  "RESERVE_VREGS",							\
-  "RESERVE_SYSREGS",							\
+  "VECTOR_MASK_REGS", 							\
+  "VECTOR_NO_MASK_REGS", 						\
+  "VECTOR_REGS", 							\
+  "VTYPE_REGS", 							\
   "ALL_REGS"								\
 }
 
@@ -465,12 +493,11 @@ enum reg_class
   { 0xffffffff, 0x00000000, 0x00000000, 0x00000000 },	/* GR_REGS */		\
   { 0x00000000, 0xffffffff, 0x00000000, 0x00000000 },	/* FP_REGS */		\
   { 0x00000000, 0x00000000, 0x00000003, 0x00000000 },	/* FRAME_REGS */	\
-  { 0x00000000, 0x00000000, 0x00000004, 0x00000000 },   /* VMASK_REGS */	\
-  { 0x00000000, 0x00000000, 0xfffffff8, 0x00000003 },   /* V_NOMASK_REGS */	\
-  { 0x00000000, 0x00000000, 0xfffffffc, 0x00000003 },	/* V_REGS */		\
-  { 0x00000000, 0x00000000, 0x00000000, 0x000003fc },   /* RESERVE_VREGS */	\
-  { 0x00000000, 0x00000000, 0x00000000, 0x00000c00 },   /* RESERVE_SYSREGS */	\
-  { 0xffffffff, 0xffffffff, 0xffffffff, 0x00000fff }	/* ALL_REGS */		\
+  { 0x00000000, 0x00000000, 0x00000000, 0x00000001 },	/* VECTOR_MASK_REGS */\
+  { 0x00000000, 0x00000000, 0x00000000, 0xfffffffe },	/* VECTOR_REGS */\
+  { 0x00000000, 0x00000000, 0x00000000, 0xffffffff },	/* VECTOR_REGS */\
+  { 0x00000000, 0x00000000, 0x00000008, 0x00000000 },	/* VTYPE_REGS */\
+  { 0xffffffff, 0xffffffff, 0x0000000f, 0xffffffff }	/* ALL_REGS */		\
 }
 
 /* A C expression whose value is a register class containing hard
@@ -510,15 +537,15 @@ enum reg_class
   60, 61, 62, 63,							\
   /* Call-saved FPRs.  */						\
   40, 41, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59,			\
+  /* Call-clobbered vector registers.  */				\
+  97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,	\
+  111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123,	\
+  124, 125, 126, 127,							\
+  /* The vector mask register.  */					\
+  96,									\
   /* None of the remaining classes have defined call-saved		\
      registers.  */							\
-  64, 65,								\
-  74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89,	\
-  90, 91, 92, 93, 94, 95, 96, 97, 66, 67, 68, 69, 70, 71, 72, 73,	\
-  /* reserved for vector */		\
-  98, 99, 100, 101, 102, 103, 104, 105,	\
-  /* system. */				\
-  106, 107,				\
+  64, 65, 66, 67							\
 }
 
 /* True if VALUE is a signed 12-bit number.  */
@@ -526,11 +553,28 @@ enum reg_class
 #define SMALL_OPERAND(VALUE) \
   ((unsigned HOST_WIDE_INT) (VALUE) + IMM_REACH/2 < IMM_REACH)
 
+#define POLY_SMALL_OPERAND_P(POLY_VALUE)		\
+  (POLY_VALUE.is_constant () ?				\
+     SMALL_OPERAND (POLY_VALUE.to_constant ()) : false)
+
 /* True if VALUE can be loaded into a register using LUI.  */
 
 #define LUI_OPERAND(VALUE)						\
   (((VALUE) | ((1UL<<31) - IMM_REACH)) == ((1UL<<31) - IMM_REACH)	\
    || ((VALUE) | ((1UL<<31) - IMM_REACH)) + IMM_REACH == 0)
+
+/* The following macros use B extension instructions to load constants.  */
+
+/* If this is a single bit mask, then we can load it with bseti.  But this
+   is not useful for any of the low 31 bits because we can use addi or lui
+   to load them.  It is wrong for loading SImode 0x80000000 on rv64 because it
+   needs to be sign-extended.  So we restrict this to the upper 32-bits
+   only.  */
+/* ??? It is OK for DImode 0x80000000 on rv64, but we don't know the target
+   mode in riscv_build_integer_1 so can't handle this case separate from the
+   bad SImode case.  */
+#define SINGLE_BIT_MASK_OPERAND(VALUE) \
+  (pow2p_hwi (VALUE) && (ctz_hwi (VALUE) >= 32))
 
 /* Stack layout; function entry, exit and calling.  */
 
@@ -592,7 +636,7 @@ enum reg_class
 #define FUNCTION_VALUE(VALTYPE, FUNC) \
   riscv_function_value (VALTYPE, FUNC, VOIDmode)
 
-#define FUNCTION_VALUE_REGNO_P(N) ((N) == GP_RETURN || (N) == FP_RETURN || (N) == VR_RETURN)
+#define FUNCTION_VALUE_REGNO_P(N) ((N) == GP_RETURN || (N) == FP_RETURN)
 
 /* 1 if N is a possible register number for function argument passing.
    We have no FP argument registers when soft-float.  */
@@ -600,8 +644,7 @@ enum reg_class
 /* Accept arguments in a0-a7, and in fa0-fa7 if permitted by the ABI.  */
 #define FUNCTION_ARG_REGNO_P(N)						\
   (IN_RANGE ((N), GP_ARG_FIRST, GP_ARG_LAST)				\
-   || (UNITS_PER_FP_ARG && IN_RANGE ((N), FP_ARG_FIRST, FP_ARG_LAST))	\
-   || (UNITS_PER_VR_ARG && IN_RANGE ((N), VR_ARG_FIRST, VR_ARG_LAST)))
+   || (UNITS_PER_FP_ARG && IN_RANGE ((N), FP_ARG_FIRST, FP_ARG_LAST)))
 
 typedef struct {
   /* Number of integer registers used so far, up to MAX_ARGS_IN_REGISTERS. */
@@ -609,9 +652,6 @@ typedef struct {
 
   /* Number of floating-point registers used so far, likewise.  */
   unsigned int num_fprs;
-
-  /* Number of vector registers used so far, likewise.  */
-  unsigned int num_vrs;
 } CUMULATIVE_ARGS;
 
 /* Initialize a variable CUM of type CUMULATIVE_ARGS
@@ -756,6 +796,13 @@ typedef struct {
 
 #define LOGICAL_OP_NON_SHORT_CIRCUIT 0
 
+/* Configure CLZ/CTZ behavior. */
+
+#define CLZ_DEFINED_VALUE_AT_ZERO(MODE, VALUE) \
+  ((VALUE) = GET_MODE_UNIT_BITSIZE (MODE), 2)
+#define CTZ_DEFINED_VALUE_AT_ZERO(MODE, VALUE) \
+  ((VALUE) = GET_MODE_UNIT_BITSIZE (MODE), 2)
+
 /* Control the assembler format that we output.  */
 
 /* Output to assembler file text saying following lines
@@ -781,14 +828,14 @@ typedef struct {
   "fs0", "fs1", "fa0", "fa1", "fa2", "fa3", "fa4", "fa5",	\
   "fa6", "fa7", "fs2", "fs3", "fs4", "fs5", "fs6", "fs7",	\
   "fs8", "fs9", "fs10","fs11","ft8", "ft9", "ft10","ft11",	\
-  "arg", "frame",						\
+  "arg", "frame","vl","vtype","N/A", "N/A", "N/A", "N/A",	\
+  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 	\
+  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 	\
+  "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", 	\
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
   "v8",  "v9",  "v10", "v11", "v12", "v13", "v14", "v15",	\
   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",	\
-  "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",	\
-  "reserved", "reserved", "reserved", "reserved",		\
-  "reserved", "reserved", "reserved", "reserved",		\
-  "frm", "vtype",						\
+  "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31" 	\
 }
 
 #define ADDITIONAL_REGISTER_NAMES					\
@@ -857,38 +904,6 @@ typedef struct {
   { "f29",	29 + FP_REG_FIRST },					\
   { "f30",	30 + FP_REG_FIRST },					\
   { "f31",	31 + FP_REG_FIRST },					\
-  { "v0",	 0 + V_REG_FIRST },					\
-  { "v1",	 1 + V_REG_FIRST },					\
-  { "v2",	 2 + V_REG_FIRST },					\
-  { "v3",	 3 + V_REG_FIRST },					\
-  { "v4",	 4 + V_REG_FIRST },					\
-  { "v5",	 5 + V_REG_FIRST },					\
-  { "v6",	 6 + V_REG_FIRST },					\
-  { "v7",	 7 + V_REG_FIRST },					\
-  { "v8",	 8 + V_REG_FIRST },					\
-  { "v9",	 9 + V_REG_FIRST },					\
-  { "v10",	10 + V_REG_FIRST },					\
-  { "v11",	11 + V_REG_FIRST },					\
-  { "v12",	12 + V_REG_FIRST },					\
-  { "v13",	13 + V_REG_FIRST },					\
-  { "v14",	14 + V_REG_FIRST },					\
-  { "v15",	15 + V_REG_FIRST },					\
-  { "v16",	16 + V_REG_FIRST },					\
-  { "v17",	17 + V_REG_FIRST },					\
-  { "v18",	18 + V_REG_FIRST },					\
-  { "v19",	19 + V_REG_FIRST },					\
-  { "v20",	20 + V_REG_FIRST },					\
-  { "v21",	21 + V_REG_FIRST },					\
-  { "v22",	22 + V_REG_FIRST },					\
-  { "v23",	23 + V_REG_FIRST },					\
-  { "v24",	24 + V_REG_FIRST },					\
-  { "v25",	25 + V_REG_FIRST },					\
-  { "v26",	26 + V_REG_FIRST },					\
-  { "v27",	27 + V_REG_FIRST },					\
-  { "v28",	28 + V_REG_FIRST },					\
-  { "v29",	29 + V_REG_FIRST },					\
-  { "v30",	30 + V_REG_FIRST },					\
-  { "v31",	31 + V_REG_FIRST },					\
 }
 
 /* Globalizing directive for a label.  */
@@ -1044,7 +1059,91 @@ extern unsigned riscv_stack_boundary;
 /* Called from RISCV_REORG, this is defined in riscv-sr.c.  */
 
 extern void riscv_remove_unneeded_save_restore_calls (void);
+extern void riscv_optimize_quiet_comparison (void);
 
 #define HARD_REGNO_RENAME_OK(FROM, TO) riscv_hard_regno_rename_ok (FROM, TO)
+
+#define TARGET_FP16 TARGET_RVZFH
+
+#ifndef USED_FOR_TARGET
+extern poly_uint16 riscv_rvv_chunks;
+
+/* The number of bits and bytes in a RVV vector.  */
+#define BITS_PER_RVV_VECTOR (poly_uint16 (riscv_rvv_chunks * 64))
+#define BYTES_PER_RVV_VECTOR (poly_uint16 (riscv_rvv_chunks * 8))
+#endif
+
+/* Minimal value of VLEN in bytes.  */
+#define MIN_VLENB \
+  (MAX (UNITS_PER_WORD, UNITS_PER_FP_REG))
+
+#define TARGET_SUPPORTS_WIDE_INT 1
+
+#define REGMODE_NATURAL_SIZE(MODE) riscv_regmode_natural_size (MODE)
+
+#define RISCV_DWARF_VLEN (4096 + 0xc22)
+
+#ifdef HAVE_POLY_INT_H
+/* Information about a function's frame layout.  */
+struct GTY(())  riscv_frame_info {
+  /* The size of the frame in bytes.  */
+  poly_int64 total_size;
+
+  /* Bit X is set if the function saves or restores GPR X.  */
+  unsigned int mask;
+
+  /* Likewise FPR X.  */
+  unsigned int fmask;
+
+  /* Bit X is set if the interrupt function saves or restores GPR X.  */
+  unsigned int imask;
+  unsigned save_ipush_adjustment;
+
+  /* How much the GPR save/restore routines adjust sp (or 0 if unused).  */
+  unsigned save_libcall_adjustment;
+
+  /* Offsets of fixed-point and floating-point save areas from frame bottom */
+  poly_int64 gp_sp_offset;
+  poly_int64 fp_sp_offset;
+
+  HOST_WIDE_INT min_first_step;
+
+  /* Offset of virtual frame pointer from stack pointer/frame bottom */
+  poly_int64 frame_pointer_offset;
+
+  /* Offset of hard frame pointer from stack pointer/frame bottom */
+  poly_int64 hard_frame_pointer_offset;
+
+  /* The offset of arg_pointer_rtx from the bottom of the frame.  */
+  poly_int64 arg_pointer_offset;
+};
+
+enum riscv_privilege_levels {
+  UNKNOWN_MODE, USER_MODE, SUPERVISOR_MODE, MACHINE_MODE
+};
+
+struct GTY(())  machine_function {
+  /* The number of extra stack bytes taken up by register varargs.
+     This area is allocated by the callee at the very top of the frame.  */
+  int varargs_size;
+
+  /* True if current function has vector operations.  */
+  bool has_vector_ops_p;
+
+  /* True if current function is a naked function.  */
+  bool naked_p;
+
+  /* True if current function is an interrupt function.  */
+  bool interrupt_handler_p;
+  /* For an interrupt handler, indicates the privilege level.  */
+  enum riscv_privilege_levels interrupt_mode;
+
+  /* True if attributes on current function have been checked.  */
+  bool attributes_checked_p;
+
+  /* The current frame information, calculated by riscv_compute_frame_info.  */
+  struct riscv_frame_info frame;
+};
+#endif
 
 #endif /* ! GCC_RISCV_H */

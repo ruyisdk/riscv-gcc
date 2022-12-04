@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_ukcrsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t test_ukcrsa32(uint64_t a, uint64_t b) {
     return __rv__ukcrsa32 (a, b);
 }
 

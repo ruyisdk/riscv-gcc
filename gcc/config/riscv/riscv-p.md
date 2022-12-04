@@ -1,748 +1,97 @@
-(define_mode_iterator VMOV_DSP [
-    V4QI V2HI
-    (V8QI "TARGET_64BIT")
-    (V4HI "TARGET_64BIT")
+(define_mode_iterator DSP_ALL [
+    V4QI (V8QI "TARGET_64BIT")
+    V2HI (V4HI "TARGET_64BIT")
     (V2SI "TARGET_64BIT")
 ])
 
-(define_mode_iterator VQIMOD [V4QI (V8QI "TARGET_64BIT")])
-(define_mode_iterator VHIMOD [V2HI (V4HI "TARGET_64BIT")])
-(define_mode_iterator VSIMOD [SI (V2SI "TARGET_64BIT")])
+(define_mode_iterator DSP_ALLX [
+    (V4QI "!TARGET_64BIT") (V8QI "TARGET_64BIT")
+    (V2HI "!TARGET_64BIT") (V4HI "TARGET_64BIT")
+    (V2SI "TARGET_64BIT")
+])
 
-(define_mode_attr vsdmod_attr
-  [(V2HI "SI") (V4HI "DI")])
+(define_mode_iterator DSP_QI [V4QI (V8QI "TARGET_64BIT")])
 
-(define_mode_attr vssmod_attr
-  [(V2HI "SI") (V4HI "V2SI")])
+(define_mode_iterator DSP_HI [V2HI (V4HI "TARGET_64BIT")])
 
-(define_mode_attr vhhmod_attr
+(define_mode_iterator DSP_QIHI [
+    V4QI (V8QI "TARGET_64BIT")
+    V2HI (V4HI "TARGET_64BIT")
+])
+
+(define_mode_iterator DSP_SI [SI (V2SI "TARGET_64BIT")])
+
+(define_mode_iterator DSP_QIHISI [
+    V4QI (V8QI "TARGET_64BIT")
+    V2HI (V4HI "TARGET_64BIT")
+    SI (V2SI "TARGET_64BIT")
+])
+
+(define_mode_iterator DSP_QIHISIX [
+    (V4QI "!TARGET_64BIT") (V8QI "TARGET_64BIT")
+    (V2HI "!TARGET_64BIT") (V4HI "TARGET_64BIT")
+    (SI "!TARGET_64BIT") (V2SI "TARGET_64BIT")
+])
+
+(define_mode_iterator DSP_V2E [V2HI (V2SI "TARGET_64BIT")])
+
+(define_mode_iterator DSP_V2EX [(V2HI "!TARGET_64BIT") (V2SI "TARGET_64BIT")])
+
+(define_mode_attr DSP_WIDEN [
+    (V4QI "V4HI") (V2HI "V2SI")
+    (V8QI "V8HI") (V4HI "V4SI")
+    (V2SI "V2DI")
+    (SI "DI") (DI "TI")]
+)
+
+(define_mode_attr DSP_EMODE [
+    (V4QI "QI") (V2HI "HI")
+    (V8QI "QI") (V4HI "HI")
+    (V2SI "SI")
+    (SI "SI") (DI "DI")]
+)
+
+(define_mode_attr DSP_EMODE_WIDEN [
+    (V4QI "HI") (V2HI "SI")
+    (V8QI "HI") (V4HI "SI")
+    (V2SI "DI")
+    (SI "DI") (DI "TI")]
+)
+
+(define_mode_attr dsp_ebits [
+    (V8QI "8") (V4QI "8") (QI "8")
+    (V4HI "16") (V2HI "16") (HI "16")
+    (V2SI "32") (SI "32")
+    (DI "64")]
+)
+
+(define_mode_attr DSP_WIDEN_SUM
+  [(V2HI "SI") (V4HI "V2SI") (V4QI "V2HI") (V8QI "V4HI")])
+
+(define_mode_attr DSP_NARROW_BISECTDS
   [(SI "V2HI") (V2SI "V4HI")])
 
-(define_mode_attr vqsdmod_attr
-  [(V4QI "SI") (V8QI "DI")])
-
-(define_mode_attr sd2vqmod_attr
-  [(SI "V4QI") (DI "V8QI")])
-
-(define_mode_attr sdvhmod_attr
-  [(SI "V2HI") (DI "V4HI")])
-
-(define_mode_attr vsvqmod_attr
+(define_mode_attr DSP_NARROW_QUARTER
   [(SI "V4QI") (V2SI "V8QI")])
 
-(define_mode_attr vqvhmod_attr
-  [(V4QI "V2HI") (V8QI "V4HI")])
+(define_mode_attr dsp_all_mode [
+    (V4QI "_v4qi") (V8QI "_v8qi")
+    (V2HI "_v2hi") (V4HI "_v4hi")
+    (V2SI " ")
+])
 
-(define_mode_attr vssdmod_attr
-  [(SI "SI") (V2SI "DI")])
+(define_code_attr zs
+  [(sign_extend "s") (zero_extend "z")])
 
 (define_c_enum "unspec" [
-  ;; Average with Rounding.
-  UNSPEC_AVE
-
-  ;; Bit Reverse
-  UNSPEC_BITREV
-
-  ;; UNSPEC_INSB
-  UNSPEC_INSB
-
-  ;; Bit-wise Pick
-  UNSPEC_BPICK
-
-  ;; SIMD 8-bit Integer Compare Equal
-  UNSPEC_CMPEQ8
-
-  ;; SIMD 16-bit Integer Compare Equal
-  UNSPEC_CMPEQ16
-
-  ;; SIMD 8-bit Count Leading Redundant Sign
-  UNSPEC_CLRS8
-  ;; SIMD 16-bit Count Leading Redundant Sign
-  UNSPEC_CLRS16
-  ;; SIMD 32-bit Count Leading Redundant Sign
-  UNSPEC_CLRS32
-
-  ;; SIMD 8-bit Count Leading One
-  UNSPEC_CLO8
-  ;; SIMD 16-bit Count Leading One
-  UNSPEC_CLO16
-  ;; SIMD 32-bit Count Leading One
-  UNSPEC_CLO32
-
-  ;; SIMD 8-bit Count Leading Zero
-  UNSPEC_CLZ8
-  ;; SIMD 16-bit Count Leading Zero
-  UNSPEC_CLZ16
-  ;; SIMD 32-bit Count Leading Zero
-  UNSPEC_CLZ32
-
-  ;; SIMD 16-bit Cross Addition & Subtraction
-  UNSPEC_CRAS16
-
-  ;; SIMD 16-bit Cross Subtraction & Addition
-  UNSPEC_CRSA16
-
-  ;; Signed Addition with Q15 Saturation
-  UNSPEC_KADDH
-
-  ;; Signed Addition with Q31 Saturation
-  UNSPEC_KADDW
-
-  ;; SIMD 16-bit Signed Saturating Cross Addition & Subtraction
-  UNSPEC_KCRAS16
-
-  ;; SIMD 16-bit Signed Saturating Cross Subtraction & Addition
-  UNSPEC_KCRSA16
-
-  ;; Signed Saturating Double Multiply B16 x B16
-  UNSPEC_KDMBB
-
-  ;; Signed Saturating Double Multiply B16 x T16
-  UNSPEC_KDMBT
-
-  ;; Signed Saturating Double Multiply T16 x T16
-  UNSPEC_KDMTT
-
-  ;; Signed Saturating Double Multiply Addition B16 x B16
-  UNSPEC_KDMABB
-
-  ;; Signed Saturating Double Multiply Addition B16 x T16
-  UNSPEC_KDMABT
-
-  ;; Signed Saturating Double Multiply Addition T16 x T16
-  UNSPEC_KDMATT
-
-  ;; SIMD Signed Saturating Q7 Multiply
-  UNSPEC_KHM8
-
-  ;; SIMD Signed Saturating Crossed Q7 Multiply
-  UNSPEC_KHMX8
-
-  ;; SIMD Signed Saturating Q15 Multiply
-  UNSPEC_KHM16
-
-  ;; SIMD Signed Saturating Crossed Q15 Multiply
-  UNSPEC_KHMX16
-
-  ;; Signed Saturating Half Multiply B16 x B16
-  UNSPEC_KHMBB
-
-  ;; Signed Saturating Half Multiply B16 x T16
-  UNSPEC_KHMBT
-
-  ;; Signed Saturating Half Multiply T16 x T16
-  UNSPEC_KHMTT
-
-  ;; SIMD Saturating Signed Multiply Bottom Halfs & Add
-  UNSPEC_KMABB
-
-  ;; SIMD Saturating Signed Multiply Bottom & Top Halfs & Add
-  UNSPEC_KMABT
-
-  ;; SIMD Saturating Signed Multiply Top Halfs & Add
-  UNSPEC_KMATT
-
-  ;; SIMD Saturating Signed Multiply Two Halfs and Two Adds
-  UNSPEC_KMADA
-
-  ;; SIMD Saturating Signed Crossed Multiply Two Halfs and Two Adds
-  UNSPEC_KMAXDA
-
-  ;; SIMD Saturating Signed Multiply Two Halfs & Subtract & Add
-  UNSPEC_KMADS
-
-  ;; SIMD Saturating Signed Multiply Two Halfs & Reverse Subtract & Add
-  UNSPEC_KMADRS
-
-  ;; SIMD Saturating Signed Crossed Multiply Two Halfs & Subtract & Add
-  UNSPEC_KMAXDS
-
-  ;; Signed Multiply and Saturating Add to 64-Bit Data
-  UNSPEC_KMAR64
-
-  ;; SIMD Signed Multiply Two Halfs and Add
-  UNSPEC_KMDA
-
-  ;; SIMD Signed Crossed Multiply Two Halfs and Add
-  UNSPEC_KMXDA
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Add
-  UNSPEC_KMMAC
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Add with Rounding
-  UNSPEC_KMMAC_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Bottom Half and Add
-  UNSPEC_KMMAWB
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Bottom Half and Add with Rounding
-  UNSPEC_KMMAWB_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Bottom Half & 2 and Add
-  UNSPEC_KMMAWB2
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Bottom Half & 2 and Add with Rounding
-  UNSPEC_KMMAWB2_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Top Half and Add
-  UNSPEC_KMMAWT
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Top Half and Add with Rounding
-  UNSPEC_KMMAWT_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Top Half & 2 and Add
-  UNSPEC_KMMAWT2
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Top Half & 2 and Add with Rounding
-  UNSPEC_KMMAWT2_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Subtract
-  UNSPEC_KMMSB
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Subtraction with Rounding
-  UNSPEC_KMMSB_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Bottom Half & 2
-  UNSPEC_KMMWB2
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Bottom Half & 2 with Rounding
-  UNSPEC_KMMWB2_U
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Top Half & 2
-  UNSPEC_KMMWT2
-
-  ;; SIMD Saturating MSW Signed Multiply Word and Top Half & 2 with Rounding
-  UNSPEC_KMMWT2_U
-
-  ;; SIMD Saturating Signed Multiply Two Halfs & Add & Subtract
-  UNSPEC_KMSDA
-
-  ;; SIMD Saturating Signed Crossed Multiply Two Halfs & Add & Subtract
-  UNSPEC_KMSXDA
-
-  ;; Signed Multiply and Saturating Subtract from 64-Bit Data
-  UNSPEC_KMSR64
-
-  ;; SIMD 8-bit Shift Left Logical with Saturation or Shift Right Arithmetic
-  UNSPEC_KSLRA8
-
-  ;; SIMD 8-bit Shift Left Logical with Saturation or Rounding Shift Right Arithmetic
-  UNSPEC_KSLRA8_U
-
-  ;; SIMD 16-bit Shift Left Logical with Saturation or Shift Right Arithmetic
-  UNSPEC_KSLRA16
-
-  ;; SIMD 16-bit Shift Left Logical with Saturation or Rounding Shift Right Arithmetic
-  UNSPEC_KSLRA16_U
-
-  ;; Shift Left Logical with Q31 Saturation or Shift Right Arithmetic
-  UNSPEC_KSLRAW
-
-  ;; Shift Left Logical with Q31 Saturation or Rounding Shift Right Arithmetic
-  UNSPEC_KSLRAW_U
-
-  ;; SIMD 16-bit Signed Saturating Straight Addition & Subtraction
-  UNSPEC_KSTAS16
-
-  ;; SIMD 16-bit Signed Saturating Straight Subtraction & Addition
-  UNSPEC_KSTSA16
-
-  ;; Signed Subtraction with Q15 Saturation
-  UNSPEC_KSUBH
-
-  ;; Signed Subtraction with Q31 Saturation
-  UNSPEC_KSUBW
-
-  ;; Multiply and Add to 32-Bit Word
-  UNSPEC_MADDR32
-
-  ;; SIMD Saturating MSW Signed Multiply Word & Double
-  UNSPEC_KWMMUL
-
-  ;; SIMD Saturating MSW Signed Multiply Word & Double with Rounding
-  UNSPEC_KWMMUL_U
-
-  ;; Parallel Byte Sum of Absolute Difference
-  UNSPEC_PBSAD
-
-  ;; Parallel Byte Sum of Absolute Difference Accum
-  UNSPEC_PBSADA
-
-  ;; Pack Two 16-bit Data from Both Bottom Half
-  UNSPEC_PKBB16
-
-  ;; Pack Two 16-bit Data from Bottom and Top Half
-  UNSPEC_PKBT16
-
-  ;; Pack Two 16-bit Data from Both Top Half
-  UNSPEC_PKTB16
-
-  ;; Pack Two 16-bit Data from Top and Bottom Half
-  UNSPEC_PKTT16
-
-  ;; SIMD 8-bit Signed Halving Addition
-  UNSPEC_RADD8
-
-  ;; SIMD 16-bit Signed Halving Addition
-  UNSPEC_RADD16
-
-  ;; 32-bit Signed Halving Addition
-  UNSPEC_RADDW
-
-  ;; SIMD 16-bit Signed Halving Cross Addition & Subtraction
-  UNSPEC_RCRAS16
-
-  ;; SIMD 16-bit Signed Halving Cross Subtraction & Addition
-  UNSPEC_RCRSA16
-
-  ;; SIMD 16-bit Signed Halving Straight Addition & Subtraction
-  UNSPEC_RSTAS16
-
-  ;; SIMD 16-bit Signed Halving Straight Subtraction & Addition
-  UNSPEC_RSTSA16
-
-  ;; SIMD 8-bit Signed Halving Subtraction
-  UNSPEC_RSUB8
-
-  ;; SIMD 16-bit Signed Halving Subtraction
-  UNSPEC_RSUB16
-
-  ;; 64-bit Signed Halving Subtraction
-  UNSPEC_RSUB64
-
-  ;; 32-bit Signed Halving Subtraction
-  UNSPEC_RSUBW
-
-  ;; SIMD 8-bit Signed Clip Value
-  UNSPEC_SCLIP8
-
-  ;; SIMD 16-bit Signed Clip Value
-  UNSPEC_SCLIP16
-
-  ;; SIMD 32-bit Signed Clip Value
-  UNSPEC_SCLIP32
-
-  ;; SIMD 8-bit Signed Compare Less Than & Equal
-  UNSPEC_SCMPLE8
-
-  ;; SIMD 16-bit Signed Compare Less Than & Equal
-  UNSPEC_SCMPLE16
-
-  ;; SIMD 8-bit Signed Compare Less Than
-  UNSPEC_SCMPLT8
-
-  ;; SIMD 16-bit Signed Compare Less Than
-  UNSPEC_SCMPLT16
-
-  ;; Signed Multiply Halfs & Add 64-bit
-  UNSPEC_SMAL
-
-  ;; Signed Multiply Bottom Halfs & Add 64-bit
-  UNSPEC_SMALBB
-
-  ;; Signed Multiply Bottom Half & Top Half & Add 64-bit
-  UNSPEC_SMALBT
-
-  ;; Signed Multiply Top Halfs & Add 64-bit
-  UNSPEC_SMALTT
-
-  ;; Signed Multiply Two Halfs and Two Adds 64-bit
-  UNSPEC_SMALDA
-
-  ;; Signed Crossed Multiply Two Halfs and Two Adds 64-bit
-  UNSPEC_SMALXDA
-
-  ;; Signed Multiply Two Halfs & Subtract & Add 64-bit
-  UNSPEC_SMALDS
-
-  ;; Signed Multiply Two Halfs & Reverse Subtract & Add 64-bit
-  UNSPEC_SMALDRS
-
-  ;; Signed Crossed Multiply Two Halfs & Subtract & Add 64-bit
-  UNSPEC_SMALXDS
-
-  ;; Signed Multiply and Add to 64-Bit Data
-  UNSPEC_SMAR64
-
-  ;; Signed Multiply Four Bytes with 32-bit Adds
-  UNSPEC_SMAQA
-
-  ;; Signed and Unsigned Multiply Four Bytes with 32-bit Adds
-  UNSPEC_SMAQA_SU
-
-  ;; SIMD Signed Multiply Bottom Half & Bottom Half
-  UNSPEC_SMBB16
-
-  ;; SIMD Signed Multiply Bottom Half & Top Half
-  UNSPEC_SMBT16
-
-  ;; SIMD Signed Multiply Top Half & Top Half
-  UNSPEC_SMTT16
-
-  ;; SIMD Signed Multiply Two Halfs and Subtract
-  UNSPEC_SMDS
-
-  ;; SIMD Signed Multiply Two Halfs and Reverse Subtract
-  UNSPEC_SMDRS
-
-  ;; SIMD Signed Crossed Multiply Two Halfs and Subtract
-  UNSPEC_SMXDS
-
-  ;; SIMD MSW Signed Multiply Word
-  UNSPEC_SMMUL
-
-  ;; SIMD MSW Signed Multiply Word with Rounding
-  UNSPEC_SMMUL_U
-
-  ;; SIMD MSW Signed Multiply Word and Bottom Half
-  UNSPEC_SMMWB
-
-  ;; SIMD MSW Signed Multiply Word and Bottom Half with Rounding
-  UNSPEC_SMMWB_U
-
-  ;; SIMD MSW Signed Multiply Word and Top Half
-  UNSPEC_SMMWT
-
-  ;; SIMD MSW Signed Multiply Word and Top Half with Rounding
-  UNSPEC_SMMWT_U
-
-  ;; Signed Multiply Two Halfs & Add & Subtract 64-bit
-  UNSPEC_SMSLDA
-
-  ;; Signed Crossed Multiply Two Halfs & Add & Subtract 64-bit
-  UNSPEC_SMSLXDA
-
-  ;; Signed Multiply and Subtract from 64-Bit Data
-  UNSPEC_SMSR64
-
-  ;; SIMD Signed Crossed 8-bit Multiply
-  UNSPEC_SMULX8
-
-  ;; SIMD Signed Crossed 16-bit Multiply
-  UNSPEC_SMULX16
-
-  ;; Rounding Shift Right Arithmetic
+  ;; Rounding shift
   UNSPEC_SRA_U
-
-  ;; SIMD 8-bit Rounding Shift Right Arithmetic
-  UNSPEC_SRA8_U
-
-  ;; SIMD 16-bit Rounding Shift Right Arithmetic
-  UNSPEC_SRA16_U
-
-  ;; SIMD 8-bit Rounding Shift Right Logical
-  UNSPEC_SRL8_U
-
-  ;; SIMD 16-bit Rounding Shift Right Logical
-  UNSPEC_SRL16_U
-
-  ;; SIMD 16-bit Straight Addition & Subtraction
-  UNSPEC_STAS16
-
-  ;; SIMD 16-bit Straight Subtraction & Addition
-  UNSPEC_STSA16
-
-  ;; Signed Unpacking
-  UNSPEC_SUNPKD810
-  UNSPEC_SUNPKD820
-  UNSPEC_SUNPKD830
-  UNSPEC_SUNPKD831
-  UNSPEC_SUNPKD832
-
-  ;; Swap Byte within Halfword
-  UNSPEC_SWAP8
-
-  ;; Swap Halfword within Word
-  UNSPEC_SWAP16
-
-  ;; SIMD 8-bit Unsigned Clip Value
-  UNSPEC_UCLIP8
-
-  ;; SIMD 16-bit Unsigned Clip Value
-  UNSPEC_UCLIP16
-
-  ;; SIMD 32-bit Unsigned Clip Value
-  UNSPEC_UCLIP32
-
-  ;; SIMD 8-bit Unsigned Compare Less Than & Equal
-  UNSPEC_UCMPLE8
-
-  ;; SIMD 16-bit Unsigned Compare Less Than & Equal
-  UNSPEC_UCMPLE16
-
-  ;; SIMD 8-bit Unsigned Compare Less Than
-  UNSPEC_UCMPLT8
-
-  ;; SIMD 16-bit Unsigned Compare Less Than
-  UNSPEC_UCMPLT16
-
-  ;; SIMD 16-bit Unsigned Saturating Cross Addition & Subtraction
-  UNSPEC_UKCRAS16
-
-  ;; SIMD 16-bit Unsigned Saturating Cross Subtraction & Addition
-  UNSPEC_UKCRSA16
-
-  ;; Unsigned Addition with U16 Saturation
-  UNSPEC_UKADDH
-
-  ;; Unsigned Addition with U32 Saturation
-  UNSPEC_UKADDW
-
-  ;; Signed Multiply and Saturating Add to 64-Bit Data
-  UNSPEC_UKMAR64
-
-  ;; Unsigned Multiply and Saturating Subtract from 64-Bit Data
-  UNSPEC_UKMSR64
-
-  ;; SIMD 16-bit Unsigned Saturating Straight Addition & Subtraction
-  UNSPEC_UKSTAS16
-
-  ;; SIMD 16-bit Unsigned Saturating Straight Subtraction & Addition
-  UNSPEC_UKSTSA16
-
-  ;; Unsigned Subtraction with U16 Saturation
-  UNSPEC_UKSUBH
-
-  ;; Unigned Subtraction with U32 Saturation
-  UNSPEC_UKSUBW
-
-  ;; Unsigned Multiply and Add to 64-Bit Data
-  UNSPEC_UMAR64
-
-  ;; Unsigned Multiply Four Bytes with 32-bit Adds
-  UNSPEC_UMAQA
-
-  ;; Unsigned Multiply and Subtract from 64-Bit Data
-  UNSPEC_UMSR64
-
-  ;; SIMD Unsigned Crossed 8-bit Multiply
-  UNSPEC_UMULX8
-
-  ;; SIMD Unsigned Crossed 16-bit Multiply
-  UNSPEC_UMULX16
-
-  ;; SIMD 8-bit Unsigned Halving Addition
-  UNSPEC_URADD8
-
-  ;; SIMD 16-bit Unsigned Halving Addition
-  UNSPEC_URADD16
-
-  ;; 32-bit Unsigned Halving Addition
-  UNSPEC_URADDW
-
-  ;; SIMD 16-bit Unsigned Halving Cross Addition & Subtraction
-  UNSPEC_URCRAS16
-
-  ;; SIMD 16-bit Unsigned Halving Cross Subtraction & Addition
-  UNSPEC_URCRSA16
-
-  ;; SIMD 16-bit Unsigned Halving Straight Addition & Subtraction
-  UNSPEC_URSTAS16
-
-  ;; SIMD 16-bit Unsigned Halving Straight Subtraction & Addition
-  UNSPEC_URSTSA16
-
-  ;; SIMD 8-bit Unsigned Halving Subtraction
-  UNSPEC_URSUB8
-
-  ;; SIMD 16-bit Unsigned Halving Subtraction
-  UNSPEC_URSUB16
-
-  ;; 64-bit Unsigned Halving Subtraction
-  UNSPEC_URSUB64
-
-  ;; 32-bit Unsigned Halving Subtraction
-  UNSPEC_URSUBW
-
-  ;; Unigned Unpacking
-  UNSPEC_ZUNPKD810
-  UNSPEC_ZUNPKD820
-  UNSPEC_ZUNPKD830
-  UNSPEC_ZUNPKD831
-  UNSPEC_ZUNPKD832
-
-  ;; Extract Word from 64-bit
-  UNSPEC_WEXT
-
-  ;; Multiply and Subtract from 32-Bit Word
-  UNSPEC_MSUBR32
-
-  UNSPEC_CRAS32
-  UNSPEC_CRSA32
-  UNSPEC_KCRAS32
-  UNSPEC_KCRSA32
-
-  ;; SIMD Signed Saturating Double Multiply B16 x B16
-  UNSPEC_KDMBB16
-
-  ;; SIMD Signed Saturating Double Multiply B16 x T16
-  UNSPEC_KDMBT16
-
-  ;; SIMD Signed Saturating Double Multiply T16 x T16
-  UNSPEC_KDMTT16
-
-  ;; SIMD Signed Saturating Double Multiply Addition B16 x B16
-  UNSPEC_KDMABB16
-
-  ;; SIMD Signed Saturating Double Multiply Addition B16 x T16
-  UNSPEC_KDMABT16
-
-  ;; SIMD Signed Saturating Double Multiply Addition T16 x T16
-  UNSPEC_KDMATT16
-
-  ;; SIMD Signed Saturating Half Multiply B16 x B16
-  UNSPEC_KHMBB16
-
-  ;; SIMD Signed Saturating Half Multiply B16 x T16
-  UNSPEC_KHMBT16
-
-  ;; SIMD Signed Saturating Half Multiply T16 x T16
-  UNSPEC_KHMTT16
-
-  ;; Saturating Signed Multiply Bottom Words & Add
-  UNSPEC_KMABB32
-
-  ;; Saturating Signed Multiply Bottom & Top Words & Add
-  UNSPEC_KMABT32
-
-  ;; Saturating Signed Multiply Top Words & Add
-  UNSPEC_KMATT32
-
-  ;; Saturating Signed Multiply Two Words and Two Adds
-  UNSPEC_KMADA32
-
-  ;; Saturating Signed Crossed Multiply Two Words and Two Adds
-  UNSPEC_KMAXDA32
-
-  ;; Saturating Signed Multiply Two Words & Subtract & Add
-  UNSPEC_KMADS32
-
-  ;; Saturating Signed Multiply Two Words & Reverse Subtract & Add
-  UNSPEC_KMADRS32
-
-  ;; Saturating Signed Crossed Multiply Two Words & Subtract & Add
-  UNSPEC_KMAXDS32
-
-  ;; Saturating Signed Multiply Two Words & Add & Subtract
-  UNSPEC_KMSDA32
-
-  ;; Saturating Signed Crossed Multiply Two Words & Add & Subtract
-  UNSPEC_KMSXDA32
-
-  ;; Signed Multiply Two Words and Add
-  UNSPEC_KMDA32
-
-  ;; Signed Crossed Multiply Two Words and Add
-  UNSPEC_KMXDA32
-
-  ;; SIMD 32-bit Unsigned Saturating Cross Addition & Subtraction
-  UNSPEC_UKCRAS32
-
-  ;; SIMD 32-bit Unsigned Saturating Cross Subtraction & Addition
-  UNSPEC_UKCRSA32
-
-  ;; SIMD 32-bit Signed Saturating Straight Addition & Subtraction
-  UNSPEC_UKSTAS32
-
-  ;; SIMD 32-bit Unsigned Saturating Straight Subtraction & Addition
-  UNSPEC_UKSTSA32
-
-  ;; SIMD 32-bit Unsigned Maximum
-  UNSPEC_UMAX32
-
-  ;; SIMD 32-bit Unsigned Minimum
-  UNSPEC_UMIN32
-
-  ;; SIMD 32-bit Unsigned Halving Addition
-  UNSPEC_URADD32
-
-  ;; SIMD 32-bit Unsigned Halving Cross Addition & Subtraction
-  UNSPEC_URCRAS32
-
-  ;; SIMD 32-bit Unsigned Halving Cross Subtraction & Addition
-  UNSPEC_URCRSA32
-
-  ;; SIMD 32-bit Unsigned Halving Straight Addition & Subtraction
-  UNSPEC_URSTAS32
-
-  ;; SIMD 32-bit Unsigned Halving Straight Subtraction & Addition
-  UNSPEC_URSTSA32
-
-  ;; SIMD 32-bit Unsigned Halving Subtraction
-  UNSPEC_URSUB32
-
-  ;; SIMD 32-bit Signed Saturating Straight Addition & Subtraction
-  UNSPEC_KSTAS32
-
-  ;; SIMD 32-bit Signed Saturating Straight Subtraction & Addition
-  UNSPEC_KSTSA32
-
-  ;; SIMD 32-bit Signed Halving Addition
-  UNSPEC_RADD32
-
-  ;; SIMD 32-bit Signed Halving Cross Addition & Subtraction
-  UNSPEC_RCRAS32
-
-  ;; SIMD 32-bit Signed Halving Cross Subtraction & Addition
-  UNSPEC_RCRSA32
-
-  ;; SIMD 32-bit Signed Halving Straight Addition & Subtraction
-  UNSPEC_RSTAS32
-
-  ;; SIMD 32-bit Signed Halving Straight Subtraction & Addition
-  UNSPEC_RSTSA32
-
-  ;; SIMD 32-bit Signed Halving Subtraction
-  UNSPEC_RSUB32
-
-  ;; SIMD 32-bit Straight signed Addition & Subtraction
-  UNSPEC_STAS32
-  UNSPEC_STSA32
-
-  ;; Signed Multiply Bottom Word & Bottom Word
-  UNSPEC_SMBB32
-
-  ;; Signed Multiply Bottom Word & Top Word
-  UNSPEC_SMBT32
-
-  ;; Signed Multiply Top Word & Top Word
-  UNSPEC_SMTT32
-
-  ;; Signed Multiply Two Words and Subtract
-  UNSPEC_SMDS32
-
-  ;; Signed Multiply Two Words and Reverse Subtract
-  UNSPEC_SMDRS32
-
-  ;; Signed Crossed Multiply Two Words and Subtract
-  UNSPEC_SMXDS32
-
-  ;; Pack Two 32-bit Data from Both Bottom Half
-  UNSPEC_PKBB32
-
-  ;; Pack Two 32-bit Data from Bottom and Top Half
-  UNSPEC_PKBT32
-
-  ;; Pack Two 32-bit Data from Both Top Half
-  UNSPEC_PKTB32
-
-  ;; Pack Two 32-bit Data from Top and Bottom Half
-  UNSPEC_PKTT32
-
-  ;; SIMD 32-bit Rounding Shift Right Arithmetic
-  UNSPEC_SRA32_U
-
-  ;; SIMD 32-bit Rounding Shift Right Logical
-  UNSPEC_SRL32_U
-
-  ;; SIMD 32-bit Shift Left Logical with Saturation or Shift Right Arithmetic
-  UNSPEC_KSLRA32
-
-  ;; SIMD 32-bit Shift Left Logical with Saturation or Rounding Shift Right Arithmetic
-  UNSPEC_KSLRA32_U
-
-  ;; Rounding Shift Right Arithmetic Immediate Word
-  UNSPEC_SRAW_U
+  UNSPEC_SRL_U
+  UNSPEC_SCLIP
+  UNSPEC_UCLIP
+  UNSPEC_CLO
+  UNSPEC_SWAP
+  UNSPEC_BITREV
 ])
 
 (define_c_enum "unspecv" [
@@ -754,24 +103,25 @@
 ])
 
 
-;;============================================== mov<vmov_dsp> pattern ================================================
+;;======================= mov<DSP_ALL> pattern ================================
 
 (define_expand "mov<mode>"
-  [(set (match_operand:VMOV_DSP 0 "nonimmediate_operand")
-	(match_operand:VMOV_DSP 1 "general_operand"))]
-  "TARGET_XTHEAD_DSP || TARGET_XTHEAD_ZPSFOPERAND"
-{
-  if (can_create_pseudo_p ())
-    {
-      if (!REG_P (operands[0]))
-	operands[1] = force_reg (<MODE>mode, operands[1]);
-    }
-})
+  [(set (match_operand:DSP_ALL 0 "nonimmediate_operand")
+	(match_operand:DSP_ALL 1 "general_operand"))]
+  "TARGET_XTHEAD_ZPN || TARGET_XTHEAD_ZPSFOPERAND"
+  {
+    if (can_create_pseudo_p ())
+      {
+	if (!REG_P (operands[0]))
+	  operands[1] = force_reg (<MODE>mode, operands[1]);
+      }
+  }
+)
 
 (define_insn "*mov<mode>"
-  [(set (match_operand:VMOV_DSP 0 "nonimmediate_operand"  "=r,m,r")
-	(match_operand:VMOV_DSP 1 "general_operand"       " r,r,m"))]
-  "TARGET_XTHEAD_DSP || TARGET_XTHEAD_ZPSFOPERAND"
+  [(set (match_operand:DSP_ALL 0 "nonimmediate_operand" "=r,m,r")
+	(match_operand:DSP_ALL 1 "general_operand" " r,r,m"))]
+  "TARGET_XTHEAD_ZPN || TARGET_XTHEAD_ZPSFOPERAND"
   {
     return riscv_output_move (operands[0], operands[1]);
   }
@@ -780,55 +130,221 @@
 ;; Auto-Vectorization
 
 ;; Public SPN
-(define_code_iterator varith_op_code
-  [plus minus
+(define_code_iterator dsp_arith_op_code [
+   plus minus
    ss_plus us_plus
    ss_minus us_minus
    smax smin
    umax umin
 ])
 
-(define_code_attr varith_op_name
-   [(plus "add") (minus "sub")
+(define_code_iterator dsp_add_sub_code [
+   plus minus
+   ss_plus us_plus
+   ss_minus us_minus
+])
+
+(define_code_iterator dsp_fixp_add_sub_code [
+   ss_plus us_plus
+   ss_minus us_minus
+])
+
+(define_code_iterator dsp_integer_add_sub_code [
+   plus minus
+])
+
+(define_code_attr dsp_arith_inverse_op_code [
+   (plus "minus") (minus "plus")
+   (ss_plus "ss_minus") (us_plus "us_minus")
+   (ss_minus "ss_plus") (us_minus "us_plus")
+   (smax "smin") (smin "smax")
+   (umax "umin") (umin "umax")
+])
+
+(define_code_attr dsp_arith_op_name [
+    (plus "add") (minus "sub")
     (ss_plus "ssadd") (us_plus "usadd")
     (ss_minus "sssub") (us_minus "ussub")
     (smax "smax") (smin "smin")
     (umax "umax") (umin "umin")
 ])
 
-(define_code_attr varith_op_vext_name
-   [(plus "add") (minus "sub")
-    (ss_plus "sadd") (us_plus "saddu")
-    (ss_minus "ssub") (us_minus "ssubu")
-    (smax "max") (smin "min")
-    (umax "maxu") (umin "minu")
+(define_code_attr dsp_arith_intruction_name [
+    (plus "add") (minus "sub")
+    (ss_plus "kadd") (us_plus "ksub")
+    (ss_minus "ukadd") (us_minus "uksub")
+    (smax "smax") (smin "smin")
+    (umax "umax") (umin "umin")
 ])
 
-(define_expand "<varith_op_name><mode>3"
-  [(set (match_operand:VMOV_DSP 0 "register_operand" "=r")
-	(varith_op_code:VMOV_DSP (match_operand:VMOV_DSP 1 "register_operand" "r")
-				 (match_operand:VMOV_DSP 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
+(define_expand "<dsp_arith_op_name><mode>3"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+	(dsp_arith_op_code:DSP_ALL
+	  (match_operand:DSP_ALL 1 "register_operand" "r")
+	  (match_operand:DSP_ALL 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
   ""
 )
-
 
 (define_expand "<optab><mode>3"
-  [(set (match_operand:VMOV_DSP 0 "register_operand")
-	(any_shift:VMOV_DSP (match_operand:VMOV_DSP 1 "register_operand")
-			    (match_operand:SI 2 "nonmemory_operand")))]
-  "TARGET_XTHEAD_DSP"
+  [(set (match_operand:DSP_ALL 0 "register_operand")
+	(any_shift:DSP_ALL (match_operand:DSP_ALL 1 "register_operand")
+			   (match_operand:SI 2 "nonmemory_operand")))]
+  "TARGET_XTHEAD_ZPN"
   ""
 )
 
-(define_expand "maddsidi4"
-  [(match_operand:DI 0 "register_operand")
-   (match_operand:SI 1 "register_operand")
-   (match_operand:SI 2 "register_operand")
-   (match_operand:DI 3 "register_operand")]
-  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+(define_expand "<dsp_arith_op_name>hi3"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(dsp_fixp_add_sub_code:HI
+	  (match_operand:HI 1 "register_operand" "r")
+	  (match_operand:HI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  ""
+)
+
+(define_expand "<dsp_arith_op_name>di3"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(dsp_fixp_add_sub_code:DI
+	  (match_operand:DI 1 "register_operand" "r")
+	  (match_operand:DI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  ""
+)
+
+(define_expand "ssashl<mode>3"
+  [(set (match_operand:DSP_QIHISIX 0 "register_operand" "=r")
+	(ss_ashift:DSP_QIHISIX
+	  (match_operand:DSP_QIHISIX 1 "register_operand" "r")
+	  (match_operand:SI 2 "nonmemory_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  ""
+)
+
+(define_expand "usashl<mode>3"
+  [(set (match_operand:DSP_QIHISIX 0 "register_operand" "=r")
+	(us_ashift:DSP_QIHISIX
+	  (match_operand:DSP_QIHISIX 1 "register_operand" "r")
+	  (match_operand:SI 2 "nonmemory_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  ""
+)
+
+(define_expand "avg<mode>3_floor"
+  [(match_operand:DSP_ALL 0 "register_operand")
+   (match_operand:DSP_ALL 1 "register_operand")
+   (match_operand:DSP_ALL 2 "register_operand")]
+  "TARGET_XTHEAD_ZPN"
   {
-    emit_insn (gen_riscv_smar64_si (operands[0], operands[3], operands[1], operands[2]));
+    emit_insn (gen_riscv_radd<dsp_ebits><dsp_all_mode> (
+      operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "uavg<mode>3_floor"
+  [(match_operand:DSP_ALL 0 "register_operand")
+   (match_operand:DSP_ALL 1 "register_operand")
+   (match_operand:DSP_ALL 2 "register_operand")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    emit_insn (gen_riscv_uradd<dsp_ebits><dsp_all_mode> (
+      operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "avgdi3_floor"
+  [(match_operand:DI 0 "register_operand")
+   (match_operand:DI 1 "register_operand")
+   (match_operand:DI 2 "register_operand")]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  {
+    emit_insn (gen_riscv_radd64 (operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "uavgdi3_floor"
+  [(match_operand:DI 0 "register_operand")
+   (match_operand:DI 1 "register_operand")
+   (match_operand:DI 2 "register_operand")]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  {
+    emit_insn (gen_riscv_uradd64 (operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "avgsi3_floor"
+  [(match_operand:SI 0 "register_operand")
+   (match_operand:SI 1 "register_operand")
+   (match_operand:SI 2 "register_operand")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    emit_insn (gen_riscv_raddw_si (operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "uavgsi3_floor"
+  [(match_operand:SI 0 "register_operand")
+   (match_operand:SI 1 "register_operand")
+   (match_operand:SI 2 "register_operand")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    emit_insn (gen_riscv_uraddw_si (operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "avg<mode>3_ceil"
+  [(match_operand:X 0 "register_operand")
+   (match_operand:X 1 "register_operand")
+   (match_operand:X 2 "register_operand")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    emit_insn (gen_riscv_ave_<mode> (operands[0], operands[1], operands[2]));
+    DONE;
+  }
+)
+
+(define_expand "clrsb<mode>2"
+  [(set (match_operand:DSP_QIHISI 0 "register_operand" "=r")
+	(clrsb:DSP_QIHISI
+	  (match_operand:DSP_QIHISI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  ""
+)
+
+;; (define_expand "clz<mode>2"
+;;   [(set (match_operand:DSP_QIHISI 0 "register_operand" "=r")
+;; 	(clz:DSP_QIHISI (match_operand:DSP_QIHISI 1 "register_operand" "r")))]
+;;   "TARGET_XTHEAD_ZPN"
+;;   ""
+;; )
+
+(define_insn "bswaphi2"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(bswap:HI (match_operand:HI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "swap8\t%0,%1"
+)
+
+(define_insn "bswap<mode>2"
+  [(set (match_operand:DSP_HI 0 "register_operand" "=r")
+	(bswap:DSP_HI (match_operand:DSP_HI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "swap8\t%0,%1"
+)
+
+(define_expand "smulv2si3_highpart"
+  [(match_operand:V2SI 0 "register_operand")
+   (match_operand:V2SI 1 "register_operand")
+   (match_operand:V2SI 2 "register_operand")]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  {
+    emit_insn (gen_riscv_smmul_v2si (operands[0], operands[1], operands[2]));
     DONE;
   }
 )
@@ -840,7 +356,8 @@
    (match_operand:DI 3 "register_operand")]
   "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
   {
-    emit_insn (gen_riscv_umar64_si (operands[0], operands[3], operands[1], operands[2]));
+    emit_insn (gen_riscv_umar64_si (operands[0], operands[3], operands[1],
+    				    operands[2]));
     DONE;
   }
 )
@@ -852,7 +369,8 @@
    (match_operand:DI 3 "register_operand")]
   "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
   {
-    emit_insn (gen_riscv_smsr64_si (operands[0], operands[3], operands[1], operands[2]));
+    emit_insn (gen_riscv_smsr64_si (operands[0], operands[3], operands[1],
+    				    operands[2]));
     DONE;
   }
 )
@@ -864,825 +382,5405 @@
    (match_operand:DI 3 "register_operand")]
   "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
   {
-    emit_insn (gen_riscv_umsr64_si (operands[0], operands[3], operands[1], operands[2]));
+    emit_insn (gen_riscv_umsr64_si (operands[0], operands[3], operands[1],
+    				    operands[2]));
     DONE;
   }
 )
 
-
-;;==================================================== RV32 & RV64 ====================================================
-
-(define_int_attr simd8_int_str [
-   (UNSPEC_KHM8 "khm8")
-   (UNSPEC_KHMX8 "khmx8")
-   (UNSPEC_RADD8 "radd8")
-   (UNSPEC_RSUB8 "rsub8")
-   (UNSPEC_URADD8 "uradd8")
-   (UNSPEC_URSUB8 "ursub8")
-])
-
-(define_int_attr simd8_int_insn [
-   (UNSPEC_KHM8 "khm8")
-   (UNSPEC_KHMX8 "khmx8")
-   (UNSPEC_RADD8 "radd8")
-   (UNSPEC_RSUB8 "rsub8")
-   (UNSPEC_URADD8 "uradd8")
-   (UNSPEC_URSUB8 "ursub8")
-])
-
-(define_int_iterator UNSPEC_SIMD8 [
-   UNSPEC_KHM8
-   UNSPEC_KHMX8
-   UNSPEC_RADD8
-   UNSPEC_RSUB8
-   UNSPEC_URADD8
-   UNSPEC_URSUB8
-])
-
-(define_insn "riscv_<simd8_int_str>_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:VQIMOD 2 "register_operand" "r")]
-	   UNSPEC_SIMD8))]
-  "TARGET_XTHEAD_DSP"
-  "<simd8_int_insn>\\t%0,%1,%2"
+(define_expand "vec_set<mode>"
+  [(match_operand:DSP_V2E 0 "register_operand" "")
+   (match_operand:<DSP_EMODE> 1 "register_operand" "")
+   (match_operand:SI 2 "immediate_operand" "")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    HOST_WIDE_INT pos = INTVAL (operands[2]);
+    if (pos > 1)
+      gcc_unreachable ();
+    HOST_WIDE_INT elem = (HOST_WIDE_INT) 1 << pos;
+    emit_insn (gen_vec_set<mode>_internal (operands[0], operands[1],
+					   operands[0], GEN_INT (elem)));
+    DONE;
+  }
 )
 
-(define_int_attr simd16_int_str [
-   (UNSPEC_CRAS16 "cras16")
-   (UNSPEC_CRSA16 "crsa16")
-   (UNSPEC_KCRAS16 "kcras16")
-   (UNSPEC_KCRSA16 "kcrsa16")
-   (UNSPEC_KHM16 "khm16")
-   (UNSPEC_KHMX16 "khmx16")
-   (UNSPEC_KSTAS16 "kstas16")
-   (UNSPEC_KSTSA16 "kstsa16")
-   (UNSPEC_PKBB16 "pkbb16")
-   (UNSPEC_PKBT16 "pkbt16")
-   (UNSPEC_PKTB16 "pktb16")
-   (UNSPEC_PKTT16 "pktt16")
-   (UNSPEC_RADD16 "radd16")
-   (UNSPEC_RCRAS16 "rcras16")
-   (UNSPEC_RCRSA16 "rcrsa16")
-   (UNSPEC_RSTAS16 "rstas16")
-   (UNSPEC_RSTSA16 "rstsa16")
-   (UNSPEC_RSUB16 "rsub16")
-   (UNSPEC_STAS16 "stas16")
-   (UNSPEC_STSA16 "stsa16")
-   (UNSPEC_UKCRAS16 "ukcras16")
-   (UNSPEC_UKCRSA16 "ukcrsa16")
-   (UNSPEC_UKSTAS16 "ukstas16")
-   (UNSPEC_UKSTSA16 "ukstsa16")
-   (UNSPEC_URADD16 "uradd16")
-   (UNSPEC_URCRAS16 "urcras16")
-   (UNSPEC_URCRSA16 "urcrsa16")
-   (UNSPEC_URSTAS16 "urstas16")
-   (UNSPEC_URSTSA16 "urstsa16")
-   (UNSPEC_URSUB16 "ursub16")])
+(define_expand "vec_set<mode>"
+  [(match_operand:DSP_QI 0 "register_operand" "")
+   (match_operand:QI 1 "register_operand" "")
+   (match_operand:SI 2 "immediate_operand" "")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    HOST_WIDE_INT pos = INTVAL (operands[2]);
+    if (pos > GET_MODE_SIZE (E_<MODE>mode).to_constant () - 1)
+      gcc_unreachable ();
+    HOST_WIDE_INT elem = (HOST_WIDE_INT) 1 << pos;
+    emit_insn (gen_vec_set<mode>_internal (operands[0], operands[1],
+					   operands[0], GEN_INT (elem)));
+    DONE;
+  }
+)
 
-(define_int_attr simd16_int_insn [
-   (UNSPEC_CRAS16 "cras16")
-   (UNSPEC_CRSA16 "crsa16")
-   (UNSPEC_KCRAS16 "kcras16")
-   (UNSPEC_KCRSA16 "kcrsa16")
-   (UNSPEC_KHM16 "khm16")
-   (UNSPEC_KHMX16 "khmx16")
-   (UNSPEC_KSTAS16 "kstas16")
-   (UNSPEC_KSTSA16 "kstsa16")
-   (UNSPEC_PKBB16 "pkbb16")
-   (UNSPEC_PKBT16 "pkbt16")
-   (UNSPEC_PKTB16 "pktb16")
-   (UNSPEC_PKTT16 "pktt16")
-   (UNSPEC_RADD16 "radd16")
-   (UNSPEC_RCRAS16 "rcras16")
-   (UNSPEC_RCRSA16 "rcrsa16")
-   (UNSPEC_RSTAS16 "rstas16")
-   (UNSPEC_RSTSA16 "rstsa16")
-   (UNSPEC_RSUB16 "rsub16")
-   (UNSPEC_STAS16 "stas16")
-   (UNSPEC_STSA16 "stsa16")
-   (UNSPEC_UKCRAS16 "ukcras16")
-   (UNSPEC_UKCRSA16 "ukcrsa16")
-   (UNSPEC_UKSTAS16 "ukstas16")
-   (UNSPEC_UKSTSA16 "ukstsa16")
-   (UNSPEC_URADD16 "uradd16")
-   (UNSPEC_URCRAS16 "urcras16")
-   (UNSPEC_URCRSA16 "urcrsa16")
-   (UNSPEC_URSTAS16 "urstas16")
-   (UNSPEC_URSTSA16 "urstsa16")
-   (UNSPEC_URSUB16 "ursub16")])
+(define_expand "insv<mode>"
+  [(set (zero_extract:GPR (match_operand:GPR 0 "register_operand" "")
+			  (match_operand:GPR 1 "const_int_operand" "")
+			  (match_operand:GPR 2 "insv<dsp_ebits>_operand" ""))
+	(match_operand:GPR 3 "register_operand" ""))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    if (INTVAL (operands[1]) != 8)
+      FAIL;
+  }
+)
 
-(define_int_iterator UNSPEC_SIMD16 [
-   UNSPEC_CRAS16
-   UNSPEC_CRSA16
-   UNSPEC_KCRAS16
-   UNSPEC_KCRSA16
-   UNSPEC_KHM16
-   UNSPEC_KHMX16
-   UNSPEC_KSTAS16
-   UNSPEC_KSTSA16
-   UNSPEC_RADD16
-   UNSPEC_RCRAS16
-   UNSPEC_RCRSA16
-   UNSPEC_RSTAS16
-   UNSPEC_RSTSA16
-   UNSPEC_RSUB16
-   UNSPEC_STAS16
-   UNSPEC_STSA16
-   UNSPEC_UKCRAS16
-   UNSPEC_UKCRSA16
-   UNSPEC_UKSTAS16
-   UNSPEC_UKSTSA16
-   UNSPEC_URADD16
-   UNSPEC_URCRAS16
-   UNSPEC_URCRSA16
-   UNSPEC_URSTAS16
-   UNSPEC_URSTSA16
-   UNSPEC_URSUB16
+;;##################### RISC-V P Extension Instruction ########################
+
+;;=================== SIMD Data Processing Instructions =======================
+
+;;---------------- 16-bit Addition & Subtraction Instructions -----------------
+;;Already implemented in previous: None
+
+;;Implement: add16, sub16, kadd16, ksub16, ukadd16, uksub16
+;;Extra implement: add8, sub8, kadd8, ksub8, ukadd8, uksub8,
+;;                 add32, sub32, kadd32, ksub32, ukadd32, uksub32
+(define_insn "riscv_<dsp_arith_intruction_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+	(dsp_integer_add_sub_code:DSP_ALL
+	  (match_operand:DSP_ALL 1 "register_operand" "r")
+	  (match_operand:DSP_ALL 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name><dsp_ebits>\\t%0,%1,%2"
+)
+
+(define_insn "riscv_<dsp_arith_intruction_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALLX 0 "register_operand" "=r")
+	(dsp_fixp_add_sub_code:DSP_ALLX
+	  (match_operand:DSP_ALLX 1 "register_operand" "r")
+	  (match_operand:DSP_ALLX 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name><dsp_ebits>\\t%0,%1,%2"
+)
+
+;;Implement: radd16, rsub16
+;;Extra implement: radd8, rsub8, radd32, rsub32
+(define_insn "riscv_r<dsp_arith_intruction_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+	(truncate:DSP_ALL
+	  (ashiftrt:<DSP_WIDEN>
+	    (dsp_integer_add_sub_code:<DSP_WIDEN>
+	      (sign_extend:<DSP_WIDEN>
+		(match_operand:DSP_ALL 1 "register_operand" "r"))
+	      (sign_extend:<DSP_WIDEN>
+		(match_operand:DSP_ALL 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "r<dsp_arith_intruction_name><dsp_ebits>\\t%0,%1,%2"
+)
+
+;;Implement: uradd16, ursub16
+;;Extra implement: uradd8, ursub8, uradd32, ursub32
+(define_insn "riscv_ur<dsp_arith_intruction_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+	(truncate:DSP_ALL
+	  (ashiftrt:<DSP_WIDEN>
+	    (dsp_integer_add_sub_code:<DSP_WIDEN>
+	      (zero_extend:<DSP_WIDEN>
+		(match_operand:DSP_ALL 1 "register_operand" "r"))
+	      (zero_extend:<DSP_WIDEN>
+		(match_operand:DSP_ALL 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "ur<dsp_arith_intruction_name><dsp_ebits>\\t%0,%1,%2"
+)
+
+(define_code_attr dsp_arith_cross_op_name [
+   (plus "cras") (minus "crsa")
+   (ss_plus "kcras") (us_plus "ukcras")
+   (ss_minus "kcrsa") (us_minus "ukcrsa")
 ])
 
-(define_insn "riscv_<simd16_int_str>_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-      [(match_operand:VHIMOD 1 "register_operand" "r")
-       (match_operand:VHIMOD 2 "register_operand" "r")]
-       UNSPEC_SIMD16))]
-  "TARGET_XTHEAD_DSP"
-  "<simd16_int_insn>\\t%0,%1,%2"
+;;Implement: cras16, crsa16, kcras16, ukcras16, kcrsa16, ukcrsa16
+;;Extra implement: cras32, crsa32, kcras32, ukcras32, kcrsa32, ukcrsa32
+(define_insn "riscv_<dsp_arith_cross_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (<dsp_arith_inverse_op_code>:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2E 1 "register_operand" "r")
+		(parallel [(const_int 0)]))
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2E 2 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (vec_duplicate:DSP_V2E
+	    (dsp_integer_add_sub_code:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_dup 1)
+		(parallel [(const_int 1)]))
+	      (vec_select:<DSP_EMODE>
+		(match_dup 2)
+		(parallel [(const_int 0)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_cross_op_name><dsp_ebits>\t%0,%1,%2"
 )
 
-(define_int_iterator UNSPEC_PACK16 [
-   UNSPEC_PKBB16
-   UNSPEC_PKBT16
-   UNSPEC_PKTB16
-   UNSPEC_PKTT16
+(define_insn "riscv_<dsp_arith_cross_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2EX 0 "register_operand" "=r")
+	(vec_merge:DSP_V2EX
+	  (vec_duplicate:DSP_V2EX
+	    (<dsp_arith_inverse_op_code>:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2EX 1 "register_operand" "r")
+		(parallel [(const_int 0)]))
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2EX 2 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (vec_duplicate:DSP_V2EX
+	    (dsp_fixp_add_sub_code:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_dup 1)
+		(parallel [(const_int 1)]))
+	      (vec_select:<DSP_EMODE>
+		(match_dup 2)
+		(parallel [(const_int 0)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_cross_op_name><dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "riscv_<dsp_arith_cross_op_name>16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (<dsp_arith_inverse_op_code>:HI
+	      (vec_select:HI (match_operand:V4HI 1 "register_operand" "r")
+			     (parallel [(const_int 0)]))
+	      (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+			     (parallel [(const_int 1)])))
+	    (dsp_add_sub_code:HI
+	      (vec_select:HI (match_dup 1) (parallel [(const_int 1)]))
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 0)]))))
+	  (vec_concat:V2HI
+	    (<dsp_arith_inverse_op_code>:HI
+	      (vec_select:HI (match_dup 1) (parallel [(const_int 2)]))
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+	    (dsp_add_sub_code:HI
+	      (vec_select:HI (match_dup 1) (parallel [(const_int 3)]))
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 2)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<dsp_arith_cross_op_name>16\t%0,%1,%2"
+)
+
+(define_code_attr dsp_arith_straight_op_name [
+   (plus "stas") (minus "stsa")
+   (ss_plus "kstas") (us_plus "ukstas")
+   (ss_minus "kstsa") (us_minus "ukstsa")
 ])
 
-(define_insn "riscv_<simd16_int_str>_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-      [(match_operand:VHIMOD 1 "register_operand" "r")
-       (match_operand:VHIMOD 2 "register_operand" "r")]
-       UNSPEC_PACK16))]
-  "TARGET_XTHEAD_DSP"
-  "<simd16_int_insn>\\t%0,%1,%2"
+;;Implement: stas16, stsa16, kstas16, ukstas16, kstsa16, ukstsa16
+;;Extra implement: stas32, stsa32, kstas32, ukstas32, kstsa32, ukstsa32
+(define_insn "riscv_<dsp_arith_straight_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (<dsp_arith_inverse_op_code>:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2E 1 "register_operand" "r")
+		(parallel [(const_int 0)]))
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2E 2 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (vec_duplicate:DSP_V2E
+	    (dsp_integer_add_sub_code:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_dup 1)
+		(parallel [(const_int 1)]))
+	      (vec_select:<DSP_EMODE>
+		(match_dup 2)
+		(parallel [(const_int 1)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_straight_op_name><dsp_ebits>\t%0,%1,%2"
 )
 
-(define_insn "riscv_add8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-    (plus:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")
-		 (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "add8\\t%0,%1,%2"
+(define_insn "riscv_<dsp_arith_straight_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2EX 0 "register_operand" "=r")
+	(vec_merge:DSP_V2EX
+	  (vec_duplicate:DSP_V2EX
+	    (<dsp_arith_inverse_op_code>:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2EX 1 "register_operand" "r")
+		(parallel [(const_int 0)]))
+	      (vec_select:<DSP_EMODE>
+		(match_operand:DSP_V2EX 2 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (vec_duplicate:DSP_V2EX
+	    (dsp_fixp_add_sub_code:<DSP_EMODE>
+	      (vec_select:<DSP_EMODE>
+		(match_dup 1)
+		(parallel [(const_int 1)]))
+	      (vec_select:<DSP_EMODE>
+		(match_dup 2)
+		(parallel [(const_int 1)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_straight_op_name><dsp_ebits>\t%0,%1,%2"
 )
 
-(define_insn "riscv_add16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-    (plus:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")
-		 (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "add16\\t%0,%1,%2"
+(define_insn "riscv_<dsp_arith_straight_op_name>16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (<dsp_arith_inverse_op_code>:HI
+	      (vec_select:HI (match_operand:V4HI 1 "register_operand" "r")
+			     (parallel [(const_int 0)]))
+	      (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+			     (parallel [(const_int 0)])))
+	    (dsp_add_sub_code:HI
+	      (vec_select:HI (match_dup 1) (parallel [(const_int 1)]))
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 1)]))))
+	  (vec_concat:V2HI
+	    (<dsp_arith_inverse_op_code>:HI
+	      (vec_select:HI (match_dup 1) (parallel [(const_int 2)]))
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+	    (dsp_add_sub_code:HI
+	      (vec_select:HI (match_dup 1) (parallel [(const_int 3)]))
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 3)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<dsp_arith_straight_op_name>16\t%0,%1,%2"
 )
 
-(define_insn "riscv_add64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (plus:DI (match_operand:DI 1 "register_operand" "r")
-	     (match_operand:DI 2 "register_operand" "r")))]
+;;Implement: rcras16, rcrsa16
+;;Extra implement: rcras32, rcrsa32
+(define_insn "riscv_r<dsp_arith_cross_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (ashiftrt:<DSP_EMODE_WIDEN>
+		(<dsp_arith_inverse_op_code>:<DSP_EMODE_WIDEN>
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+	      (const_int 1))))
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (ashiftrt:<DSP_EMODE_WIDEN>
+		(dsp_integer_add_sub_code:<DSP_EMODE_WIDEN>
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 2)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 1)
+		      (parallel [(const_int 0)]))))
+	      (const_int 1))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "r<dsp_arith_cross_op_name><dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "riscv_r<dsp_arith_cross_op_name>16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (ashiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (ashiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 1)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 0)]))))
+		(const_int 1))))
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (ashiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 2)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 3)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (ashiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 3)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 2)]))))
+		(const_int 1))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "r<dsp_arith_cross_op_name>16\t%0,%1,%2"
+)
+
+;;Implement: urcras16, urcrsa16
+;;Extra implement: urcras32, urcrsa32
+(define_insn "riscv_ur<dsp_arith_cross_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (lshiftrt:<DSP_EMODE_WIDEN>
+		(<dsp_arith_inverse_op_code>:<DSP_EMODE_WIDEN>
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+	      (const_int 1))))
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (lshiftrt:<DSP_EMODE_WIDEN>
+		(dsp_integer_add_sub_code:<DSP_EMODE_WIDEN>
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 2)
+		      (parallel [(const_int 1)])))
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 1)
+		      (parallel [(const_int 0)]))))
+	      (const_int 1))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "ur<dsp_arith_cross_op_name><dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "riscv_ur<dsp_arith_cross_op_name>16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (lshiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (zero_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (zero_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (lshiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 1)])))
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 0)]))))
+		(const_int 1))))
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (lshiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 2)])))
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 3)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (lshiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 3)])))
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 2)]))))
+		(const_int 1))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "ur<dsp_arith_cross_op_name>16\t%0,%1,%2"
+)
+
+;;Implement: rstas16, rstsa16
+;;Extra implement: rstas32, rstsa32
+(define_insn "riscv_r<dsp_arith_straight_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (ashiftrt:<DSP_EMODE_WIDEN>
+		(<dsp_arith_inverse_op_code>:<DSP_EMODE_WIDEN>
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 1))))
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (ashiftrt:<DSP_EMODE_WIDEN>
+		(dsp_integer_add_sub_code:<DSP_EMODE_WIDEN>
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 2)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 1)
+		      (parallel [(const_int 1)]))))
+		(const_int 1))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "r<dsp_arith_straight_op_name><dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "riscv_r<dsp_arith_straight_op_name>16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (ashiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:SI
+		    (vec_select:HI
+		     (match_operand:V4HI 2 "register_operand" "r")
+		     (parallel [(const_int 0)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (ashiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 1)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 1)]))))
+		(const_int 1))))
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (ashiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 2)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 2)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (ashiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 3)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 3)]))))
+		(const_int 1))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "r<dsp_arith_straight_op_name>16\t%0,%1,%2"
+)
+
+;;Implement: urstas16, urstsa16
+;;Extra implement: urstas32, urstsa32
+(define_insn "riscv_ur<dsp_arith_straight_op_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (lshiftrt:<DSP_EMODE_WIDEN>
+		(<dsp_arith_inverse_op_code>:<DSP_EMODE_WIDEN>
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_operand:DSP_V2E 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 1))))
+	  (vec_duplicate:DSP_V2E
+	    (truncate:<DSP_EMODE>
+	      (lshiftrt:<DSP_EMODE_WIDEN>
+		(dsp_integer_add_sub_code:<DSP_EMODE_WIDEN>
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 2)
+		      (parallel [(const_int 1)])))
+		  (zero_extend:<DSP_EMODE_WIDEN>
+		    (vec_select:<DSP_EMODE>
+		      (match_dup 1)
+		      (parallel [(const_int 1)]))))
+		(const_int 1))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "ur<dsp_arith_straight_op_name><dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "riscv_ur<dsp_arith_straight_op_name>16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (lshiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (zero_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (zero_extend:SI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (lshiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 1)])))
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 1)]))))
+		(const_int 1))))
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (lshiftrt:SI
+		(<dsp_arith_inverse_op_code>:SI
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 2)])))
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 2)]))))
+		(const_int 1)))
+	    (truncate:HI
+	      (lshiftrt:SI
+		(dsp_integer_add_sub_code:SI
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 1) (parallel [(const_int 3)])))
+		  (zero_extend:SI
+		    (vec_select:HI (match_dup 2) (parallel [(const_int 3)]))))
+		(const_int 1))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "ur<dsp_arith_straight_op_name>16\t%0,%1,%2"
+)
+
+;;---------------- 8-bit Addition & Subtraction Instructions ------------------
+;;Already implemented in previous: add8, radd8, uradd8, kadd8, ukadd8,
+;;                                 sub8, rsub8, ursub8, ksub8, uksub8
+
+;;------------------------ 16-bit Shift Instructions --------------------------
+;;Already implemented in previous: None
+
+;;Implement: sll16, srl16, sra16
+;;Extra implemented: sll8, srl8, sra8, sll32, srl32, sra32
+(define_insn "riscv_<insn><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+     (any_shift:DSP_ALL
+	(match_operand:DSP_ALL 1 "register_operand" "r")
+	(match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<insn><dsp_ebits>\\t%0,%1,%2"
+)
+
+;;Implement: slli16, srli16, srai16
+;;Extra implemented: slli8, srli8, srai8, slli32, srli32, srai32
+(define_insn "riscv_<insn>i<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+     (any_shift:DSP_ALL
+	(match_operand:DSP_ALL 1 "register_operand" "r")
+	(match_operand:SI 2 "immediate_operand" "i")))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (<dsp_ebits> - 1));
+    return "<insn>i<dsp_ebits>\\t%0,%1,%2";
+  }
+)
+
+;;Implement: ksll16
+;;Extra implemented: ksll8, ksll32
+(define_insn "riscv_ksll<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALLX 0 "register_operand" "=r")
+     (ss_ashift:DSP_ALLX
+	(match_operand:DSP_ALLX 1 "register_operand" "r")
+	(match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "ksll<dsp_ebits>\\t%0,%1,%2"
+)
+
+;;Implement: kslli16
+;;Extra implemented: kslli8, kslli32
+(define_insn "riscv_kslli<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALLX 0 "register_operand" "=r")
+     (ss_ashift:DSP_ALLX
+	(match_operand:DSP_ALLX 1 "register_operand" "r")
+	(match_operand:SI 2 "immediate_operand" "i")))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
+    return "kslli<dsp_ebits>\\t%0,%1,%2";
+  }
+)
+
+;;Implement: kslra16
+;;Extra implemented: kslra8, kslra32
+(define_insn "riscv_kslra<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALLX 0 "register_operand" "=r")
+	(if_then_else:DSP_ALLX
+	  (lt:SI (match_operand:SI 2 "register_operand" "r")
+		 (const_int 0))
+	  (ashiftrt:DSP_ALLX (match_operand:DSP_ALLX 1 "register_operand" "r")
+			     (neg:SI (match_dup 2)))
+	  (ss_ashift:DSP_ALLX (match_dup 1)
+			      (match_dup 2))))]
+  "TARGET_XTHEAD_ZPN"
+  "kslra<dsp_ebits>\t%0,%1,%2"
+)
+
+;;Implement: kslra16.u
+;;Extra implemented: kslra8.u, kslra32.u
+(define_insn "riscv_kslra<dsp_ebits>_u<dsp_all_mode>"
+  [(set (match_operand:DSP_ALLX 0 "register_operand" "=r")
+	(if_then_else:DSP_ALLX
+	  (lt:SI (match_operand:SI 2 "register_operand" "r")
+		 (const_int 0))
+	  (unspec:DSP_ALLX [(match_operand:DSP_ALLX 1 "register_operand" "r")
+			    (neg:SI (match_dup 2))] UNSPEC_SRA_U)
+	  (ss_ashift:DSP_ALLX (match_dup 1)
+			      (match_dup 2))))]
+  "TARGET_XTHEAD_ZPN"
+  "kslra<dsp_ebits>.u\t%0,%1,%2"
+)
+
+;;Implement: sra16.u
+;;Extra implemented: sra8.u, sra32.u
+(define_insn "riscv_sra<dsp_ebits>_u<dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+     (unspec:DSP_ALL
+	[(match_operand:DSP_ALL 1 "register_operand" "r")
+	 (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_SRA_U))]
+  "TARGET_XTHEAD_ZPN"
+  "sra<dsp_ebits>.u\\t%0,%1,%2"
+)
+
+;;Implement: srai16.u
+;;Extra implemented: srai8.u, srai32.u
+(define_insn "riscv_srai<dsp_ebits>_u<dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+     (unspec:DSP_ALL
+	[(match_operand:DSP_ALL 1 "register_operand" "r")
+	 (match_operand:SI 2 "immediate_operand" "i")]
+	 UNSPEC_SRA_U))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (<dsp_ebits> - 1));
+    return "srai<dsp_ebits>.u\\t%0,%1,%2";
+  }
+)
+
+;;Implement: srl16.u
+;;Extra implemented: srl8.u, srl32.u
+(define_insn "riscv_srl<dsp_ebits>_u<dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+     (unspec:DSP_ALL
+	[(match_operand:DSP_ALL 1 "register_operand" "r")
+	 (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_SRL_U))]
+  "TARGET_XTHEAD_ZPN"
+  "srl<dsp_ebits>.u\\t%0,%1,%2"
+)
+
+;;Implement: sril16.u
+;;Extra implemented: sril8.u, sril32.u
+(define_insn "riscv_srli<dsp_ebits>_u<dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+     (unspec:DSP_ALL
+	[(match_operand:DSP_ALL 1 "register_operand" "r")
+	 (match_operand:SI 2 "immediate_operand" "i")]
+	 UNSPEC_SRL_U))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (<dsp_ebits> - 1));
+    return "srli<dsp_ebits>.u\\t%0,%1,%2";
+  }
+)
+
+;;------------------------ 8-bit Shift Instructions ---------------------------
+;;Already implemented in previous: sra8, sll8, srl8, srai8, slli8, srli8.u,
+;;                                 sra8.u, srai8.u, srli8, srl8.u, ksll8,
+;;                                 kslli8, kslra8, kslra8.u
+
+;;----------------------- 16-bit Compare Instructions -------------------------
+;;Already implemented in previous: None
+
+(define_code_iterator dsp_cmp_code [
+   le leu lt ltu eq
+])
+
+(define_code_attr dsp_cmp_name [
+    (eq "cmpeq")
+    (le "scmple")
+    (lt "scmplt")
+    (leu "ucmple")
+    (ltu "ucmplt")
+])
+
+;;Implement: cmpeq16, scmplt16, scmpe16, ucmplt16, ucmple16
+;;Extra implemented: cmpeq8, scmplt8, scmpe8, ucmplt8, ucmple8
+(define_insn "riscv_<dsp_cmp_name><dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHI 0 "register_operand" "=r")
+	(dsp_cmp_code:DSP_QIHI
+	  (match_operand:DSP_QIHI 1 "register_operand" "r")
+	  (match_operand:DSP_QIHI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_cmp_name><dsp_ebits>\\t%0,%1,%2"
+)
+
+;;----------------------- 8-bit Compare Instructions --------------------------
+;;Already implemented in previous: cmpeq8, scmplt8, scmpe8, ucmplt8, ucmple8
+
+;;---------------------- 16-bit Multiply Instructions -------------------------
+;;Already implemented in previous: None
+
+;;Implement: smul16, smulx16, umul16, umulx16
+(define_insn "riscv_<su>mul16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(mult:V2SI
+	   (any_extend:V2SI (match_operand:V2HI 1 "register_operand" "r"))
+	   (any_extend:V2SI (match_operand:V2HI 2 "register_operand" "r"))))]
   "TARGET_XTHEAD_ZPSFOPERAND"
-  "add64\\t%0,%1,%2"
+  "<su>mul16\\t%0,%1,%2"
 )
 
-(define_insn "riscv_ave_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-      [(match_operand:GPR 1 "register_operand" "r")
-       (match_operand:GPR 2 "register_operand" "r")]
-       UNSPEC_AVE))]
-  "TARGET_XTHEAD_DSP"
-  "ave\\t%0,%1,%2"
-)
-
-(define_insn "riscv_bitrev_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-      [(match_operand:GPR 1 "register_operand" "r")
-       (match_operand:SI 2 "register_operand" "r")]
-       UNSPEC_BITREV))]
-  "TARGET_XTHEAD_DSP"
-  "bitrev\\t%0,%1,%2"
-)
-
-(define_insn "riscv_bitrevi_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-      [(match_operand:GPR 1 "register_operand" "r")
-       (match_operand:SI 2 "immediate_operand" "i")]
-       UNSPEC_BITREV))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & (BITS_PER_WORD - 1));
-  return "bitrevi\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_insb_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-      [(match_operand:GPR 1 "register_operand" "0")
-       (match_operand:GPR 2 "register_operand" "r")
-       (match_operand:SI 3 "immediate_operand" "i")]
-       UNSPEC_INSB))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[3] = GEN_INT (INTVAL (operands[3]) & (UNITS_PER_WORD - 1));
-  return "insb\\t%0,%2,%3";
-}
-)
-
-(define_insn "riscv_bpick_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-      [(match_operand:GPR 1 "register_operand" "r")
-       (match_operand:GPR 2 "register_operand" "r")
-       (match_operand:GPR 3 "register_operand" "r")]
-       UNSPEC_BPICK))]
-  "TARGET_XTHEAD_DSP"
-  "bpick\\t%0,%1,%2,%3"
-)
-
-(define_insn "riscv_clrs8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-      [(match_operand:VQIMOD 1 "register_operand" "r")]
-       UNSPEC_CLRS8))]
-  "TARGET_XTHEAD_DSP"
-  "clrs8\\t%0,%1"
-)
-
-(define_insn "riscv_clrs16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-      [(match_operand:VHIMOD 1 "register_operand" "r")]
-       UNSPEC_CLRS16))]
-  "TARGET_XTHEAD_DSP"
-  "clrs16\\t%0,%1"
-)
-
-(define_insn "riscv_clrs32_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-     (unspec:VSIMOD
-      [(match_operand:VSIMOD 1 "register_operand" "r")]
-       UNSPEC_CLRS32))]
-  "TARGET_XTHEAD_DSP"
-  "clrs32\\t%0,%1"
-)
-
-(define_insn "riscv_clo8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-      [(match_operand:VQIMOD 1 "register_operand" "r")]
-       UNSPEC_CLO8))]
-  "TARGET_XTHEAD_DSP"
-  "clo8\\t%0,%1"
-)
-
-(define_insn "riscv_clo16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-      [(match_operand:VHIMOD 1 "register_operand" "r")]
-       UNSPEC_CLO16))]
-  "TARGET_XTHEAD_DSP"
-  "clo16\\t%0,%1"
-)
-
-(define_insn "riscv_clo32_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-     (unspec:VSIMOD
-      [(match_operand:VSIMOD 1 "register_operand" "r")]
-       UNSPEC_CLO32))]
-  "TARGET_XTHEAD_DSP"
-  "clo32\\t%0,%1"
-)
-
-(define_insn "riscv_clz8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-      [(match_operand:VQIMOD 1 "register_operand" "r")]
-       UNSPEC_CLZ8))]
-  "TARGET_XTHEAD_DSP"
-  "clz8\\t%0,%1"
-)
-
-(define_insn "riscv_clz16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-      [(match_operand:VHIMOD 1 "register_operand" "r")]
-       UNSPEC_CLZ16))]
-  "TARGET_XTHEAD_DSP"
-  "clz16\\t%0,%1"
-)
-
-(define_insn "riscv_clz32_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-     (unspec:VSIMOD
-      [(match_operand:VSIMOD 1 "register_operand" "r")]
-       UNSPEC_CLZ32))]
-  "TARGET_XTHEAD_DSP"
-  "clz32\\t%0,%1"
-)
-
-(define_insn "riscv_cmpeq8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:VQIMOD 2 "register_operand" "r")]
-	   UNSPEC_CMPEQ8))]
-  "TARGET_XTHEAD_DSP"
-  "cmpeq8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_cmpeq16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_CMPEQ16))]
-  "TARGET_XTHEAD_DSP"
-  "cmpeq16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kabs8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ss_abs:VQIMOD
-       (match_operand:VQIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "kabs8\\t%0,%1"
-)
-
-(define_insn "riscv_kabs16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(ss_abs:VHIMOD
-	  (match_operand:VHIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "kabs16\\t%0,%1"
-)
-
-(define_insn "riscv_kabsw"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-	(ss_abs:SI
-	  (match_operand:SI 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "kabsw\\t%0,%1"
-)
-
-(define_insn "riscv_kabsw_di"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(sign_extend:DI (ss_abs:SI
-	  (match_operand:DI 1 "register_operand" "r"))))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "kabsw\\t%0,%1"
-)
-
-(define_insn "riscv_kadd8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-    (ss_plus:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")
-		    (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "kadd8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kadd16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-    (ss_plus:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")
-		    (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "kadd16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kadd64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (ss_plus:DI (match_operand:DI 1 "register_operand" "r")
-		(match_operand:DI 2 "register_operand" "r")))]
+(define_insn "riscv_<su>mulx16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_merge:V2SI
+	  (vec_duplicate:V2SI
+	    (mult:SI
+	      (any_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 1 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (any_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))))
+	  (vec_duplicate:V2SI
+	    (mult:SI
+	      (any_extend:SI
+		(vec_select:HI
+		  (match_dup 1)
+		  (parallel [(const_int 1)])))
+	      (any_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 0)])))))
+	  (const_int 1)))]
   "TARGET_XTHEAD_ZPSFOPERAND"
-  "kadd64\\t%0,%1,%2"
+  "<su>mulx16\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kaddh_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KADDH))]
-  "TARGET_XTHEAD_DSP"
-  "kaddh\\t%0,%1,%2"
+;;Implement: khm16
+(define_insn "riscv_khm16_v2hi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_concat:V2HI
+	  (truncate:HI
+	    (ashiftrt:SI
+	      (ss_mult:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V2HI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V2HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 2))
+	      (const_int 16)))
+	  (truncate:HI
+	    (ashiftrt:SI
+	      (ss_mult:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1)
+				   (parallel [(const_int 1)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2)
+				   (parallel [(const_int 1)]))))
+		(const_int 2))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "khm16\t%0,%1,%2"
 )
 
-(define_insn "riscv_kaddw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KADDW))]
-  "TARGET_XTHEAD_DSP"
-  "kaddw\\t%0,%1,%2"
+(define_insn "riscv_khm16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_concat:V4HI
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (ashiftrt:SI
+		(ss_mult:SI
+		  (mult:SI
+		    (sign_extend:SI
+		      (vec_select:HI
+			(match_operand:V4HI 1 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:SI
+		      (vec_select:HI
+			(match_operand:V4HI 2 "register_operand" "r")
+			(parallel [(const_int 0)]))))
+		  (const_int 2))
+		(const_int 16)))
+	    (truncate:HI
+	      (ashiftrt:SI
+		(ss_mult:SI
+		  (mult:SI
+		    (sign_extend:SI
+		      (vec_select:HI (match_dup 1)
+				     (parallel [(const_int 1)])))
+		    (sign_extend:SI
+		      (vec_select:HI (match_dup 2)
+				     (parallel [(const_int 1)]))))
+		(const_int 2))
+	      (const_int 16))))
+	  (vec_concat:V2HI
+	    (truncate:HI
+	      (ashiftrt:SI
+		(ss_mult:SI
+		  (mult:SI
+		    (sign_extend:SI
+		      (vec_select:HI (match_dup 1)
+				     (parallel [(const_int 2)])))
+		    (sign_extend:SI
+		      (vec_select:HI (match_dup 2)
+				     (parallel [(const_int 2)]))))
+		  (const_int 2))
+		(const_int 16)))
+	    (truncate:HI
+	      (ashiftrt:SI
+		(ss_mult:SI
+		  (mult:SI
+		    (sign_extend:SI
+		      (vec_select:HI (match_dup 1)
+				     (parallel [(const_int 3)])))
+		    (sign_extend:SI
+		      (vec_select:HI (match_dup 2)
+				     (parallel [(const_int 3)]))))
+		  (const_int 2))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "khm16\t%0,%1,%2"
 )
 
-(define_int_iterator UNSPEC_KDMXY [
-   UNSPEC_KDMBB
-   UNSPEC_KDMBT
-   UNSPEC_KDMTT
-])
+;;Implement: khmx16
+(define_insn "riscv_khmx16_v2hi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_concat:V2HI
+	  (truncate:HI
+	    (ashiftrt:SI
+	      (ss_mult:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V2HI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:SI
+		    (vec_select:HI
+		      (match_operand:V2HI 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 2))
+	      (const_int 16)))
+	  (truncate:HI
+	    (ashiftrt:SI
+	      (ss_mult:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 1)
+				   (parallel [(const_int 1)])))
+		  (sign_extend:SI
+		    (vec_select:HI (match_dup 2)
+				   (parallel [(const_int 0)]))))
+		(const_int 2))
+	      (const_int 8)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "khmx16\t%0,%1,%2"
+)
 
-(define_int_attr kdmxy_insn [
-   (UNSPEC_KDMBB "kdmbb")
-   (UNSPEC_KDMBT "kdmbt")
-   (UNSPEC_KDMTT "kdmtt")
-])
+(define_insn "riscv_khmx16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(truncate:V4HI
+	  (ashiftrt:V4SI
+	    (ss_mult:V4SI
+	      (mult:V4SI
+		(sign_extend:V4SI
+		  (match_operand:V4HI 1 "register_operand" "r"))
+		(sign_extend:V4SI
+		  (vec_select:V4HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)
+			       (const_int 0)
+			       (const_int 3)
+			       (const_int 2)]))))
+	      (const_int 2))
+	  (const_int 8))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "khmx16\t%0,%1,%2"
+)
 
-(define_insn "riscv_<kdmxy_insn>"
+;;---------------------- 8-bit Multiply Instructions --------------------------
+;;Already implemented in previous: khm8, khmx8
+
+;;Implement: smul8, smulx8, umul8, umulx8
+(define_insn "riscv_<su>mul8"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(mult:V4HI
+	  (any_extend:V4HI (match_operand:V4QI 1 "register_operand" "r"))
+	  (any_extend:V4HI (match_operand:V4QI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "<su>mul8\\t%0,%1,%2"
+)
+
+(define_insn "riscv_<su>mulx8"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(mult:V4HI
+	  (any_extend:V4HI (match_operand:V4QI 1 "register_operand" "r"))
+	  (any_extend:V4HI
+	    (vec_select:V4QI
+	      (match_operand:V4QI 2 "register_operand" "r")
+	      (parallel [(const_int 1)
+			 (const_int 0)
+			 (const_int 3)
+			 (const_int 2)])))))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "<su>mulx8\\t%0,%1,%2"
+)
+
+;;Implement: khm8
+(define_insn "riscv_khm8_v4qi"
+  [(set (match_operand:V4QI 0 "register_operand" "=r")
+	(truncate:V4QI
+	  (ashiftrt:V4HI
+	    (ss_mult:V4HI
+	      (mult:V4HI
+		(sign_extend:V4HI
+		  (match_operand:V4QI 1 "register_operand" "r"))
+		(sign_extend:V4HI		
+		  (match_operand:V4QI 2 "register_operand" "r")))
+	      (const_int 2))
+	  (const_int 8))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "khm8\t%0,%1,%2"
+)
+
+(define_insn "riscv_khm8_v8qi"
+  [(set (match_operand:V8QI 0 "register_operand" "=r")
+	(truncate:V8QI
+	  (ashiftrt:V8HI
+	    (ss_mult:V8HI
+	      (mult:V8HI
+		(sign_extend:V8HI
+		  (match_operand:V8QI 1 "register_operand" "r"))
+		(sign_extend:V8HI		
+		  (match_operand:V8QI 2 "register_operand" "r")))
+	      (const_int 2))
+	  (const_int 8))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "khm8\t%0,%1,%2"
+)
+
+;;Implement: khmx8
+(define_insn "riscv_khmx8_v4qi"
+  [(set (match_operand:V4QI 0 "register_operand" "=r")
+	(truncate:V4QI
+	  (ashiftrt:V4HI
+	    (ss_mult:V4HI
+	      (mult:V4HI
+		(sign_extend:V4HI
+		  (match_operand:V4QI 1 "register_operand" "r"))
+		(sign_extend:V4HI
+		  (vec_select:V4QI		
+		    (match_operand:V4QI 2 "register_operand" "r")
+		    (parallel [(const_int 1)
+			       (const_int 0)
+			       (const_int 3)
+			       (const_int 2)]))))
+	      (const_int 2))
+	  (const_int 8))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "khmx8\t%0,%1,%2"
+)
+
+(define_insn "riscv_khmx8_v8qi"
+  [(set (match_operand:V8QI 0 "register_operand" "=r")
+	(truncate:V8QI
+	  (ashiftrt:V8HI
+	    (ss_mult:V8HI
+	      (mult:V8HI
+		(sign_extend:V8HI
+		  (match_operand:V8QI 1 "register_operand" "r"))
+		(sign_extend:V8HI
+		  (vec_select:V8QI		
+		    (match_operand:V8QI 2 "register_operand" "r")
+		    (parallel [(const_int 1)
+			       (const_int 0)
+			       (const_int 3)
+			       (const_int 2)
+			       (const_int 5)
+			       (const_int 4)
+			       (const_int 7)
+			       (const_int 6)]))))
+	      (const_int 2))
+	  (const_int 8))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "khmx8\t%0,%1,%2"
+)
+
+;;------------------------ 16-bit Misc Instructions ---------------------------
+;;Already implemented in previous: None
+
+(define_code_iterator min_max [smin smax umin umax])
+
+;;Implement: smin16, umin16, smax16, umax16
+;;Extra implemented: smin8, umin8, smax8, umax8, smin32, umin32, smax32, umax32
+(define_insn "riscv_<dsp_arith_intruction_name><dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALL 0 "register_operand" "=r")
+	(min_max:DSP_ALL
+	    (match_operand:DSP_ALL 1 "register_operand" "r")
+	    (match_operand:DSP_ALL 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name><dsp_ebits>\\t%0,%1,%2"
+)
+
+;;Implement: sclip16
+;;Extra implemented: sclip8, sclip32
+(define_insn "riscv_sclip<dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHISIX 0 "register_operand" "=r")
+	(unspec:DSP_QIHISIX
+	  [(match_operand:DSP_QIHISIX 1 "register_operand" "r")
+	   (match_operand:SI 2 "immediate_operand" "i")]
+	   UNSPEC_SCLIP))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (<dsp_ebits> - 1));
+    return "sclip<dsp_ebits>\\t%0,%1,%2";
+  }
+)
+
+;;Implement: uclip16
+;;Extra implemented: uclip8, uclip32
+(define_insn "riscv_uclip<dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHISIX 0 "register_operand" "=r")
+	(unspec:DSP_QIHISIX
+	  [(match_operand:DSP_QIHISIX 1 "register_operand" "r")
+	   (match_operand:SI 2 "immediate_operand" "i")]
+	   UNSPEC_UCLIP))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (<dsp_ebits> - 1));
+    return "uclip<dsp_ebits>\\t%0,%1,%2";
+  }
+)
+
+;;Implement: kabs16
+;;Extra implemented: kabs8, kabs32
+(define_insn "riscv_kabs<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_ALLX 0 "register_operand" "=r")
+	(ss_abs:DSP_ALLX (match_operand:DSP_ALLX 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "kabs<dsp_ebits>\\t%0,%1"
+)
+
+;;Implement: clrs16
+;;Extra implemented: clrs8, clrs32
+(define_insn "riscv_clrs<dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHISI 0 "register_operand" "=r")
+	(clrsb:DSP_QIHISI
+	  (match_operand:DSP_QIHISI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "clrs<dsp_ebits>\\t%0,%1"
+)
+
+;;Implement: clo16
+;;Extra implemented: clo8, clo32
+(define_insn "riscv_clo<dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHISI 0 "register_operand" "=r")
+	(unspec:DSP_QIHISI
+	  [(match_operand:DSP_QIHISI 1 "register_operand" "r")]
+	UNSPEC_CLO))]
+  "TARGET_XTHEAD_ZPN"
+  "clo<dsp_ebits>\\t%0,%1"
+)
+
+;;Implement: clz16
+;;Extra implemented: clz8, clz32
+(define_insn "riscv_clz<dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHISI 0 "register_operand" "=r")
+	(clz:DSP_QIHISI (match_operand:DSP_QIHISI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "clz<dsp_ebits>\\t%0,%1"
+)
+
+;;Implement: swap16
+;;Extra implemented: swap8
+(define_insn "riscv_swap<dsp_ebits>_<mode>"
+  [(set (match_operand:DSP_QIHI 0 "register_operand" "=r")
+     (unspec:DSP_QIHI
+      [(match_operand:DSP_QIHI 1 "register_operand" "r")]
+       UNSPEC_SWAP))]
+  "TARGET_XTHEAD_ZPN"
+  "swap<dsp_ebits>\\t%0,%1"
+)
+
+;;------------------------ 8-bit Misc Instructions ----------------------------
+;;Already implemented in previous: smin8, umin8, smax8, umax8, sclip8, uclip8
+;;                                 kabs8, clrs8, clz8 clo8, swap8
+
+;;--------------------- 8-bit Unpacking Instructions --------------------------
+;;Already implemented in previous: None
+
+;;Implement: sunpkd810, zunpkd810
+(define_insn "riscv_<zs>unpkd810_v4qi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 0)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd810\t%0,%1"
+)
+
+(define_insn "*riscv_<zs>unpkd810_v4qi_inv"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 1)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd810\t%0,%1"
+)
+
+(define_insn "riscv_<zs>unpkd810_v8qi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	  (any_extend:V8HI (match_operand:V8QI 1 "register_operand" "r"))
+	  (parallel [(const_int 0) (const_int 1)
+		     (const_int 4) (const_int 5)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<zs>unpkd810\t%0,%1"
+)
+
+;;Implement: sunpkd820, zunpkd820
+(define_insn "riscv_<zs>unpkd820_v4qi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 2)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 0)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd820\t%0,%1"
+)
+
+(define_insn "*riscv_<zs>unpkd820_v4qi_inv"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 2)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd820\t%0,%1"
+)
+
+(define_insn "riscv_<zs>unpkd820_v8qi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	  (any_extend:V8HI (match_operand:V8QI 1 "register_operand" "r"))
+	  (parallel [(const_int 0) (const_int 2)
+		     (const_int 4) (const_int 6)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<zs>unpkd820\t%0,%1"
+)
+
+;;Implement: sunpkd830, zunpkd830
+(define_insn "riscv_<zs>unpkd830_v4qi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 3)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 0)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd830\t%0,%1"
+)
+
+(define_insn "*riscv_<zs>unpkd830_v4qi_inv"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 3)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd830\t%0,%1"
+)
+
+(define_insn "riscv_<zs>unpkd830_v8qi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	  (any_extend:V8HI (match_operand:V8QI 1 "register_operand" "r"))
+	  (parallel [(const_int 0) (const_int 3)
+		     (const_int 4) (const_int 7)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<zs>unpkd830\t%0,%1"
+)
+
+;;Implement: sunpkd831, zunpkd831
+(define_insn "riscv_<zs>unpkd831_v4qi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 3)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 1)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd831\t%0,%1"
+)
+
+(define_insn "*riscv_<zs>unpkd831_v4qi_inv"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 3)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd831\t%0,%1"
+)
+
+(define_insn "riscv_<zs>unpkd831_v8qi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	  (any_extend:V8HI (match_operand:V8QI 1 "register_operand" "r"))
+	  (parallel [(const_int 1) (const_int 3)
+		     (const_int 5) (const_int 7)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<zs>unpkd831\t%0,%1"
+)
+
+;;Implement: sunpkd832, zunpkd832
+(define_insn "riscv_<zs>unpkd832_v4qi"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 3)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 2)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd832\t%0,%1"
+)
+
+(define_insn "*riscv_<zs>unpkd832_v4qi_inv"
+  [(set (match_operand:V2HI 0 "register_operand" "=r")
+	(vec_merge:V2HI
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_operand:V4QI 1 "register_operand" "r")
+		(parallel [(const_int 2)]))))
+	  (vec_duplicate:V2HI
+	    (any_extend:HI
+	      (vec_select:QI
+		(match_dup 1)
+		(parallel [(const_int 3)]))))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "<zs>unpkd832\t%0,%1"
+)
+
+(define_insn "riscv_<zs>unpkd832_v8qi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	  (any_extend:V8HI (match_operand:V8QI 1 "register_operand" "r"))
+	  (parallel [(const_int 2) (const_int 3)
+		     (const_int 6) (const_int 7)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<zs>unpkd832\t%0,%1"
+)
+
+
+;;=============== Partial-SIMD Data Processing Instructions ===================
+
+;;---------------------- 16-bit Packing Instructions --------------------------
+;;Already implemented in previous: None
+
+;;Implement: pkbb16
+;;Extra implemented: pkbb32
+(define_insn "riscv_pkbb<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "pkbb<dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "*riscv_pkbb<dsp_ebits><dsp_all_mode>_inverse"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "pkbb<dsp_ebits>\t%0,%2,%1"
+)
+
+(define_insn "riscv_pkbb16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	 (vec_concat:V8HI (match_operand:V4HI 1 "register_operand" "r")
+			  (match_operand:V4HI 2 "register_operand" "r"))
+	 (parallel [(const_int 0) (const_int 4)
+		    (const_int 2) (const_int 6)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "pkbb16\t%0,%1,%2"
+)
+
+;;Implement: pkbt16
+;;Extra implemented: pkbt32
+(define_insn "riscv_pkbt<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "pkbt<dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "*riscv_pkbt<dsp_ebits><dsp_all_mode>_inverse"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "pkbt<dsp_ebits>\t%0,%2,%1"
+)
+
+(define_insn "riscv_pkbt16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	 (vec_concat:V8HI (match_operand:V4HI 1 "register_operand" "r")
+			  (match_operand:V4HI 2 "register_operand" "r"))
+	 (parallel [(const_int 0) (const_int 5)
+		    (const_int 2) (const_int 7)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "pkbt16\t%0,%1,%2"
+)
+
+;;Implement: pktb16
+;;Extra implemented: pktb32
+(define_insn "riscv_pktb<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "pktb<dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "*riscv_pktb<dsp_ebits><dsp_all_mode>_inverse"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "pktb<dsp_ebits>\t%0,%2,%1"
+)
+
+(define_insn "riscv_pktb16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	 (vec_concat:V8HI (match_operand:V4HI 1 "register_operand" "r")
+			  (match_operand:V4HI 2 "register_operand" "r"))
+	 (parallel [(const_int 1) (const_int 4)
+		    (const_int 3) (const_int 6)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "pktb16\t%0,%1,%2"
+)
+
+;;Implement: pktt16
+;;Extra implemented: pktt32
+(define_insn "riscv_pktt<dsp_ebits><dsp_all_mode>"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "pktt<dsp_ebits>\t%0,%1,%2"
+)
+
+(define_insn "*riscv_pktt<dsp_ebits><dsp_all_mode>_inverse"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 1 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (vec_duplicate:DSP_V2E
+	    (vec_select:<DSP_EMODE>
+	      (match_operand:DSP_V2E 2 "register_operand" "r")
+	      (parallel [(const_int 1)])))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN"
+  "pktt<dsp_ebits>\t%0,%2,%1"
+)
+
+(define_insn "riscv_pktt16_v4hi"
+  [(set (match_operand:V4HI 0 "register_operand" "=r")
+	(vec_select:V4HI
+	 (vec_concat:V8HI (match_operand:V4HI 1 "register_operand" "r")
+			  (match_operand:V4HI 2 "register_operand" "r"))
+	 (parallel [(const_int 1) (const_int 5)
+		    (const_int 3) (const_int 7)])))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "pktt16\t%0,%1,%2"
+)
+
+;;Other uses of pkxy
+(define_insn "pkbbsi_1"
   [(set (match_operand:SI 0 "register_operand" "=r")
-	(unspec:SI
-	  [(match_operand:V2HI 1 "register_operand" "r")
-	   (match_operand:V2HI 2 "register_operand" "r")]
-	   UNSPEC_KDMXY))]
-  "TARGET_XTHEAD_DSP"
-  "<kdmxy_insn>\\t%0,%1,%2"
+	(ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+			(const_int 65535))
+		(ashift:SI (match_operand:SI 2 "register_operand" "r")
+			   (const_int 16))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pkbb16\t%0,%2,%1"
 )
 
-(define_insn "riscv_<kdmxy_insn>_di"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(sign_extend:DI (unspec:SI
-	    [(match_operand:V2HI 1 "register_operand" "r")
-	     (match_operand:V2HI 2 "register_operand" "r")]
-	    UNSPEC_KDMXY)))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<kdmxy_insn>\\t%0,%1,%2"
-)
-
-(define_int_iterator UNSPEC_KDMAXY [
-   UNSPEC_KDMABB
-   UNSPEC_KDMABT
-   UNSPEC_KDMATT
-])
-
-(define_int_attr kdmaxy_insn [
-   (UNSPEC_KDMABB "kdmabb")
-   (UNSPEC_KDMABT "kdmabt")
-   (UNSPEC_KDMATT "kdmatt")
-])
-
-(define_insn "riscv_<kdmaxy_insn>"
+(define_insn "pkbbsi_2"
   [(set (match_operand:SI 0 "register_operand" "=r")
-	(unspec:SI
-	  [(match_operand:SI 1 "register_operand" "0")
-	   (match_operand:V2HI 2 "register_operand" "r")
-	   (match_operand:V2HI 3 "register_operand" "r")]
-	   UNSPEC_KDMAXY))]
-  "TARGET_XTHEAD_DSP"
-  "<kdmaxy_insn>\\t%0,%2,%3"
+	(ior:SI	(ashift:SI (match_operand:SI 2 "register_operand" "r")
+			   (const_int 16))
+		(and:SI (match_operand:SI 1 "register_operand" "r")
+			(const_int 65535))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pkbb16\t%0,%2,%1"
 )
 
-(define_insn "riscv_<kdmaxy_insn>_di"
+(define_insn "pkbbsi_3"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI (zero_extend:SI	(match_operand:HI 1 "register_operand" "r"))
+		(ashift:SI (match_operand:SI 2 "register_operand" "r")
+			   (const_int 16))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pkbb16\t%0,%2,%1"
+)
+
+(define_insn "pkbbsi_4"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI	(ashift:SI (match_operand:SI 2 "register_operand" "r")
+			   (const_int 16))
+		(zero_extend:SI (match_operand:HI 1 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pkbb16\t%0,%2,%1"
+)
+
+;; v0 = (v1 & 0xffff0000) | (v2 & 0xffff)
+(define_insn "pktbsi_1"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+			(const_int -65536))
+		(zero_extend:SI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pktb16\t%0,%1,%2"
+)
+
+(define_insn "pktbsi_2"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+			(const_int -65536))
+		(and:SI (match_operand:SI 2 "register_operand" "r")
+			(const_int 65535))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pktb16\t%0,%1,%2"
+)
+
+(define_insn "pktbsi_3"
+  [(set (zero_extract:SI (match_operand:SI 0 "register_operand" "+r")
+			 (const_int 16 )
+			 (const_int 0))
+	(match_operand:SI 1 "register_operand" "r"))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pktb16\t%0,%0,%1"
+)
+
+(define_insn "pktbsi_4"
+  [(set (zero_extract:SI (match_operand:SI 0 "register_operand" "+r")
+			 (const_int 16 )
+			 (const_int 0))
+	(zero_extend:SI (match_operand:HI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pktb16\t%0,%0,%1"
+)
+
+(define_insn "pkttsi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+			(const_int -65536))
+		(lshiftrt:SI (match_operand:SI 2 "register_operand" "r")
+			     (const_int 16))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pktt16\t%0,%1,%2"
+)
+
+(define_insn "vec_set<mode>_internal"
+  [(set (match_operand:DSP_V2E 0 "register_operand" "=r")
+	(vec_merge:DSP_V2E
+	  (vec_duplicate:DSP_V2E
+	    (match_operand:<DSP_EMODE> 1 "register_operand" "r"))
+	  (match_operand:DSP_V2E 2 "register_operand" "r")
+	  (match_operand:SI 3 "immediate_operand" "i")))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    HOST_WIDE_INT elem = INTVAL (operands[3]);
+    if (elem == 1)
+      return "pktb<dsp_ebits>\t%0,%2,%1";
+    else if (elem == 2)
+      return "pkbb<dsp_ebits>\t%0,%1,%2";
+    else
+      gcc_unreachable ();
+  }
+)
+
+;;--------- Most Significant Word “32x32” Multiply & Add Instructions ---------
+;;Already implemented in previous: None
+
+;;Implement: smmul
+(define_insn "riscv_smmul_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (mult:DI
+	      (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN"
+  "smmul\t%0,%1,%2"
+)
+
+(define_insn "riscv_smmul_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(truncate:V2SI
+	  (lshiftrt:V2DI
+	    (mult:V2DI
+	      (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" "r"))
+	      (sign_extend:V2DI (match_operand:V2SI 2 "register_operand" "r")))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smmul\t%0,%1,%2"
+)
+
+;;Implement: smmul.u
+(define_insn "riscv_smmul_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (ashift: DI (const_int 1) (const_int 31)))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN"
+  "smmul.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_smmul_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(truncate:V2SI
+	  (lshiftrt:V2DI
+	    (plus:V2DI
+	      (mult:V2DI
+		(sign_extend:V2DI
+		  (match_operand:V2SI 1 "register_operand" "r"))
+		(sign_extend:V2DI
+		  (match_operand:V2SI 2 "register_operand" "r")))
+	      (vec_duplicate:V2DI
+		(ashift: DI (const_int 1) (const_int 31))))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smmul.u\t%0,%1,%2"
+)
+
+;;Implement: kmmac
+(define_insn "riscv_kmmac_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI (match_operand:SI 1 "register_operand" " 0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		(sign_extend:DI (match_operand:SI 3 "register_operand" "r")))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmac\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmac_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI (match_operand:V2SI 1 "register_operand" " 0")
+	  (truncate:V2SI
+	    (lshiftrt:V2DI
+	      (mult:V2DI
+		(sign_extend:V2DI
+		  (match_operand:V2SI 2 "register_operand" "r"))
+		(sign_extend:V2DI
+		  (match_operand:V2SI 3 "register_operand" "r")))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmac\t%0,%2,%3"
+)
+
+;;Implement: kmmac.u
+(define_insn "riscv_kmmac_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI (match_operand:SI 1 "register_operand" " 0")
+	  (truncate:SI
+	    (lshiftrt:V2DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		  (sign_extend:DI (match_operand:SI 3 "register_operand" "r")))
+		(ashift: DI (const_int 1) (const_int 31)))
+	    (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmac.u\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmac_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI (match_operand:V2SI 1 "register_operand" " 0")
+	  (truncate:V2SI
+	    (lshiftrt:V2DI
+	      (plus:V2DI
+		(mult:V2DI
+		  (sign_extend:V2DI
+		    (match_operand:V2SI 2 "register_operand" "r"))
+		  (sign_extend:V2DI
+		    (match_operand:V2SI 3 "register_operand" "r")))
+		(vec_duplicate:V2DI
+		  (ashift: DI (const_int 1) (const_int 31))))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmac.u\t%0,%2,%3"
+)
+
+;;Implement: kmmsb
+(define_insn "riscv_kmmsb_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_minus:SI (match_operand:SI 1 "register_operand" " 0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		(sign_extend:DI (match_operand:SI 3 "register_operand" "r")))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmsb\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmsb_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_minus:V2SI (match_operand:V2SI 1 "register_operand" " 0")
+	  (truncate:V2SI
+	    (lshiftrt:V2DI
+	      (mult:V2DI
+		(sign_extend:V2DI
+		  (match_operand:V2SI 2 "register_operand" "r"))
+		(sign_extend:V2DI
+		  (match_operand:V2SI 3 "register_operand" "r")))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmsb\t%0,%2,%3"
+)
+
+;;Implement: kmmsb.u
+(define_insn "riscv_kmmsb_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_minus:SI (match_operand:SI 1 "register_operand" " 0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		  (sign_extend:DI (match_operand:SI 3 "register_operand" "r")))
+		(ashift: DI (const_int 1) (const_int 31)))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmsb.u\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmsb_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_minus:V2SI (match_operand:V2SI 1 "register_operand" " 0")
+	  (truncate:V2SI
+	    (lshiftrt:V2DI
+	      (plus:V2DI
+		(mult:V2DI
+		  (sign_extend:V2DI
+		    (match_operand:V2SI 2 "register_operand" "r"))
+		  (sign_extend:V2DI
+		    (match_operand:V2SI 3 "register_operand" "r")))
+		(vec_duplicate:V2DI
+		  (ashift: DI (const_int 1) (const_int 31))))
+	      (const_int 32)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmsb.u\t%0,%2,%3"
+)
+
+;;Implement: kwmmul
+(define_insn "riscv_kwmmul_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (ashiftrt:DI
+	    (ss_mult:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 2))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kwmmul\t%0,%1,%2"
+)
+
+(define_insn "riscv_kwmmul_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(truncate:V2SI
+	  (lshiftrt:V2DI
+	    (ss_mult:V2DI
+	      (mult:V2DI
+		(sign_extend:V2DI
+		  (match_operand:V2SI 1 "register_operand" "r"))
+		(sign_extend:V2DI
+		  (match_operand:V2SI 2 "register_operand" "r")))
+	      (const_int 2))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kwmmul\t%0,%1,%2"
+)
+
+;;Implement: kwmmu.u
+(define_insn "riscv_kwmmul_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (ss_plus:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+		(const_int 2))
+	      (ashift: DI (const_int 1) (const_int 31)))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kwmmul.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_kwmmul_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(truncate:V2SI
+	  (lshiftrt:V2DI
+	    (ss_plus:V2DI
+	      (ss_mult:V2DI
+		(mult:V2DI
+		  (sign_extend:V2DI
+		    (match_operand:V2SI 1 "register_operand" "r"))
+		  (sign_extend:V2DI
+		    (match_operand:V2SI 2 "register_operand" "r")))
+		(const_int 2))
+	      (vec_duplicate:V2DI
+		(ashift: DI (const_int 1) (const_int 31))))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kwmmul.u\t%0,%1,%2"
+)
+
+;;--------- Most Significant Word “32x16” Multiply & Add Instructions ---------
+;;Already implemented in previous: None
+
+;;Implement: smmwb
+(define_insn "riscv_smmwb_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (mult:DI
+	      (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "smmwb\t%0,%1,%2"
+)
+
+(define_insn "riscv_smmwb_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:SI
+		    (match_operand:V2SI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:SI
+		    (match_dup 1)
+		      (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_dup 2)
+		      (parallel [(const_int 2)]))))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smmwb\t%0,%1,%2"
+)
+
+;;Implement: smmwt
+(define_insn "riscv_smmwt_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (mult:DI
+	      (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "smmwt\t%0,%1,%2"
+)
+
+(define_insn "riscv_smmwt_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:SI
+		    (match_operand:V2SI 1 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:SI
+		    (match_dup 1)
+		    (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 3)]))))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smmwt\t%0,%1,%2"
+)
+
+;;Implement: smmwb.u
+(define_insn "riscv_smmwb_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V2HI 2 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (ashift:DI (const_int 1) (const_int 15)))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "smmwb.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_smmwb_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_operand:V2SI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_dup 1)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 2)
+		      (parallel [(const_int 2)]))))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smmwb.u\t%0,%1,%2"
+)
+
+;;Implement: smmwt.u
+(define_insn "riscv_smmwt_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V2HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (ashift:DI (const_int 1) (const_int 15)))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "smmwt.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_smmwt_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_operand:V2SI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_dup 1)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 2)
+		      (parallel [(const_int 3)]))))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smmwt.u\t%0,%1,%2"
+)
+
+;;Implement: kmmawb
+(define_insn "riscv_kmmawb_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V2HI 3 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawb\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawb_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_operand:V2SI 2 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 3 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_dup 2)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 3)
+		      (parallel [(const_int 2)]))))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawb\t%0,%2,%3"
+)
+
+;;Implement: kmmawt
+(define_insn "riscv_kmmawt_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V2HI 3 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawt\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawt_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_operand:V2SI 2 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 3 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_dup 2)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 3)
+		      (parallel [(const_int 3)]))))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawt\t%0,%2,%3"
+)
+
+;;Implement: kmmawb.u
+(define_insn "riscv_kmmawb_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V2HI 3 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawb.u\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawb_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(plus:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_operand:V2SI 2 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V4HI 3 "register_operand" "r")
+			(parallel [(const_int 0)]))))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(plus:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_dup 2)
+			(parallel [(const_int 1)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_dup 3)
+			(parallel [(const_int 2)]))))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawb.u\t%0,%2,%3"
+)
+
+;;Implement: kmmawt.u
+(define_insn "riscv_kmmawt_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V2HI 3 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawt.u\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawt_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(plus:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_operand:V2SI 2 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V4HI 3 "register_operand" "r")
+			(parallel [(const_int 1)]))))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(plus:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_dup 2)
+			(parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 3)
+		      (parallel [(const_int 3)]))))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawt.u\t%0,%2,%3"
+)
+
+;;Implement: kmmwb2
+(define_insn "riscv_kmmwb2_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (ashiftrt:DI
+	    (ss_mult:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V2HI 2 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (const_int 2))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmwb2\t%0,%1,%2"
+)
+
+(define_insn "riscv_kmmwb2_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_operand:V2SI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 2))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_dup 1)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 2)
+		      (parallel [(const_int 2)]))))
+		(const_int 2))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmwb2\t%0,%1,%2"
+)
+
+;;Implement: kmmwt2
+(define_insn "riscv_kmmwt2_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (ashiftrt:DI
+	    (ss_mult:DI
+	      (mult:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI
+		  (vec_select:HI
+		    (match_operand:V2HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmwt2\t%0,%1,%2"
+)
+
+(define_insn "riscv_kmmwt2_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_operand:V2SI 1 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 2))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:SI
+		      (match_dup 1)
+		      (parallel [(const_int 1)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_dup 2)
+		      (parallel [(const_int 3)]))))
+		(const_int 2))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmwt2\t%0,%1,%2"
+)
+
+;;Implement: kmmwb2.u
+(define_insn "riscv_kmmwb2_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (ss_plus:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V2HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 2))
+	      (ashift: DI (const_int 1) (const_int 31)))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmwb2.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_kmmwb2_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_plus:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_operand:V2SI 1 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V4HI 2 "register_operand" "r")
+			(parallel [(const_int 0)]))))
+		  (const_int 2))
+		(ashift:DI (const_int 1) (const_int 15)))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_plus:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_dup 1)
+			(parallel [(const_int 1)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_dup 2)
+			(parallel [(const_int 2)]))))
+		  (const_int 2))
+		(ashift:DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmwb2.u\t%0,%1,%2"
+)
+
+;;Implement: kmmwt2.u
+(define_insn "riscv_kmmwt2_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (ss_plus:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V2HI 2 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 2))
+	      (ashift: DI (const_int 1) (const_int 31)))
+	    (const_int 32))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmwt2.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_kmmwt2_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_plus:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_operand:V2SI 1 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V4HI 2 "register_operand" "r")
+			(parallel [(const_int 1)]))))
+		  (const_int 2))
+		(ashift:DI (const_int 1) (const_int 15)))
+	      (const_int 16)))
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_plus:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_dup 1)
+			(parallel [(const_int 1)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_dup 2)
+			(parallel [(const_int 3)]))))
+		  (const_int 2))
+		(ashift:DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmwt2.u\t%0,%1,%2"
+)
+
+;;Implement: kmmawb2
+(define_insn "riscv_kmmawb2_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V2HI 3 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(const_int 2))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawb2\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawb2_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_operand:V2SI 2 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V4HI 3 "register_operand" "r")
+			(parallel [(const_int 0)]))))
+		    (const_int 2))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_dup 2)
+			(parallel [(const_int 1)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_dup 3)
+			(parallel [(const_int 2)]))))
+		  (const_int 2))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawb2\t%0,%2,%3"
+)
+
+;;Implement: kmmawt2
+(define_insn "riscv_kmmawt2_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_mult:DI
+		(mult:DI
+		  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V2HI 3 "register_operand" "r")
+		      (parallel [(const_int 1)]))))
+		(const_int 2))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawt2\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawt2_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_operand:V2SI 2 "register_operand" "r")
+			(parallel [(const_int 0)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V4HI 3 "register_operand" "r")
+			(parallel [(const_int 1)]))))
+		    (const_int 2))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (vec_select:SI
+			(match_dup 2)
+			(parallel [(const_int 1)])))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_dup 3)
+			(parallel [(const_int 3)]))))
+		  (const_int 2))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawt2\t%0,%2,%3"
+)
+
+;;Implement: kmmawb2.u
+(define_insn "riscv_kmmawb2_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_plus:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (match_operand:SI 2 "register_operand" "r"))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V2HI 3 "register_operand" "r")
+			(parallel [(const_int 0)]))))
+		  (const_int 2))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawb2.u\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawb2_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_plus:DI
+		  (ss_mult:DI
+		    (mult:DI
+		      (sign_extend:DI
+			(vec_select:SI
+			  (match_operand:V2SI 2 "register_operand" "r")
+			  (parallel [(const_int 0)])))
+		      (sign_extend:DI
+			(vec_select:HI
+			  (match_operand:V4HI 3 "register_operand" "r")
+			  (parallel [(const_int 0)]))))
+		    (const_int 2))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_plus:DI
+		  (ss_mult:DI
+		    (mult:DI
+		      (sign_extend:DI
+			(vec_select:SI
+			  (match_dup 2)
+			  (parallel [(const_int 1)])))
+		      (sign_extend:DI
+			(vec_select:HI
+			  (match_dup 3)
+			  (parallel [(const_int 2)]))))
+		    (const_int 2))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawb2.u\t%0,%2,%3"
+)
+
+;;Implement: kmmawt2.u
+(define_insn "riscv_kmmawt2_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (ss_plus:DI
+		(ss_mult:DI
+		  (mult:DI
+		    (sign_extend:DI
+		      (match_operand:SI 2 "register_operand" "r"))
+		    (sign_extend:DI
+		      (vec_select:HI
+			(match_operand:V2HI 3 "register_operand" "r")
+			(parallel [(const_int 1)]))))
+		  (const_int 2))
+		(ashift: DI (const_int 1) (const_int 15)))
+	      (const_int 16)))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmmawt2.u\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmmawt2_u_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (vec_concat:V2SI
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_plus:DI
+		  (ss_mult:DI
+		    (mult:DI
+		      (sign_extend:DI
+			(vec_select:SI
+			  (match_operand:V2SI 2 "register_operand" "r")
+			  (parallel [(const_int 0)])))
+		      (sign_extend:DI
+			(vec_select:HI
+			  (match_operand:V4HI 3 "register_operand" "r")
+			  (parallel [(const_int 1)]))))
+		    (const_int 2))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16)))
+	    (truncate:SI
+	      (lshiftrt:DI
+		(ss_plus:DI
+		  (ss_mult:DI
+		    (mult:DI
+		      (sign_extend:DI
+			(vec_select:SI
+			  (match_dup 2)
+			  (parallel [(const_int 1)])))
+		      (sign_extend:DI
+			(vec_select:HI
+			  (match_dup 3)
+			  (parallel [(const_int 3)]))))
+		    (const_int 2))
+		  (ashift: DI (const_int 1) (const_int 15)))
+		(const_int 16))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmmawt2.u\t%0,%2,%3"
+)
+
+;;-------- Signed 16-bit Multiply with 32-bit Add/Subtract Instructions -------
+;;Already implemented in previous: None
+
+;;Implement: smbb16
+(define_insn "riscv_smbb16_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI
+	  (sign_extend:SI
+	     (vec_select:HI
+	       (match_operand:V2HI 1 "register_operand" "r")
+	       (parallel [(const_int 0)])))
+	  (sign_extend:SI (vec_select:HI
+	       (match_operand:V2HI 2 "register_operand" "r")
+	       (parallel [(const_int 0)])))))]
+  "TARGET_XTHEAD_ZPN"
+  "smbb16\t%0,%1,%2"
+)
+
+(define_insn "riscv_smbb16_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(mult:V2SI
+	 (sign_extend:V2SI
+	  (vec_select:V2HI
+	   (match_operand:V4HI 1 "register_operand" "r")
+	   (parallel [(const_int 0)
+		      (const_int 2)])))
+	 (sign_extend:V2SI
+	  (vec_select:V2HI
+	   (match_operand:V4HI 2 "register_operand" "r")
+	   (parallel [(const_int 0)
+		      (const_int 2)])))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smbb16\t%0,%1,%2"
+)
+
+;;Implement: smbt16
+(define_insn "riscv_smbt16_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI
+	  (sign_extend:SI
+	     (vec_select:HI
+	       (match_operand:V2HI 1 "register_operand" "r")
+	       (parallel [(const_int 0)])))
+	  (sign_extend:SI (vec_select:HI
+	       (match_operand:V2HI 2 "register_operand" "r")
+	       (parallel [(const_int 1)])))))]
+  "TARGET_XTHEAD_ZPN"
+  "smbt16\t%0,%1,%2"
+)
+
+(define_insn "*riscv_smtb16_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI
+	  (sign_extend:SI
+	     (vec_select:HI
+	       (match_operand:V2HI 1 "register_operand" "r")
+	       (parallel [(const_int 1)])))
+	  (sign_extend:SI (vec_select:HI
+	       (match_operand:V2HI 2 "register_operand" "r")
+	       (parallel [(const_int 0)])))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "smbt16\t%0,%2,%1"
+)
+
+(define_insn "riscv_smbt16_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(mult:V2SI
+	 (sign_extend:V2SI
+	  (vec_select:V2HI
+	   (match_operand:V4HI 1 "register_operand" "r")
+	   (parallel [(const_int 0)
+		      (const_int 2)])))
+	 (sign_extend:V2SI
+	  (vec_select:V2HI
+	   (match_operand:V4HI 2 "register_operand" "r")
+	   (parallel [(const_int 1)
+		      (const_int 3)])))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smbt16\t%0,%1,%2"
+)
+
+;;Implement: smtt16
+(define_insn "riscv_smtt16_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI
+	  (sign_extend:SI
+	     (vec_select:HI
+	       (match_operand:V2HI 1 "register_operand" "r")
+	       (parallel [(const_int 1)])))
+	  (sign_extend:SI (vec_select:HI
+	       (match_operand:V2HI 2 "register_operand" "r")
+	       (parallel [(const_int 1)])))))]
+  "TARGET_XTHEAD_ZPN"
+  "smtt16\t%0,%1,%2"
+)
+
+(define_insn "riscv_smtt16_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(mult:V2SI
+	 (sign_extend:V2SI
+	  (vec_select:V2HI
+	   (match_operand:V4HI 1 "register_operand" "r")
+	   (parallel [(const_int 1)
+		      (const_int 3)])))
+	 (sign_extend:V2SI
+	  (vec_select:V2HI
+	   (match_operand:V4HI 2 "register_operand" "r")
+	   (parallel [(const_int 1)
+		      (const_int 3)])))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smtt16\t%0,%1,%2"
+)
+
+;;Implement: kmda
+(define_insn "riscv_kmda_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 2 "register_operand" "r")
+			      (parallel [(const_int 1)]))))
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 2)
+			      (parallel [(const_int 0)]))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmda\t%0,%1,%2"
+)
+
+(define_insn "riscv_kmda_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 1 "register_operand" "r")
+				(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 2 "register_operand" "r")
+				(parallel [(const_int 1) (const_int 3)]))))
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 1)
+				(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 2)
+				(parallel [(const_int 0) (const_int 2)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmda\t%0,%1,%2"
+)
+
+;;Implement: kmxda
+(define_insn "riscv_kmxda_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 2 "register_operand" "r")
+			      (parallel [(const_int 0)]))))
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 2)
+			      (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmxda\t%0,%1,%2"
+)
+
+(define_insn "riscv_kmxda_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 1 "register_operand" "r")
+				(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 2 "register_operand" "r")
+				(parallel [(const_int 0) (const_int 2)]))))
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 1)
+				(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 2)
+				(parallel [(const_int 1) (const_int 3)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmxda\t%0,%1,%2"
+)
+
+;;Implement: smds
+(define_insn "riscv_smds_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(minus:SI
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 2 "register_operand" "r")
+			      (parallel [(const_int 1)]))))
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 2)
+			      (parallel [(const_int 0)]))))))]
+  "TARGET_XTHEAD_ZPN"
+  "smds\t%0,%1,%2"
+)
+
+(define_insn "riscv_smds_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(minus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 1 "register_operand" "r")
+				(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 2 "register_operand" "r")
+				(parallel [(const_int 1) (const_int 3)]))))
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 1)
+				(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 2)
+				(parallel [(const_int 0) (const_int 2)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smds\t%0,%1,%2"
+)
+
+;;Implement: smdrs
+(define_insn "riscv_smdrs_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(minus:SI
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 1 "register_operand" "r")
+			      (parallel [(const_int 0)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 2 "register_operand" "r")
+			      (parallel [(const_int 0)]))))
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 1)
+			      (parallel [(const_int 1)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 2)
+			      (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPN"
+  "smdrs\t%0,%1,%2"
+)
+
+(define_insn "riscv_smdrs_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(minus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 1 "register_operand" "r")
+				(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 2 "register_operand" "r")
+				(parallel [(const_int 0) (const_int 2)]))))
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 1)
+				(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 2)
+				(parallel [(const_int 1) (const_int 3)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smdrs\t%0,%1,%2"
+)
+
+;;Implement: smxds
+(define_insn "riscv_smxds_v2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(minus:SI
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_operand:V2HI 2 "register_operand" "r")
+			      (parallel [(const_int 0)]))))
+	  (mult:SI
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:SI (vec_select:HI
+			      (match_dup 2)
+			      (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPN"
+  "smxds\t%0,%1,%2"
+)
+
+(define_insn "riscv_smxds_v4hi"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(minus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 1 "register_operand" "r")
+				(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_operand:V4HI 2 "register_operand" "r")
+				(parallel [(const_int 0) (const_int 2)]))))
+	  (mult:V2SI
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 1)
+				(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI (vec_select:V2HI
+				(match_dup 2)
+				(parallel [(const_int 1) (const_int 3)]))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smxds\t%0,%1,%2"
+)
+
+;;Implement: kmabb
+(define_insn "riscv_kmabb_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmabb\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmabb_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 2 "register_operand" "r")
+		(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 3 "register_operand" "r")
+		(parallel [(const_int 0) (const_int 2)]))))
+	  (match_operand:V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmabb\t%0,%2,%3"
+)
+
+;;Implement: kmabt
+(define_insn "riscv_kmabt_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmabt\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kmatb_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 1)])))
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmabt\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmabt_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 2 "register_operand" "r")
+		(parallel [(const_int 0) (const_int 2)])))
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 3 "register_operand" "r")
+		(parallel [(const_int 1) (const_int 3)]))))
+	  (match_operand:V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmabt\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kmatb_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 2 "register_operand" "r")
+		(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 3 "register_operand" "r")
+		(parallel [(const_int 0) (const_int 2)]))))
+	  (match_operand:V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmabt\t%0,%2,%3"
+)
+
+;;Implement: kmatt
+(define_insn "riscv_kmatt_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 1)])))
+	    (sign_extend:SI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmatt\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmatt_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (mult:V2SI
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 2 "register_operand" "r")
+		(parallel [(const_int 1) (const_int 3)])))
+	    (sign_extend:V2SI
+	      (vec_select:V2HI
+		(match_operand:V4HI 3 "register_operand" "r")
+		(parallel [(const_int 1) (const_int 3)]))))
+	  (match_operand:V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmatt\t%0,%2,%3"
+)
+
+;;Implement: kmada
+(define_insn "riscv_kmada_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_plus:SI
+	    (mult:SI
+	      (sign_extend:SI (vec_select:HI
+				(match_operand:V2HI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:SI (vec_select:HI
+				(match_operand:V2HI 3 "register_operand" "r")
+				(parallel [(const_int 1)]))))
+	    (mult:SI
+	      (sign_extend:SI (vec_select:HI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:SI (vec_select:HI
+				(match_dup 3)
+				(parallel [(const_int 0)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmada\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmada_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_plus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 0) (const_int 2)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmada\t%0,%2,%3"
+)
+
+;;Implement: kmxada
+(define_insn "riscv_kmaxda_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_plus:SI
+	    (mult:SI
+	      (sign_extend:SI (vec_select:HI
+				(match_operand:V2HI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:SI (vec_select:HI
+				(match_operand:V2HI 3 "register_operand" "r")
+				(parallel [(const_int 0)]))))
+	    (mult:SI
+	      (sign_extend:SI (vec_select:HI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:SI (vec_select:HI
+				(match_dup 3)
+				(parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmaxda\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmaxda_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_plus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 0) (const_int 2)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 1) (const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmaxda\t%0,%2,%3"
+)
+
+;;Implement: kmads
+(define_insn "riscv_kmads_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_minus:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 3 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 0)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmads\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmads_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_minus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 0) (const_int 2)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmads\t%0,%2,%3"
+)
+
+;;Implement: kmadrs
+(define_insn "riscv_kmadrs_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_minus:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmadrs\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmadrs_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_minus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 0) (const_int 2)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 1) (const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmadrs\t%0,%2,%3"
+)
+
+;;Implement: kmaxds
+(define_insn "riscv_kmaxds_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_minus:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmaxds\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmaxds_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_minus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 0) (const_int 2)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 1) (const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmaxds\t%0,%2,%3"
+)
+
+;;Implement: kmsda
+(define_insn "riscv_kmsda_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_minus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_minus:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 3 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 0)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmsda\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmsda_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_minus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_minus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 0) (const_int 2)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmsda\t%0,%2,%3"
+)
+
+;;Implement: kmsxda
+(define_insn "riscv_kmsxda_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_minus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (ss_minus:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V2HI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "kmsxda\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmsxda_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_minus:V2SI
+	  (match_operand:V2SI 1 "register_operand" "0")
+	  (ss_minus:V2SI
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1) (const_int 3)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 0) (const_int 2)]))))
+	    (mult:V2SI
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 2)
+		  (parallel [(const_int 0) (const_int 2)])))
+	      (sign_extend:V2SI
+		(vec_select:V2HI
+		  (match_dup 3)
+		  (parallel [(const_int 1) (const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kmsxda\t%0,%2,%3"
+)
+
+;;-------- Signed 16-bit Multiply with 64-bit Add/Subtract Instructions -------
+;;Already implemented in previous: None
+
+;;Implement: smal
+(define_insn "riscv_smal_v2hi"
   [(set (match_operand:DI 0 "register_operand" "=r")
-	(sign_extend:DI (unspec:SI
-	    [(match_operand:SI 1 "register_operand" "0")
-	     (match_operand:V2HI 2 "register_operand" "r")
-	     (match_operand:V2HI 3 "register_operand" "r")]
-	    UNSPEC_KDMAXY)))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<kdmaxy_insn>\\t%0,%2,%3"
+	(plus:DI (match_operand:DI 1 "register_operand" "r")
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_dup 2)
+		(parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smal\t%0,%1,%2"
+)
+
+(define_insn "riscv_smal_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (match_operand:DI 1 "register_operand" "r")
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2) (parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2) (parallel [(const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smal\t%0,%1,%2"
+)
+
+;;---------------------- Miscellaneous Instructions ---------------------------
+;;Already implemented in previous: sclip32, uclip32, clrs32, clz32, clo32
+
+;;Implement: pbsad
+(define_insn "riscv_pbsad_v4qi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (plus:SI (plus:SI
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI
+		  (match_operand:V4QI 1 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:QI
+		  (match_operand:V4QI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))))
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 1)]))))))
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 2)])))
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 2)]))))))
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 3)])))
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pbsad\\t%0,%1,%2"
+)
+
+(define_insn "riscv_pbsad_v8qi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (plus:DI (plus:DI (plus:DI (plus:DI (plus:DI (plus:DI
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI
+		  (match_operand:V8QI 1 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:QI
+		  (match_operand:V8QI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 1)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 2)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 3)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 3)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 4)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 4)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 5)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 5)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 6)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 6)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 1) (parallel [(const_int 7)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 7)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "pbsad\\t%0,%1,%2"
+)
+
+;;Implement: pbsada
+(define_insn "riscv_pbsada_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (plus:SI (plus:SI (plus:SI
+	  (match_operand:SI 1 "register_operand" "0")
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI
+		  (match_operand:V4QI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:QI
+		  (match_operand:V4QI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))))
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 1)]))))))
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 2)])))
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 2)]))))))
+	  (abs:SI
+	    (minus:SI
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 3)])))
+	      (sign_extend:SI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 3)])))))))]
+  "TARGET_XTHEAD_ZPN && !TARGET_64BIT"
+  "pbsada\\t%0,%2,%3"
+)
+
+(define_insn "riscv_pbsada_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (plus:DI (plus:DI (plus:DI (plus:DI (plus:DI (plus:DI (plus:SI
+	  (match_operand:DI 1 "register_operand" "0")
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI
+		  (match_operand:V8QI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:QI
+		  (match_operand:V8QI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 1)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 2)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 3)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 3)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 4)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 4)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 5)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 5)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 6)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 6)]))))))
+	  (abs:DI
+	    (minus:DI
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 2) (parallel [(const_int 7)])))
+	      (sign_extend:DI
+		(vec_select:QI (match_dup 3) (parallel [(const_int 7)])))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "pbsada\\t%0,%1,%2"
+)
+
+;;---------------- 8-bit Multiply with 32-bit Add Instructions ----------------
+;;Already implemented in previous: None
+
+;;Implement: smaqa, umaqa
+(define_insn "riscv_<su>maqa_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (match_operand:SI 1 "register_operand"    " 0")
+	  (plus:SI
+	    (plus:SI
+	      (mult:SI
+		(any_extend:SI
+		  (vec_select:QI
+		    (match_operand:V4QI 2 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(any_extend:SI
+		  (vec_select:QI
+		    (match_operand:V4QI 3 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (mult:SI
+		(any_extend:SI
+		  (vec_select:QI (match_dup 2) (parallel [(const_int 1)])))
+		(any_extend:SI
+		  (vec_select:QI (match_dup 3) (parallel [(const_int 1)])))))
+	  (plus:SI
+	      (mult:SI
+		(any_extend:SI
+		  (vec_select:QI (match_dup 2) (parallel [(const_int 2)])))
+		(any_extend:SI
+		  (vec_select:QI (match_dup 3) (parallel [(const_int 2)]))))
+	      (mult:SI
+		(any_extend:SI
+		  (vec_select:QI (match_dup 2) (parallel [(const_int 3)])))
+		(any_extend:SI
+		  (vec_select:QI (match_dup 3)
+				 (parallel [(const_int 3)]))))))))]
+  "TARGET_XTHEAD_ZPN"
+  "<su>maqa\\t%0,%2,%3"
+)
+
+(define_insn "riscv_<su>maqa_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(plus:V2SI (match_operand:V2SI 1 "register_operand"  " 0")
+	  (vec_concat:V2SI
+	    (plus:SI
+	      (plus:SI
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI
+		      (match_operand:V8QI 2 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (any_extend:SI
+		    (vec_select:QI
+		      (match_operand:V8QI 3 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 1)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 1)])))))
+	    (plus:SI
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 2)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 2)]))))
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 3)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3)
+				   (parallel [(const_int 3)]))))))
+	    (plus:SI
+	      (plus:SI
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 4)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 4)]))))
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 5)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 5)])))))
+	    (plus:SI
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 6)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 6)]))))
+		(mult:SI
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 7)])))
+		  (any_extend:SI
+		    (vec_select:QI (match_dup 3)
+				   (parallel [(const_int 7)])))))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<su>maqa\\t%0,%2,%3"
+)
+
+;;Implement: smaqa.su
+(define_insn "riscv_smaqa_su_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (match_operand:SI 1 "register_operand"    " 0")
+	  (plus:SI
+	    (plus:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:QI
+		    (match_operand:V4QI 2 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(zero_extend:SI
+		  (vec_select:QI
+		    (match_operand:V4QI 3 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:QI (match_dup 2) (parallel [(const_int 1)])))
+		(zero_extend:SI
+		  (vec_select:QI (match_dup 3) (parallel [(const_int 1)])))))
+	  (plus:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:QI (match_dup 2) (parallel [(const_int 2)])))
+		(zero_extend:SI
+		  (vec_select:QI (match_dup 3) (parallel [(const_int 2)]))))
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:QI (match_dup 2) (parallel [(const_int 3)])))
+		(zero_extend:SI
+		  (vec_select:QI (match_dup 3)
+				 (parallel [(const_int 3)]))))))))]
+  "TARGET_XTHEAD_ZPN"
+  "smaqa.su\\t%0,%2,%3"
+)
+
+(define_insn "riscv_smaqa_su_v2si"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(plus:V2SI (match_operand:V2SI 1 "register_operand"  " 0")
+	  (vec_concat:V2SI
+	    (plus:SI
+	      (plus:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI
+		      (match_operand:V8QI 2 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (zero_extend:SI
+		    (vec_select:QI
+		      (match_operand:V8QI 3 "register_operand" "r")
+		      (parallel [(const_int 0)]))))
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 1)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 1)])))))
+	    (plus:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 2)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 2)]))))
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 3)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3)
+				   (parallel [(const_int 3)]))))))
+	    (plus:SI
+	      (plus:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 4)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 4)]))))
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 5)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 5)])))))
+	    (plus:SI
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 6)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3) (parallel [(const_int 6)]))))
+		(mult:SI
+		  (sign_extend:SI
+		    (vec_select:QI (match_dup 2) (parallel [(const_int 7)])))
+		  (zero_extend:SI
+		    (vec_select:QI (match_dup 3)
+				   (parallel [(const_int 7)])))))))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "smaqa.su\\t%0,%2,%3"
+)
+
+
+;;===================== 64-bit Profile Instructions ===========================
+
+;;---------------- 64-bit Addition & Subtraction Instructions -----------------
+;;Already implemented in previous: None
+
+;;Implement: add64, sub64, kadd64, ksub64, ukadd64, uksub64
+(define_insn "riscv_<dsp_arith_intruction_name>64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(dsp_add_sub_code:DI
+	  (match_operand:DI 1 "register_operand" "r")
+	  (match_operand:DI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "<dsp_arith_intruction_name>64\\t%0,%1,%2"
+)
+
+;;Implement: radd64, rsub64
+(define_insn "riscv_r<dsp_arith_intruction_name>64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(truncate:DI
+	  (ashiftrt:TI
+	    (dsp_integer_add_sub_code:TI
+	      (sign_extend:TI (match_operand:DI 1 "register_operand" "r"))
+	      (sign_extend:TI (match_operand:DI 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "r<dsp_arith_intruction_name>64\\t%0,%1,%2"
+)
+
+;;Implement: uradd64, ursub64
+(define_insn "riscv_ur<dsp_arith_intruction_name>64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(truncate:DI
+	  (lshiftrt:TI
+	    (dsp_integer_add_sub_code:TI
+	      (zero_extend:TI (match_operand:DI 1 "register_operand" "r"))
+	      (zero_extend:TI (match_operand:DI 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "ur<dsp_arith_intruction_name>64\\t%0,%1,%2"
+)
+
+;;---------- 32-bit Multiply with 64-bit Add/Subtract Instructions ------------
+;;Already implemented in previous: None
+
+;;Implement: smar64, umar64
+(define_insn "riscv_<su>mar64_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (mult:DI
+	    (any_extend:DI (match_operand:SI 2 "register_operand" "r"))
+	    (any_extend:DI (match_operand:SI 3 "register_operand" "r")))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "<su>mar64\t%0,%2,%3"
+)
+
+(define_insn "riscv_<su>mar64_v2si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (any_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (any_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (any_extend:DI
+		(vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+	      (any_extend:DI
+		(vec_select:SI (match_dup 3) (parallel [(const_int 1)])))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "<su>mar64\t%0,%2,%3"
+)
+
+;;Implement: smsr64, umsr64
+(define_insn "riscv_<su>msr64_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI (match_operand:DI 1 "register_operand" "0")
+	  (mult:DI
+	    (any_extend:DI (match_operand:SI 2 "register_operand" "r"))
+	    (any_extend:DI (match_operand:SI 3 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "<su>msr64\\t%0,%2,%3"
+)
+
+(define_insn "riscv_<su>msr64_v2si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (minus:DI
+	    (match_operand:DI 1 "register_operand" " 0")
+	    (mult:DI
+	      (any_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (any_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 3 "register_operand" "r")
+		  (parallel [(const_int 0)])))))
+	  (mult:DI
+	    (any_extend:DI
+	      (vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+	    (any_extend:DI
+	      (vec_select:SI (match_dup 3) (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "<su>msr64\t%0,%2,%3"
+)
+
+;;Implement: kmar64
+(define_insn "riscv_kmar64_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
+	    (sign_extend:DI (match_operand:SI 3 "register_operand" "r")))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "kmar64\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmar64_v2si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI (match_operand:DI 1 "register_operand" " 0")
+	  (ss_plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 3) (parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "kmar64\t%0,%2,%3"
+)
+
+;;Implement: kmsr64
+(define_insn "riscv_kmsr64_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_minus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (mult:DI
+	    (sign_extend:DI
+	      (match_operand:SI 2 "register_operand" "r"))
+	    (sign_extend:DI
+	      (match_operand:SI 3 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "kmsr64\t%0,%2,%3"
+)
+
+(define_insn "riscv_kmsr64_v2si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_minus:DI
+	  (ss_minus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 3 "register_operand" "r")
+		  (parallel [(const_int 0)])))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 3) (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "kmsr64\t%0,%2,%3"
+)
+
+;;Implement: ukmar64
+(define_insn "riscv_ukmar64_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(us_plus:DI
+	  (mult:DI
+	    (zero_extend:DI
+	      (match_operand:SI 2 "register_operand" "r"))
+	    (zero_extend:DI
+	      (match_operand:SI 3 "register_operand" "r")))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "ukmar64\t%0,%2,%3"
+)
+
+(define_insn "riscv_ukmar64_v2si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(us_plus:DI (match_operand:DI 1 "register_operand" " 0")
+	  (us_plus:DI
+	    (mult:DI
+	      (zero_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (zero_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 3) (parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "ukmar64\t%0,%2,%3"
+)
+
+;;Implement: ukmsr64
+(define_insn "riscv_ukmsr64_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(us_minus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (mult:DI
+	    (zero_extend:DI
+	      (match_operand:SI 2 "register_operand" "r"))
+	    (zero_extend:DI
+	      (match_operand:SI 3 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "ukmsr64\t%0,%2,%3"
+)
+
+(define_insn "riscv_ukmsr64_v2si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(us_minus:DI
+	  (us_minus:DI
+	    (match_operand:DI 1 "register_operand" " 0")
+	    (mult:DI
+	      (zero_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (zero_extend:DI
+		(vec_select:SI
+		  (match_operand:V2SI 3 "register_operand" "r")
+		  (parallel [(const_int 0)])))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 2) (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:SI (match_dup 3) (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "ukmsr64\t%0,%2,%3"
+)
+
+;;-------- Signed 16-bit Multiply with 64-bit Add/Subtract Instructions--------
+;;Already implemented in previous: None
+
+;;Implement: smalbb
+(define_insn "riscv_smalbb_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalbb\t%0,%2,%3"
+)
+
+(define_insn "*riscv_smalbb_hi"
+  [(set (match_operand:DI 0                     "register_operand" "=r")
+	(plus:DI
+	  (mult:DI
+	    (sign_extend:DI (match_operand:HI 2 "register_operand" "r"))
+	    (sign_extend:DI (match_operand:HI 3 "register_operand" "r")))
+	  (match_operand:DI 1                   "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalbb\t%0,%2,%3"
+)
+
+(define_insn "riscv_smalbb_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 2)])))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalbb\t%0,%2,%3"
+)
+
+;;Implement: smalbt
+(define_insn "riscv_smalbt_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalbt\t%0,%2,%3"
+)
+
+(define_insn "*riscv_smaltb_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 1)])))
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalbt\t%0,%3,%2"
+)
+
+(define_insn "riscv_smalbt_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 3)])))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalbt\t%0,%2,%3"
+)
+
+(define_insn "*riscv_smaltt_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 3)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 2)])))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalbt\t%0,%2,%3"
+)
+
+;;Implement: smaltt
+(define_insn "riscv_smaltt_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 2 "register_operand" "r")
+		(parallel [(const_int 1)])))
+	    (sign_extend:DI
+	      (vec_select:HI
+		(match_operand:V2HI 3 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smaltt\t%0,%2,%3"
+)
+
+(define_insn "riscv_smaltt_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_operand:V4HI 3 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 3)])))
+	      (sign_extend:DI
+		(vec_select:HI
+		  (match_dup 3)
+		  (parallel [(const_int 3)])))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smaltt\t%0,%2,%3"
+)
+
+;;Implement: smalda
+(define_insn "riscv_smalda_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2)
+			       (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3)
+			       (parallel [(const_int 1)])))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalda\t%0,%2,%3"
+)
+
+(define_insn "riscv_smalda_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 3 "register_operand" "r")
+				 (parallel [(const_int 0)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 1)])))))
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 2)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 3)]))))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalda\t%0,%2,%3"
+)
+
+;;Implement: smalxda
+(define_insn "riscv_smalxda_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2)
+			       (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3)
+			       (parallel [(const_int 0)])))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalxda\t%0,%2,%3"
+)
+
+(define_insn "riscv_smalxda_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 3 "register_operand" "r")
+				 (parallel [(const_int 1)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 0)])))))
+	    (plus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 3)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 2)]))))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalxda\t%0,%2,%3"
+)
+
+;;Implement: smalds
+(define_insn "riscv_smalds_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (minus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2)
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3)
+			       (parallel [(const_int 0)])))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalds\t%0,%2,%3"
+)
+
+(define_insn "riscv_smalds_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (minus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+				 (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 3 "register_operand" "r")
+				 (parallel [(const_int 1)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 0)])))))
+	    (minus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 3)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 2)]))))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalds\t%0,%2,%3"
+)
+
+;;Implement: smaldrs
+(define_insn "riscv_smaldrs_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (minus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2)
+			       (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3)
+			       (parallel [(const_int 1)])))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smaldrs\t%0,%2,%3"
+)
+
+(define_insn "riscv_smaldrs_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (minus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 3 "register_operand" "r")
+				 (parallel [(const_int 0)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 1)])))))
+	    (minus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 2)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 3)]))))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smaldrs\t%0,%2,%3"
+)
+
+;;Implement: smalxds
+(define_insn "riscv_smalxds_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (minus:DI
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2)
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3)
+			       (parallel [(const_int 1)])))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smalxds\t%0,%2,%3"
+)
+
+(define_insn "riscv_smalxds_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI
+	  (plus:DI
+	    (minus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 2 "register_operand" "r")
+				 (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_operand:V4HI 3 "register_operand" "r")
+				 (parallel [(const_int 0)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 0)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 1)])))))
+	    (minus:DI
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 2)]))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 3)]))))))
+	  (match_operand:DI 1 "register_operand" " 0")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smalxds\t%0,%2,%3"
+)
+
+;;Implement: smslda
+(define_insn "riscv_smslda_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (minus:DI
+	    (match_operand:DI 1 "register_operand" " 0")
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 0)])))))
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 3) (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smslda\t%0,%2,%3"
+)
+
+(define_insn "riscv_smslda_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (minus:DI
+	    (minus:DI
+	      (minus:DI
+		(match_operand:DI 1 "register_operand" " 0")
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		     (match_operand:V4HI 3 "register_operand" "r")
+		     (parallel [(const_int 0)])))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 1)])))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3) (parallel [(const_int 2)])))))
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 3) (parallel [(const_int 3)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smslda\t%0,%2,%3"
+)
+
+;;Implement: smslxda
+(define_insn "riscv_smslxda_v2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (minus:DI
+	    (match_operand:DI 1 "register_operand" " 0")
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 1)])))))
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 3) (parallel [(const_int 0)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
+  "smslxda\t%0,%2,%3"
+)
+
+(define_insn "riscv_smslxda_v4hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (minus:DI
+	    (minus:DI
+	      (minus:DI
+		(match_operand:DI 1 "register_operand" " 0")
+		(mult:DI
+		  (sign_extend:DI
+		    (vec_select:HI
+		      (match_operand:V4HI 2 "register_operand" "r")
+		      (parallel [(const_int 0)])))
+		  (sign_extend:DI
+		    (vec_select:HI
+		     (match_operand:V4HI 3 "register_operand" "r")
+		     (parallel [(const_int 1)])))))
+	      (mult:DI
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 2) (parallel [(const_int 1)])))
+		(sign_extend:DI
+		  (vec_select:HI (match_dup 3) (parallel [(const_int 0)])))))
+	    (mult:DI
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 2) (parallel [(const_int 2)])))
+	      (sign_extend:DI
+		(vec_select:HI (match_dup 3) (parallel [(const_int 3)])))))
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 2) (parallel [(const_int 3)])))
+	    (sign_extend:DI
+	      (vec_select:HI (match_dup 3) (parallel [(const_int 2)]))))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "smslxda\t%0,%2,%3"
+)
+
+
+;;========================= Non-SIMD Instructions =============================
+
+;;----------------------- Q15 saturation instructions -------------------------
+;;Already implemented in previous: None
+
+(define_code_iterator dsp_fixp_sadd_ssub_code [
+   ss_plus ss_minus
+])
+
+;;Implement: kaddh, ksubh
+(define_insn "riscv_<dsp_arith_intruction_name>h"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(ss_truncate:HI
+	  (dsp_fixp_sadd_ssub_code:SI
+	    (match_operand:SI 1 "register_operand" "r")
+	    (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name>h\\t%0,%1,%2"
+)
+
+(define_insn "riscv_<dsp_arith_intruction_name>h_<mode>"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	(sign_extend:GPR
+	  (ss_truncate:HI
+	    (dsp_fixp_sadd_ssub_code:SI
+	      (match_operand:SI 1 "register_operand" "r")
+	      (match_operand:SI 2 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name>h\\t%0,%1,%2"
+)
+
+(define_code_iterator dsp_fixp_uadd_usub_code [
+   us_plus us_minus
+])
+
+;;Implement: ukaddh, uksubh
+(define_insn "riscv_<dsp_arith_intruction_name>h"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(ss_truncate:HI
+	  (dsp_fixp_uadd_usub_code:SI
+	    (match_operand:SI 1 "register_operand" "r")
+	    (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name>h\\t%0,%1,%2"
+)
+
+(define_insn "riscv_<dsp_arith_intruction_name>h_<mode>"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	(sign_extend:GPR
+	  (us_truncate:HI
+	    (dsp_fixp_uadd_usub_code:SI
+	      (match_operand:SI 1 "register_operand" "r")
+	      (match_operand:SI 2 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name>h\\t%0,%1,%2"
+)
+
+;;Implement: khmbb
+(define_insn "*riscv_khmbb_hihi"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(truncate:HI
+	  (ashiftrt:GPR
+	    (ss_mult:GPR
+	      (mult:GPR
+		(sign_extend:GPR (match_operand:HI 1 "register_operand" "r"))
+		(sign_extend:GPR (match_operand:HI 2 "register_operand" "r")))
+	      (const_int 2))
+	  (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "khmbb\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_khmbb_hi<mode>"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(truncate:HI
+	  (ashiftrt:GPR
+	    (ss_mult:GPR
+	      (mult:GPR
+		(sign_extend:GPR
+		  (vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:GPR
+		  (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+				 (parallel [(const_int 0)]))))
+	      (const_int 2))
+	  (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "khmbb\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_khmbb_<mode>hi"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	(ashiftrt:GPR
+	  (ss_mult:GPR
+	    (mult:GPR
+	      (sign_extend:GPR (match_operand:HI 1 "register_operand" "r"))
+	      (sign_extend:GPR (match_operand:HI 2 "register_operand" "r")))
+	    (const_int 2))
+	  (const_int 16)))]
+  "TARGET_XTHEAD_ZPN"
+  "khmbb\\t%0,%1,%2"
 )
 
 (define_insn "riscv_khmbb_<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:V2HI 1 "register_operand" "r")
-	   (match_operand:V2HI 2 "register_operand" "r")]
-	   UNSPEC_KHMBB))]
-  "TARGET_XTHEAD_DSP"
+	(ashiftrt:GPR
+	  (ss_mult:GPR
+	    (mult:GPR
+	      (sign_extend:GPR
+		(vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:GPR
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)]))))
+	    (const_int 2))
+	  (const_int 16)))]
+  "TARGET_XTHEAD_ZPN"
   "khmbb\\t%0,%1,%2"
+)
+
+
+;;Implement: khmbt
+(define_insn "*riscv_khmbt_hi<mode>"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(truncate:HI
+	  (ashiftrt:GPR
+	    (ss_mult:GPR
+	      (mult:GPR
+		(sign_extend:GPR
+		  (vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:GPR
+		  (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+				 (parallel [(const_int 1)]))))
+	      (const_int 2))
+	  (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "khmbt\\t%0,%1,%2"
 )
 
 (define_insn "riscv_khmbt_<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:V2HI 1 "register_operand" "r")
-	   (match_operand:V2HI 2 "register_operand" "r")]
-	   UNSPEC_KHMBT))]
-  "TARGET_XTHEAD_DSP"
+	(ashiftrt:GPR
+	  (ss_mult:GPR
+	    (mult:GPR
+	     (sign_extend:GPR
+		(vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	     (sign_extend:GPR
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	      (const_int 2))
+	  (const_int 16)))]
+  "TARGET_XTHEAD_ZPN"
   "khmbt\\t%0,%1,%2"
+)
+
+;;Implement: khmtt
+(define_insn "*riscv_khmtt_hi<mode>"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(truncate:HI
+	  (ashiftrt:GPR
+	    (ss_mult:GPR
+	      (mult:GPR
+		(sign_extend:GPR
+		  (vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+				 (parallel [(const_int 1)])))
+		(sign_extend:GPR
+		  (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+				 (parallel [(const_int 1)]))))
+	      (const_int 2))
+	  (const_int 16))))]
+  "TARGET_XTHEAD_ZPN"
+  "khmtt\\t%0,%1,%2"
 )
 
 (define_insn "riscv_khmtt_<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:V2HI 1 "register_operand" "r")
-	   (match_operand:V2HI 2 "register_operand" "r")]
-	   UNSPEC_KHMTT))]
-  "TARGET_XTHEAD_DSP"
+	(ashiftrt:GPR
+	  (ss_mult:GPR
+	    (mult:GPR
+	     (sign_extend:GPR
+		(vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			       (parallel [(const_int 1)])))
+	     (sign_extend:GPR
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	      (const_int 2))
+	  (const_int 16)))]
+  "TARGET_XTHEAD_ZPN"
   "khmtt\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kmabb_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMABB))]
-  "TARGET_XTHEAD_DSP"
-  "kmabb\\t%0,%2,%3"
+;;----------------------- Q31 saturation instructions -------------------------
+;;Already implemented in previous: None
+
+;;Implement: kaddw, ksubw, ukaddw, uksubw
+(define_insn "riscv_<dsp_arith_intruction_name>w"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(dsp_fixp_add_sub_code:SI
+	  (match_operand:SI 1 "register_operand" "r")
+	  (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name>w\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kmabt_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMABT))]
-  "TARGET_XTHEAD_DSP"
-  "kmabt\\t%0,%2,%3"
+(define_insn "riscv_<dsp_arith_intruction_name>w_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(dsp_fixp_add_sub_code:SI
+	  (match_operand:SI 1 "register_operand" "r")
+	  (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "<dsp_arith_intruction_name>w\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kmatt_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMATT))]
-  "TARGET_XTHEAD_DSP"
-  "kmatt\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmada_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMADA))]
-  "TARGET_XTHEAD_DSP"
-  "kmada\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmaxda_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMAXDA))]
-  "TARGET_XTHEAD_DSP"
-  "kmaxda\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmads_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMADS))]
-  "TARGET_XTHEAD_DSP"
-  "kmads\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmadrs_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMADRS))]
-  "TARGET_XTHEAD_DSP"
-  "kmadrs\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmaxds_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMAXDS))]
-  "TARGET_XTHEAD_DSP"
-  "kmaxds\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmar64_<mode>"
+(define_insn "riscv_<dsp_arith_intruction_name>w_di"
   [(set (match_operand:DI 0 "register_operand" "=r")
-	(unspec:DI
-	  [(match_operand:DI 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:VSIMOD 3 "register_operand" "r")]
-	   UNSPEC_KMAR64))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "kmar64\\t%0,%2,%3"
+	(sign_extend:DI
+	  (dsp_fixp_add_sub_code:SI
+	    (match_operand:SI 1 "register_operand" "r")
+	    (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "<dsp_arith_intruction_name>w\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kmda_<mode>"
-  [(set (match_operand:<vssmod_attr> 0 "register_operand" "=r")
-	(unspec:<vssmod_attr>
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_KMDA))]
-  "TARGET_XTHEAD_DSP"
-  "kmda\\t%0,%1,%2"
+;;Implement: kdmbb
+(define_insn "*riscv_kdmbb_scalar"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_mult:SI
+	  (mult:SI
+	    (sign_extend:SI (match_operand:HI 1 "register_operand" "r"))
+	    (sign_extend:SI (match_operand:HI 2 "register_operand" "r")))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmbb\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kmxda_<mode>"
-  [(set (match_operand:<vssmod_attr> 0 "register_operand" "=r")
-	(unspec:<vssmod_attr>
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_KMXDA))]
-  "TARGET_XTHEAD_DSP"
-  "kmxda\\t%0,%1,%2"
+(define_insn "riscv_kdmbb"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_mult:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			     (parallel [(const_int 0)])))
+	    (sign_extend:SI
+	      (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			     (parallel [(const_int 0)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmbb\\t%0,%1,%2"
 )
 
-(define_insn "riscv_kmmac_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:VSIMOD 3 "register_operand" "r")]
-	   UNSPEC_KMMAC))]
-  "TARGET_XTHEAD_DSP"
-  "kmmac\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmac_u_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:VSIMOD 3 "register_operand" "r")]
-	   UNSPEC_KMMAC_U))]
-  "TARGET_XTHEAD_DSP"
-  "kmmac.u\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawb_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWB))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawb\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawb_u_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWB_U))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawb.u\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawb2_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWB2))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawb2\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawb2_u_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWB2_U))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawb2.u\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawt_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWT))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawt\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawt_u_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWT_U))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawt.u\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawt2_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWT2))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawt2\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmawt2_u_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMMAWT2_U))]
-  "TARGET_XTHEAD_DSP"
-  "kmmawt2.u\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmsb_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:VSIMOD 3 "register_operand" "r")]
-	   UNSPEC_KMMSB))]
-  "TARGET_XTHEAD_DSP"
-  "kmmsb\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmmsb_u_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:VSIMOD 3 "register_operand" "r")]
-	   UNSPEC_KMMSB_U))]
-  "TARGET_XTHEAD_DSP"
-  "kmmsb.u\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmsda_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMSDA))]
-  "TARGET_XTHEAD_DSP"
-  "kmsda\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmsxda_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vhhmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_KMSXDA))]
-  "TARGET_XTHEAD_DSP"
-  "kmsxda\\t%0,%2,%3"
-)
-
-(define_insn "riscv_kmsr64_<mode>"
+(define_insn "*riscv_kdmbb_scalardi"
   [(set (match_operand:DI 0 "register_operand" "=r")
-    (unspec:DI
-      [(match_operand:DI 1 "register_operand" "0")
-       (match_operand:VSIMOD 2 "register_operand" "r")
-       (match_operand:VSIMOD 3 "register_operand" "r")]
-       UNSPEC_KMSR64))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "kmsr64\\t%0,%2,%3"
+	(sign_extend:DI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI (match_operand:HI 1 "register_operand" "r"))
+	      (sign_extend:SI (match_operand:HI 2 "register_operand" "r")))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmbb\\t%0,%1,%2"
 )
 
+(define_insn "*riscv_kdmbb_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmbb\\t%0,%1,%2"
+)
+
+;;Implement: kdmbt
+(define_insn "riscv_kdmbt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_mult:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			     (parallel [(const_int 0)])))
+	    (sign_extend:SI
+	      (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			     (parallel [(const_int 1)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmbt\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_kdmbt_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmbt\\t%0,%1,%2"
+)
+
+;;Implement: kdmtt
+(define_insn "riscv_kdmtt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_mult:SI
+	  (mult:SI
+	    (sign_extend:SI
+	      (vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			     (parallel [(const_int 1)])))
+	    (sign_extend:SI
+	      (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			     (parallel [(const_int 1)]))))
+	  (const_int 2)))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmtt\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_kdmtt_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 1 "register_operand" "r")
+			       (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmtt\\t%0,%1,%2"
+)
+
+;;Implement: kslraw
+(define_insn "riscv_kslraw"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(if_then_else:SI
+	  (lt:SI (match_operand:SI 2 "register_operand" "r")
+		 (const_int 0))
+	  (ashiftrt:SI (match_operand:SI 1 "register_operand" "r")
+			 (neg:SI (match_dup 2)))
+	  (ss_ashift:SI (match_dup 1)
+			  (match_dup 2))))]
+  "TARGET_XTHEAD_ZPN"
+  "kslraw\t%0,%1,%2"
+)
+
+(define_insn "riscv_kslraw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(if_then_else:SI
+	  (lt:SI (match_operand:SI 2 "register_operand" "r")
+		 (const_int 0))
+	  (ashiftrt:SI (match_operand:SI 1 "register_operand" "r")
+			 (neg:SI (match_dup 2)))
+	  (ss_ashift:SI (match_dup 1)
+			  (match_dup 2))))]
+  "TARGET_XTHEAD_ZPN"
+  "kslraw\t%0,%1,%2"
+)
+
+(define_insn "riscv_kslraw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (if_then_else:SI
+	    (lt:SI (match_operand:SI 2 "register_operand" "r")
+		   (const_int 0))
+	    (ashiftrt:SI (match_operand:SI 1 "register_operand" "r")
+			 (neg:SI (match_dup 2)))
+	    (ss_ashift:SI (match_dup 1)
+			  (match_dup 2)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kslraw\t%0,%1,%2"
+)
+
+;;Implement: kslraw.u
+(define_insn "riscv_kslraw_u"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(if_then_else:SI
+	  (lt:SI (match_operand:SI 2 "register_operand" "r")
+		 (const_int 0))
+	  (unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		      (neg:SI (match_dup 2))] UNSPEC_SRA_U)
+	  (ss_ashift:SI (match_dup 1)
+			(match_dup 2))))]
+  "TARGET_XTHEAD_ZPN"
+  "kslraw.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_kslraw_u_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(if_then_else:SI
+	  (lt:SI (match_operand:SI 2 "register_operand" "r")
+		 (const_int 0))
+	  (unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		      (neg:SI (match_dup 2))] UNSPEC_SRA_U)
+	  (ss_ashift:SI (match_dup 1)
+			(match_dup 2))))]
+  "TARGET_XTHEAD_ZPN"
+  "kslraw.u\t%0,%1,%2"
+)
+
+(define_insn "riscv_kslraw_u_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (if_then_else:SI
+	    (lt:SI (match_operand:SI 2 "register_operand" "r")
+		   (const_int 0))
+	    (unspec:SI [(match_operand:SI 1 "register_operand" "r")
+			(neg:SI (match_dup 2))] UNSPEC_SRA_U)
+	    (ss_ashift:SI (match_dup 1)
+			  (match_dup 2)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kslraw.u\t%0,%1,%2"
+)
+
+;;Implement: ksllw, kslliw
 (define_insn "riscv_ksllw"
   [(set (match_operand:SI 0 "register_operand" "=r,r")
      (ss_ashift:SI
 	(match_operand:SI 1 "register_operand" "r,r")
 	(match_operand:SI 2 "const_int_or_reg_operand" "i,r")))]
-  "TARGET_XTHEAD_DSP"
-{
-  if (which_alternative == 0)
-    {
-      operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-      return "kslliw\\t%0,%1,%2";
-    }
-  else
-    return "ksllw\\t%0,%1,%2";
-}
+  "TARGET_XTHEAD_ZPN"
+  {
+    if (which_alternative == 0)
+      {
+	operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
+	return "kslliw\\t%0,%1,%2";
+      }
+    else
+      return "ksllw\\t%0,%1,%2";
+  }
 )
 
 (define_insn "riscv_ksllw_di"
@@ -1690,1902 +5788,1568 @@
 	(sign_extend:DI (ss_ashift:SI
 	    (match_operand:SI 1 "register_operand" "r,r")
 	    (match_operand:SI 2 "const_int_or_reg_operand" "i,r"))))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-{
-  if (which_alternative == 0)
-    {
-      operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-      return "kslliw\\t%0,%1,%2";
-    }
-  else
-    return "ksllw\\t%0,%1,%2";
-}
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  {
+    if (which_alternative == 0)
+      {
+	operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
+	return "kslliw\\t%0,%1,%2";
+      }
+    else
+      return "ksllw\\t%0,%1,%2";
+  }
 )
 
-(define_insn "riscv_ksll8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ss_ashift:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ksll8\\t%0,%1,%2"
+;;Implement: kdmabb
+(define_insn "*riscv_kdmabb_scalar"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI (match_operand:HI 2 "register_operand" "r"))
+	      (sign_extend:SI (match_operand:HI 3 "register_operand" "r")))
+	    (const_int 2))
+	(match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmabb\\t%0,%2,%3"
 )
 
-(define_insn "riscv_kslli8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ss_ashift:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "kslli8\\t%0,%1,%2";
-}
+(define_insn "riscv_kdmabb"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 0)]))))
+	    (const_int 2))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmabb\\t%0,%2,%3"
 )
 
-(define_insn "riscv_ksll16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (ss_ashift:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ksll16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslli16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (ss_ashift:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "kslli16\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_kslra8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSLRA8))]
-  "TARGET_XTHEAD_DSP"
-  "kslra8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslra8_u_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSLRA8_U))]
-  "TARGET_XTHEAD_DSP"
-  "kslra8.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslra16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSLRA16))]
-  "TARGET_XTHEAD_DSP"
-  "kslra16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslra16_u_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSLRA16_U))]
-  "TARGET_XTHEAD_DSP"
-  "kslra16.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslraw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSLRAW))]
-  "TARGET_XTHEAD_DSP"
-  "kslraw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslraw_u_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSLRAW_U))]
-  "TARGET_XTHEAD_DSP"
-  "kslraw.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ksub8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-    (ss_minus:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")
-	    (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ksub8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ksub16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-    (ss_minus:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")
-	    (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ksub16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ksub64"
+(define_insn "*riscv_kdmabb_scalardi"
   [(set (match_operand:DI 0 "register_operand" "=r")
-    (ss_minus:DI (match_operand:DI 1 "register_operand" "r")
-	    (match_operand:DI 2 "register_operand" "r")))]
+	(sign_extend:DI
+	  (ss_plus:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI (match_operand:HI 2 "register_operand" "r"))
+		(sign_extend:SI (match_operand:HI 3 "register_operand" "r")))
+	      (const_int 2))
+	    (match_operand:SI 1 "register_operand" "0"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmabb\\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kdmabb_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_plus:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:SI
+		  (vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+				 (parallel [(const_int 0)]))))
+	      (const_int 2))
+	    (match_operand:SI 1 "register_operand" "0"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmabb\\t%0,%2,%3"
+)
+
+;;Implement: kdmabt
+(define_insn "riscv_kdmabt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	    (const_int 2))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmabt\\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kdmabt_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_plus:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+				 (parallel [(const_int 0)])))
+		(sign_extend:SI
+		  (vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+				 (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (match_operand:SI 1 "register_operand" "0"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmabt\\t%0,%2,%3"
+)
+
+;;Implement: kdmatt
+(define_insn "riscv_kdmatt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_plus:SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+			       (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+			       (parallel [(const_int 1)]))))
+	    (const_int 2))
+	  (match_operand:SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPN"
+  "kdmatt\\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kdmatt_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_plus:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI (match_operand:V2HI 2 "register_operand" "r")
+				 (parallel [(const_int 1)])))
+		(sign_extend:SI
+		  (vec_select:HI (match_operand:V2HI 3 "register_operand" "r")
+				 (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (match_operand:SI 1 "register_operand" "0"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kdmatt\\t%0,%2,%3"
+)
+
+;;Implement: kabsw
+(define_insn "riscv_kabsw"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ss_abs:SI
+	  (match_operand:SI 1 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "kabsw\\t%0,%1"
+)
+
+(define_insn "*riscv_kabsw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (ss_abs:SI
+	    (match_operand:SI 1 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "kabsw\\t%0,%1"
+)
+
+;;--------------------- 32-bit Computation Instructions -----------------------
+;;Already implemented in previous: None
+
+;;Implement: raddw
+(define_insn "riscv_raddw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (ashiftrt:DI
+	    (plus:DI
+	      (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "raddw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_raddw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ashiftrt:DI
+	  (plus:DI
+	    (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	    (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "raddw\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_raddw_di2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend: DI
+	  (truncate:SI
+	    (ashiftrt:DI
+	      (plus:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 1)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "raddw\\t%0,%1,%2"
+)
+
+;;Implement:rsubw
+(define_insn "riscv_rsubw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (ashiftrt:DI
+	    (minus:DI
+	      (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "rsubw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_rsubw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ashiftrt:DI
+	  (minus:DI
+	    (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	    (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "rsubw\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_rsubw_di2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (truncate:SI
+	    (ashiftrt:DI
+	      (minus:DI
+		(sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 1)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "rsubw\\t%0,%1,%2"
+)
+
+;;Implement: uraddw
+(define_insn "riscv_uraddw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (lshiftrt:DI
+	    (plus:DI
+	      (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "uraddw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_uraddw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(lshiftrt:DI
+	  (plus:DI
+	    (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	    (zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "uraddw\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_uraddw_di2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend: DI
+	  (truncate:SI
+	    (lshiftrt:DI
+	      (plus:DI
+		(zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 1)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "uraddw\\t%0,%1,%2"
+)
+
+;;Implement: ursubw
+(define_insn "riscv_ursubw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (ashiftrt:DI
+	    (minus:DI
+	      (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "ursubw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_ursubw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ashiftrt:DI
+	  (minus:DI
+	    (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	    (zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	  (const_int 1)))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "ursubw\\t%0,%1,%2"
+)
+
+(define_insn "*riscv_ursubw_di2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (truncate:SI
+	    (ashiftrt:DI
+	      (minus:DI
+		(zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 1)))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "ursubw\\t%0,%1,%2"
+)
+
+;;Implement: maxw
+(define_insn "riscv_maxw"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(smax:SI (match_operand:SI 1 "register_operand" "r")
+		 (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "maxw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_maxw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(smax:SI (match_operand:SI 1 "register_operand" "r")
+		 (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "maxw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_maxw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (smax:SI (match_operand:SI 1 "register_operand" "r")
+		   (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "maxw\\t%0,%1,%2"
+)
+
+;;Implement: minw
+(define_insn "riscv_minw"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(smin:SI (match_operand:SI 1 "register_operand" "r")
+		 (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "minw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_minw_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(smin:SI (match_operand:SI 1 "register_operand" "r")
+		 (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  "minw\\t%0,%1,%2"
+)
+
+(define_insn "riscv_minw_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (smin:SI (match_operand:SI 1 "register_operand" "r")
+		   (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  "minw\\t%0,%1,%2"
+)
+
+;;Implement: mulr64
+(define_insn "riscv_mulr64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI
+	  (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	  (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
   "TARGET_XTHEAD_ZPSFOPERAND"
-  "ksub64\\t%0,%1,%2"
+  "mulr64\\t%0,%1,%2"
 )
 
-(define_insn "*ssneg<mode>"
-  [(set (match_operand:VQIMOD 0                "register_operand" "=r")
-	(ss_neg:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ksub8\t%0,zero,%1"
-)
-
-(define_insn "*ssneg<mode>"
-  [(set (match_operand:VHIMOD 0                "register_operand" "=r")
-	(ss_neg:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ksub16\t%0,zero,%1"
-)
-
-(define_insn "*ssnegdi2"
-  [(set (match_operand:DI 0            "register_operand" "=r")
-	(ss_neg:DI (match_operand:DI 1 "register_operand" "r")))]
+;;Implement: mulsr64
+(define_insn "riscv_mulsr64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI
+	  (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
   "TARGET_XTHEAD_ZPSFOPERAND"
-  "ksub64\t%0,zero,%1"
+  "mulsr64\\t%0,%1,%2"
 )
 
-(define_insn "riscv_ksubh_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSUBH))]
-  "TARGET_XTHEAD_DSP"
-  "ksubh\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ksubw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_KSUBW))]
-  "TARGET_XTHEAD_DSP"
-  "ksubw\\t%0,%1,%2"
-)
-
+;;Implement: maddr32
 (define_insn "riscv_maddr32"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(plus:SI (mult:SI (match_operand:SI 2 "register_operand" "r")
 			  (match_operand:SI 3 "register_operand" "r"))
 		 (match_operand:SI 1 "register_operand" "0")))]
-  "TARGET_XTHEAD_DSP"
+  "TARGET_XTHEAD_ZPN"
   "maddr32\\t%0,%2,%3"
 )
 
 (define_insn "riscv_maddr32_di"
   [(set (match_operand:DI 0 "register_operand" "=r")
-	(sign_extend:DI (plus:SI (mult:SI (match_operand:SI 2 "register_operand" "r")
-					  (match_operand:SI 3 "register_operand" "r"))
-				 (match_operand:SI 1 "register_operand" "0"))))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
+	(sign_extend:DI
+	  (plus:SI
+	    (mult:SI (match_operand:SI 2 "register_operand" "r")
+		     (match_operand:SI 3 "register_operand" "r"))
+	  (match_operand:SI 1 "register_operand" "0"))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
   "maddr32\\t%0,%2,%3"
 )
 
+;;Implement: msubr32
 (define_insn "riscv_msubr32"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(minus:SI (match_operand:SI 1 "register_operand" "0")
 		  (mult:SI (match_operand:SI 2 "register_operand" "r")
 			   (match_operand:SI 3 "register_operand" "r"))))]
-  "TARGET_XTHEAD_DSP"
+  "TARGET_XTHEAD_ZPN"
   "msubr32\\t%0,%2,%3"
 )
 
 (define_insn "riscv_msubr32_di"
   [(set (match_operand:DI 0 "register_operand" "=r")
-	(sign_extend:DI (minus:SI (match_operand:SI 1 "register_operand" "0")
-				  (mult:SI (match_operand:SI 2 "register_operand" "r")
-					   (match_operand:SI 3 "register_operand" "r")))))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
+	(sign_extend:DI
+	  (minus:SI (match_operand:SI 1 "register_operand" "0")
+		    (mult:SI (match_operand:SI 2 "register_operand" "r")
+			     (match_operand:SI 3 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
   "msubr32\\t%0,%2,%3"
 )
 
-(define_insn "riscv_maxw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(smax:GPR (match_operand:SI 1 "register_operand" "r")
-		  (match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "maxw\\t%0,%1,%2"
-)
+;;------------- Overflow/Saturation status manipulation instructions ----------
+;;Already implemented in previous: None
 
-(define_insn "riscv_minw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(smin:GPR (match_operand:SI 1 "register_operand" "r")
-		  (match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "minw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_mulr64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
-		 (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "TARGET_XTHEAD_DSP"
-  "mulr64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_mulsr64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
-		 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "TARGET_XTHEAD_DSP"
-  "mulsr64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_pbsad_<mode>"
-  [(set (match_operand:<vqsdmod_attr> 0 "register_operand" "=r")
-	(unspec:<vqsdmod_attr>
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:VQIMOD 2 "register_operand" "r")]
-	   UNSPEC_PBSAD))]
-  "TARGET_XTHEAD_DSP"
-  "pbsad\\t%0,%1,%2"
-)
-
-(define_insn "riscv_pbsada_<mode>"
-  [(set (match_operand:X 0 "register_operand" "=r")
-	(unspec:X
-	  [(match_operand:X 1 "register_operand" "0")
-	   (match_operand:<sd2vqmod_attr> 2 "register_operand" "r")
-	   (match_operand:<sd2vqmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_PBSADA))]
-  "TARGET_XTHEAD_DSP"
-  "pbsada\\t%0,%2,%3"
-)
-
-(define_insn "riscv_radd64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(ashiftrt:DI
-	    (plus:DI (match_operand:DI 1 "register_operand" "r")
-		     (match_operand:DI 2 "register_operand" "r"))
-	    (const_int 1)))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "radd64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_raddw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_RADDW))]
-  "TARGET_XTHEAD_DSP"
-  "raddw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_rsub64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(ashiftrt:DI
-	    (minus:DI (match_operand:DI 1 "register_operand" "r")
-		      (match_operand:DI 2 "register_operand" "r"))
-	    (const_int 1)))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "rsub64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_rsubw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(ashiftrt:GPR
-	    (minus:GPR (match_operand:SI 1 "register_operand" "r")
-		       (match_operand:SI 2 "register_operand" "r"))
-	    (const_int 1)))]
-  "TARGET_XTHEAD_DSP"
-  "rsubw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_sclip8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	   UNSPEC_SCLIP8))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "sclip8\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_sclip16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	   UNSPEC_SCLIP16))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "sclip16\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_sclip32_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	   UNSPEC_SCLIP32))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "sclip32\\t%0,%1,%2";
-}
-)
-
-(define_int_attr cmple8_int_str
-  [(UNSPEC_SCMPLE8 "scmple8")
-   (UNSPEC_UCMPLE8 "ucmple8")])
-
-(define_int_attr cmple8_int_insn
-  [(UNSPEC_SCMPLE8 "scmple8")
-   (UNSPEC_UCMPLE8 "ucmple8")])
-
-(define_int_iterator UNSPEC_CMPLE8 [
-   UNSPEC_SCMPLE8
-   UNSPEC_UCMPLE8])
-
-
-(define_insn "riscv_<cmple8_int_str>_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:VQIMOD 2 "register_operand" "r")]
-	   UNSPEC_CMPLE8))]
-  "TARGET_XTHEAD_DSP"
-  "<cmple8_int_insn>\\t%0,%1,%2"
-)
-
-(define_int_attr cmple16_int_str
-  [(UNSPEC_SCMPLE16 "scmple16")
-   (UNSPEC_UCMPLE16 "ucmple16")])
-
-(define_int_attr cmple16_int_insn
-  [(UNSPEC_SCMPLE16 "scmple16")
-   (UNSPEC_UCMPLE16 "ucmple16")])
-
-(define_int_iterator UNSPEC_CMPLE16 [
-   UNSPEC_SCMPLE16
-   UNSPEC_UCMPLE16])
-
-(define_insn "riscv_<cmple16_int_str>_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_CMPLE16))]
-  "TARGET_XTHEAD_DSP"
-  "<cmple16_int_insn>\\t%0,%1,%2"
-)
-
-(define_int_attr cmplt8_int_str
-  [(UNSPEC_SCMPLT8 "scmplt8")
-   (UNSPEC_UCMPLT8 "ucmplt8")])
-
-(define_int_attr cmplt8_int_insn
-  [(UNSPEC_SCMPLT8 "scmplt8")
-   (UNSPEC_UCMPLT8 "ucmplt8")])
-
-(define_int_iterator UNSPEC_CMPLT8 [
-   UNSPEC_SCMPLT8
-   UNSPEC_UCMPLT8])
-
-(define_insn "riscv_<cmplt8_int_str>_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:VQIMOD 2 "register_operand" "r")]
-	   UNSPEC_CMPLT8))]
-  "TARGET_XTHEAD_DSP"
-  "<cmplt8_int_insn>\\t%0,%1,%2"
-)
-
-(define_int_attr cmplt16_int_str
-  [(UNSPEC_SCMPLT16 "scmplt16")
-   (UNSPEC_UCMPLT16 "ucmplt16")])
-
-(define_int_attr cmplt16_int_insn
-  [(UNSPEC_SCMPLT16 "scmplt16")
-   (UNSPEC_UCMPLT16 "ucmplt16")])
-
-(define_int_iterator UNSPEC_CMPLT16 [
-   UNSPEC_SCMPLT16
-   UNSPEC_UCMPLT16])
-
-(define_insn "riscv_<cmplt16_int_str>_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_CMPLT16))]
-  "TARGET_XTHEAD_DSP"
-  "<cmplt16_int_insn>\\t%0,%1,%2"
-)
-
-(define_insn "riscv_sll8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ashift:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sll8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_slli8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ashift:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "slli8\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_sll16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (ashift:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sll16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_slli16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (ashift:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "slli16\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_smal_<mode>"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(unspec:DI
-	  [(match_operand:DI 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_SMAL))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "smal\\t%0,%1,%2"
-)
-
-(define_insn "riscv_smaqa_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vsvqmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vsvqmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_SMAQA))]
-  "TARGET_XTHEAD_DSP"
-  "smaqa\\t%0,%2,%3"
-)
-
-(define_insn "riscv_smaqa_su_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vsvqmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vsvqmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_SMAQA_SU))]
-  "TARGET_XTHEAD_DSP"
-  "smaqa.su\\t%0,%2,%3"
-)
-
-(define_int_attr sm16_str
-  [(UNSPEC_SMBB16 "smbb16")
-   (UNSPEC_SMBT16 "smbt16")
-   (UNSPEC_SMTT16 "smtt16")
-   (UNSPEC_SMDS "smds")
-   (UNSPEC_SMDRS "smdrs")
-   (UNSPEC_SMXDS "smxds")])
-
-(define_int_attr sm16_insn
-  [(UNSPEC_SMBB16 "smbb16")
-   (UNSPEC_SMBT16 "smbt16")
-   (UNSPEC_SMTT16 "smtt16")
-   (UNSPEC_SMDS "smds")
-   (UNSPEC_SMDRS "smdrs")
-   (UNSPEC_SMXDS "smxds")])
-
-(define_int_iterator UNSPEC_SM16 [
-   UNSPEC_SMBB16
-   UNSPEC_SMBT16
-   UNSPEC_SMTT16
-   UNSPEC_SMDS
-   UNSPEC_SMDRS
-   UNSPEC_SMXDS])
-
-(define_insn "riscv_<sm16_str>_<mode>"
-  [(set (match_operand:<vssmod_attr> 0 "register_operand" "=r")
-	(unspec:<vssmod_attr>
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:VHIMOD 2 "register_operand" "r")]
-	   UNSPEC_SM16))]
-  "TARGET_XTHEAD_DSP"
-  "<sm16_insn>\\t%0,%1,%2"
-)
-
-(define_code_iterator minmax [smin smax umin umax])
-(define_code_attr minmax8_code [(smin "smin8") (smax "smax8") (umin "umin8") (umax "umax8")])
-(define_code_attr minmax8_insn [(smin "smin8") (smax "smax8") (umin "umin8") (umax "umax8")])
-
-(define_insn "riscv_<minmax8_code>_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(minmax:VQIMOD
-	    (match_operand:VQIMOD 1 "register_operand" "r")
-	    (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "<minmax8_insn>\\t%0,%1,%2"
-)
-
-(define_code_attr minmax16_code [(smin "smin16") (smax "smax16") (umin "umin16") (umax "umax16")])
-(define_code_attr minmax16_insn [(smin "smin16") (smax "smax16") (umin "umin16") (umax "umax16")])
-
-(define_insn "riscv_<minmax16_code>_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(minmax:VHIMOD
-	    (match_operand:VHIMOD 1 "register_operand" "r")
-	    (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "<minmax16_insn>\\t%0,%1,%2"
-)
-
-(define_int_attr xmmul_str
-  [(UNSPEC_SMMUL "smmul")
-   (UNSPEC_SMMUL_U "smmul_u")
-   (UNSPEC_KWMMUL "kwmmul")
-   (UNSPEC_KWMMUL_U "kwmmul_u")])
-
-(define_int_attr xmmul_insn
-  [(UNSPEC_SMMUL "smmul")
-   (UNSPEC_SMMUL_U "smmul.u")
-   (UNSPEC_KWMMUL "kwmmul")
-   (UNSPEC_KWMMUL_U "kwmmul.u")])
-
-(define_int_iterator UNSPEC_XMMUL [
-   UNSPEC_SMMUL
-   UNSPEC_SMMUL_U
-   UNSPEC_KWMMUL
-   UNSPEC_KWMMUL_U])
-
-(define_insn "riscv_<xmmul_str>_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "r")
-	   (match_operand:VSIMOD 2 "register_operand" "r")]
-	   UNSPEC_XMMUL))]
-  "TARGET_XTHEAD_DSP"
-  "<xmmul_insn>\\t%0,%1,%2"
-)
-
-(define_int_attr xmmw_str
-  [(UNSPEC_KMMWB2 "kmmwb2")
-   (UNSPEC_KMMWB2_U "kmmwb2_u")
-   (UNSPEC_KMMWT2 "kmmwt2")
-   (UNSPEC_KMMWT2_U "kmmwt2_u")
-   (UNSPEC_SMMWB "smmwb")
-   (UNSPEC_SMMWB_U "smmwb_u")
-   (UNSPEC_SMMWT "smmwt")
-   (UNSPEC_SMMWT_U "smmwt_u")])
-
-(define_int_attr xmmw_insn
-  [(UNSPEC_KMMWB2 "kmmwb2")
-   (UNSPEC_KMMWB2_U "kmmwb2.u")
-   (UNSPEC_KMMWT2 "kmmwt2")
-   (UNSPEC_KMMWT2_U "kmmwt2.u")
-   (UNSPEC_SMMWB "smmwb")
-   (UNSPEC_SMMWB_U "smmwb.u")
-   (UNSPEC_SMMWT "smmwt")
-   (UNSPEC_SMMWT_U "smmwt.u")])
-
-(define_int_iterator UNSPEC_XMMW [
-   UNSPEC_KMMWB2
-   UNSPEC_KMMWB2_U
-   UNSPEC_KMMWT2
-   UNSPEC_KMMWT2_U
-   UNSPEC_SMMWB
-   UNSPEC_SMMWB_U
-   UNSPEC_SMMWT
-   UNSPEC_SMMWT_U])
-
-(define_insn "riscv_<xmmw_str>_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vhhmod_attr> 2 "register_operand" "r")]
-	   UNSPEC_XMMW))]
-  "TARGET_XTHEAD_DSP"
-  "<xmmw_insn>\\t%0,%1,%2"
-)
-
-
-(define_int_attr smxl_str
-  [(UNSPEC_SMALBB "smalbb")
-   (UNSPEC_SMALBT "smalbt")
-   (UNSPEC_SMALTT "smaltt")
-   (UNSPEC_SMALDA "smalda")
-   (UNSPEC_SMALXDA "smalxda")
-   (UNSPEC_SMALDS "smalds")
-   (UNSPEC_SMALDRS "smaldrs")
-   (UNSPEC_SMALXDS "smalxds")
-   (UNSPEC_SMSLDA "smslda")
-   (UNSPEC_SMSLXDA "smslxda")])
-
-(define_int_attr smxl_insn
-  [(UNSPEC_SMALBB "smalbb")
-   (UNSPEC_SMALBT "smalbt")
-   (UNSPEC_SMALTT "smaltt")
-   (UNSPEC_SMALDA "smalda")
-   (UNSPEC_SMALXDA "smalxda")
-   (UNSPEC_SMALDS "smalds")
-   (UNSPEC_SMALDRS "smaldrs")
-   (UNSPEC_SMALXDS "smalxds")
-   (UNSPEC_SMSLDA "smslda")
-   (UNSPEC_SMSLXDA "smslxda")])
-
-(define_int_iterator UNSPEC_SMXL [
-   UNSPEC_SMALBB
-   UNSPEC_SMALBT
-   UNSPEC_SMALTT
-   UNSPEC_SMALDA
-   UNSPEC_SMALXDA
-   UNSPEC_SMALDS
-   UNSPEC_SMALDRS
-   UNSPEC_SMALXDS
-   UNSPEC_SMSLDA
-   UNSPEC_SMSLXDA])
-
-(define_insn "riscv_<smxl_str>_<mode>"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(unspec:DI
-	  [(match_operand:DI 1 "register_operand" "0")
-	   (match_operand:VHIMOD 2 "register_operand" "r")
-	   (match_operand:VHIMOD 3 "register_operand" "r")]
-	   UNSPEC_SMXL))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "<smxl_insn>\\t%0,%2,%3"
-)
-
-(define_insn "riscv_smar64_si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(plus:DI
-	  (mult:DI
-	    (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
-	    (sign_extend:DI (match_operand:SI 3 "register_operand" "r")))
-	  (match_operand:DI 1 "register_operand" "0")))]
-  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
-  "smar64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_smar64_v2si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (unspec:DI
-      [(match_operand:DI 1 "register_operand" "0")
-       (match_operand:V2SI 2 "register_operand" "r")
-       (match_operand:V2SI 3 "register_operand" "r")]
-       UNSPEC_SMAR64))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "smar64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_smsr64_si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(minus:DI (match_operand:DI 1 "register_operand" "0")
-	  (mult:DI
-	    (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))
-	    (sign_extend:DI (match_operand:SI 3 "register_operand" "r")))))]
-  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
-  "smsr64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_smsr64_v2si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (unspec:DI
-      [(match_operand:DI 1 "register_operand" "0")
-       (match_operand:V2SI 2 "register_operand" "r")
-       (match_operand:V2SI 3 "register_operand" "r")]
-       UNSPEC_SMSR64))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "smsr64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_umar64_si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(plus:DI
-	  (mult:DI
-	    (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))
-	    (zero_extend:DI (match_operand:SI 3 "register_operand" "r")))
-	  (match_operand:DI 1 "register_operand" "0")))]
-  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
-  "umar64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_umar64_v2si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (unspec:DI
-      [(match_operand:DI 1 "register_operand" "0")
-       (match_operand:V2SI 2 "register_operand" "r")
-       (match_operand:V2SI 3 "register_operand" "r")]
-       UNSPEC_UMAR64))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "umar64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_umsr64_si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(minus:DI (match_operand:DI 1 "register_operand" "0")
-	  (mult:DI
-	    (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))
-	    (zero_extend:DI (match_operand:SI 3 "register_operand" "r")))))]
-  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT"
-  "umsr64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_umsr64_v2si"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (unspec:DI
-      [(match_operand:DI 1 "register_operand" "0")
-       (match_operand:V2SI 2 "register_operand" "r")
-       (match_operand:V2SI 3 "register_operand" "r")]
-       UNSPEC_UMSR64))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "umsr64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_smul8"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-	(mult:V4HI
-	   (sign_extend:V4HI (match_operand:V4QI 1 "register_operand" "r"))
-	   (sign_extend:V4HI (match_operand:V4QI 2 "register_operand" "r"))))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "smul8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_smulx8"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-	(unspec:V4HI
-	  [(match_operand:V4QI 1 "register_operand" "r")
-	   (match_operand:V4QI 2 "register_operand" "r")]
-	   UNSPEC_SMULX8))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "smulx8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_smul16"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(mult:V2SI
-	   (sign_extend:V2SI (match_operand:V2HI 1 "register_operand" "r"))
-	   (sign_extend:V2SI (match_operand:V2HI 2 "register_operand" "r"))))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "smul16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_smulx16"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(unspec:V2SI
-	  [(match_operand:V2HI 1 "register_operand" "r")
-	   (match_operand:V2HI 2 "register_operand" "r")]
-	   UNSPEC_SMULX16))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "smulx16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_sra_u_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-	[(match_operand:GPR 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")]
-	UNSPEC_SRA_U))]
-  "TARGET_XTHEAD_DSP"
-  "sra.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srai_u_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-     (unspec:GPR
-	[(match_operand:GPR 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")]
-	UNSPEC_SRA_U))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & (BITS_PER_WORD - 1));
-  return "srai.u\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_sra8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ashiftrt:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sra8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_sra8_u_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-	[(match_operand:VQIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "register_operand" "r")]
-	 UNSPEC_SRA8_U))]
-  "TARGET_XTHEAD_DSP"
-  "sra8.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srai8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (ashiftrt:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "srai8\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_srai8_u_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-	[(match_operand:VQIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "immediate_operand" "i")]
-	 UNSPEC_SRA8_U))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "srai8.u\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_sra16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (ashiftrt:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sra16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_sra16_u_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-	[(match_operand:VHIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "register_operand" "r")]
-	 UNSPEC_SRA16_U))]
-  "TARGET_XTHEAD_DSP"
-  "sra16.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srai16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (ashiftrt:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "srai16\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_srai16_u_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-	[(match_operand:VHIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "immediate_operand" "i")]
-	 UNSPEC_SRA16_U))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "srai16.u\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_srl8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (lshiftrt:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "srl8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srl8_u_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-	[(match_operand:VQIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "register_operand" "r")]
-	 UNSPEC_SRL8_U))]
-  "TARGET_XTHEAD_DSP"
-  "srl8.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srli8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (lshiftrt:VQIMOD
-	(match_operand:VQIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "srli8\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_srli8_u_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-	[(match_operand:VQIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "immediate_operand" "i")]
-	 UNSPEC_SRL8_U))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "srli8.u\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_srl16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (lshiftrt:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "srl16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srl16_u_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-	[(match_operand:VHIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "register_operand" "r")]
-	 UNSPEC_SRL16_U))]
-  "TARGET_XTHEAD_DSP"
-  "srl16.u\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srli16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (lshiftrt:VHIMOD
-	(match_operand:VHIMOD 1 "register_operand" "r")
-	(match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "srli16\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_srli16_u_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-	[(match_operand:VHIMOD 1 "register_operand" "r")
-	 (match_operand:SI 2 "immediate_operand" "i")]
-	 UNSPEC_SRL16_U))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "srli16.u\\t%0,%1,%2";
-}
-)
-
-(define_int_attr unpkd_int_str
-  [(UNSPEC_SUNPKD810 "sunpkd810")
-   (UNSPEC_SUNPKD820 "sunpkd820")
-   (UNSPEC_SUNPKD830 "sunpkd830")
-   (UNSPEC_SUNPKD831 "sunpkd831")
-   (UNSPEC_SUNPKD832 "sunpkd832")
-   (UNSPEC_ZUNPKD810 "zunpkd810")
-   (UNSPEC_ZUNPKD820 "zunpkd820")
-   (UNSPEC_ZUNPKD830 "zunpkd830")
-   (UNSPEC_ZUNPKD831 "zunpkd831")
-   (UNSPEC_ZUNPKD832 "zunpkd832")])
-
-(define_int_attr unpkd_int_insn
-  [(UNSPEC_SUNPKD810 "sunpkd810")
-   (UNSPEC_SUNPKD820 "sunpkd820")
-   (UNSPEC_SUNPKD830 "sunpkd830")
-   (UNSPEC_SUNPKD831 "sunpkd831")
-   (UNSPEC_SUNPKD832 "sunpkd832")
-   (UNSPEC_ZUNPKD810 "zunpkd810")
-   (UNSPEC_ZUNPKD820 "zunpkd820")
-   (UNSPEC_ZUNPKD830 "zunpkd830")
-   (UNSPEC_ZUNPKD831 "zunpkd831")
-   (UNSPEC_ZUNPKD832 "zunpkd832")])
-
-(define_int_iterator UNSPEC_UNPKD [
-   UNSPEC_SUNPKD810
-   UNSPEC_SUNPKD820
-   UNSPEC_SUNPKD830
-   UNSPEC_SUNPKD831
-   UNSPEC_SUNPKD832
-   UNSPEC_ZUNPKD810
-   UNSPEC_ZUNPKD820
-   UNSPEC_ZUNPKD830
-   UNSPEC_ZUNPKD831
-   UNSPEC_ZUNPKD832])
-
-(define_insn "riscv_<unpkd_int_str>_<mode>"
-  [(set (match_operand:<vqvhmod_attr> 0 "register_operand" "=r")
-     (unspec:<vqvhmod_attr>
-      [(match_operand:VQIMOD 1 "register_operand" "r")]
-       UNSPEC_UNPKD))]
-  "TARGET_XTHEAD_DSP"
-  "<unpkd_int_insn>\\t%0,%1"
-)
-
-(define_insn "riscv_swap8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-     (unspec:VQIMOD
-      [(match_operand:VQIMOD 1 "register_operand" "r")]
-       UNSPEC_SWAP8))]
-  "TARGET_XTHEAD_DSP"
-  "swap8\\t%0,%1"
-)
-
-(define_insn "riscv_swap16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-     (unspec:VHIMOD
-      [(match_operand:VHIMOD 1 "register_operand" "r")]
-       UNSPEC_SWAP16))]
-  "TARGET_XTHEAD_DSP"
-  "swap16\\t%0,%1"
-)
-
-(define_insn "riscv_uclip8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-	(unspec:VQIMOD
-	  [(match_operand:VQIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	   UNSPEC_UCLIP8))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x7);
-  return "uclip8\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_uclip16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-	(unspec:VHIMOD
-	  [(match_operand:VHIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	   UNSPEC_UCLIP16))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0xf);
-  return "uclip16\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_uclip32_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	   UNSPEC_UCLIP32))]
-  "TARGET_XTHEAD_DSP"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "uclip32\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_sub8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-    (minus:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")
-		  (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sub8\\t%0,%1,%2"
-)
-
-
-(define_insn "riscv_sub16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-    (minus:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")
-		  (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sub16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_sub64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (minus:DI (match_operand:DI 1 "register_operand" "r")
-	      (match_operand:DI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "sub64\\t%0,%1,%2"
-)
-
-(define_insn "*neg<mode>"
-  [(set (match_operand:VQIMOD 0             "register_operand" "=r")
-	(neg:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sub8\t%0,zero,%1"
-)
-
-(define_insn "*neg<mode>"
-  [(set (match_operand:VHIMOD 0             "register_operand" "=r")
-	(neg:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "sub16\t%0,zero,%1"
-)
-
-(define_insn "riscv_ukadd8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-    (us_plus:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")
-		    (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ukadd8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ukadd16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-    (us_plus:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")
-		    (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "ukadd16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ukadd64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (us_plus:DI (match_operand:DI 1 "register_operand" "r")
-		(match_operand:DI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "ukadd64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ukaddh_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_UKADDH))]
-  "TARGET_XTHEAD_DSP"
-  "ukaddh\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ukaddw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_UKADDW))]
-  "TARGET_XTHEAD_DSP"
-  "ukaddw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ukmar64_<mode>"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(unspec:DI
-	  [(match_operand:DI 1 "register_operand" "0")
-	   (match_operand:VSIMOD 2 "register_operand" "r")
-	   (match_operand:VSIMOD 3 "register_operand" "r")]
-	   UNSPEC_UKMAR64))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "ukmar64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_ukmsr64_<mode>"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (unspec:DI
-      [(match_operand:DI 1 "register_operand" "0")
-       (match_operand:VSIMOD 2 "register_operand" "r")
-       (match_operand:VSIMOD 3 "register_operand" "r")]
-       UNSPEC_UKMSR64))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "ukmsr64\\t%0,%2,%3"
-)
-
-(define_insn "riscv_uksub8_<mode>"
-  [(set (match_operand:VQIMOD 0 "register_operand" "=r")
-    (us_minus:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")
-		     (match_operand:VQIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "uksub8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_uksub16_<mode>"
-  [(set (match_operand:VHIMOD 0 "register_operand" "=r")
-    (us_minus:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")
-		     (match_operand:VHIMOD 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "uksub16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_uksub64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-    (us_minus:DI (match_operand:DI 1 "register_operand" "r")
-		 (match_operand:DI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "uksub64\\t%0,%1,%2"
-)
-
-(define_insn "*usneg<mode>"
-  [(set (match_operand:VQIMOD 0                "register_operand" "=r")
-	(us_neg:VQIMOD (match_operand:VQIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "uksub8\t%0,zero,%1"
-)
-
-(define_insn "*usneg<mode>"
-  [(set (match_operand:VHIMOD 0                "register_operand" "=r")
-	(us_neg:VHIMOD (match_operand:VHIMOD 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP"
-  "uksub16\t%0,zero,%1"
-)
-
-(define_insn "*usnegdi2"
-  [(set (match_operand:DI 0            "register_operand" "=r")
-	(us_neg:DI (match_operand:DI 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "uksub64\t%0,zero,%1"
-)
-
-(define_insn "riscv_uksubh_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_UKSUBH))]
-  "TARGET_XTHEAD_DSP"
-  "uksubh\\t%0,%1,%2"
-)
-
-(define_insn "riscv_uksubw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_UKSUBW))]
-  "TARGET_XTHEAD_DSP"
-  "uksubw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_umaqa_<mode>"
-  [(set (match_operand:VSIMOD 0 "register_operand" "=r")
-	(unspec:VSIMOD
-	  [(match_operand:VSIMOD 1 "register_operand" "0")
-	   (match_operand:<vsvqmod_attr> 2 "register_operand" "r")
-	   (match_operand:<vsvqmod_attr> 3 "register_operand" "r")]
-	   UNSPEC_UMAQA))]
-  "TARGET_XTHEAD_DSP"
-  "umaqa\\t%0,%2,%3"
-)
-
-(define_insn "riscv_umul8"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-	(mult:V4HI
-	   (zero_extend:V4HI (match_operand:V4QI 1 "register_operand" "r"))
-	   (zero_extend:V4HI (match_operand:V4QI 2 "register_operand" "r"))))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "umul8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_umulx8"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-	(unspec:V4HI
-	  [(match_operand:V4QI 1 "register_operand" "r")
-	   (match_operand:V4QI 2 "register_operand" "r")]
-	   UNSPEC_UMULX8))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "umulx8\\t%0,%1,%2"
-)
-
-(define_insn "riscv_umul16"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(mult:V2SI
-	   (zero_extend:V2SI (match_operand:V2HI 1 "register_operand" "r"))
-	   (zero_extend:V2SI (match_operand:V2HI 2 "register_operand" "r"))))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "umul16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_umulx16"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(unspec:V2SI
-	  [(match_operand:V2HI 1 "register_operand" "r")
-	   (match_operand:V2HI 2 "register_operand" "r")]
-	   UNSPEC_UMULX16))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "umulx16\\t%0,%1,%2"
-)
-
-(define_insn "riscv_uradd64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(lshiftrt:DI
-	    (plus:DI (match_operand:DI 1 "register_operand" "r")
-		     (match_operand:DI 2 "register_operand" "r"))
-	    (const_int 1)))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "uradd64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_uraddw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_URADDW))]
-  "TARGET_XTHEAD_DSP"
-  "uraddw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ursub64"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(unspec:DI
-	  [(match_operand:DI 1 "register_operand" "r")
-	   (match_operand:DI 2 "register_operand" "r")]
-	   UNSPEC_URSUB64))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "ursub64\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ursubw_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:SI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	   UNSPEC_URSUBW))]
-  "TARGET_XTHEAD_DSP"
-  "ursubw\\t%0,%1,%2"
-)
-
-(define_insn "riscv_wext_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:DI 1 "register_operand" "r")
-	   (match_operand:SI 2 "register_operand" "r")]
-	UNSPEC_WEXT))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-  "wext\\t%0,%1,%2"
-)
-
-(define_insn "riscv_wexti_<mode>"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(unspec:GPR
-	  [(match_operand:DI 1 "register_operand" "r")
-	   (match_operand:SI 2 "immediate_operand" "i")]
-	UNSPEC_WEXT))]
-  "TARGET_XTHEAD_ZPSFOPERAND"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "wexti\\t%0,%1,%2";
-}
-)
-
+;;Implement: rdov
 (define_insn "riscv_rdov_<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=r")
 	(unspec_volatile:GPR [(const_int 0)] UNSPECV_RDOV))]
-  "TARGET_XTHEAD_DSP || TARGET_XTHEAD_ZPSFOPERAND"
+  "TARGET_XTHEAD_ZPN || TARGET_XTHEAD_ZPSFOPERAND"
   "rdov\\t%0"
 )
 
+;;Implement: clrov
 (define_insn "riscv_clrov"
   [(unspec_volatile [(const_int 0)] UNSPECV_CLROV)]
-  "TARGET_XTHEAD_DSP || TARGET_XTHEAD_ZPSFOPERAND"
+  "TARGET_XTHEAD_ZPN || TARGET_XTHEAD_ZPSFOPERAND"
   "clrov"
 )
 
+;;------------------------ Miscellaneous Instructions -------------------------
+;;Already implemented in previous: None
+;;wext, wexti, bpick, insb
 
-;;==================================================== RV64 only ====================================================
-
-(define_insn "riscv_add32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (plus:V2SI (match_operand:V2SI 1 "register_operand" "r")
-	       (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "add32\\t%0,%1,%2"
+;;Implement: ave
+(define_insn "riscv_ave_<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(truncate:X
+	  (ashiftrt:<DSP_WIDEN>
+	    (plus:<DSP_WIDEN>
+	      (plus:<DSP_WIDEN>
+		(sign_extend:<DSP_WIDEN>
+		  (match_operand:X 1 "register_operand" "r"))
+		(sign_extend:<DSP_WIDEN>
+		  (match_operand:X 2 "register_operand" "r")))
+	      (const_int 1))
+	  (const_int 1))))]
+  "TARGET_XTHEAD_ZPN"
+  "ave\\t%0,%1,%2"
 )
 
-(define_insn "riscv_sub32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (minus:V2SI (match_operand:V2SI 1 "register_operand" "r")
-		(match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "sub32\\t%0,%1,%2"
+;;Implement: sra.u
+(define_insn "riscv_sra_u_<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(unspec:X
+	  [(match_operand:X 1 "register_operand" "r")
+	   (match_operand:SI 2 "register_operand" "r")]
+	UNSPEC_SRA_U))]
+  "TARGET_XTHEAD_ZPN"
+  "sra.u\\t%0,%1,%2"
 )
 
-(define_insn "*negv2si3"
-  [(set (match_operand:V2SI 0           "register_operand" "=r")
-	(neg:V2SI (match_operand:V2SI 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "sub32\t%0,zero,%1"
+;;Implement: srai.u
+(define_insn "*riscv_srai_u_<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(unspec:X
+	  [(match_operand:X 1 "register_operand" "r")
+	   (match_operand:SI 2 "immediate_operand" "i")]
+	UNSPEC_SRA_U))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (BITS_PER_WORD - 1));
+    return "srai.u\\t%0,%1,%2";
+  }
 )
 
-(define_insn "riscv_kadd32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (ss_plus:V2SI (match_operand:V2SI 1 "register_operand" "r")
-		  (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "kadd32\\t%0,%1,%2"
-)
-
-(define_int_attr rv64_simd32_int_str
-  [(UNSPEC_CRAS32 "cras32")
-   (UNSPEC_CRSA32 "crsa32")
-   (UNSPEC_KCRAS32 "kcras32")
-   (UNSPEC_KCRSA32 "kcrsa32")
-   (UNSPEC_UKCRAS32 "ukcras32")
-   (UNSPEC_UKCRSA32 "ukcrsa32")
-   (UNSPEC_UKSTAS32 "ukstas32")
-   (UNSPEC_UKSTSA32 "ukstsa32")
-   (UNSPEC_URADD32 "uradd32")
-   (UNSPEC_URCRAS32 "urcras32")
-   (UNSPEC_URCRSA32 "urcrsa32")
-   (UNSPEC_URSTAS32 "urstas32")
-   (UNSPEC_URSTSA32 "urstsa32")
-   (UNSPEC_URSUB32 "ursub32")
-   (UNSPEC_KSTAS32 "kstas32")
-   (UNSPEC_KSTSA32 "kstsa32")
-   (UNSPEC_RADD32 "radd32")
-   (UNSPEC_RCRAS32 "rcras32")
-   (UNSPEC_RCRSA32 "rcrsa32")
-   (UNSPEC_RSTAS32 "rstas32")
-   (UNSPEC_RSTSA32 "rstsa32")
-   (UNSPEC_RSUB32 "rsub32")
-   (UNSPEC_STAS32 "stas32")
-   (UNSPEC_STSA32 "stsa32")
-   (UNSPEC_PKBB32 "pkbb32")
-   (UNSPEC_PKBT32 "pkbt32")
-   (UNSPEC_PKTB32 "pktb32")
-   (UNSPEC_PKTT32 "pktt32")])
-
-(define_int_attr rv64_simd32_int_insn
-  [(UNSPEC_CRAS32 "cras32")
-   (UNSPEC_CRSA32 "crsa32")
-   (UNSPEC_KCRAS32 "kcras32")
-   (UNSPEC_KCRSA32 "kcrsa32")
-   (UNSPEC_UKCRAS32 "ukcras32")
-   (UNSPEC_UKCRSA32 "ukcrsa32")
-   (UNSPEC_UKSTAS32 "ukstas32")
-   (UNSPEC_UKSTSA32 "ukstsa32")
-   (UNSPEC_URADD32 "uradd32")
-   (UNSPEC_URCRAS32 "urcras32")
-   (UNSPEC_URCRSA32 "urcrsa32")
-   (UNSPEC_URSTAS32 "urstas32")
-   (UNSPEC_URSTSA32 "urstsa32")
-   (UNSPEC_URSUB32 "ursub32")
-   (UNSPEC_KSTAS32 "kstas32")
-   (UNSPEC_KSTSA32 "kstsa32")
-   (UNSPEC_RADD32 "radd32")
-   (UNSPEC_RCRAS32 "rcras32")
-   (UNSPEC_RCRSA32 "rcrsa32")
-   (UNSPEC_RSTAS32 "rstas32")
-   (UNSPEC_RSTSA32 "rstsa32")
-   (UNSPEC_RSUB32 "rsub32")
-   (UNSPEC_STAS32 "stas32")
-   (UNSPEC_STSA32 "stsa32")
-   (UNSPEC_PKBB32 "pkbb32")
-   (UNSPEC_PKBT32 "pkbt32")
-   (UNSPEC_PKTB32 "pktb32")
-   (UNSPEC_PKTT32 "pktt32")])
-
-(define_int_iterator UNSPEC_RV64_SIMD32 [
-   UNSPEC_CRAS32
-   UNSPEC_CRSA32
-   UNSPEC_KCRAS32
-   UNSPEC_KCRSA32
-   UNSPEC_UKCRAS32
-   UNSPEC_UKCRSA32
-   UNSPEC_UKSTAS32
-   UNSPEC_UKSTSA32
-   UNSPEC_URADD32
-   UNSPEC_URCRAS32
-   UNSPEC_URCRSA32
-   UNSPEC_URSTAS32
-   UNSPEC_URSTSA32
-   UNSPEC_URSUB32
-   UNSPEC_KSTAS32
-   UNSPEC_KSTSA32
-   UNSPEC_RADD32
-   UNSPEC_RCRAS32
-   UNSPEC_RCRSA32
-   UNSPEC_RSTAS32
-   UNSPEC_RSTSA32
-   UNSPEC_RSUB32
-   UNSPEC_STAS32
-   UNSPEC_STSA32])
-
-(define_int_iterator UNSPEC_RV64_PACK32 [
-   UNSPEC_PKBB32
-   UNSPEC_PKBT32
-   UNSPEC_PKTB32
-   UNSPEC_PKTT32])
-
-(define_insn "riscv_<rv64_simd32_int_str>"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:V2SI 2 "register_operand" "r")]
-       UNSPEC_RV64_SIMD32))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<rv64_simd32_int_insn>\\t%0,%1,%2"
-)
-
-(define_insn "riscv_<rv64_simd32_int_str>"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:V2SI 2 "register_operand" "r")]
-       UNSPEC_RV64_PACK32))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<rv64_simd32_int_insn>\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kabs32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (ss_abs:V2SI
-       (match_operand:V2SI 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "kabs32\\t%0,%1"
-)
-
-(define_int_attr rv64_kdmb_int_str
-  [(UNSPEC_KDMBB16 "kdmbb16")
-   (UNSPEC_KDMBT16 "kdmbt16")
-   (UNSPEC_KDMTT16 "kdmtt16")
-   (UNSPEC_KHMBB16 "khmbb16")
-   (UNSPEC_KHMBT16 "khmbt16")
-   (UNSPEC_KHMTT16 "khmtt16")])
-
-(define_int_attr rv64_kdmb_int_insn
-  [(UNSPEC_KDMBB16 "kdmbb16")
-   (UNSPEC_KDMBT16 "kdmbt16")
-   (UNSPEC_KDMTT16 "kdmtt16")
-   (UNSPEC_KHMBB16 "khmbb16")
-   (UNSPEC_KHMBT16 "khmbt16")
-   (UNSPEC_KHMTT16 "khmtt16")])
-
-(define_int_iterator UNSPEC_RV64_KDMB [
-   UNSPEC_KDMBB16
-   UNSPEC_KDMBT16
-   UNSPEC_KDMTT16
-   UNSPEC_KHMBB16
-   UNSPEC_KHMBT16
-   UNSPEC_KHMTT16])
-
-(define_insn "riscv_<rv64_kdmb_int_str>"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V4HI 1 "register_operand" "r")
-       (match_operand:V4HI 2 "register_operand" "r")]
-       UNSPEC_RV64_KDMB))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<rv64_kdmb_int_insn>\\t%0,%1,%2"
-)
-
-(define_int_attr rv64_kdma_int_str
-  [(UNSPEC_KDMABB16 "kdmabb16")
-   (UNSPEC_KDMABT16 "kdmabt16")
-   (UNSPEC_KDMATT16 "kdmatt16")])
-
-(define_int_attr rv64_kdma_int_insn
-  [(UNSPEC_KDMABB16 "kdmabb16")
-   (UNSPEC_KDMABT16 "kdmabt16")
-   (UNSPEC_KDMATT16 "kdmatt16")])
-
-(define_int_iterator UNSPEC_RV64_KDMA [
-   UNSPEC_KDMABB16
-   UNSPEC_KDMABT16
-   UNSPEC_KDMATT16])
-
-(define_insn "riscv_<rv64_kdma_int_str>"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(unspec:V2SI
-	  [(match_operand:V2SI 1 "register_operand" "0")
-	   (match_operand:V4HI 2 "register_operand" "r")
-	   (match_operand:V4HI 3 "register_operand" "r")]
-	   UNSPEC_RV64_KDMA))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<rv64_kdma_int_insn>\\t%0,%2,%3"
-)
-
-(define_int_attr rv64_km32_int_str
-  [(UNSPEC_KMABB32 "kmabb32")
-   (UNSPEC_KMABT32 "kmabt32")
-   (UNSPEC_KMATT32 "kmatt32")
-   (UNSPEC_KMADA32 "kmada32")
-   (UNSPEC_KMAXDA32 "kmaxda32")
-   (UNSPEC_KMADS32 "kmads32")
-   (UNSPEC_KMADRS32 "kmadrs32")
-   (UNSPEC_KMAXDS32 "kmaxds32")
-   (UNSPEC_KMSDA32 "kmsda32")
-   (UNSPEC_KMSXDA32"kmsxda32")])
-
-(define_int_attr rv64_km32_int_insn
-  [(UNSPEC_KMABB32 "kmabb32")
-   (UNSPEC_KMABT32 "kmabt32")
-   (UNSPEC_KMATT32 "kmatt32")
-   (UNSPEC_KMADA32 "kmada32")
-   (UNSPEC_KMAXDA32 "kmaxda32")
-   (UNSPEC_KMADS32 "kmads32")
-   (UNSPEC_KMADRS32 "kmadrs32")
-   (UNSPEC_KMAXDS32 "kmaxds32")
-   (UNSPEC_KMSDA32 "kmsda32")
-   (UNSPEC_KMSXDA32"kmsxda32")])
-
-(define_int_iterator UNSPEC_RV64_KM32 [
-   UNSPEC_KMABB32
-   UNSPEC_KMABT32
-   UNSPEC_KMATT32
-   UNSPEC_KMADA32
-   UNSPEC_KMAXDA32
-   UNSPEC_KMADS32
-   UNSPEC_KMADRS32
-   UNSPEC_KMAXDS32
-   UNSPEC_KMSDA32
-   UNSPEC_KMSXDA32])
-
-(define_insn "riscv_<rv64_km32_int_str>"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(unspec:DI
-	  [(match_operand:DI 1 "register_operand" "0")
-	   (match_operand:V2SI 2 "register_operand" "r")
-	   (match_operand:V2SI 3 "register_operand" "r")]
-	   UNSPEC_RV64_KM32))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<rv64_km32_int_insn>\\t%0,%2,%3"
-)
-
-(define_insn "riscv_ukadd32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (us_plus:V2SI (match_operand:V2SI 1 "register_operand" "r")
-		  (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "ukadd32\\t%0,%1,%2"
-)
-
-(define_insn "riscv_uksub32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (us_minus:V2SI (match_operand:V2SI 1 "register_operand" "r")
-		   (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "uksub32\\t%0,%1,%2"
-)
-
-(define_insn "*usnegv2si3"
-  [(set (match_operand:V2SI 0              "register_operand" "=r")
-	(us_neg:V2SI (match_operand:V2SI 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "uksub32\t%0,zero,%1"
-)
-
-(define_insn "riscv_umax32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (umax:V2SI (match_operand:V2SI 1 "register_operand" "r")
-	       (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "umax32\\t%0,%1,%2"
-)
-
-(define_insn "riscv_umin32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (umin:V2SI (match_operand:V2SI 1 "register_operand" "r")
-	       (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "umin32\\t%0,%1,%2"
-)
-
-(define_insn "riscv_smax32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (smax:V2SI (match_operand:V2SI 1 "register_operand" "r")
-	       (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "smax32\\t%0,%1,%2"
-)
-
-(define_insn "riscv_smin32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (smin:V2SI (match_operand:V2SI 1 "register_operand" "r")
-	       (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "smin32\\t%0,%1,%2"
-)
-
-(define_insn "riscv_ksub32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-    (ss_minus:V2SI (match_operand:V2SI 1 "register_operand" "r")
-		   (match_operand:V2SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "ksub32\\t%0,%1,%2"
-)
-
-(define_insn "*ssnegv2si3"
-  [(set (match_operand:V2SI 0              "register_operand" "=r")
-	(ss_neg:V2SI (match_operand:V2SI 1 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "ksub32\t%0,zero,%1"
-)
-
-(define_int_attr rv64_sm32_int_str
-  [(UNSPEC_KMDA32 "kmda32")
-   (UNSPEC_KMXDA32 "kmxda32")
-   (UNSPEC_SMBB32 "smbb32")
-   (UNSPEC_SMBT32 "smbt32")
-   (UNSPEC_SMTT32 "smtt32")
-   (UNSPEC_SMDS32 "smds32")
-   (UNSPEC_SMDRS32 "smdrs32")
-   (UNSPEC_SMXDS32 "smxds32")])
-
-(define_int_attr rv64_sm32_int_insn
-  [(UNSPEC_KMDA32 "kmda32")
-   (UNSPEC_KMXDA32 "kmxda32")
-   (UNSPEC_SMBB32 "smbb32")
-   (UNSPEC_SMBT32 "smbt32")
-   (UNSPEC_SMTT32 "smtt32")
-   (UNSPEC_SMDS32 "smds32")
-   (UNSPEC_SMDRS32 "smdrs32")
-   (UNSPEC_SMXDS32 "smxds32")])
-
-(define_int_iterator UNSPEC_RV64_SM32 [
-   UNSPEC_KMDA32
-   UNSPEC_KMXDA32
-   UNSPEC_SMBB32
-   UNSPEC_SMBT32
-   UNSPEC_SMTT32
-   UNSPEC_SMDS32
-   UNSPEC_SMDRS32
-   UNSPEC_SMXDS32])
-
-(define_insn "riscv_<rv64_sm32_int_str>"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-     (unspec:DI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:V2SI 2 "register_operand" "r")]
-       UNSPEC_RV64_SM32))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<rv64_sm32_int_insn>\\t%0,%1,%2"
-)
-
-(define_insn "riscv_srl32_u"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
+;;Implement: bitrev
+(define_insn "riscv_bitrev_<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+     (unspec:X
+      [(match_operand:X 1 "register_operand" "r")
        (match_operand:SI 2 "register_operand" "r")]
-       UNSPEC_SRL32_U))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "srl32.u\\t%0,%1,%2"
+       UNSPEC_BITREV))]
+  "TARGET_XTHEAD_ZPN"
+  "bitrev\\t%0,%1,%2"
 )
 
-(define_insn "riscv_srli32_u"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
+;;Implement: bitrevi
+(define_insn "*riscv_bitrevi_<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+     (unspec:X
+      [(match_operand:X 1 "register_operand" "r")
        (match_operand:SI 2 "immediate_operand" "i")]
-       UNSPEC_SRL32_U))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "srli32.u\\t%0,%1,%2";
-}
+       UNSPEC_BITREV))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & (BITS_PER_WORD - 1));
+    return "bitrevi\\t%0,%1,%2";
+  }
 )
 
-(define_insn "riscv_sra32_u"
+;;Implement: wext, wexti
+(define_insn "riscv_<u>wext_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (any_shiftrt:DI
+	    (match_operand:DI 1 "register_operand" "r")
+	    (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "wext\t%0,%1,%2"
+)
+
+(define_insn "riscv_wext_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (truncate:SI
+	    (ashiftrt:DI
+	      (match_operand:DI 1 "register_operand" "r")
+	      (match_operand:SI 2 "register_operand" "r")))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  "wext\t%0,%1,%2"
+)
+
+(define_insn_and_split "*wext_<code>di3"
+  [(set (match_operand:DI 0 "register_operand" "")
+	(any_shift:DI (match_operand:DI 1 "register_operand" "")
+		      (match_operand:QI 2 "imm6u_operand" "")))]
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT && !reload_completed"
+  "#"
+  "TARGET_XTHEAD_ZPSFOPERAND && !TARGET_64BIT && !reload_completed"
+  [(const_int 0)]
+  {
+    riscv_split_<code>di3 (operands[0], operands[1], operands[2]);
+    DONE;
+  }
+)
+
+;;Implement: wexti
+(define_insn "riscv_<u>wexti_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(truncate:SI
+	  (any_shiftrt:DI
+	    (match_operand:DI 1 "register_operand" "r")
+	    (match_operand:SI 2 "immediate_operand" "i"))))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
+    return "wexti\\t%0,%1,%2";
+  }
+)
+
+(define_insn "riscv_wexti_di"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (truncate:SI
+	    (ashiftrt:DI
+	      (match_operand:DI 1 "register_operand" "r")
+	      (match_operand:SI 2 "immediate_operand" "i")))))]
+  "TARGET_XTHEAD_ZPSFOPERAND && TARGET_64BIT"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
+    return "wexti\\t%0,%1,%2";
+  }
+)
+
+(define_insn "*riscv_wexti_<mode>2"
+  [(set (match_operand:GPR 0 "register_operand" "=r, r")
+	(sign_extract:GPR (match_operand:DI 1 "register_operand" "r, r")
+			  (const_int 32)
+			  (match_operand 2 "reg_or_uimm5_operand" "r, i")))]
+  "TARGET_XTHEAD_ZPSFOPERAND"
+  "@
+   wext\t%0,%1,%2
+   wexti\t%0,%1,%2"
+)
+
+;;Implement: bpick
+(define_insn "riscv_bpick_<mode>"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	  (ior:GPR
+	    (and:GPR
+	      (match_operand:GPR 1 "register_operand" "r")
+	      (match_operand:GPR 3 "register_operand" "r"))
+	    (and:GPR
+	      (match_operand:GPR 2 "register_operand" "r")
+	      (not:GPR (match_dup 3)))))]
+  "TARGET_XTHEAD_ZPN"
+  "bpick\t%0,%1,%2,%3"
+)
+
+;;Implement: insb
+(define_expand "riscv_insb_<mode>"
+  [(match_operand:GPR 0 "register_operand" "")
+   (match_operand:GPR 1 "register_operand" "0")
+   (match_operand:GPR 2 "register_operand" "")
+   (match_operand:SI 3 "const_int_operand" "")]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[3] = GEN_INT (INTVAL (operands[3]) & (<dsp_ebits>/8 - 1));
+
+    HOST_WIDE_INT selector_index;
+    selector_index = INTVAL (operands[3]);
+    rtx selector = gen_int_mode (selector_index * 8, SImode);
+
+    emit_insn (gen_insv<mode>_internal (operands[1], selector, operands[2]));
+    emit_move_insn (operands[0], operands[1]);
+    DONE;
+  }
+)
+
+(define_insn "insv<mode>_internal"
+  [(set (zero_extract:GPR (match_operand:GPR 0 "register_operand" "+r")
+			  (const_int 8)
+			  (match_operand:SI 1 "insv<dsp_ebits>_operand" "i"))
+	(match_operand:GPR 2 "register_operand" "r"))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[1] = GEN_INT (INTVAL (operands[1]) / 8);
+    return "insb\t%0,%2,%1";
+  }
+)
+
+(define_insn "*insv<mode>_internal2"
+  [(set (zero_extract:GPR (match_operand:GPR 0 "register_operand" "+r")
+			  (const_int 8)
+			  (match_operand:SI 1 "insv<dsp_ebits>_operand" "i"))
+	(zero_extend:GPR (match_operand:QI 2 "register_operand" "r")))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[1] = GEN_INT (INTVAL (operands[1]) / 8);
+    return "insb\t%0,%2,%1";
+  }
+)
+
+(define_insn "vec_setv4qi_internal"
+  [(set (match_operand:V4QI 0 "register_operand" "=r")
+	(vec_merge:V4QI
+	  (vec_duplicate:V4QI
+	    (match_operand:QI 1 "register_operand" "r"))
+	  (match_operand:V4QI 2 "register_operand" "0" )
+	  (match_operand:SI 3 "pwr_3_operand" "i")))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[3] = GEN_INT (exact_log2 (INTVAL (operands[3])));
+    return "insb\t%0,%1,%3";
+  }
+)
+
+(define_insn "vec_setv4qi_internal_vec"
+  [(set (match_operand:V4QI 0 "register_operand" "=r")
+	(vec_merge:V4QI
+	  (vec_duplicate:V4QI
+	    (vec_select:QI
+	      (match_operand:V4QI 1 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (match_operand:V4QI 2 "register_operand" "0")
+	  (match_operand:SI 3 "pwr_3_operand" "i")))]
+  "TARGET_XTHEAD_ZPN"
+  {
+    operands[3] = GEN_INT (exact_log2 (INTVAL (operands[3])));
+    return "insb\t%0,%1,%3";
+  }
+)
+
+(define_insn "vec_setv8qi_internal"
+  [(set (match_operand:V8QI 0 "register_operand" "=r")
+	(vec_merge:V8QI
+	  (vec_duplicate:V8QI
+	    (match_operand:QI 1 "register_operand" "r"))
+	  (match_operand:V8QI 2 "register_operand" "0" )
+	  (match_operand:SI 3 "pwr_7_operand" "i")))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  {
+    operands[3] = GEN_INT (exact_log2 (INTVAL (operands[3])));
+    return "insb\t%0,%1,%3";
+  }
+)
+
+(define_insn "vec_setv8qi_internal_vec"
+  [(set (match_operand:V8QI 0 "register_operand" "=r")
+	(vec_merge:V8QI
+	  (vec_duplicate:V8QI
+	    (vec_select:QI
+	      (match_operand:V8QI 1 "register_operand" "r")
+	      (parallel [(const_int 0)])))
+	  (match_operand:V8QI 2 "register_operand" "0")
+	  (match_operand:SI 3 "pwr_7_operand" "i")))]
+  "TARGET_XTHEAD_ZPN && TARGET_64BIT"
+  {
+    operands[3] = GEN_INT (exact_log2 (INTVAL (operands[3])));
+    return "insb\t%0,%1,%3";
+  }
+)
+
+
+;;========================= RV64 Only Instructions ============================
+
+;;---------------- 32-bit Addition & Subtraction Instructions -----------------
+;;Already implemented in previous: add32, radd32, uradd32, kadd32, ukadd32,
+;;                                 sub32, rsub32, ursub32, ksub32, uksub32,
+;;                                 cras32, rcras32, ucras32, kcras32, ukcras32,
+;;                                 crsa23, rcrsa32, urcrsa32, kcrsa32,
+;;                                 ukcrsa32, stas32, rstas32, urstas32,
+;;                                 kstas32, ukstas32,  stsa32, rstsa32,
+;;                                 urstsa32, kstsa32, ukstsa32
+
+;;----------------------- 32-bit shift Instructions ---------------------------
+;;Already implemented in previous: sra32, srai32, sra32.u, srai32.u, srl32,
+;;                                 srli32, srl32.u, srli32.u, sll32, slli32,
+;;                                 ksll32, kslli32, kslra32, ksra32.u
+
+;;-------------------- 32-bit Miscellaneous Instructions ----------------------
+;;Already implemented in previous: smin32, umin32, smax32, umax32, kabs32
+
+;;------------------- Q15 saturating Multiply Instructions --------------------
+;;Already implemented in previous: None
+
+;;Implement: khmbb16
+(define_insn "riscv_khmbb16"
   [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:SI 2 "register_operand" "r")]
-       UNSPEC_SRA32_U))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "sra32.u\\t%0,%1,%2"
+	(vec_concat:V2SI
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 1 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (const_int 2))
+	    (const_int 16))
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 1)
+		    (parallel [(const_int 2)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 2)]))))
+	      (const_int 2))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "khmbb16\t%0,%1,%2"
 )
 
-(define_insn "riscv_srai32_u"
+;;Implement: khmbt16
+(define_insn "riscv_khmbt16"
   [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:SI 2 "immediate_operand" "i")]
-       UNSPEC_SRA32_U))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "srai32.u\\t%0,%1,%2";
-}
+	(vec_concat:V2SI
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 1 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (const_int 16))
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 1)
+		    (parallel [(const_int 2)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 3)]))))
+	      (const_int 2))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "khmbt16\t%0,%1,%2"
 )
 
+(define_insn "*riscv_khmtb16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 1 "register_operand" "r")
+		    (parallel [(const_int 1)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (const_int 2))
+	    (const_int 16))
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 1)
+		    (parallel [(const_int 3)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 2)]))))
+	      (const_int 2))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "khmbt16\t%0,%2,%1"
+)
+
+;;Implement: khmtt16
+(define_insn "riscv_khmtt16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 1 "register_operand" "r")
+		    (parallel [(const_int 1)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (const_int 16))
+	  (ashiftrt:SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 1)
+		    (parallel [(const_int 2)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 2)]))))
+	      (const_int 2))
+	    (const_int 16))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "khmtt16\t%0,%1,%2"
+)
+
+;;Implement: kdmbb16
+(define_insn "riscv_kdmbb16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 1 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (const_int 2))
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 1)
+		  (parallel [(const_int 2)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 2)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmbb16\t%0,%1,%2"
+)
+
+;;Implement: kdmbt16
+(define_insn "riscv_kdmbt16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 1 "register_operand" "r")
+		  (parallel [(const_int 0)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (const_int 2))
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 1)
+		  (parallel [(const_int 2)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 3)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmbt16\t%0,%1,%2"
+)
+
+(define_insn "*riscv_kdmtb16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 1 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 0)]))))
+	    (const_int 2))
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 1)
+		  (parallel [(const_int 3)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 2)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmbt16\t%0,%2,%1"
+)
+
+;;Implement: kdmtt16
+(define_insn "riscv_kdmtt16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(vec_concat:V2SI
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 1 "register_operand" "r")
+		  (parallel [(const_int 1)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_operand:V4HI 2 "register_operand" "r")
+		  (parallel [(const_int 1)]))))
+	    (const_int 2))
+	  (ss_mult:SI
+	    (mult:SI
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 1)
+		  (parallel [(const_int 3)])))
+	      (sign_extend:SI
+		(vec_select:HI
+		  (match_dup 2)
+		  (parallel [(const_int 3)]))))
+	    (const_int 2))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmtt16\t%0,%1,%2"
+)
+
+;;Implement: kdmabb16
+(define_insn "riscv_kdmabb16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (vec_concat:V2SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 3 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (const_int 2))
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 2)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 3)
+		    (parallel [(const_int 2)]))))
+	      (const_int 2)))
+	  (match_operand: V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmabb16\t%0,%1,%2"
+)
+
+;;Implement: kdmabt16
+(define_insn "riscv_kdmabt16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (vec_concat:V2SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 0)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 3 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 2)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 3)
+		    (parallel [(const_int 3)]))))
+	      (const_int 2)))
+	  (match_operand: V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmabt16\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kdmatb16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (vec_concat:V2SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 3 "register_operand" "r")
+		    (parallel [(const_int 0)]))))
+	      (const_int 2))
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 3)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 3)
+		    (parallel [(const_int 2)]))))
+	      (const_int 2)))
+	  (match_operand: V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmabt16\t%0,%2,%3"
+)
+
+;;Implement: kdmatt16
+(define_insn "riscv_kdmatt16"
+  [(set (match_operand:V2SI 0 "register_operand" "=r")
+	(ss_plus:V2SI
+	  (vec_concat:V2SI
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 2 "register_operand" "r")
+		    (parallel [(const_int 1)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_operand:V4HI 3 "register_operand" "r")
+		    (parallel [(const_int 1)]))))
+	      (const_int 2))
+	    (ss_mult:SI
+	      (mult:SI
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 2)
+		    (parallel [(const_int 3)])))
+		(sign_extend:SI
+		  (vec_select:HI
+		    (match_dup 3)
+		    (parallel [(const_int 3)]))))
+	      (const_int 2)))
+	  (match_operand: V2SI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kdmatt16\t%0,%2,%3"
+)
+
+;;---------------------- 32-bit Multiply Instructions -------------------------
+;;Already implemented in previous: None
+
+;;Implemented: smbb32, smbt32, smtt32
+(define_insn "riscv_smbb32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI
+	  (sign_extend:DI
+	     (vec_select:SI
+	       (match_operand:V2SI 1 "register_operand" "r")
+	       (parallel [(const_int 0)])))
+	  (sign_extend:DI (vec_select:SI
+	       (match_operand:V2SI 2 "register_operand" "r")
+	       (parallel [(const_int 0)])))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smbb32\t%0,%1,%2"
+)
+
+(define_insn "riscv_smbt32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI
+	  (sign_extend:DI
+	     (vec_select:SI
+	       (match_operand:V2SI 1 "register_operand" "r")
+	       (parallel [(const_int 0)])))
+	  (sign_extend:DI (vec_select:SI
+	       (match_operand:V2SI 2 "register_operand" "r")
+	       (parallel [(const_int 1)])))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smbt32\t%0,%1,%2"
+)
+
+(define_insn "*riscv_smtb32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI
+	  (sign_extend:DI
+	     (vec_select:SI
+	       (match_operand:V2SI 1 "register_operand" "r")
+	       (parallel [(const_int 1)])))
+	  (sign_extend:DI (vec_select:SI
+	       (match_operand:V2SI 2 "register_operand" "r")
+	       (parallel [(const_int 0)])))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smbt32\t%0,%2,%1"
+)
+
+(define_insn "riscv_smtt32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI
+	  (sign_extend:DI
+	     (vec_select:SI
+	       (match_operand:V2SI 1 "register_operand" "r")
+	       (parallel [(const_int 1)])))
+	  (sign_extend:DI (vec_select:SI
+	       (match_operand:V2SI 2 "register_operand" "r")
+	       (parallel [(const_int 1)])))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smtt32\t%0,%1,%2"
+)
+
+;;------------------- 32-bit Multiply & Add Instructions ----------------------
+;;Already implemented in previous: None
+
+;;Implemented: kmabb32
+(define_insn "riscv_kmabb32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 3 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmabb32\t%0,%2,%3"
+)
+
+;;Implemented: kmabt32
+(define_insn "riscv_kmabt32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 2 "register_operand" "r")
+		(parallel [(const_int 0)])))
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 3 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmabt32\t%0,%2,%3"
+)
+
+(define_insn "*riscv_kmatb32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 2 "register_operand" "r")
+		(parallel [(const_int 1)])))
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 3 "register_operand" "r")
+		(parallel [(const_int 0)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmabt32\t%0,%2,%3"
+)
+
+;;Implemented: kmatt32
+(define_insn "riscv_kmatt32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 2 "register_operand" "r")
+		(parallel [(const_int 1)])))
+	    (sign_extend:DI
+	      (vec_select:SI
+		(match_operand:V2SI 3 "register_operand" "r")
+		(parallel [(const_int 1)]))))
+	  (match_operand:DI 1 "register_operand" "0")))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmatt32\t%0,%2,%3"
+)
+
+;;--------------- 32-bit Parallel Multiply & Add Instructions -----------------
+;;Already implemented in previous: None
+
+;;Impement: kmda32
+(define_insn "riscv_kmda32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 2 "register_operand" "r")
+			      (parallel [(const_int 1)]))))
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 2)
+			      (parallel [(const_int 0)]))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmda32\t%0,%1,%2"
+)
+
+;;Impement: kmxda32
+(define_insn "riscv_kmxda32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 2 "register_operand" "r")
+			      (parallel [(const_int 0)]))))
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 2)
+			      (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmxda32\t%0,%1,%2"
+)
+
+;;Impement: kmada32
+(define_insn "riscv_kmada32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (match_operand:DI 1 "register_operand" "0")
+	  (ss_plus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 0)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmada32\t%0,%2,%3"
+)
+
+;;Impement: kmaxda32
+(define_insn "riscv_kmaxda32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (ss_plus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmaxda32\t%0,%2,%3"
+)
+
+;;Impement: kmads32
+(define_insn "riscv_kmads32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (ss_minus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 0)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmads32\t%0,%2,%3"
+)
+
+;;Impement: kmadrs32
+(define_insn "riscv_kmadrs32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (ss_minus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmadrs32\t%0,%2,%3"
+)
+
+;;Impement: kmaxds32
+(define_insn "riscv_kmaxds32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_plus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (ss_minus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmaxds32\t%0,%2,%3"
+)
+
+;;Impement: kmsda32
+(define_insn "riscv_kmsda32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_minus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (ss_minus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 1)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 0)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmsda32\t%0,%2,%3"
+)
+
+;;Impement: kmsxda32
+(define_insn "riscv_kmsxda32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ss_minus:DI
+	  (match_operand:DI 1 "register_operand" " 0")
+	  (ss_minus:DI
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 2 "register_operand" "r")
+				(parallel [(const_int 1)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_operand:V2SI 3 "register_operand" "r")
+				(parallel [(const_int 0)]))))
+	    (mult:DI
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 2)
+				(parallel [(const_int 0)])))
+	      (sign_extend:DI (vec_select:SI
+				(match_dup 3)
+				(parallel [(const_int 1)])))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "kmsxda32\t%0,%2,%3"
+)
+
+;;Impement: smds32
+(define_insn "riscv_smds32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 2 "register_operand" "r")
+			      (parallel [(const_int 1)]))))
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 2)
+			      (parallel [(const_int 0)]))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smds32\t%0,%1,%2"
+)
+
+;;Impement: smdrs32
+(define_insn "riscv_smdrs32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 1 "register_operand" "r")
+			      (parallel [(const_int 0)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 2 "register_operand" "r")
+			      (parallel [(const_int 0)]))))
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 1)
+			      (parallel [(const_int 1)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 2)
+			      (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smdrs32\t%0,%1,%2"
+)
+
+;;Impement: smxds32
+(define_insn "riscv_smxds32"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(minus:DI
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 1 "register_operand" "r")
+			      (parallel [(const_int 1)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_operand:V2SI 2 "register_operand" "r")
+			      (parallel [(const_int 0)]))))
+	  (mult:DI
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 1)
+			      (parallel [(const_int 0)])))
+	    (sign_extend:DI (vec_select:SI
+			      (match_dup 2)
+			      (parallel [(const_int 1)]))))))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  "smxds32\t%0,%1,%2"
+)
+
+;;--------------------- Non-SIMD 32-bit Shift Instructions --------------------
+;;Already implemented in previous: None
+
+;;Implemented: sraiw.u
 (define_insn "riscv_sraw_u"
   [(set (match_operand:SI 0 "register_operand" "=r")
-     (unspec:SI
-      [(match_operand:SI 1 "register_operand" "r")
-       (match_operand:SI 2 "immediate_operand" "i")]
-       UNSPEC_SRAW_U))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "sraiw.u\\t%0,%1,%2";
-}
+	(unspec:SI
+	  [(match_operand:SI 1 "register_operand" "r")
+	   (match_operand:SI 2 "immediate_operand" "i")]
+	  UNSPEC_SRA_U))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
+    return "sraiw.u\\t%0,%1,%2";
+  }
 )
 
 (define_insn "riscv_sraw_u_di"
   [(set (match_operand:DI 0 "register_operand" "=r")
-     (sign_extend:DI (unspec:SI
-       [(match_operand:SI 1 "register_operand" "r")
-        (match_operand:SI 2 "immediate_operand" "i")]
-       UNSPEC_SRAW_U)))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "sraiw.u\\t%0,%1,%2";
-}
+	(sign_extend:DI
+	  (unspec:SI
+	    [(match_operand:SI 1 "register_operand" "r")
+	     (match_operand:SI 2 "immediate_operand" "i")]
+	    UNSPEC_SRA_U)))]
+  "TARGET_XTHEAD_ZPRVSFEXTRA"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
+    return "sraiw.u\\t%0,%1,%2";
+  }
 )
 
-(define_code_iterator vshift32 [ss_ashift ashift ashiftrt lshiftrt])
-(define_code_attr vshift32_code [(ss_ashift "ksll32") (ashift "sll32") (ashiftrt "sra32") (lshiftrt "srl32")])
-(define_code_attr vshift32_insn [(ss_ashift "ksll32") (ashift "sll32") (ashiftrt "sra32") (lshiftrt "srl32")])
+;;----------------------- 32-bit Packing Instructions -------------------------
+;;Already implemented in previous: pkbb32, pkbt32, pktb32, pktt32
 
-(define_insn "riscv_<vshift32_code>"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(vshift32:V2SI
-	    (match_operand:V2SI 1 "register_operand" "r")
-	    (match_operand:SI 2 "register_operand" "r")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "<vshift32_insn>\\t%0,%1,%2"
-)
-
-(define_code_iterator vshift32_imm [ss_ashift ashift ashiftrt lshiftrt])
-(define_code_attr vshift32_imm_code [(ss_ashift "kslli32") (ashift "slli32")
-				     (ashiftrt "srai32") (lshiftrt "srli32")])
-(define_code_attr vshift32_imm_insn [(ss_ashift "kslli32") (ashift "slli32")
-				     (ashiftrt "srai32") (lshiftrt "srli32")])
-
-(define_insn "riscv_<vshift32_imm_code>"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-	(vshift32_imm:V2SI
-	  (match_operand:V2SI 1 "register_operand" "r")
-	  (match_operand:SI 2 "immediate_operand" "i")))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-{
-  operands[2] = GEN_INT (INTVAL (operands[2]) & 0x1f);
-  return "<vshift32_imm_insn>\\t%0,%1,%2";
-}
-)
-
-(define_insn "riscv_kslra32"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:SI 2 "register_operand" "r")]
-       UNSPEC_KSLRA32))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "kslra32\\t%0,%1,%2"
-)
-
-(define_insn "riscv_kslra32_u"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-     (unspec:V2SI
-      [(match_operand:V2SI 1 "register_operand" "r")
-       (match_operand:SI 2 "register_operand" "r")]
-       UNSPEC_KSLRA32_U))]
-  "TARGET_XTHEAD_DSP && TARGET_64BIT"
-  "kslra32.u\\t%0,%1,%2"
-)
-
+;;################################### END #####################################

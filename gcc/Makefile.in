@@ -2127,20 +2127,20 @@ libgcc.mvars: config.status Makefile specs xgcc$(exeext)
 # switches.
 multilib.h: s-mlib; @true
 s-mlib: $(srcdir)/genmultilib Makefile
+	echo "$(MULTILIB_OPTIONS)" > tmp-mlib-args
+	echo "$(MULTILIB_DIRNAMES)" >> tmp-mlib-args
+	echo "$(MULTILIB_MATCHES)" >> tmp-mlib-args
+	echo "$(MULTILIB_EXCEPTIONS)" >> tmp-mlib-args
+	echo "$(MULTILIB_EXTRA_OPTS)" >> tmp-mlib-args
+	echo "$(MULTILIB_EXCLUSIONS)" >> tmp-mlib-args
+	echo "$(MULTILIB_OSDIRNAMES)" >> tmp-mlib-args
+	echo "$(MULTILIB_REQUIRED)" >> tmp-mlib-args
+	echo "$(if $(MULTILIB_OSDIRNAMES),,$(MULTIARCH_DIRNAME))" >> tmp-mlib-args
+	echo "$(MULTILIB_REUSE)" >> tmp-mlib-args
+	echo "@enable_multilib@" >> tmp-mlib-args
 	if test @enable_multilib@ = yes \
 	   || test -n "$(MULTILIB_OSDIRNAMES)"; then \
-	  $(SHELL) $(srcdir)/genmultilib \
-	    "$(MULTILIB_OPTIONS)" \
-	    "$(MULTILIB_DIRNAMES)" \
-	    "$(MULTILIB_MATCHES)" \
-	    "$(MULTILIB_EXCEPTIONS)" \
-	    "$(MULTILIB_EXTRA_OPTS)" \
-	    "$(MULTILIB_EXCLUSIONS)" \
-	    "$(MULTILIB_OSDIRNAMES)" \
-	    "$(MULTILIB_REQUIRED)" \
-	    "$(if $(MULTILIB_OSDIRNAMES),,$(MULTIARCH_DIRNAME))" \
-	    "$(MULTILIB_REUSE)" \
-	    "@enable_multilib@" \
+	  $(SHELL) $(srcdir)/genmultilib --from-file tmp-mlib-args \
 	    > tmp-mlib.h; \
 	else \
 	  $(SHELL) $(srcdir)/genmultilib '' '' '' '' '' '' '' '' \

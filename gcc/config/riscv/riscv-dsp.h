@@ -1366,32 +1366,32 @@ uint16x4_t __rv__v_ustsa16(uint16x4_t a, uint16x4_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__add32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__add32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_add32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__sub32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__sub32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_sub32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__cras32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__cras32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_cras32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__crsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__crsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_crsa32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__stas32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__stas32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_stas32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__stsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__stsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_stsa32((int32x2_t)a, (int32x2_t)b);
 }
 
@@ -1661,17 +1661,17 @@ int32x2_t __rv__v_kmxda(int16x4_t a, int16x4_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kdmbb16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kdmbb16(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kdmbb16((int16x4_t)a, (int16x4_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kdmbt16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kdmbt16(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kdmbt16((int16x4_t)a, (int16x4_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kdmtt16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kdmtt16(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kdmtt16((int16x4_t)a, (int16x4_t)b);
 }
 
@@ -1691,17 +1691,17 @@ int32x2_t __rv__v_kdmtt16(int16x4_t a, int16x4_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__khmbb16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__khmbb16(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_khmbb16((int16x4_t)a, (int16x4_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__khmbt16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__khmbt16(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_khmbt16((int16x4_t)a, (int16x4_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__khmtt16(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__khmtt16(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_khmtt16((int16x4_t)a, (int16x4_t)b);
 }
 
@@ -1721,7 +1721,7 @@ int32x2_t __rv__v_khmtt16(int16x4_t a, int16x4_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kabs32(uintXLEN_t a) {
+uint64_t __rv__kabs32(uint64_t a) {
   return (uint64_t) __builtin_riscv_kabs32((int32x2_t)a);
 }
 
@@ -1731,12 +1731,12 @@ int32x2_t __rv__v_kabs32(int32x2_t a) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kslra32(uintXLEN_t a, int32_t b) {
+uint64_t __rv__kslra32(uint64_t a, int32_t b) {
   return (uint64_t) __builtin_riscv_kslra32((int32x2_t)a, b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kslra32_u(uintXLEN_t a, int32_t b) {
+uint64_t __rv__kslra32_u(uint64_t a, int32_t b) {
   return (uint64_t) __builtin_riscv_kslra32_u((int32x2_t)a, b);
 }
 
@@ -1816,17 +1816,17 @@ int32x2_t __rv__v_kwmmul_u(int32x2_t a, int32x2_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kadd32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kadd32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kadd32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kcras32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kcras32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kcras32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kcrsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kcrsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kcrsa32((int32x2_t)a, (int32x2_t)b);
 }
 
@@ -1846,57 +1846,57 @@ int32x2_t __rv__v_kcrsa32(int32x2_t a, int32x2_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__smax32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__smax32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_smax32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__smin32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__smin32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_smin32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kstas32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kstas32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kstas32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kstsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kstsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kstsa32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ksub32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ksub32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ksub32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__radd32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__radd32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_radd32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__rcras32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__rcras32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_rcras32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__rcrsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__rcrsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_rcrsa32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__rstas32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__rstas32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_rstas32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__rstsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__rstsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_rstsa32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__rsub32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__rsub32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_rsub32((int32x2_t)a, (int32x2_t)b);
 }
 
@@ -1956,17 +1956,17 @@ int32x2_t __rv__v_rsub32(int32x2_t a, int32x2_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__sra32(uintXLEN_t a, uint32_t b) {
+uint64_t __rv__sra32(uint64_t a, uint32_t b) {
   return (uint64_t) __builtin_riscv_sra32((int32x2_t)a, b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__sra32_u(uintXLEN_t a, uint32_t b) {
+uint64_t __rv__sra32_u(uint64_t a, uint32_t b) {
   return (uint64_t) __builtin_riscv_sra32_u((int32x2_t)a, b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ksll32(uintXLEN_t a, uint32_t b) {
+uint64_t __rv__ksll32(uint64_t a, uint32_t b) {
   return (uint64_t) __builtin_riscv_ksll32((int32x2_t)a, b);
 }
 
@@ -2036,17 +2036,17 @@ int32x2_t __rv__v_kmsxda(int32x2_t t, int16x4_t a, int16x4_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kdmabb16(uintXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kdmabb16(uint64_t t, uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kdmabb16((int32x2_t)t, (int16x4_t)a, (int16x4_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kdmabt16(uintXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kdmabt16(uint64_t t, uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kdmabt16((int32x2_t)t, (int16x4_t)a, (int16x4_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__kdmatt16(uintXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__kdmatt16(uint64_t t, uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_kdmatt16((int32x2_t)t, (int16x4_t)a, (int16x4_t)b);
 }
 
@@ -2136,12 +2136,12 @@ int32x2_t __rv__v_smaqa_su(int32x2_t t, int8x8_t a, uint8x8_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmda32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmda32(uint64_t a, uint64_t b) {
   return __builtin_riscv_kmda32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmxda32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmxda32(uint64_t a, uint64_t b) {
   return __builtin_riscv_kmxda32((int32x2_t)a, (int32x2_t)b);
 }
 
@@ -2156,32 +2156,32 @@ int64_t __rv__v_kmxda32(int32x2_t a, int32x2_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__smbb32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__smbb32(uint64_t a, uint64_t b) {
   return __builtin_riscv_smbb32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__smbt32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__smbt32(uint64_t a, uint64_t b) {
   return __builtin_riscv_smbt32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__smtt32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__smtt32(uint64_t a, uint64_t b) {
   return __builtin_riscv_smtt32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__smds32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__smds32(uint64_t a, uint64_t b) {
   return __builtin_riscv_smds32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__smdrs32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__smdrs32(uint64_t a, uint64_t b) {
   return __builtin_riscv_smdrs32((int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__smxds32(uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__smxds32(uint64_t a, uint64_t b) {
   return __builtin_riscv_smxds32((int32x2_t)a, (int32x2_t)b);
 }
 
@@ -2216,52 +2216,52 @@ int64_t __rv__v_smxds32(int32x2_t a, int32x2_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmabb32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmabb32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmabb32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmabt32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmabt32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmabt32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmatt32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmatt32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmatt32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmada32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmada32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmada32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmaxda32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmaxda32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmaxda32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmads32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmads32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmads32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmadrs32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmadrs32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmadrs32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmaxds32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmaxds32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmaxds32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmsda32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmsda32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmsda32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-intXLEN_t __rv__kmsxda32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t __rv__kmsxda32(int64_t t, uint64_t a, uint64_t b) {
   return __builtin_riscv_kmsxda32(t, (int32x2_t)a, (int32x2_t)b);
 }
 
@@ -2596,7 +2596,7 @@ uint32x2_t __rv__v_clz32(uint32x2_t a) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__sll32(uintXLEN_t a, uint32_t b) {
+uint64_t __rv__sll32(uint64_t a, uint32_t b) {
   return (uint64_t) __builtin_riscv_sll32((uint32x2_t)a, b);
 }
 
@@ -2606,12 +2606,12 @@ uint32x2_t __rv__v_sll32(uint32x2_t a, uint32_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__srl32(uintXLEN_t a, uint32_t b) {
+uint64_t __rv__srl32(uint64_t a, uint32_t b) {
   return (uint64_t) __builtin_riscv_srl32((uint32x2_t)a, b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__srl32_u(uintXLEN_t a, uint32_t b) {
+uint64_t __rv__srl32_u(uint64_t a, uint32_t b) {
   return (uint64_t) __builtin_riscv_srl32_u((uint32x2_t)a, b);
 }
 
@@ -2626,72 +2626,72 @@ uint32x2_t __rv__v_srl32_u(uint32x2_t a, uint32_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ukadd32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ukadd32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ukadd32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ukcras32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ukcras32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ukcras32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ukcrsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ukcrsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ukcrsa32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ukstas32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ukstas32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ukstas32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ukstsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ukstsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ukstsa32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__uksub32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__uksub32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_uksub32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__umax32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__umax32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_umax32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__umin32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__umin32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_umin32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__uradd32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__uradd32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_uradd32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__urcras32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__urcras32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_urcras32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__urcrsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__urcrsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_urcrsa32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__urstas32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__urstas32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_urstas32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__urstsa32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__urstsa32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_urstsa32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__ursub32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__ursub32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_ursub32((uint32x2_t)a, (uint32x2_t)b);
 }
 
@@ -2766,22 +2766,22 @@ uint32x2_t __rv__v_ursub32(uint32x2_t a, uint32x2_t b) {
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__pkbb32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__pkbb32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_pkbb32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__pkbt32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__pkbt32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_pkbt32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__pktb32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__pktb32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_pktb32((uint32x2_t)a, (uint32x2_t)b);
 }
 
 __extension__ static __inline __attribute__ ((__always_inline__))
-uintXLEN_t __rv__pktt32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t __rv__pktt32(uint64_t a, uint64_t b) {
   return (uint64_t) __builtin_riscv_pktt32((uint32x2_t)a, (uint32x2_t)b);
 }
 

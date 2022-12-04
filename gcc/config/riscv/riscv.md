@@ -40,11 +40,97 @@
   UNSPEC_FLT_QUIET
   UNSPEC_FLE_QUIET
   UNSPEC_COPYSIGN
+  UNSPEC_NCOPYSIGN
+  UNSPEC_XORSIGN
   UNSPEC_LRINT
   UNSPEC_LROUND
 
+  ;; Bitmanip
+  UNSPEC_PCNTW
+
   ;; Stack tie
   UNSPEC_TIE
+
+  ;; Vector unspecs.
+  UNSPEC_FIRST
+  UNSPEC_SBF
+  UNSPEC_SIF
+  UNSPEC_SOF
+  UNSPEC_IOTA
+  UNSPEC_VID
+  UNSPEC_MASKED_STORE
+  UNSPEC_STRIDED_LOAD
+  UNSPEC_STRIDED_STORE
+  UNSPEC_REDUC
+  UNSPEC_ORDERED_REDUC
+  UNSPEC_REDUC_SUM
+  UNSPEC_REDUC_USUM
+  UNSPEC_ORDERED_REDUC_SUM
+  UNSPEC_OVERFLOW
+  UNSPEC_VMULHS
+  UNSPEC_VMULHU
+  UNSPEC_VMULHSU
+  UNSPEC_FCVT_XUF
+  UNSPEC_ROD
+  UNSPEC_VFCLASS
+  UNSPEC_VSLIDEUP
+  UNSPEC_VSLIDE1UP
+  UNSPEC_VFSLIDE1UP
+  UNSPEC_VSLIDEDOWN
+  UNSPEC_VSLIDE1DOWN
+  UNSPEC_VFSLIDE1DOWN
+  UNSPEC_VRGATHER
+  UNSPEC_VCOMPRESS
+  UNSPEC_VNCLIP
+  UNSPEC_VNCLIPU
+  UNSPEC_VSSRL
+  UNSPEC_VSSRA
+  UNSPEC_VAADDU
+  UNSPEC_VAADD
+  UNSPEC_VASUBU
+  UNSPEC_VASUB
+  UNSPEC_VSMUL
+  UNSPEC_VLEFF
+  UNSPEC_LOAD_GATHER
+  UNSPEC_INDEXED_LOAD
+  UNSPEC_UNORDERED_INDEXED_LOAD
+  UNSPEC_STORE_SCATTER
+  UNSPEC_ORDERED_INDEXED_STORE
+  UNSPEC_UNORDERED_INDEXED_STORE
+  UNSPEC_READ_VL
+  UNSPEC_WHOLE_MOVE
+  UNSPEC_VPOPCOUNT
+  UNSPEC_VQMAC
+  UNSPEC_VMADD
+  UNSPEC_RSQRTE7
+  UNSPEC_RECE7
+  UNSPEC_READ_VTYPE
+  UNSPEC_WRITE_VTYPE
+  UNSPEC_VMACS
+  UNSPEC_MASK_VMADD
+  UNSPEC_MASK_VMSUB
+  UNSPEC_MASK_VMACC
+  UNSPEC_MASK_VMSAC
+  UNSPEC_MASK_VFMADD
+  UNSPEC_MASK_VFMACC
+  UNSPEC_MASK_VFNMADD
+  UNSPEC_MASK_VFNMACC
+  UNSPEC_MASK_VFWMACC
+  UNSPEC_MASK_VFWNMACC
+  UNSPEC_VCLR
+  UNSPEC_VSET
+  UNSPEC_USEVL
+  UNSPEC_VLM
+  UNSPEC_VSM
+  UNSPEC_VSETVL
+  UNSPEC_VWLDST
+
+  ;; Segment load/store
+  UNSPEC_SEG_STORE
+  UNSPEC_SEG_UNORDERED_STORE
+  UNSPEC_SEG_LOAD
+  UNSPEC_SEG_UNORDERED_LOAD
+  UNSPEC_SEG_LOAD_FIRST_FAULT
 ])
 
 (define_c_enum "unspecv" [
@@ -65,6 +151,10 @@
   UNSPECV_BLOCKAGE
   UNSPECV_FENCE
   UNSPECV_FENCE_I
+
+  ;; Vector unspecs.
+  UNSPECV_VLOAD
+  UNSPECV_VSTORE
 ])
 
 (define_constants
@@ -84,6 +174,9 @@
    (S9_REGNUM			25)
    (S10_REGNUM			26)
    (S11_REGNUM			27)
+
+   (VL_REGNUM			66)
+   (VTYPE_REGNUM		67)
 
    (NORMAL_RETURN		0)
    (SIBCALL_RETURN		1)
@@ -165,12 +258,16 @@
 (define_attr "type"
   "unknown,branch,jump,call,load,fpload,store,fpstore,
    mtc,mfc,const,arith,logical,shift,slt,imul,idiv,move,fmove,fadd,fmul,
-   fmadd,fdiv,fcmp,fcvt,fsqrt,multi,auipc,sfb_alu,nop,ghost,
+   fmadd,fdiv,fcmp,fcvt,fsqrt,multi,auipc,sfb_alu,nop,ghost,vector,bitmanip,
+   atomic,
 
    fcvt_i,fsgnj,ebreak,
-   vset,vadd,vcmp,vshift,vlogical,vmove,vred_bit,vmul,vmadd,vred_sum,
-   vred_min,vred_max,vdiv,vrem,vload,vstore,
-   vfadd,vfsgnj,vfmul,vfwmul,vfmadd,vfwmadd,vfred,vfmove,vfcmp,vfcvt,vfdiv,vfsqrt"
+   vset,varith,vcmp,vshift,vlogical,vmove,vmask,vred_bit,vmul,vmadd,vred_sum,
+   vred_max,vdiv,vload,vstore,
+   vfadd,vfsgnj,vfmul,vfwmul,vfmadd,vfwmadd,vfred,vfmove,vfmax,vfcmp,vfcvt,
+   vfdiv,vfsqrt,vfrec,vfclass,
+
+   idivmod"
   (cond [(eq_attr "got" "load") (const_string "load")
 
 	 ;; If a doubleword move uses these expensive instructions,
@@ -253,7 +350,7 @@
 ;; Keep this in sync with enum riscv_microarchitecture.
 (define_attr "tune"
   "generic,sifive_7,
-  c910,c906"
+  c910,c906v,c908"
   (const (symbol_ref "((enum attr_tune) riscv_microarchitecture)")))
 
 ;; Describe a user's asm statement.
@@ -298,37 +395,38 @@
 
 ;; Iterator for hardware-supported floating-point modes.
 (define_mode_iterator ANYF [(SF "TARGET_HARD_FLOAT")
-			    (DF "TARGET_DOUBLE_FLOAT")])
+			    (DF "TARGET_DOUBLE_FLOAT")
+			    (HF "TARGET_FP16")])
 
 ;; Iterator for floating-point modes that can be loaded into X registers.
-(define_mode_iterator SOFTF [SF (DF "TARGET_64BIT")])
+(define_mode_iterator SOFTF [SF (DF "TARGET_64BIT") (HF "TARGET_FP16")])
 
 ;; This attribute gives the length suffix for a sign- or zero-extension
 ;; instruction.
 (define_mode_attr size [(QI "b") (HI "h")])
 
 ;; Mode attributes for loads.
-(define_mode_attr load [(QI "lb") (HI "lh") (SI "lw") (DI "ld") (SF "flw") (DF "fld")])
+(define_mode_attr load [(QI "lb") (HI "lh") (SI "lw") (DI "ld") (SF "flw") (DF "fld") (HF "flh")])
 
 ;; Instruction names for integer loads that aren't explicitly sign or zero
 ;; extended.  See riscv_output_move and LOAD_EXTEND_OP.
 (define_mode_attr default_load [(QI "lbu") (HI "lhu") (SI "lw") (DI "ld")])
 
 ;; Mode attribute for FP loads into integer registers.
-(define_mode_attr softload [(SF "lw") (DF "ld")])
+(define_mode_attr softload [(SF "lw") (DF "ld") (HF "lh")])
 
 ;; Instruction names for stores.
-(define_mode_attr store [(QI "sb") (HI "sh") (SI "sw") (DI "sd") (SF "fsw") (DF "fsd")])
+(define_mode_attr store [(QI "sb") (HI "sh") (SI "sw") (DI "sd") (SF "fsw") (DF "fsd") (HF "fsh")])
 
 ;; Instruction names for FP stores from integer registers.
-(define_mode_attr softstore [(SF "sw") (DF "sd")])
+(define_mode_attr softstore [(SF "sw") (DF "sd") (HF "sh")])
 
 ;; This attribute gives the best constraint to use for registers of
 ;; a given mode.
 (define_mode_attr reg [(SI "d") (DI "d") (CC "d")])
 
 ;; This attribute gives the format suffix for floating-point operations.
-(define_mode_attr fmt [(SF "s") (DF "d")])
+(define_mode_attr fmt [(SF "s") (DF "d") (HF "h")])
 
 ;; This attribute gives the integer suffix for floating-point conversions.
 (define_mode_attr ifmt [(SI "w") (DI "l")])
@@ -338,7 +436,7 @@
 
 ;; This attribute gives the upper-case mode name for one unit of a
 ;; floating-point mode.
-(define_mode_attr UNITMODE [(SF "SF") (DF "DF")])
+(define_mode_attr UNITMODE [(SF "SF") (DF "DF") (HF "HF")])
 
 ;; This attribute gives the integer mode that has half the size of
 ;; the controlling mode.
@@ -387,10 +485,13 @@
 ;; <u> expands to an empty string when doing a signed operation and
 ;; "u" when doing an unsigned operation.
 (define_code_attr u [(sign_extend "") (zero_extend "u")
+		     (ashiftrt "") (lshiftrt "u")
 		     (gt "") (gtu "u")
 		     (ge "") (geu "u")
 		     (lt "") (ltu "u")
-		     (le "") (leu "u")])
+		     (le "") (leu "u")
+		     (fix "") (unsigned_fix "u")
+		     (float "") (unsigned_float "u")])
 
 ;; <su> is like <u>, but the signed form expands to "s" rather than "".
 (define_code_attr su [(sign_extend "s") (zero_extend "u")])
@@ -399,6 +500,7 @@
 (define_code_attr optab [(ashift "ashl")
 			 (ashiftrt "ashr")
 			 (lshiftrt "lshr")
+			 (mult "mul")
 			 (div "div")
 			 (mod "mod")
 			 (udiv "udiv")
@@ -411,7 +513,13 @@
 			 (xor "xor")
 			 (and "and")
 			 (plus "add")
-			 (minus "sub")])
+			 (minus "sub")
+			 (smax "max")
+			 (smin "min")
+			 (us_plus "usadd")
+			 (ss_plus "ssadd")
+			 (us_minus "ussub")
+			 (ss_minus "sssub")])
 
 ;; <insn> expands to the name of the insn that implements a particular code.
 (define_code_attr insn [(ashift "sll")
@@ -425,7 +533,15 @@
 			(xor "xor")
 			(and "and")
 			(plus "add")
-			(minus "sub")])
+			(minus "sub")
+			(smax "max")
+			(umax "maxu")
+			(smin "min")
+			(umin "minu")
+			(us_plus "saddu")
+			(ss_plus "sadd")
+			(us_minus "ssubu")
+			(ss_minus "ssub")])
 
 ;; Ghost instructions produce no real code and introduce no hazards.
 ;; They exist purely to express an effect on dataflow.
@@ -460,6 +576,20 @@
   { return TARGET_64BIT ? "add%i2w\t%0,%1,%2" : "add%i2\t%0,%1,%2"; }
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
+
+(define_expand "adddi3x"
+  [(set (match_operand:DI          0 "register_operand")
+	(plus:DI (match_operand:DI 1 "register_operand")
+		 (match_operand:DI 2 "move_operand")))]
+  "TARGET_64BIT"
+{
+  if (!arith_operand (operands[2], DImode))
+    {
+      gcc_assert (false);
+    }
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
 
 (define_insn "*adddi3"
   [(set (match_operand:DI          0 "register_operand" "=r,r")
@@ -657,14 +787,14 @@
   emit_insn (gen_muldi3 (low, operands[1], operands[2]));
 
   rtx high = gen_reg_rtx (DImode);
-  emit_insn (gen_<u>muldi3_highpart (high, operands[1], operands[2]));
+  emit_insn (gen_<su>muldi3_highpart (high, operands[1], operands[2]));
 
   emit_move_insn (gen_lowpart (DImode, operands[0]), low);
   emit_move_insn (gen_highpart (DImode, operands[0]), high);
   DONE;
 })
 
-(define_insn "<u>muldi3_highpart"
+(define_insn "<su>muldi3_highpart"
   [(set (match_operand:DI                0 "register_operand" "=r")
 	(truncate:DI
 	  (lshiftrt:TI
@@ -721,14 +851,14 @@
   {
     rtx temp = gen_reg_rtx (SImode);
     emit_insn (gen_mulsi3 (temp, operands[1], operands[2]));
-    emit_insn (gen_<u>mulsi3_highpart (riscv_subword (operands[0], true),
+    emit_insn (gen_<su>mulsi3_highpart (riscv_subword (operands[0], true),
 				       operands[1], operands[2]));
     emit_insn (gen_movsi (riscv_subword (operands[0], false), temp));
     DONE;
   }
 })
 
-(define_insn "<u>mulsi3_highpart"
+(define_insn "<su>mulsi3_highpart"
   [(set (match_operand:SI                0 "register_operand" "=r")
 	(truncate:SI
 	  (lshiftrt:DI
@@ -1054,6 +1184,24 @@
   [(set_attr "type" "fcvt")
    (set_attr "mode" "SF")])
 
+(define_insn "truncsfhf2"
+  [(set (match_operand:HF     0 "register_operand" "=f")
+	(float_truncate:HF
+	    (match_operand:SF 1 "register_operand" " f")))]
+  "TARGET_FP16"
+  "fcvt.h.s\t%0,%1"
+  [(set_attr "type" "fcvt")
+   (set_attr "mode" "HF")])
+
+(define_insn "truncdfhf2"
+  [(set (match_operand:HF     0 "register_operand" "=f")
+	(float_truncate:HF
+	    (match_operand:DF 1 "register_operand" " f")))]
+  "TARGET_FP16 && TARGET_DOUBLE_FLOAT"
+  "fcvt.h.d\t%0,%1"
+  [(set_attr "type" "fcvt")
+   (set_attr "mode" "HF")])
+
 ;;
 ;;  ....................
 ;;
@@ -1063,11 +1211,16 @@
 
 ;; Extension insns.
 
-(define_insn_and_split "zero_extendsidi2"
+(define_expand "zero_extendsidi2"
+  [(set (match_operand:DI 0 "register_operand")
+	(zero_extend:DI (match_operand:SI 1 "nonimmediate_operand")))]
+  "TARGET_64BIT")
+
+(define_insn_and_split "*zero_extendsidi2_internal"
   [(set (match_operand:DI     0 "register_operand"     "=r,r,r,r,r,r")
 	(zero_extend:DI
 	    (match_operand:SI 1 "nonimmediate_operand" " r,Qmu,Qmr,Qma,Qmb,m")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT && !(TARGET_ZBA || TARGET_ZBB)"
   "@
    #
    lurwu\t%0,%1
@@ -1087,11 +1240,15 @@
   [(set_attr "move_type" "shift_shift,load,load,load,load,load")
    (set_attr "mode" "DI")])
 
-(define_insn_and_split "zero_extendhi<GPR:mode>2"
+(define_expand "zero_extendhi<GPR:mode>2"
+  [(set (match_operand:GPR 0 "register_operand")
+	(zero_extend:GPR (match_operand:HI 1 "nonimmediate_operand")))])
+
+(define_insn_and_split "*zero_extendhi<GPR:mode>2_internal"
   [(set (match_operand:GPR    0 "register_operand"     "=r,r,r,r,r,r")
 	(zero_extend:GPR
 	    (match_operand:HI 1 "nonimmediate_operand" " r,Qmu,Qmr,Qma,Qmb,m")))]
-  ""
+  "!(TARGET_ZBA || TARGET_ZBB)"
   "@
    #
    lurhu\t%0,%1
@@ -1103,8 +1260,7 @@
    && REG_P (operands[1])
    && !paradoxical_subreg_p (operands[0])
    && !(TARGET_XTHEAD_EXT
-	&& ((TARGET_64BIT && GET_MODE (operands[0]) == DImode)
-	    || (!TARGET_64BIT && GET_MODE (operands[0]) == SImode)))"
+	&& (TARGET_64BIT || GET_MODE (operands[0]) == SImode))"
   [(set (match_dup 0)
 	(ashift:GPR (match_dup 1) (match_dup 2)))
    (set (match_dup 0)
@@ -1153,11 +1309,16 @@
   [(set_attr "move_type" "move,load,load,load,load,load")
    (set_attr "mode" "DI")])
 
-(define_insn_and_split "extend<SHORT:mode><SUPERQI:mode>2"
+(define_expand "extend<SHORT:mode><SUPERQI:mode>2"
+  [(set (match_operand:SUPERQI 0 "register_operand" "")
+    (sign_extend:SUPERQI
+	    (match_operand:SHORT 1 "nonimmediate_operand" "")))])
+
+(define_insn_and_split "*extend<SHORT:mode><SUPERQI:mode>2"
   [(set (match_operand:SUPERQI   0 "register_operand"     "=r,r,r,r,r,r")
 	(sign_extend:SUPERQI
 	    (match_operand:SHORT 1 "nonimmediate_operand" " r,Qmu,Qmr,Qma,Qmb,m")))]
-  ""
+  "!TARGET_ZBB"
   "@
    #
    lur<SHORT:size>\t%0,%1
@@ -1182,12 +1343,30 @@
   [(set_attr "move_type" "shift_shift,load,load,load,load,load")
    (set_attr "mode" "SI")])
 
+(define_insn "extendhfsf2"
+  [(set (match_operand:SF     0 "register_operand" "=f")
+	(float_extend:SF
+	    (match_operand:HF 1 "register_operand" " f")))]
+  "TARGET_FP16"
+  "fcvt.s.h\t%0,%1"
+  [(set_attr "type" "fcvt")
+   (set_attr "mode" "SF")])
+
 (define_insn "extendsfdf2"
   [(set (match_operand:DF     0 "register_operand" "=f")
 	(float_extend:DF
 	    (match_operand:SF 1 "register_operand" " f")))]
   "TARGET_DOUBLE_FLOAT"
   "fcvt.d.s\t%0,%1"
+  [(set_attr "type" "fcvt")
+   (set_attr "mode" "DF")])
+
+(define_insn "extendhfdf2"
+  [(set (match_operand:DF     0 "register_operand" "=f")
+	(float_extend:DF
+	    (match_operand:HF 1 "register_operand" " f")))]
+  "TARGET_FP16 && TARGET_DOUBLE_FLOAT"
+  "fcvt.d.h\t%0,%1"
   [(set_attr "type" "fcvt")
    (set_attr "mode" "DF")])
 
@@ -1204,7 +1383,7 @@
 	    (match_operand:ANYF 1 "register_operand" " f")))]
   "TARGET_HARD_FLOAT"
   "fcvt.<GPR:ifmt>.<ANYF:fmt> %0,%1,rtz"
-  [(set_attr "type" "fcvt")
+  [(set_attr "type" "fcvt_i")
    (set_attr "mode" "<ANYF:MODE>")])
 
 (define_insn "fixuns_trunc<ANYF:mode><GPR:mode>2"
@@ -1213,7 +1392,7 @@
 	    (match_operand:ANYF 1 "register_operand" " f")))]
   "TARGET_HARD_FLOAT"
   "fcvt.<GPR:ifmt>u.<ANYF:fmt> %0,%1,rtz"
-  [(set_attr "type" "fcvt")
+  [(set_attr "type" "fcvt_i")
    (set_attr "mode" "<ANYF:MODE>")])
 
 (define_insn "float<GPR:mode><ANYF:mode>2"
@@ -1241,7 +1420,7 @@
 	    RINT))]
   "TARGET_HARD_FLOAT"
   "fcvt.<GPR:ifmt>.<ANYF:fmt> %0,%1,<rint_rm>"
-  [(set_attr "type" "fcvt")
+  [(set_attr "type" "fcvt_i")
    (set_attr "mode" "<ANYF:MODE>")])
 
 ;;
@@ -1360,23 +1539,23 @@
 })
 
 (define_insn "*movdi_32bit"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r,m,  *f,*f,*r,*f,*m")
-	(match_operand:DI 1 "move_operand"         " r,i,m,r,*J*r,*m,*f,*f,*f"))]
+  [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r, r,r,m,  *f,*f,*r,*f,*m")
+	(match_operand:DI 1 "move_operand"         " r,i,vp,m,r,*J*r,*m,*f,*f,*f"))]
   "!TARGET_64BIT
    && (register_operand (operands[0], DImode)
        || reg_or_0_operand (operands[1], DImode))"
   { return riscv_output_move (operands[0], operands[1]); }
-  [(set_attr "move_type" "move,const,load,store,mtc,fpload,mfc,fmove,fpstore")
+  [(set_attr "move_type" "move,const,const,load,store,mtc,fpload,mfc,fmove,fpstore")
    (set_attr "mode" "DI")])
 
 (define_insn "*movdi_64bit"
-  [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r, m,  *f,*f,*r,*f,*m")
-	(match_operand:DI 1 "move_operand"         " r,T,m,rJ,*r*J,*m,*f,*f,*f"))]
+  [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r, r,r,  m,  *f,*f,*r,*f,*m")
+	(match_operand:DI 1 "move_operand"         " r,T,vp,m,rJ,*r*J,*m,*f,*f,*f"))]
   "TARGET_64BIT
    && (register_operand (operands[0], DImode)
        || reg_or_0_operand (operands[1], DImode))"
   { return riscv_output_move (operands[0], operands[1]); }
-  [(set_attr "move_type" "move,const,load,store,mtc,fpload,mfc,fmove,fpstore")
+  [(set_attr "move_type" "move,const,const,load,store,mtc,fpload,mfc,fmove,fpstore")
    (set_attr "mode" "DI")])
 
 ;; 32-bit Integer moves
@@ -1465,6 +1644,36 @@
   { return riscv_output_move (operands[0], operands[1]); }
   [(set_attr "move_type" "move,const,load,store,mtc,mfc")
    (set_attr "mode" "QI")])
+
+;; 16-bit floating point moves
+(define_expand "movhf"
+  [(set (match_operand:HF 0 "")
+	(match_operand:HF 1 ""))]
+  ""
+{
+  if (riscv_legitimize_move (HFmode, operands[0], operands[1]))
+    DONE;
+})
+
+(define_insn "*movhf_hardfloat"
+  [(set (match_operand:HF 0 "nonimmediate_operand" "=f,f,f,m,m,*f,*r,  *r,*r,*m")
+	(match_operand:HF 1 "move_operand"         " f,G,m,f,G,*r,*f,*G*r,*m,*r"))]
+  "TARGET_FP16
+   && (register_operand (operands[0], HFmode)
+       || reg_or_0_operand (operands[1], HFmode))"
+  { return riscv_output_move (operands[0], operands[1]); }
+  [(set_attr "move_type" "fmove,mtc,fpload,fpstore,store,mtc,mfc,move,load,store")
+   (set_attr "mode" "HF")])
+
+(define_insn "*movhf_softfloat"
+  [(set (match_operand:HF 0 "nonimmediate_operand" "= r,r,m,*f,*r")
+	(match_operand:HF 1 "move_operand"         " Gr,m,r,*r,*f"))]
+  "!TARGET_FP16
+   && (register_operand (operands[0], HFmode)
+       || reg_or_0_operand (operands[1], HFmode))"
+  { return riscv_output_move (operands[0], operands[1]); }
+  [(set_attr "move_type" "move,load,store,mtc,mfc")
+   (set_attr "mode" "HF")])
 
 ;; 32-bit floating point moves
 
@@ -1576,7 +1785,8 @@
 		     LCT_NORMAL, VOIDmode, operands[0], Pmode,
 		     operands[1], Pmode, const0_rtx, Pmode);
 #else
-  emit_insn (gen_fence_i ());
+  if (TARGET_ZIFENCEI)
+    emit_insn (gen_fence_i ());
 #endif
   DONE;
 })
@@ -1588,7 +1798,7 @@
 
 (define_insn "fence_i"
   [(unspec_volatile [(const_int 0)] UNSPECV_FENCE_I)]
-  ""
+  "TARGET_ZIFENCEI"
   "fence.i")
 
 ;;
@@ -1658,7 +1868,24 @@
   [(set_attr "type" "shift")
    (set_attr "mode" "SI")])
 
-(define_insn "<optab>di3"
+(define_expand "<optab>di3"
+  [(set (match_operand:DI 0 "register_operand"     "")
+	(any_shift:DI
+	    (match_operand:DI 1 "register_operand" "")
+	    (match_operand:QI 2 "arith_operand"    "")))]
+  "TARGET_64BIT || (!TARGET_64BIT && TARGET_XTHEAD_ZPSFOPERAND)"
+{
+  if (!TARGET_64BIT && TARGET_XTHEAD_ZPSFOPERAND)
+    {
+      if (!CONST_INT_P (operands[2]))
+	FAIL;
+      if (INTVAL (operands[2]) < 0
+	  || INTVAL (operands[2]) > 31)
+	FAIL;
+    }
+})
+
+(define_insn "*<optab>di3"
   [(set (match_operand:DI 0 "register_operand"     "= r")
 	(any_shift:DI
 	    (match_operand:DI 1 "register_operand" "  r")
@@ -1835,7 +2062,7 @@
        (lshiftrt:GPR (match_dup 3) (match_dup 2)))]
 {
   /* Op2 is a VOIDmode constant, so get the mode size from op1.  */
-  operands[2] = GEN_INT (GET_MODE_BITSIZE (GET_MODE (operands[1]))
+  operands[2] = GEN_INT (GET_MODE_BITSIZE (GET_MODE (operands[1])).to_constant ()
 			 - exact_log2 (INTVAL (operands[2]) + 1));
 })
 
@@ -1865,7 +2092,7 @@
 			   (match_operand:QI 2 "immediate_operand" "I"))
 		(match_operand 3 "immediate_operand" "")))
    (clobber (match_scratch:DI 4 "=&r"))]
-  "TARGET_64BIT
+  "TARGET_64BIT && !TARGET_ZBA
    && ((INTVAL (operands[3]) >> INTVAL (operands[2])) == 0xffffffff)"
   "#"
   "&& reload_completed"
@@ -2102,6 +2329,34 @@
    (set_attr "mode" "<UNITMODE>")
    (set (attr "length") (const_int 12))])
 
+(define_insn "*f<quiet_pattern>_quiet<ANYF:mode><X:mode>4_default_nnan"
+   [(set (match_operand:X      0 "register_operand" "=r")
+	 (unspec:X
+	  [(match_operand:ANYF 1 "register_operand" " f")
+	   (match_operand:ANYF 2 "register_operand" " f")
+	   (match_operand 4 "const_int_operand")]
+	  QUIET_COMPARISON))
+    (clobber (match_scratch:X 3 "=&r"))]
+  "TARGET_HARD_FLOAT && ! HONOR_SNANS (<ANYF:MODE>mode) && TARGET_XTHEAD_FCLASS
+   && INTVAL (operands[4]) >=0 && INTVAL (operands[4]) <2"
+  {
+    if (INTVAL (operands[4]))
+      return "fclass.<fmt>\t%0,%1\n\t"
+	     "slti\t%0,%0,0x100\n\t"
+	     "beqz\t%0, 0f\n\t"
+	     "f<quiet_pattern>.<fmt>\t%0,%1,%2\n"
+	     "0:";
+    else
+      return "fclass.<fmt>\t%0,%2\n\t"
+	     "slti\t%0,%0,0x100\n\t"
+	     "beqz\t%0, 0f\n\t"
+	     "f<quiet_pattern>.<fmt>\t%0,%1,%2\n"
+	     "0:";
+  }
+  [(set_attr "type" "fcmp")
+   (set_attr "mode" "<UNITMODE>")
+   (set (attr "length") (const_int 12))])
+
 (define_insn "*f<quiet_pattern>_quiet<ANYF:mode><X:mode>4_snan"
    [(set (match_operand:X      0 "register_operand" "=r")
 	 (unspec:X
@@ -2121,6 +2376,37 @@
 	     "fclass.<fmt>\t%3,%2\n\t"
 	     "or\t%0,%0,%3\n\t"
 	     "slti\t%0,%0,0x200\n\t"
+	     "feq.<fmt>\tzero,%1,%2\n\t"
+	     "beqz\t%0, 0f\n\t"
+	     "f<quiet_pattern>.<fmt>\t%0,%1,%2\n"
+	     "0:";
+  }
+  [(set_attr "type" "fcmp")
+   (set_attr "mode" "<UNITMODE>")
+   (set (attr "length") (const_int 16))])
+
+(define_insn "*f<quiet_pattern>_quiet<ANYF:mode><X:mode>4_snan_nnan"
+   [(set (match_operand:X      0 "register_operand" "=r")
+	 (unspec:X
+	  [(match_operand:ANYF 1 "register_operand" " f")
+	   (match_operand:ANYF 2 "register_operand" " f")
+	   (match_operand 4 "const_int_operand")]
+	  QUIET_COMPARISON))
+    (clobber (match_scratch:X 3 "=&r"))]
+  "TARGET_HARD_FLOAT && HONOR_SNANS (<ANYF:MODE>mode)&& TARGET_XTHEAD_FCLASS
+   && INTVAL (operands[4]) >=0 && INTVAL (operands[4]) <2"
+  {
+    if (INTVAL (operands[4]))
+      return "fclass.<fmt>\t%0,%1\n\t"
+	     "slti\t%0,%0,0x200\n\t"
+	     "feq.<fmt>\tzero,%1,%2\n\t"
+	     "beqz\t%0, 0f\n\t"
+	     "f<quiet_pattern>.<fmt>\t%0,%1,%2\n"
+	     "0:";
+    else
+      return "fclass.<fmt>\t%0,%2\n\t"
+	     "slti\t%0,%0,0x200\n\t"
+	     "feq.<fmt>\tzero,%1,%2\n\t"
 	     "beqz\t%0, 0f\n\t"
 	     "f<quiet_pattern>.<fmt>\t%0,%1,%2\n"
 	     "0:";
@@ -2524,6 +2810,14 @@
   ""
   "")
 
+(define_insn "riscv_pcntw"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec
+	    [(match_operand:SI 1 "register_operand" "r")]
+	    UNSPEC_PCNTW))]
+  ""
+  "pcntw\t%0,%1")
+
 (define_insn "riscv_frflags"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(unspec_volatile [(const_int 0)] UNSPECV_FRFLAGS))]
@@ -2563,6 +2857,149 @@
   [(set_attr "length" "0")]
 )
 
+;; Bitmanip
+
+(define_expand "bswapsi2"
+  [(set (match_operand:SI           0 "register_operand")
+	(bswap:SI (match_operand:SI 1 "register_operand")))]
+  "TARGET_ZBB || TARGET_XTHEAD_REVW || (TARGET_XTHEAD_REV && !TARGET_64BIT)"
+  {
+    if (TARGET_ZBB)
+      {
+	emit_insn (gen_riscv_bswapsi2 (operands[0], operands[1]));
+        DONE;
+      }
+
+    if (TARGET_XTHEAD_REVW || (TARGET_XTHEAD_REV && !TARGET_64BIT))
+      {
+	emit_insn (gen_xthead_bswapsi2 (operands[0], operands[1]));
+	DONE;
+      }
+
+    FAIL;
+  })
+
+(define_expand "bswapdi2"
+  [(set (match_operand:DI           0 "register_operand")
+	(bswap:DI (match_operand:DI 1 "register_operand")))]
+  "TARGET_64BIT && (TARGET_ZBB || TARGET_XTHEAD_REV)"
+  {
+    if (TARGET_64BIT && (TARGET_ZBB))
+      {
+	emit_insn (gen_riscv_bswapdi2 (operands[0], operands[1]));
+	DONE;
+      }
+
+    if (TARGET_64BIT && TARGET_XTHEAD_REV)
+      {
+	emit_insn (gen_xthead_bswapdi2 (operands[0], operands[1]));
+	DONE;
+      }
+
+    FAIL;
+  })
+
+(define_expand "rotrsi3"
+  [(set (match_operand:SI 0 "register_operand")
+	(rotatert:SI (match_operand:SI 1 "register_operand")
+		     (match_operand:QI 2 "arith_operand")))]
+  "TARGET_ZBB || TARGET_XTHEAD_SRRIW || (TARGET_XTHEAD_SRRI && !TARGET_64BIT)"
+  {
+    if (TARGET_ZBB)
+      {
+	emit_insn (gen_riscv_rotrsi3 (operands[0], operands[1], operands[2]));
+	DONE;
+      }
+
+    if ((TARGET_XTHEAD_SRRIW || (TARGET_XTHEAD_SRRI && !TARGET_64BIT))
+	&& const_int_operand (operands[2], VOIDmode))
+      {
+	emit_insn (gen_xthead_rotrsi3 (operands[0], operands[1], operands[2]));
+	DONE;
+      }
+
+    FAIL;
+  })
+
+(define_expand "rotrdi3"
+  [(set (match_operand:DI 0 "register_operand")
+	(rotatert:DI (match_operand:DI 1 "register_operand")
+		     (match_operand:QI 2 "arith_operand")))]
+  "TARGET_64BIT && (TARGET_ZBB || TARGET_XTHEAD_SRRI)"
+  {
+    if (TARGET_64BIT && TARGET_ZBB)
+      {
+	emit_insn (gen_riscv_rotrdi3 (operands[0], operands[1], operands[2]));
+	DONE;
+      }
+
+    if (TARGET_64BIT && TARGET_XTHEAD_SRRI && const_int_operand (operands[2], VOIDmode))
+      {
+	emit_insn (gen_xthead_rotrdi3 (operands[0], operands[1], operands[2]));
+	DONE;
+      }
+
+    FAIL;
+  })
+
+(define_expand "rotlsi3"
+  [(set (match_operand:SI 0 "register_operand")
+	(rotate:SI (match_operand:SI 1 "register_operand")
+		   (match_operand:QI 2 "arith_operand")))]
+  "TARGET_ZBB || TARGET_XTHEAD_SRRIW || (TARGET_XTHEAD_SRRI && !TARGET_64BIT)"
+  {
+    if (const_arith_operand (operands[2], VOIDmode))
+      {
+	operands[2] = GEN_INT ((32 - INTVAL (operands[2])) % 32);
+
+	if (TARGET_ZBB)
+	  emit_insn (gen_riscv_rotrsi3 (operands[0], operands[1], operands[2]));
+	else if (TARGET_XTHEAD_SRRIW || (TARGET_XTHEAD_SRRI && !TARGET_64BIT))
+	  emit_insn (gen_xthead_rotrsi3 (operands[0], operands[1], operands[2]));
+	else
+	  gcc_unreachable ();
+	DONE;
+      }
+
+    if (TARGET_ZBB)
+      {
+	emit_insn (gen_riscv_rotlsi3 (operands[0], operands[1], operands[2]));
+	DONE;
+      }
+
+    FAIL;
+  })
+
+(define_expand "rotldi3"
+  [(set (match_operand:DI 0 "register_operand")
+	(rotate:DI (match_operand:DI 1 "register_operand")
+		   (match_operand:QI 2 "arith_operand")))]
+  "TARGET_64BIT && (TARGET_ZBB || TARGET_XTHEAD_SRRI)"
+  {
+    if (const_arith_operand (operands[2], VOIDmode))
+      {
+	operands[2] = GEN_INT ((64 - INTVAL (operands[2])) % 64);
+
+	if (TARGET_ZBB)
+	  emit_insn (gen_riscv_rotrdi3 (operands[0], operands[1], operands[2]));
+	else if (TARGET_XTHEAD_SRRI)
+	  emit_insn (gen_xthead_rotrdi3 (operands[0], operands[1], operands[2]));
+	else
+	  gcc_unreachable ();
+	DONE;
+      }
+
+    if (TARGET_64BIT && TARGET_ZBB)
+      {
+	emit_insn (gen_riscv_rotldi3 (operands[0], operands[1], operands[2]));
+	DONE;
+      }
+
+    FAIL;
+  })
+
+(include "bitmanip.md")
+
 ;; This fixes a failure with gcc.c-torture/execute/pr64242.c at -O2 for a
 ;; 32-bit target when using -mtune=sifive-7-series.  The first sched pass
 ;; runs before register elimination, and we have a non-obvious dependency
@@ -2584,5 +3021,6 @@
 (include "sync.md")
 (include "peephole.md")
 (include "pic.md")
+(include "vector.md")
 (include "generic.md")
 (include "sifive-7.md")

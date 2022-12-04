@@ -1,5 +1,1 @@
 (include "riscv-p.md")
-(include "riscv-fp16.md")
-(include "riscv-v.md")
-(include "riscv-v-float.md")
-(include "riscv-v-auto.md")

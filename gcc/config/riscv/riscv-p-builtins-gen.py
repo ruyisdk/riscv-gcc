@@ -11,7 +11,7 @@ from itertools import groupby
 
 import math
 
-scritp_version = "1.8"
+scritp_version = "2.0"
 scritp_dirname, script_filename = os.path.split(os.path.abspath(sys.argv[0]))
 
 simdctypes = {
@@ -4055,6 +4055,8 @@ def build_builtins(ofname="riscv-dsp.h"):
                         print("bad builtin")
                         print(i)
                         exit(-1)
+                    if available in ["64", "32"]:
+                        i["capi_name"] = i["capi_name"].replace("XLEN", available)
                     prototype = {
                         "w": "%s" % (i["capi_name"]),
                         "i": patten,

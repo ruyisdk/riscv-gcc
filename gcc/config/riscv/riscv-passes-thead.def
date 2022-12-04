@@ -1,2 +1,8 @@
-INSERT_PASS_AFTER (pass_cse, 1, pass_delete_redundancy_fsrm);
-INSERT_PASS_AFTER (pass_ree, 1, pass_delete_redundancy_sext);
+
+INSERT_PASS_BEFORE (pass_sched, 1, pass_xthead_dvsetvl);
+INSERT_PASS_BEFORE (pass_sched2, 1, pass_xthead_dvsetvl2);
+INSERT_PASS_AFTER (pass_sched2, 1, pass_xthead_dvsetvl_v0p7);
+INSERT_PASS_BEFORE (pass_ree, 1, pass_delete_redundancy_sext1);
+INSERT_PASS_AFTER (pass_ree, 1, pass_delete_redundancy_sext2);
+INSERT_PASS_AFTER (pass_thread_prologue_and_epilogue, 1, pass_xthead_dread_vlenb);
+INSERT_PASS_AFTER (pass_regrename, 1, pass_xthead_dread_vlenb_after_rnreg);

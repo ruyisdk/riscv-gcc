@@ -2867,6 +2867,8 @@ sched_macro_fuse_insns (rtx_insn *insn)
       if (targetm.sched.macro_fusion_pair_p (prev, insn))
 	SCHED_GROUP_P (insn) = 1;
     }
+  else if (targetm.sched.misc_fusion_pair_p (prev, insn))
+    SCHED_GROUP_P (insn) = 1;
 }
 
 /* Get the implicit reg pending clobbers for INSN and save them in TEMP.  */

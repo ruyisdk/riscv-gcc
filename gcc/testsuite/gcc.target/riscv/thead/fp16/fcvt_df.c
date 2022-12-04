@@ -1,5 +1,5 @@
 /* { dg-do assemble } */
-/* { dg-skip-if "test float16 insns" { *-*-* } { "*" } { "-march=*g*xtheadc*" "-march=*d*xtheadc*" } } */
+/* { dg-skip-if "test float16 insns" { *-*-* } { "*" } { "-march=*zfh*" } } */
 /* { dg-options "--save-temps" } */
 
 double func1(__fp16 a)

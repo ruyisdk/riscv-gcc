@@ -1,0 +1,204 @@
+
+#define VINT_EXT_X_V_BUILTINS(E, L, MLEN, MODE, SUBMODE, OP, NAME)	\
+  DIRECT_NAMED (OP##MODE, v##NAME##i##E##m##L,				\
+	        RISCV_##SUBMODE##_FTYPE_VI##E##M##L##_USI,		\
+	        vector),						\
+  DIRECT_NAMED (OP##MODE, v##NAME##u##E##m##L,				\
+	        RISCV_U##SUBMODE##_FTYPE_VUI##E##M##L##_USI,		\
+	        vector),
+
+_RVV_INT_ITERATOR_ARG (VINT_EXT_X_V_BUILTINS, vext, ext_xv)
+
+#define _VINT_LOADM_BUILTINS(E, L, MLEN, MODE, SUBMODE,			\
+			     SUBTYPE, VCLASS, OP)			\
+  DIRECT_NAMED (							\
+    vl##OP##MODE, vl##OP##SUBTYPE##E##m##L,				\
+    RISCV_##VCLASS##E##M##L##_FTYPE_C_##SUBMODE##_PTR,			\
+    vector),								\
+  DIRECT_NAMED (							\
+    vl##OP##MODE##_mask,						\
+    vl##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_##VCLASS##E##M##L##_FTYPE_VB##MLEN##_##VCLASS##E##M##L##_C_##SUBMODE##_PTR, \
+    vector),
+
+#define _VINT_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE,		\
+			      SUBTYPE, VCLASS, OP)			\
+  DIRECT_NAMED_NO_TARGET (						\
+    vs##OP##MODE,							\
+    vs##OP##SUBTYPE##E##m##L,						\
+    RISCV_VOID_FTYPE_##VCLASS##E##M##L##_##SUBMODE##_PTR,		\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vs##OP##MODE##_mask,						\
+    vs##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_VOID_FTYPE_VB##MLEN##_##VCLASS##E##M##L##_##SUBMODE##_PTR,	\
+    vector),
+
+#define VINT_LOADM_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE, OP)	\
+  _VINT_LOADM_BUILTINS(E, L, MLEN, MODE, SUBMODE, int, VI, OP)		\
+  _VINT_LOADM_BUILTINS(E, L, MLEN, MODE, U##SUBMODE, uint, VUI, OP##u)	\
+  _VINT_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE, int, VI, OP)		\
+  _VINT_STOREM_BUILTINS(E, L, MLEN, MODE, U##SUBMODE, uint, VUI, OP)
+
+_RVV_INT_ITERATOR_ARG (VINT_LOADM_STOREM_BUILTINS, b)
+_RVV_INT_ITERATOR_ARG (VINT_LOADM_STOREM_BUILTINS, h)
+_RVV_INT_ITERATOR_ARG (VINT_LOADM_STOREM_BUILTINS, w)
+
+#define _VINT_STRIDED_LOADM_BUILTINS(E, L, MLEN, MODE, SUBMODE,		\
+				     SUBTYPE, VCLASS, OP)		\
+  DIRECT_NAMED (							\
+    vls##OP##MODE, vls##OP##SUBTYPE##E##m##L,				\
+    RISCV_##VCLASS##E##M##L##_FTYPE_C_##SUBMODE##_PTR_SI,		\
+    vector),								\
+  DIRECT_NAMED (							\
+    vls##OP##MODE##_mask,						\
+    vls##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_##VCLASS##E##M##L##_FTYPE_VB##MLEN##_##VCLASS##E##M##L##_C_##SUBMODE##_PTR_SI, \
+    vector),								\
+
+#define _VINT_STRIDED_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE,	\
+				      SUBTYPE, VCLASS, OP)		\
+  DIRECT_NAMED_NO_TARGET (						\
+    vss##OP##MODE,							\
+    vss##OP##SUBTYPE##E##m##L,						\
+    RISCV_VOID_FTYPE_##VCLASS##E##M##L##_##SUBMODE##_PTR_SI,		\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vss##OP##MODE##_mask,						\
+    vss##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_VOID_FTYPE_VB##MLEN##_##VCLASS##E##M##L##_##SUBMODE##_PTR_SI,	\
+    vector),								\
+
+#define VINT_STRIDED_LOADM_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE, OP)	\
+  _VINT_STRIDED_LOADM_BUILTINS(E, L, MLEN, MODE, SUBMODE, int, VI, OP)		\
+  _VINT_STRIDED_LOADM_BUILTINS(E, L, MLEN, MODE, U##SUBMODE, uint, VUI, OP##u)	\
+  _VINT_STRIDED_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE, int, VI, OP)		\
+  _VINT_STRIDED_STOREM_BUILTINS(E, L, MLEN, MODE, U##SUBMODE, uint, VUI, OP)
+
+_RVV_INT_ITERATOR_ARG (VINT_STRIDED_LOADM_STOREM_BUILTINS, b)
+_RVV_INT_ITERATOR_ARG (VINT_STRIDED_LOADM_STOREM_BUILTINS, h)
+_RVV_INT_ITERATOR_ARG (VINT_STRIDED_LOADM_STOREM_BUILTINS, w)
+
+#define _VINT_INDEX_LOADM_BUILTINS(E, L, MLEN, MODE, SUBMODE,		\
+				   SUBTYPE, VCLASS, OP)			\
+  DIRECT_NAMED (							\
+    vlx##OP##MODE, vlx##OP##SUBTYPE##E##m##L,				\
+    RISCV_##VCLASS##E##M##L##_FTYPE_C_##SUBMODE##_PTR_VUI##E##M##L,	\
+    vector),								\
+  DIRECT_NAMED (							\
+    vlx##OP##MODE##_mask,						\
+    vlx##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_##VCLASS##E##M##L##_FTYPE_VB##MLEN##_##VCLASS##E##M##L##_C_##SUBMODE##_PTR_VUI##E##M##L, \
+    vector),								\
+
+#define _VINT_INDEX_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE,		\
+				    SUBTYPE, VCLASS, OP)		\
+  DIRECT_NAMED_NO_TARGET (						\
+    vsx##OP##MODE,							\
+    vsx##OP##SUBTYPE##E##m##L,						\
+    RISCV_VOID_FTYPE_##SUBMODE##_PTR_VUI##E##M##L##_##VCLASS##E##M##L,	\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vsx##OP##MODE##_mask,						\
+    vsx##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_VOID_FTYPE_VB##MLEN##_##SUBMODE##_PTR_VUI##E##M##L##_##VCLASS##E##M##L,\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vsux##OP##MODE,							\
+    vsux##OP##SUBTYPE##E##m##L,						\
+    RISCV_VOID_FTYPE_##SUBMODE##_PTR_VUI##E##M##L##_##VCLASS##E##M##L,	\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vsux##OP##MODE##_mask,						\
+    vsux##OP##SUBTYPE##E##m##L##_mask,					\
+    RISCV_VOID_FTYPE_VB##MLEN##_##SUBMODE##_PTR_VUI##E##M##L##_##VCLASS##E##M##L,\
+    vector),								\
+
+#define VINT_INDEX_LOADM_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE, OP)		\
+  _VINT_INDEX_LOADM_BUILTINS(E, L, MLEN, MODE, SUBMODE, int, VI, OP)		\
+  _VINT_INDEX_LOADM_BUILTINS(E, L, MLEN, MODE, U##SUBMODE, uint, VUI, OP##u)	\
+  _VINT_INDEX_STOREM_BUILTINS(E, L, MLEN, MODE, SUBMODE, int, VI, OP)		\
+  _VINT_INDEX_STOREM_BUILTINS(E, L, MLEN, MODE, U##SUBMODE, uint, VUI, OP)
+
+_RVV_INT_ITERATOR_ARG (VINT_INDEX_LOADM_STOREM_BUILTINS, b)
+_RVV_INT_ITERATOR_ARG (VINT_INDEX_LOADM_STOREM_BUILTINS, h)
+_RVV_INT_ITERATOR_ARG (VINT_INDEX_LOADM_STOREM_BUILTINS, w)
+
+#define _VSEG_LOADM_BUILTINS(E, L, NF, MLEN, MODE, SUBMODE,		\
+			     SUBTYPE, VCLASS, OP)			\
+  DIRECT_NAMED (							\
+    vseg_load##OP##MODE,						\
+    vseg_load##OP##SUBTYPE##E##m##L##x##NF,				\
+    RISCV_##VCLASS##E##M##L##X##NF##_FTYPE_C_##SUBMODE##_PTR,		\
+    vector),								\
+  DIRECT_NAMED (							\
+    vseg_load##OP##MODE##_mask,						\
+    vseg_load##OP##SUBTYPE##E##m##L##x##NF##_mask,			\
+    RISCV_##VCLASS##E##M##L##X##NF##_FTYPE_VB##MLEN##_##VCLASS##E##M##L##X##NF##_C_##SUBMODE##_PTR,\
+    vector),								\
+  DIRECT_NAMED (							\
+    vseg_strided_load##OP##MODE,					\
+    vseg_strided_load##OP##SUBTYPE##E##m##L##x##NF,			\
+    RISCV_##VCLASS##E##M##L##X##NF##_FTYPE_C_##SUBMODE##_PTR_PTRDIFF,	\
+    vector),								\
+  DIRECT_NAMED (							\
+    vseg_strided_load##OP##MODE##_mask,					\
+    vseg_strided_load##OP##SUBTYPE##E##m##L##x##NF##_mask,		\
+    RISCV_##VCLASS##E##M##L##X##NF##_FTYPE_VB##MLEN##_##VCLASS##E##M##L##X##NF##_C_##SUBMODE##_PTR_PTRDIFF,\
+    vector),								\
+  DIRECT_NAMED (							\
+    vseg_idx_load##OP##MODE,						\
+    vseg_idx_load##OP##SUBTYPE##E##m##L##x##NF,				\
+    RISCV_##VCLASS##E##M##L##X##NF##_FTYPE_C_##SUBMODE##_PTR_VUI##E##M##L,\
+    vector),								\
+  DIRECT_NAMED (							\
+    vseg_idx_load##OP##MODE##_mask,					\
+    vseg_idx_load##OP##SUBTYPE##E##m##L##x##NF##_mask,			\
+    RISCV_##VCLASS##E##M##L##X##NF##_FTYPE_VB##MLEN##_##VCLASS##E##M##L##X##NF##_C_##SUBMODE##_PTR_VUI##E##M##L,\
+    vector),								\
+
+#define _VSEG_STOREM_BUILTINS(E, L, NF, MLEN, MODE, SUBMODE,		\
+			      SUBTYPE, VCLASS, OP)			\
+  DIRECT_NAMED_NO_TARGET (						\
+    vseg_store##OP##MODE,						\
+    vseg_store##OP##SUBTYPE##E##m##L##x##NF,				\
+    RISCV_VOID_FTYPE_##VCLASS##E##M##L##X##NF##_##SUBMODE##_PTR,	\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vseg_store##OP##MODE##_mask,					\
+    vseg_store##OP##SUBTYPE##E##m##L##x##NF##_mask,			\
+    RISCV_VOID_FTYPE_VB##MLEN##_##VCLASS##E##M##L##X##NF##_##SUBMODE##_PTR,\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vseg_strided_store##OP##MODE,					\
+    vseg_strided_store##OP##SUBTYPE##E##m##L##x##NF,			\
+    RISCV_VOID_FTYPE_##VCLASS##E##M##L##X##NF##_##SUBMODE##_PTR_PTRDIFF,\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vseg_strided_store##OP##MODE##_mask,				\
+    vseg_strided_store##OP##SUBTYPE##E##m##L##x##NF##_mask,		\
+    RISCV_VOID_FTYPE_VB##MLEN##_##VCLASS##E##M##L##X##NF##_##SUBMODE##_PTR_PTRDIFF,\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vseg_idx_store##OP##MODE,						\
+    vseg_idx_store##OP##SUBTYPE##E##m##L##x##NF,			\
+    RISCV_VOID_FTYPE_##VCLASS##E##M##L##X##NF##_##SUBMODE##_PTR_VUI##E##M##L,\
+    vector),								\
+  DIRECT_NAMED_NO_TARGET (						\
+    vseg_idx_store##OP##MODE##_mask,					\
+    vseg_idx_store##OP##SUBTYPE##E##m##L##x##NF##_mask,			\
+    RISCV_VOID_FTYPE_VB##MLEN##_##VCLASS##E##M##L##X##NF##_##SUBMODE##_PTR_VUI##E##M##L,\
+    vector),
+
+#define VSEG_LOADM_STOREM_BUILTINS(E, L, NF, MLEN,			\
+				   SMODE_UPPER, SMODE_LOWER,		\
+				   MODE_UPPER, MODE_LOWER,		\
+				   OP)					\
+  _VSEG_LOADM_BUILTINS(E, L, NF, MLEN, MODE_LOWER##i, SMODE_UPPER##I, int, VI, OP)		\
+  _VSEG_LOADM_BUILTINS(E, L, NF, MLEN, MODE_LOWER##i, U##SMODE_UPPER##I, uint, VUI, OP##u)	\
+  _VSEG_STOREM_BUILTINS(E, L, NF, MLEN, MODE_LOWER##i, SMODE_UPPER##I, int, VI, OP)		\
+  _VSEG_STOREM_BUILTINS(E, L, NF, MLEN, MODE_LOWER##i, U##SMODE_UPPER##I, uint, VUI, OP)
+
+_RVV_SEG_ARG (VSEG_LOADM_STOREM_BUILTINS, b)
+_RVV_SEG_ARG (VSEG_LOADM_STOREM_BUILTINS, h)
+_RVV_SEG_ARG (VSEG_LOADM_STOREM_BUILTINS, w)

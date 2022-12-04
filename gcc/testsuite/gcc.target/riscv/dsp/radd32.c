@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_radd32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t test_radd32(uint64_t a, uint64_t b) {
     return __rv__radd32 (a, b);
 }
 

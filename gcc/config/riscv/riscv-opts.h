@@ -41,18 +41,23 @@ enum riscv_code_model {
 };
 extern enum riscv_code_model riscv_cmodel;
 
-enum riscv_vlen_bits {
-  VLEN_64 = 64,
-  VLEN_128 = 128
+enum riscv_isa_spec_class {
+  ISA_SPEC_CLASS_NONE,
+
+  ISA_SPEC_CLASS_2P2,
+  ISA_SPEC_CLASS_20190608,
+  ISA_SPEC_CLASS_20191213
 };
-extern enum riscv_vlen_bits riscv_vlen;
+
+extern enum riscv_isa_spec_class riscv_isa_spec;
 
 /* Keep this list in sync with define_attr "tune" in riscv.md.  */
 enum riscv_microarchitecture_type {
   generic,
   sifive_7,
   c910,
-  c906
+  c906v,
+  c908
 };
 extern enum riscv_microarchitecture_type riscv_microarchitecture;
 
@@ -60,5 +65,32 @@ enum riscv_align_data {
   riscv_align_data_type_xlen,
   riscv_align_data_type_natural
 };
+
+/* RVV vector register sizes.  */
+enum riscv_rvv_vector_bits_enum {
+  RVV_SCALABLE,
+  RVV_NOT_IMPLEMENTED = RVV_SCALABLE,
+  RVV_64 = 64,
+  RVV_128 = 128,
+  RVV_256 = 256,
+  RVV_512 = 512,
+  RVV_1024 = 1024
+};
+
+#define MASK_ZBA (1 << 0)
+#define MASK_ZBB (1 << 1)
+#define MASK_ZBC (1 << 6)
+#define MASK_ZBS (1 << 2)
+
+#define TARGET_ZBA ((riscv_bitmanip_subext & MASK_ZBA) != 0)
+#define TARGET_ZBB ((riscv_bitmanip_subext & MASK_ZBB) != 0)
+#define TARGET_ZBC ((riscv_bitmanip_subext & MASK_ZBC) != 0)
+#define TARGET_ZBS ((riscv_bitmanip_subext & MASK_ZBS) != 0)
+
+#define MASK_ZICSR    (1 << 0)
+#define MASK_ZIFENCEI (1 << 1)
+
+#define TARGET_ZICSR    ((riscv_zi_subext & MASK_ZICSR) != 0)
+#define TARGET_ZIFENCEI ((riscv_zi_subext & MASK_ZIFENCEI) != 0)
 
 #endif /* ! GCC_RISCV_OPTS_H */

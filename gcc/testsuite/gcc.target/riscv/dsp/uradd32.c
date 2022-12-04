@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_uradd32(uintXLEN_t a, uintXLEN_t b) {
+uint64_t test_uradd32(uint64_t a, uint64_t b) {
     return __rv__uradd32 (a, b);
 }
 

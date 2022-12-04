@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_kdmabt16(uintXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+uint64_t test_kdmabt16(uint64_t t, uint64_t a, uint64_t b) {
     return __rv__kdmabt16 (t, a, b);
 }
 

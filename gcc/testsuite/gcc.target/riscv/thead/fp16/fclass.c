@@ -1,5 +1,5 @@
 /* { dg-do assemble } */
-/* { dg-skip-if "test float16 insns" { *-*-* } { "*" } { "-march=*g*xtheadc*" "-march=*f*xtheadc*" } } */
+/* { dg-skip-if "test float16 insns" { *-*-* } { "*" } { "-march=*zfh*" } } */
 /* { dg-options "--save-temps" } */
 
 /* Copy from gcc.dg/torture/float16-tg-3.c */

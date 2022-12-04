@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-intXLEN_t test_kmsxda32(intXLEN_t t, uintXLEN_t a, uintXLEN_t b) {
+int64_t test_kmsxda32(int64_t t, uint64_t a, uint64_t b) {
     return __rv__kmsxda32 (t, a, b);
 }
 

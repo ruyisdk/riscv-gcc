@@ -4160,6 +4160,25 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
 		  }
 	    }
 
+#ifdef TARGET_XTHEAD_COMBINE_CSE
+	  if (TARGET_XTHEAD_COMBINE_CSE
+	      && GET_CODE (newi2pat) == SET
+	      && REG_P (SET_DEST (newi2pat))
+	      && REG_P (SET_DEST (newpat))
+	      && rtx_equal_p (SET_SRC (newi2pat), SET_SRC (newpat))
+	      && (set_src_cost (SET_SRC (newpat),
+				GET_MODE (SET_SRC (newpat)),
+				optimize_this_for_speed_p) >
+		  set_src_cost (SET_DEST (newi2pat),
+				GET_MODE (SET_DEST (newi2pat)),
+				optimize_this_for_speed_p))
+	      && !find_reg_note (i2, REG_EQUAL, NULL_RTX)
+	      && !find_reg_note (i2, REG_EQUIV, NULL_RTX)
+	      && !find_reg_note (i3, REG_EQUAL, NULL_RTX)
+	      && !find_reg_note (i3, REG_EQUIV, NULL_RTX))
+	    SUBST (SET_SRC (newpat), SET_DEST (newi2pat));
+#endif
+
 	  insn_code_number = recog_for_combine (&newpat, i3, &new_i3_notes);
 
 	  if (insn_code_number >= 0)
@@ -10160,7 +10179,6 @@ simplify_and_const_int_1 (scalar_int_mode mode, rtx varop,
   /* See what bits may be nonzero in VAROP.  Unlike the general case of
      a call to nonzero_bits, here we don't care about bits outside
      MODE.  */
-
   nonzero = nonzero_bits (varop, mode) & GET_MODE_MASK (mode);
 
   /* Turn off all bits in the constant that are known to already be zero.

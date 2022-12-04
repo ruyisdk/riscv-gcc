@@ -55,9 +55,28 @@
   (and (match_code "const_int,const_wide_int,const_double,const_vector")
        (match_test "op == CONST0_RTX (GET_MODE (op))")))
 
+(define_predicate "const_1_operand"
+  (and (match_code "const_int,const_wide_int,const_double,const_vector")
+       (match_test "op == CONST1_RTX (GET_MODE (op))")))
+
 (define_predicate "reg_or_0_operand"
   (ior (match_operand 0 "const_0_operand")
        (match_operand 0 "register_operand")))
+
+(define_predicate "reg_or_mem_operand"
+  (ior (match_operand 0 "memory_operand")
+       (match_operand 0 "register_operand")))
+
+(define_predicate "uimm5_operand"
+  (match_operand 0 "const_csr_operand"))
+
+(define_predicate "reg_or_uimm5_operand"
+  (match_operand 0 "csr_operand"))
+
+(define_predicate "reg_or_simm5_operand"
+  (ior (match_operand 0 "register_operand")
+       (and (match_operand 0 "const_int_operand")
+	    (match_test "IN_RANGE (INTVAL (op), -16, 15)"))))
 
 ;; Only use branch-on-bit sequences when the mask is not an ANDI immediate.
 (define_predicate "branch_on_bit_operand"
@@ -71,7 +90,12 @@
 {
   /* Don't handle multi-word moves this way; we don't want to introduce
      the individual word-mode moves until after reload.  */
-  if (GET_MODE_SIZE (mode) > UNITS_PER_WORD)
+  if (GET_MODE_SIZE (mode).to_constant () > UNITS_PER_WORD)
+    return false;
+
+  /* Check whether the constant can be loaded in a single
+     instruction with zbs extensions.  */
+  if (TARGET_64BIT && TARGET_ZBS && SINGLE_BIT_MASK_OPERAND (INTVAL (op)))
     return false;
 
   /* Otherwise check whether the constant can be loaded in a single
@@ -145,6 +169,9 @@
       #endif
       return !splittable_const_int_operand (op, mode);
 
+    case CONST_POLY_INT:
+      return satisfies_constraint_vp (op);
+
     case CONST:
     case SYMBOL_REF:
     case LABEL_REF:
@@ -196,6 +223,12 @@
 (define_predicate "equality_operator"
   (match_code "eq,ne"))
 
+(define_predicate "ltge_operator"
+  (match_code "lt,ltu,ge,geu"))
+
+(define_predicate "vector_comparison_operator"
+  (match_code "eq,ne,le,leu,gt,gtu"))
+
 (define_predicate "order_operator"
   (match_code "eq,ne,lt,ltu,le,leu,ge,geu,gt,gtu"))
 
@@ -216,3 +249,126 @@
 {
   return riscv_gpr_save_operation_p (op);
 })
+
+;; Vector predicates.
+
+(define_predicate "const_poly_int_operand"
+  (match_code "const_poly_int"))
+
+(define_predicate "const_vector_int_operand"
+  (and (match_code "const_vector")
+       (match_test "riscv_const_vec_all_same_in_range_p (op, -16, 15)")))
+
+(define_predicate "const_vector_int_0_operand"
+  (and (match_code "const_vector")
+       (match_test "riscv_const_vec_all_same_in_range_p (op, 0, 0)")))
+
+(define_predicate "const_vector_int_1_operand"
+  (and (match_code "const_vector")
+       (match_test "riscv_const_vec_all_same_in_range_p (op, 1, 1)")))
+
+(define_predicate "vector_arith_operand"
+  (ior (match_operand 0 "const_vector_int_operand")
+       (match_operand 0 "register_operand")))
+
+;; A negated const_vector_int_operand, for subtract.
+(define_predicate "neg_const_vector_int_operand"
+  (and (match_code "const_vector")
+       (match_test "riscv_const_vec_all_same_in_range_p (op, -15, 16)")))
+
+;; A negated vector_arith_operand, for subtract.
+(define_predicate "neg_vector_arith_operand"
+  (ior (match_operand 0 "neg_const_vector_int_operand")
+       (match_operand 0 "register_operand")))
+
+(define_predicate "vector_move_operand"
+  (ior (match_operand 0 "nonimmediate_operand")
+       (match_test "const_vec_duplicate_p (op)")))
+
+(define_predicate "const_vector_shift_operand"
+  (and (match_code "const_vector")
+       (match_test "riscv_const_vec_all_same_in_range_p (op, 0, 31)")))
+
+(define_predicate "vector_shift_operand"
+  (ior (match_operand 0 "const_vector_shift_operand")
+       (match_operand 0 "register_operand")))
+
+(define_predicate "ltge_const_vector_int_operand"
+  (match_code "const_vector")
+{
+  op = unwrap_const_vec_duplicate (op);
+  return CONST_INT_P (op) && IN_RANGE (INTVAL (op), -15, 16);
+})
+
+(define_predicate "ltge_vector_arith_operand"
+  (ior (match_operand 0 "ltge_const_vector_int_operand")
+       (match_operand 0 "register_operand")))
+
+(define_predicate "shift_b_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 8")))
+
+(define_predicate "shift_h_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 16")))
+
+(define_predicate "shift_w_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 32")))
+
+(define_predicate "shift_d_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 64")))
+
+;; P-ext predicates
+
+(define_predicate "imm6u_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) < 32 && INTVAL (op) >= 0")))
+
+(define_predicate "pwr_3_operand"
+  (and (match_code "const_int")
+       (match_test "(unsigned) exact_log2 (INTVAL (op)) <= 3")))
+
+(define_predicate "pwr_7_operand"
+  (and (match_code "const_int")
+       (match_test "(unsigned) exact_log2 (INTVAL (op)) <= 7")))
+
+(define_predicate "insv32_operand"
+  (match_code "const_int")
+{
+  return INTVAL (op) == 0
+	 || INTVAL (op) == 8
+	 || INTVAL (op) == 16
+	 || INTVAL (op) == 24;
+})
+
+(define_predicate "insv64_operand"
+  (match_code "const_int")
+{
+  return INTVAL (op) == 0
+	 || INTVAL (op) == 8
+	 || INTVAL (op) == 16
+	 || INTVAL (op) == 24
+	 || INTVAL (op) == 32
+	 || INTVAL (op) == 40
+	 || INTVAL (op) == 48
+	 || INTVAL (op) == 56;
+})
+
+;; Predicates for the ZBS extension.
+(define_predicate "single_bit_mask_operand"
+  (and (match_code "const_int")
+       (match_test "pow2p_hwi (INTVAL (op))")))
+
+(define_predicate "not_single_bit_mask_operand"
+  (and (match_code "const_int")
+       (match_test "pow2p_hwi (~INTVAL (op))")))
+
+(define_predicate "const31_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 31")))
+
+(define_predicate "const63_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == 63")))

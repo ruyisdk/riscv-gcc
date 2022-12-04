@@ -13,6 +13,20 @@ long long func (long long a, long long b, long long c, long long d)
   return ret;
 }
 
+/* { dg-final { scan-assembler "mveqz" } } */
+
+long func2 (long a, long b, long c, long d)
+{
+  return (a == b) ? c : d;
+}
+
+/* { dg-final { scan-assembler "mveqz" } } */
+
+long func3 (long a, long b, long c, long d)
+{
+  return (a != b) ? c : d;
+}
+
 /* { dg-final { scan-assembler "mvnez" } } */
 
 /* { dg-final { cleanup-saved-temps } } */

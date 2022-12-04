@@ -1093,6 +1093,12 @@ two SET insns or a compare and a conditional jump and this hook should\n\
 validate any dependencies needed to fuse the two insns together.",
  bool, (rtx_insn *prev, rtx_insn *curr), NULL)
 
+DEFHOOK
+(misc_fusion_pair_p,
+ "Like @samp{TARGET_SCHED_MACRO_FUSION_PAIR_P}. But there is no need that\n\
+  (@var{prev} and @var{curr}) are both single set or @var{curr}) is a condjump.",
+ bool, (rtx_insn *prev, rtx_insn *curr), NULL)
+
 /* The following member value is a pointer to a function called
    after evaluation forward dependencies of insns in chain given
    by two parameter values (head and tail correspondingly).  */
@@ -4444,6 +4450,14 @@ supported by the target.",
  unsigned HOST_WIDE_INT, (void),
  NULL)
 
+/* Return true if reject initialization for a uninitialized register.  */
+DEFHOOK
+(register_reject_init_p,
+ "This target hook should return @code{true} if reject initialization for a uninitialized @var{reg}.\n\
+\n\
+The default value of this hook is @code{NULL}.",
+ bool, (rtx reg), NULL)
+
 /* Functions relating to calls - argument passing, returns, etc.  */
 /* Members of struct call have no special macro prefix.  */
 HOOK_VECTOR (TARGET_CALLS, calls)
@@ -6784,6 +6798,10 @@ bool, false)
 DEFHOOK
 (iv_gen_load_index, "*",
 bool, (HOST_WIDE_INT loop_niter, machine_mode mem_mode), NULL)
+
+DEFHOOK
+(fwprop_legitimize_set, "Legitmize define insn @var{def_set} to enbale forward propagate.",
+void, (rtx *def_set), hook_void_rtx)
 
 /* Leave the boolean fields at the end.  */
 

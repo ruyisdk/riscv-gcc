@@ -1,5 +1,5 @@
 /* { dg-do assemble } */
-/* { dg-skip-if "test fmv.hw insns" { *-*-* } { "*" } { "-march=rv32*g*xthead*" "-march=rv32*f*xthead*" } } */
+/* { dg-skip-if "test fmv.hw insns" { *-*-* } { "*" } { "-march=rv32*g*xthead*" "-march=rv32*fd*xthead*" } } */
 /* { dg-options "-mabi=ilp32 --save-temps" } */
 
 double func(long long a)

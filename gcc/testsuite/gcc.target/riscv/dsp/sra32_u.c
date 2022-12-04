@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-uintXLEN_t test_sra32_u(uintXLEN_t a, uint32_t b) {
+uint64_t test_sra32_u(uint64_t a, uint32_t b) {
     return __rv__sra32_u (a, b);
 }
 

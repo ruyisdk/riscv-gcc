@@ -20,12 +20,14 @@ along with GCC; see the file COPYING3.  If not see
 
 #define IN_TARGET_CODE 1
 
+#define INCLUDE_STRING
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
 #include "c-family/c-common.h"
 #include "cpplib.h"
+#include "riscv-subset.h"
 
 #define builtin_define(TXT) cpp_define (pfile, TXT)
 
@@ -38,17 +40,24 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
 
   if (TARGET_XTHEAD)
     builtin_define ("__riscv_xthead");
-  if (TARGET_XTHEAD_C)
-    builtin_define ("__riscv_xtheadc");
-  if (TARGET_XTHEAD_E)
-    builtin_define ("__riscv_xtheade");
-  if (TARGET_XTHEAD_SE)
-    builtin_define ("__riscv_xtheadse");
+#ifdef THEAD_VERSION_NUMBER
+#define STR(a) #a
+#define XSTR(a) STR(a)
+  cpp_define_formatted (pfile, "__THEAD_VERSION__=\"%s\"", XSTR (THEAD_VERSION_NUMBER));
+#else
+  builtin_define ("__THEAD_VERSION__=\"undefined\"");
+#endif
 
-  if (TARGET_XTHEAD_VECTOR)
-    builtin_define_with_int_value ("__riscv_vector", riscv_vlen);
-  if (TARGET_XTHEAD_FP16)
-    builtin_define ("__riscv_fp16");
+#ifndef TARGET_LINUX
+  builtin_define_with_int_value ("__THEAD_SIZEOF_PTHREAD_MUTEXATTR_T", 20);
+  builtin_define_with_int_value ("__THEAD_SIZEOF_PTHREAD_COND_T", 64);
+  builtin_define_with_int_value ("__THEAD_SIZEOF_PTHREAD_CONDATTR_T", 24);
+  builtin_define_with_int_value ("__THEAD_SIZEOF_PTHREAD_ATTR_T", 64);
+  builtin_define_with_int_value ("__THEAD_SIZEOF_PTHREAD_MUTEX_T", 40);
+#endif
+
+  if (TARGET_VECTOR)
+    builtin_define ("__riscv_vector");
 
   if (TARGET_RVC)
     builtin_define ("__riscv_compressed");
@@ -76,14 +85,9 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__riscv_fsqrt");
     }
 
-  if (TARGET_XTHEAD_DSP)
+  if (TARGET_XTHEAD_ZPN)
     {
       builtin_define ("__riscv_dsp");
-    }
-
-  if (TARGET_XTHEAD_ZPSFOPERAND)
-    {
-      builtin_define ("__riscv_zpsfoperand");
     }
 
   switch (riscv_abi)
@@ -130,5 +134,27 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
       builtin_define ("__riscv_cmodel_medany");
       break;
 
+    }
+
+  const riscv_subset_list *subset_list = riscv_current_subset_list ();
+  size_t max_ext_len = 0;
+
+  /* Figure out the max length of extension name for reserving buffer.   */
+  for (const riscv_subset_t *subset = subset_list->begin ();
+       subset != subset_list->end ();
+       subset = subset->next)
+    max_ext_len = MAX (max_ext_len, subset->name.length ());
+
+  char *buf = (char *)alloca (max_ext_len + 10 /* For __riscv_ and '\0'.  */);
+
+  for (const riscv_subset_t *subset = subset_list->begin ();
+       subset != subset_list->end ();
+       subset = subset->next)
+    {
+      int version_value = (subset->major_version * 1000000)
+			   + (subset->minor_version * 1000);
+
+      sprintf (buf, "__riscv_%s", subset->name.c_str ());
+      builtin_define_with_int_value (buf, version_value);
     }
 }

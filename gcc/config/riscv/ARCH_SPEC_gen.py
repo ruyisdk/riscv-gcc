@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+import sys
+from itertools import groupby
+
+outputs = []
+inputs = []
+
+start = False
+with open("t-linux-multilib", "r", encoding="utf-8") as ofp:
+    while True:
+        tl = ofp.readline()
+        if tl.startswith("MULTILIB_DIRNAMES"):
+            start = True
+        if not start:
+            continue
+        inputs += tl.split()
+        if not tl.endswith("\\\n"):
+            break
+
+inputs = filter(lambda x: x.startswith("rv"), inputs)
+
+
+def findir(arch):
+    if "xthead" in arch and "v0p7" in arch:
+        return "v0p7_xthead"
+    if "xthead" in arch and "v" in "".join(filter(lambda x: not (x.startswith("z" or x.startswith("x"))), arch.split("_"))).lstrip("rv"):
+        return "v_xthead"
+    if "xthead" in arch:
+        return "xthead"
+    return False
+
+
+for arch in inputs:
+    dir = findir(arch)
+    if not dir:
+        continue
+    print("  \"%{march=" + arch + ":" + dir + "}\" \\")

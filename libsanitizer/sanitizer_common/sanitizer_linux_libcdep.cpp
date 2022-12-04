@@ -262,7 +262,7 @@ void InitTlsSize() { }
 
 #if (defined(__x86_64__) || defined(__i386__) || defined(__mips__) ||          \
      defined(__aarch64__) || defined(__powerpc64__) || defined(__s390__) ||    \
-     defined(__arm__)) &&                                                      \
+     defined(__arm__) || SANITIZER_RISCV64) &&                                                      \
     SANITIZER_LINUX && !SANITIZER_ANDROID
 // sizeof(struct pthread) from glibc.
 static atomic_uintptr_t thread_descriptor_size;
@@ -302,6 +302,20 @@ uptr ThreadDescriptorSize() {
 #elif defined(__mips__)
   // TODO(sagarthakur): add more values as per different glibc versions.
   val = FIRST_32_SECOND_64(1152, 1776);
+#elif SANITIZER_RISCV64
+  int major;
+  int minor;
+  int patch;
+  if (GetLibcVersion(&major, &minor, &patch) && major == 2) {
+    // TODO: consider adding an optional runtime check for an unknown (untested)
+    // glibc version
+    if (minor <= 28)  // WARNING: the highest tested version is 2.29
+      val = 1772;     // no guarantees for this one
+    else if (minor <= 31)
+      val = 1772;  // tested against glibc 2.29, 2.31
+    else
+      val = 1936;  // tested against glibc 2.32
+  }
 #elif defined(__aarch64__)
   // The sizeof (struct pthread) is the same from GLIBC 2.17 to 2.22.
   val = 1776;
@@ -322,7 +336,7 @@ uptr ThreadSelfOffset() {
   return kThreadSelfOffset;
 }
 
-#if defined(__mips__) || defined(__powerpc64__)
+#if defined(__mips__) || defined(__powerpc64__) || SANITIZER_RISCV64
 // TlsPreTcbSize includes size of struct pthread_descr and size of tcb
 // head structure. It lies before the static tls blocks.
 static uptr TlsPreTcbSize() {
@@ -330,6 +344,8 @@ static uptr TlsPreTcbSize() {
   const uptr kTcbHead = 16; // sizeof (tcbhead_t)
 # elif defined(__powerpc64__)
   const uptr kTcbHead = 88; // sizeof (tcbhead_t)
+#elif SANITIZER_RISCV64
+  const uptr kTcbHead = 16;  // sizeof (tcbhead_t)
 # endif
   const uptr kTlsAlign = 16;
   const uptr kTlsPreTcbSize =
@@ -359,6 +375,11 @@ uptr ThreadSelf() {
 # elif defined(__aarch64__) || defined(__arm__)
   descr_addr = reinterpret_cast<uptr>(__builtin_thread_pointer()) -
                                       ThreadDescriptorSize();
+#elif SANITIZER_RISCV64
+  // https://github.com/riscv/riscv-elf-psabi-doc/issues/53
+  uptr thread_pointer;
+  asm("mv %0, tp;\n" : "=r"(thread_pointer));
+  descr_addr = thread_pointer - TlsPreTcbSize();
 # elif defined(__s390__)
   descr_addr = reinterpret_cast<uptr>(__builtin_thread_pointer());
 # elif defined(__powerpc64__)
@@ -435,7 +456,7 @@ static void GetTls(uptr *addr, uptr *size) {
   *addr -= *size;
   *addr += ThreadDescriptorSize();
 # elif defined(__mips__) || defined(__aarch64__) || defined(__powerpc64__) \
-    || defined(__arm__)
+    || defined(__arm__) || SANITIZER_RISCV64
   *addr = ThreadSelf();
   *size = GetTlsSize();
 # else
@@ -492,7 +513,7 @@ uptr GetTlsSize() {
   uptr addr, size;
   GetTls(&addr, &size);
   return size;
-#elif defined(__mips__) || defined(__powerpc64__)
+#elif defined(__mips__) || defined(__powerpc64__) || SANITIZER_RISCV64
   return RoundUpTo(g_tls_size + TlsPreTcbSize(), 16);
 #else
   return g_tls_size;

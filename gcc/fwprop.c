@@ -1472,6 +1472,9 @@ forward_propagate_into (df_ref use, bool reg_prop_only = false)
   if (!def_set)
     return false;
 
+  /* Allow target to legitimize DEF_SET to fit forward propagration.  */
+  targetm.fwprop_legitimize_set (&def_set);
+
   if (reg_prop_only
       && (!reg_single_def_p (SET_SRC (def_set))
 	  || !reg_single_def_p (SET_DEST (def_set))))

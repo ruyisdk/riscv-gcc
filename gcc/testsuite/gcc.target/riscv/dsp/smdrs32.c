@@ -5,7 +5,7 @@
 
 #include <riscv-dsp.h>
 
-intXLEN_t test_smdrs32(uintXLEN_t a, uintXLEN_t b) {
+int64_t test_smdrs32(uint64_t a, uint64_t b) {
     return __rv__smdrs32 (a, b);
 }
 

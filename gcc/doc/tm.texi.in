@@ -4727,6 +4727,8 @@ them: try the first ones in this list first.
 
 @hook TARGET_SCHED_MACRO_FUSION_PAIR_P
 
+@hook TARGET_SCHED_MISC_FUSION_PAIR_P
+
 @hook TARGET_SCHED_DEPENDENCIES_EVALUATION_HOOK
 
 @hook TARGET_SCHED_INIT
@@ -7002,6 +7004,8 @@ internal line number tables.
 
 @hook TARGET_NO_REGISTER_ALLOCATION
 
+@hook TARGET_FWPROP_LEGITIMIZE_SET
+
 @defmac ASM_OUTPUT_DWARF_DELTA (@var{stream}, @var{size}, @var{label1}, @var{label2})
 A C statement to issue assembly directives that create a difference
 @var{lab1} minus @var{lab2}, using an integer of the given @var{size}.
@@ -8180,3 +8184,5 @@ maintainer is familiar with.
 @hook TARGET_SPECULATION_SAFE_VALUE
 
 @hook TARGET_RUN_TARGET_SELFTESTS
+
+@hook TARGET_REGISTER_REJECT_INIT_P

@@ -4,3 +4,10 @@ LIB2ADD += $(srcdir)/config/riscv/save-restore.S \
 	   $(srcdir)/config/riscv/div.S \
 	   $(srcdir)/config/riscv/atomic.c \
 
+LIB_TF_FUNCS = addtf3 subtf3 multf3 divtf3 \
+	       eqtf2 getf2 letf2 \
+	       extenddftf2 extendsftf2 \
+	       trunctfdf2 trunctfsf2 \
+	       fixtfdi fixtfsi fixunstfdi fixunstfsi \
+	       floatditf floatsitf floatunditf floatunsitf \
+	       negtf2 _powitf2 unordtf2 \

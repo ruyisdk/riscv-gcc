@@ -64,7 +64,7 @@ extern rtx riscv_legitimize_call_address (rtx);
 extern void riscv_set_return_address (rtx, rtx);
 extern bool riscv_expand_block_move (rtx, rtx, rtx);
 extern rtx riscv_return_addr (int, rtx);
-extern HOST_WIDE_INT riscv_initial_elimination_offset (int, int);
+extern poly_int64 riscv_initial_elimination_offset (int, int);
 extern void riscv_expand_prologue (void);
 extern void riscv_expand_epilogue (int);
 extern bool riscv_epilogue_uses (unsigned int);
@@ -74,6 +74,15 @@ extern bool riscv_expand_block_move (rtx, rtx, rtx);
 extern bool riscv_store_data_bypass_p (rtx_insn *, rtx_insn *);
 extern rtx riscv_gen_gpr_save_insn (struct riscv_frame_info *);
 extern bool riscv_gpr_save_operation_p (rtx);
+extern bool riscv_mul_accum_bypass_p (rtx_insn *, rtx_insn *);
+extern bool riscv_macro_fusion_pair_p (rtx_insn *, rtx_insn *);
+extern bool riscv_misc_fusion_pair_p (rtx_insn *, rtx_insn *);
+extern bool riscv_all_fusion_pair_p (rtx_insn *, rtx_insn *);
+
+/* Routines for vector support.  */
+bool riscv_const_vec_all_same_in_range_p (rtx, HOST_WIDE_INT, HOST_WIDE_INT);
+extern poly_uint64 riscv_regmode_natural_size (machine_mode);
+extern void riscv_expand_vtuple_create (rtx *);
 
 /* Routines implemented in riscv-c.c.  */
 void riscv_cpu_cpp_builtins (cpp_reader *);
@@ -86,6 +95,8 @@ extern void riscv_atomic_assign_expand_fenv (tree *, tree *, tree *);
 extern rtx riscv_expand_builtin (tree, rtx, rtx, machine_mode, int);
 extern tree riscv_builtin_decl (unsigned int, bool);
 extern void riscv_init_builtins (void);
+extern const char * riscv_mangle_builtin_type (const_tree type);
+extern bool builtin_vector_type_p (const_tree);
 
 /* Routines implemented in riscv-common.c.  */
 extern std::string riscv_arch_str (bool version_p = true);
@@ -95,8 +106,22 @@ extern bool riscv_hard_regno_rename_ok (unsigned, unsigned);
 rtl_opt_pass * make_pass_shorten_memrefs (gcc::context *ctxt);
 
 /* T-Head */
-rtl_opt_pass * make_pass_delete_redundancy_fsrm (gcc::context *ctxt);
-rtl_opt_pass * make_pass_delete_redundancy_sext (gcc::context *ctxt);
+rtl_opt_pass * make_pass_delete_redundancy_sext1 (gcc::context *ctxt);
+rtl_opt_pass * make_pass_delete_redundancy_sext2 (gcc::context *ctxt);
+rtl_opt_pass * make_pass_xthead_dvsetvl (gcc::context *ctxt);
+rtl_opt_pass * make_pass_xthead_dvsetvl2 (gcc::context *ctxt);
+rtl_opt_pass * make_pass_xthead_dvsetvl_v0p7 (gcc::context *ctxt);
+rtl_opt_pass * make_pass_xthead_dread_vlenb (gcc::context *ctxt);
+rtl_opt_pass * make_pass_xthead_dread_vlenb_after_rnreg (gcc::context *ctxt);
+class gimple_opt_pass;
+gimple_opt_pass *make_pass_load_merging (gcc::context *ctxt);
+
+bool target_subset_version_p (const char *subset, int major, int minor);
+
+/* P-ext */
+extern void riscv_split_ashiftdi3 (rtx dst, rtx src, rtx shiftamount);
+extern void riscv_split_ashiftrtdi3 (rtx dst, rtx src, rtx shiftamount);
+extern void riscv_split_lshiftrtdi3 (rtx dst, rtx src, rtx shiftamount);
 
 /* Information about one CPU we know about.  */
 struct riscv_cpu_info {
@@ -111,5 +136,11 @@ struct riscv_cpu_info {
 };
 
 extern const riscv_cpu_info *riscv_find_cpu (const char *);
+
+/* Routines for vector tuple types.  */
+extern int riscv_get_nf (machine_mode);
+extern int riscv_get_lmul (machine_mode);
+
+extern int sched_finish_global;
 
 #endif /* ! GCC_RISCV_PROTOS_H */

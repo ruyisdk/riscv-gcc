@@ -10308,3 +10308,24 @@ proc check_effective_target_indirect_calls { } {
   }
   return 1
 }
+
+# Return 1 if this is an RISCV target supporting RVV.
+proc check_effective_target_riscv_rvv { } {
+    if { ![istarget riscv*-*-*] } {
+	return 0
+    }
+    return [check_no_compiler_messages riscv_rvv assembly {
+	#if !defined (__riscv_vector)
+	#error FOO
+	#endif
+    }]
+}
+
+# Return 1 if this is an RISCV target supporting RVV v0.7.
+proc check_effective_target_riscv_rvv_v0p7 { } {
+    return [check_no_compiler_messages riscv_rvv_v0p7 assembly {
+	    #if __riscv_v != 7000
+	    #error FOO
+	    #endif
+	    }]
+}

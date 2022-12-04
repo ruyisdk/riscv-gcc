@@ -1,7 +1,9 @@
 
 /* { dg-do assemble } */
-/* { dg-skip-if "test P-ext insns" { *-*-* } { "*" } { "-march=rv*p*" } } */
+/* { dg-skip-if "test P-ext insns" { *-*-* } { "*" } { "-march=rv64*p*" } } */
 /* { dg-options "-O2 --save-temps" } */
+
+/* When rv32, smmul is identical to mulh. */
 
 #include <riscv-dsp.h>
 

@@ -7517,22 +7517,14 @@ driver::build_multilib_strings () const
 {
   {
     const char *p;
-    const char *const *q = multilib_raw;
+    const char *const *q;
     int need_space;
 
     obstack_init (&multilib_obstack);
-    while ((p = *q++) != (char *) 0)
-      obstack_grow (&multilib_obstack, p, strlen (p));
 
-    obstack_1grow (&multilib_obstack, 0);
-    multilib_select = XOBFINISH (&multilib_obstack, const char *);
+    multilib_select = multilib_raw;
 
-    q = multilib_matches_raw;
-    while ((p = *q++) != (char *) 0)
-      obstack_grow (&multilib_obstack, p, strlen (p));
-
-    obstack_1grow (&multilib_obstack, 0);
-    multilib_matches = XOBFINISH (&multilib_obstack, const char *);
+    multilib_matches = multilib_matches_raw;
 
     q = multilib_exclusions_raw;
     while ((p = *q++) != (char *) 0)
@@ -7541,12 +7533,7 @@ driver::build_multilib_strings () const
     obstack_1grow (&multilib_obstack, 0);
     multilib_exclusions = XOBFINISH (&multilib_obstack, const char *);
 
-    q = multilib_reuse_raw;
-    while ((p = *q++) != (char *) 0)
-      obstack_grow (&multilib_obstack, p, strlen (p));
-
-    obstack_1grow (&multilib_obstack, 0);
-    multilib_reuse = XOBFINISH (&multilib_obstack, const char *);
+    multilib_reuse = multilib_reuse_raw;
 
     need_space = FALSE;
     for (size_t i = 0; i < ARRAY_SIZE (multilib_defaults_raw); i++)
@@ -8556,7 +8543,11 @@ validate_all_switches (void)
 
   /* Look through the linked list of specs read from the specs file.  */
   for (spec = specs; spec; spec = spec->next)
-    validate_switches_from_spec (*spec->ptr_spec, spec->user_p);
+    {
+      if (strcmp (spec->name, "multilib") >= 0)
+	continue;
+      validate_switches_from_spec (*spec->ptr_spec, spec->user_p);
+    }
 
   validate_switches_from_spec (link_command_spec, false);
 }

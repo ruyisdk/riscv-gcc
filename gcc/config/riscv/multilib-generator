@@ -32,6 +32,16 @@
 # means that, in addition to rv32imafd, these configurations can also use the
 # rv32imafd-ilp32d libraries: rv32imafdc-ilp32d, rv32imafdb-ilp32d,
 #                             rv32imafdcb-ilp32d
+#
+# In addition, the multi-character extensions (include the standard extensions
+# with version numbers) must be separated from other extensions by "_" so that
+# they can be handled correctly.
+# Example :
+#  rv64ima_f2p0_dc-lp64d-rv64imafdc_zpa_zpd-b3p1,v    # Valid
+#  rv64imaf2p0_dc-lp64d-rv64imafdc_zpa_zpd-b3p1,v     # Invalid
+#  rv64ima_f2p0dc-lp64d-rv64imafdc_zpa_zpd-b3p1,v     # Invalid
+#  rv64ima_f2p0_dc-lp64d-rv64imafczpa_zpd-b3p1,v      # Invalid
+#  rv64ima_f2p0_dc-lp64d-rv64imafc_zpazpd-b3p1,v      # Invalid
 
 from __future__ import print_function
 import sys
@@ -48,7 +58,7 @@ abis = collections.OrderedDict()
 required = []
 reuse = []
 
-canonical_order = "mafdgqlcbjtpvn"
+canonical_order = "eimafdgqlcbjtpvn"
 LONG_EXT_PREFIXES = ['z', 's', 'h', 'x']
 
 #
@@ -56,6 +66,18 @@ LONG_EXT_PREFIXES = ['z', 's', 'h', 'x']
 #
 IMPLIED_EXT = {
   "d" : ["f"],
+  # XXX: Not sure ZFH is implied F or not, because the spec is not clear,
+  #      but add it could prevent invalid combination.
+  "zfh" : ["f"],
+  # XXX: WORK-AROUND for v = zvbase + zvlsseg + zvamo.
+  #      We don't have formal name for zvbase yet, so just add zvlsseg and zvamo
+  #      to implied list for resolve multi-lib issue.
+  "v"   : ['zvlsseg', 'zvamo'],
+  "v0p7"   : ['zvlsseg0p7', 'zvamo0p7'],
+  # XXX: WORK-AROUND for zvqmac, zvqmac need v, which mean we also implied
+  #      zvlsseg and zvamo
+  "zvqmac"   : ['v', 'zvlsseg', 'zvamo'],
+  "b" : ["zba", "zbb", "zbc", "zbs"],
 }
 
 def arch_canonicalize(arch):
@@ -63,22 +85,31 @@ def arch_canonicalize(arch):
   new_arch = ""
   if arch[:5] in ['rv32e', 'rv32i', 'rv32g', 'rv64i', 'rv64g']:
     # TODO: We should expand g to imad_zifencei once we support newer spec.
-    new_arch = arch[:5].replace("g", "imafd")
+    arch = arch[:5].replace("g", "imafd") + arch[5:]
+    new_arch = arch[:4]
   else:
     raise Exception("Unexpected arch: `%s`" % arch[:5])
 
-  # Find any Z, S, H or X
-  long_ext_prefixes_idx = map(lambda x: arch.find(x), LONG_EXT_PREFIXES)
-
-  # Filter out any non-existent index.
-  long_ext_prefixes_idx = list(filter(lambda x: x != -1, long_ext_prefixes_idx))
-  if long_ext_prefixes_idx:
-    first_long_ext_idx = min(long_ext_prefixes_idx)
-    long_exts = arch[first_long_ext_idx:].split("_")
-    std_exts = list(arch[5:first_long_ext_idx])
+  long_ext_prefixes_idx = arch.find('_')
+  if long_ext_prefixes_idx != -1:
+    long_exts = list(filter(None, arch[long_ext_prefixes_idx:].split("_")))
+    std_exts = list(arch[4:long_ext_prefixes_idx])
   else:
     long_exts = []
-    std_exts = list(arch[5:])
+    std_exts = list(arch[4:])
+
+  i = 0
+  while i < len(long_exts):
+    ext = long_exts[i]
+    if len(ext) == 1 or (ext[0] in canonical_order and ext[-1].isdigit()):
+      std_exts.append(ext)
+      long_exts.remove(ext)
+    elif ext[0] in canonical_order:
+      std_exts.extend(list(ext))
+      long_exts.remove(ext)
+    else:
+      i += 1
+
 
   #
   # Handle implied extensions.
@@ -88,11 +119,10 @@ def arch_canonicalize(arch):
       implied_exts = IMPLIED_EXT[ext]
       for implied_ext in implied_exts:
         if implied_ext not in std_exts + long_exts:
-          long_exts.append(implied_ext)
-
-  # Single letter extension might appear in the long_exts list,
-  # becasue we just append extensions list to the arch string.
-  std_exts += list(filter(lambda x:len(x.lstrip('_')) == 1, long_exts))
+          if implied_ext[0] in canonical_order:
+            std_exts.append (implied_ext)
+          else:
+            long_exts.append(implied_ext)
 
   def longext_sort (exts):
     if not exts.startswith("zxm") and exts.startswith("z"):
@@ -103,20 +133,31 @@ def arch_canonicalize(arch):
       canonical_sort = -1
     return (exts.startswith("x"), exts.startswith("zxm"), LONG_EXT_PREFIXES.index(exts[0]), canonical_sort, exts[1:])
 
+  long_exts = list(set(long_exts))
   # Multi-letter extension must be in lexicographic order.
-  long_exts = list(sorted(filter(lambda x:len(x) != 1, long_exts), key=longext_sort))
-
-  # Put extensions in canonical order.
-  for ext in canonical_order:
-    if ext in std_exts:
-      new_arch += ext
+  long_exts.sort(key=longext_sort)
 
   # Check every extension is processed.
   for ext in std_exts:
-    if ext == '_':
-      continue
-    if ext not in canonical_order:
+    if ext[0] not in canonical_order:
       raise Exception("Unsupported extension `%s`" % ext)
+
+  std_exts = list(set(std_exts))
+  # Put extensions in canonical order.
+  std_exts.sort(key = lambda x: canonical_order.index(x[0]))
+
+  underline = False
+  # Concat std extensions.
+  for ext in std_exts:
+    if len(ext) != 1 or underline:
+      new_arch += "_" + ext
+    else:
+      new_arch += ext
+    if  len(ext) != 1:
+      underline = True
+    else:
+      underline = False
+
 
   # Concat rest of the multi-char extensions.
   if long_exts:

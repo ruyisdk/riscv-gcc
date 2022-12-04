@@ -154,6 +154,8 @@ namespace __sanitizer {
 
 #if SANITIZER_LINUX && defined(__x86_64__)
 #include "sanitizer_syscall_linux_x86_64.inc"
+#elif SANITIZER_LINUX && SANITIZER_RISCV64
+#include "sanitizer_syscall_linux_riscv64.inc"
 #elif SANITIZER_LINUX && defined(__aarch64__)
 #include "sanitizer_syscall_linux_aarch64.inc"
 #elif SANITIZER_LINUX && defined(__arm__)
@@ -700,7 +702,7 @@ struct linux_dirent {
 };
 #else
 struct linux_dirent {
-#if SANITIZER_X32 || defined(__aarch64__)
+#if SANITIZER_X32 || defined(__aarch64__) || SANITIZER_RISCV64
   u64 d_ino;
   u64 d_off;
 #else
@@ -708,7 +710,7 @@ struct linux_dirent {
   unsigned long      d_off;
 #endif
   unsigned short     d_reclen;
-#ifdef __aarch64__
+#if defined(__aarch64__) || SANITIZER_RISCV64
   unsigned char      d_type;
 #endif
   char               d_name[256];
@@ -1033,6 +1035,8 @@ uptr GetMaxVirtualAddress() {
   // This should (does) work for both PowerPC64 Endian modes.
   // Similarly, aarch64 has multiple address space layouts: 39, 42 and 47-bit.
   return (1ULL << (MostSignificantSetBitIndex(GET_CURRENT_FRAME()) + 1)) - 1;
+#elif SANITIZER_RISCV64
+  return (1ULL << 38) - 1;
 # elif defined(__mips64)
   return (1ULL << 40) - 1;  // 0x000000ffffffffffUL;
 # elif defined(__s390x__)
@@ -1324,6 +1328,47 @@ uptr internal_clone(int (*fn)(void *), void *child_stack, int flags, void *arg,
                          "i"(__NR_clone),
                          "i"(__NR_exit)
                        : "memory", "$29" );
+  return res;
+}
+#elif SANITIZER_RISCV64
+uptr internal_clone(int (*fn)(void *), void *child_stack, int flags, void *arg,
+                    int *parent_tidptr, void *newtls, int *child_tidptr) {
+  if (!fn || !child_stack)
+    return -EINVAL;
+
+  CHECK_EQ(0, (uptr)child_stack % 16);
+
+  register int res __asm__("a0");
+  register int __flags __asm__("a0") = flags;
+  register void *__stack __asm__("a1") = child_stack;
+  register int *__ptid __asm__("a2") = parent_tidptr;
+  register void *__tls __asm__("a3") = newtls;
+  register int *__ctid __asm__("a4") = child_tidptr;
+  register int (*__fn)(void *) __asm__("a5") = fn;
+  register void *__arg __asm__("a6") = arg;
+  register int nr_clone __asm__("a7") = __NR_clone;
+
+  __asm__ __volatile__(
+      "ecall\n"
+
+      /* if (a0 != 0)
+       *   return a0;
+       */
+      "bnez a0, 1f\n"
+
+      // In the child, now. Call "fn(arg)".
+      "mv a0, a6\n"
+      "jalr a5\n"
+
+      // Call _exit(a0).
+      "addi a7, zero, %9\n"
+      "ecall\n"
+      "1:\n"
+
+      : "=r"(res)
+      : "0"(__flags), "r"(__stack), "r"(__ptid), "r"(__tls), "r"(__ctid),
+        "r"(__fn), "r"(__arg), "r"(nr_clone), "i"(__NR_exit)
+      : "memory");
   return res;
 }
 #elif defined(__aarch64__)
@@ -1846,6 +1891,109 @@ SignalContext::WriteFlag SignalContext::GetWriteFlag() const {
 #endif
   u32 instr = *(u32 *)pc;
   return (instr >> 21) & 1 ? WRITE: READ;
+#elif defined(__riscv)
+#if SANITIZER_FREEBSD
+  unsigned long pc = ucontext->uc_mcontext.mc_gpregs.gp_sepc;
+#else
+  unsigned long pc = ucontext->uc_mcontext.__gregs[REG_PC];
+#endif
+  unsigned faulty_instruction = *(uint16_t *)pc;
+
+#if defined(__riscv_compressed)
+  if ((faulty_instruction & 0x3) != 0x3) {  // it's a compressed instruction
+    // set op_bits to the instruction bits [1, 0, 15, 14, 13]
+    unsigned op_bits =
+        ((faulty_instruction & 0x3) << 3) | (faulty_instruction >> 13);
+    unsigned rd = faulty_instruction & 0xF80;  // bits 7-11, inclusive
+    switch (op_bits) {
+      case 0b10'010:  // c.lwsp (rd != x0)
+#if __riscv_xlen == 64
+      case 0b10'011:  // c.ldsp (rd != x0)
+#endif
+        return rd ? SignalContext::READ : SignalContext::UNKNOWN;
+      case 0b00'010:  // c.lw
+#if __riscv_flen >= 32 && __riscv_xlen == 32
+      case 0b10'011:  // c.flwsp
+#endif
+#if __riscv_flen >= 32 || __riscv_xlen == 64
+      case 0b00'011:  // c.flw / c.ld
+#endif
+#if __riscv_flen == 64
+      case 0b00'001:  // c.fld
+      case 0b10'001:  // c.fldsp
+#endif
+        return SignalContext::READ;
+      case 0b00'110:  // c.sw
+      case 0b10'110:  // c.swsp
+#if __riscv_flen >= 32 || __riscv_xlen == 64
+      case 0b00'111:  // c.fsw / c.sd
+      case 0b10'111:  // c.fswsp / c.sdsp
+#endif
+#if __riscv_flen == 64
+      case 0b00'101:  // c.fsd
+      case 0b10'101:  // c.fsdsp
+#endif
+        return SignalContext::WRITE;
+      default:
+        return SignalContext::UNKNOWN;
+    }
+  }
+#endif
+
+  unsigned opcode = faulty_instruction & 0x7f;         // lower 7 bits
+  unsigned funct3 = (faulty_instruction >> 12) & 0x7;  // bits 12-14, inclusive
+  switch (opcode) {
+    case 0b0000011:  // loads
+      switch (funct3) {
+        case 0b000:  // lb
+        case 0b001:  // lh
+        case 0b010:  // lw
+#if __riscv_xlen == 64
+        case 0b011:  // ld
+#endif
+        case 0b100:  // lbu
+        case 0b101:  // lhu
+          return SignalContext::READ;
+        default:
+          return SignalContext::UNKNOWN;
+      }
+    case 0b0100011:  // stores
+      switch (funct3) {
+        case 0b000:  // sb
+        case 0b001:  // sh
+        case 0b010:  // sw
+#if __riscv_xlen == 64
+        case 0b011:  // sd
+#endif
+          return SignalContext::WRITE;
+        default:
+          return SignalContext::UNKNOWN;
+      }
+#if __riscv_flen >= 32
+    case 0b0000111:  // floating-point loads
+      switch (funct3) {
+        case 0b010:  // flw
+#if __riscv_flen == 64
+        case 0b011:  // fld
+#endif
+          return SignalContext::READ;
+        default:
+          return SignalContext::UNKNOWN;
+      }
+    case 0b0100111:  // floating-point stores
+      switch (funct3) {
+        case 0b010:  // fsw
+#if __riscv_flen == 64
+        case 0b011:  // fsd
+#endif
+          return SignalContext::WRITE;
+        default:
+          return SignalContext::UNKNOWN;
+      }
+#endif
+    default:
+      return SignalContext::UNKNOWN;
+  }
 #else
   (void)ucontext;
   return UNKNOWN;  // FIXME: Implement.
