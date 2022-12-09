@@ -58,6 +58,7 @@
 
 #define TARGET_XTHEAD_INTERRUPT_HANDLER_P() \
   (cfun->machine->interrupt_handler_p \
+   && !crtl->is_leaf \
    && TARGET_XTHEAD_IPUSH \
    && (cfun->machine->interrupt_mode == USER_MODE \
        || cfun->machine->interrupt_mode == MACHINE_MODE))
