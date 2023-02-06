@@ -4658,6 +4658,9 @@ case "${target}" in
 		ilp32,rv32* | ilp32e,rv32e* \
 		| ilp32f,rv32*f* | ilp32f,rv32g* \
 		| ilp32d,rv32*d* | ilp32d,rv32g* \
+		| ilp32f,rv64*f* | ilp32f,rv64g* \
+		| ilp32d,rv64*d* | ilp32d,rv64g* \
+		| ilp32,rv64* \
 		| lp64,rv64* \
 		| lp64f,rv64*f* | lp64f,rv64g* \
 		| lp64d,rv64*d* | lp64d,rv64g*)
