@@ -392,7 +392,10 @@ delect_redundancy_sext (void)
 		  rtx_insn *ref_insn;
 
 		  if (DF_REF_IS_ARTIFICIAL (defs->ref))
-		    continue;
+		    {
+		      can_delete = false;
+		      break;
+		    }
 		  ref_insn = DF_REF_INSN (defs->ref);
 
 		  if (!bitmap_bit_p (sext_marked, INSN_UID (ref_insn)))
@@ -404,7 +407,7 @@ delect_redundancy_sext (void)
 		    unatificial_defs ++;
 		}
 
-	      if (!unatificial_defs)
+	      if (can_delete && !unatificial_defs)
 		can_delete = false;
 
 	      /* Detect the sequence:
@@ -419,7 +422,10 @@ delect_redundancy_sext (void)
 		      rtx_insn *ref_insn;
 
 		      if (DF_REF_IS_ARTIFICIAL (defs->ref))
-			continue;
+			{
+			  can_delete = false;
+			  break;
+			}
 		      ref_insn = DF_REF_INSN (defs->ref);
 
 		      if (!is_lbu_insn (ref_insn))
@@ -431,7 +437,7 @@ delect_redundancy_sext (void)
 			unatificial_defs ++;
 		    }
 
-		  if (!unatificial_defs)
+		  if (can_delete && !unatificial_defs)
 		    can_delete = false;
 		}
 
