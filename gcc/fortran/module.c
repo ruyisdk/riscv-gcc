@@ -4411,6 +4411,9 @@ mio_symbol (gfc_symbol *sym)
 
   mio_symbol_attribute (&sym->attr);
 
+  if (sym->attr.pdt_type)
+    sym->name = gfc_dt_upper_string (sym->name);
+
   /* Note that components are always saved, even if they are supposed
      to be private.  Component access is checked during searching.  */
   mio_component_list (&sym->components, sym->attr.vtype);
@@ -6073,6 +6076,17 @@ write_symtree (gfc_symtree *st)
     return;
 
   if (check_unique_name (st->name))
+    return;
+
+  /* From F2003 onwards, intrinsic procedures are no longer subject to
+     the restriction, "that an elemental intrinsic function here be of
+     type integer or character and each argument must be an initialization
+     expr of type integer or character" is lifted so that intrinsic
+     procedures can be over-ridden. This requires that the intrinsic
+     symbol not appear in the module file, thereby preventing ambiguity
+     when USEd.  */
+  if (strcmp (sym->module, "(intrinsic)") == 0
+      && (gfc_option.allow_std & GFC_STD_F2003))
     return;
 
   p = find_pointer (sym);

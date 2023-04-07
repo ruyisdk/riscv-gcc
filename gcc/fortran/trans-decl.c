@@ -737,6 +737,8 @@ gfc_finish_var_decl (tree decl, gfc_symbol * sym)
   /* Keep variables larger than max-stack-var-size off stack.  */
   if (!(sym->ns->proc_name && sym->ns->proc_name->attr.recursive)
       && !sym->attr.automatic
+      && sym->attr.save != SAVE_EXPLICIT
+      && sym->attr.save != SAVE_IMPLICIT
       && INTEGER_CST_P (DECL_SIZE_UNIT (decl))
       && !gfc_can_put_var_on_stack (DECL_SIZE_UNIT (decl))
 	 /* Put variable length auto array pointers always into stack.  */
@@ -747,15 +749,21 @@ gfc_finish_var_decl (tree decl, gfc_symbol * sym)
 	  || sym->attr.allocatable)
       && !DECL_ARTIFICIAL (decl))
     {
-      if (flag_max_stack_var_size > 0)
+      if (flag_max_stack_var_size > 0
+	  && !(sym->ns->proc_name
+	       && sym->ns->proc_name->attr.is_main_program))
 	gfc_warning (OPT_Wsurprising,
-		     "Array %qs at %L is larger than limit set by"
-		     " %<-fmax-stack-var-size=%>, moved from stack to static"
-		     " storage. This makes the procedure unsafe when called"
-		     " recursively, or concurrently from multiple threads."
-		     " Consider using %<-frecursive%>, or increase the"
-		     " %<-fmax-stack-var-size=%> limit, or change the code to"
-		     " use an ALLOCATABLE array.",
+		     "Array %qs at %L is larger than limit set by "
+		     "%<-fmax-stack-var-size=%>, moved from stack to static "
+		     "storage. This makes the procedure unsafe when called "
+		     "recursively, or concurrently from multiple threads. "
+		     "Consider increasing the %<-fmax-stack-var-size=%> "
+		     "limit (or use %<-frecursive%>, which implies "
+		     "unlimited %<-fmax-stack-var-size%>) - or change the "
+		     "code to use an ALLOCATABLE array. If the variable is "
+		     "never accessed concurrently, this warning can be "
+		     "ignored, and the variable could also be declared with "
+		     "the SAVE attribute.",
 		     sym->name, &sym->declared_at);
 
       TREE_STATIC (decl) = 1;
@@ -1527,7 +1535,8 @@ gfc_get_symbol_decl (gfc_symbol * sym)
      declaration of the entity and memory allocated/deallocated.  */
   if ((sym->ts.type == BT_DERIVED || sym->ts.type == BT_CLASS)
       && sym->param_list != NULL
-      && !(sym->attr.host_assoc || sym->attr.use_assoc || sym->attr.dummy))
+      && gfc_current_ns == sym->ns
+      && !(sym->attr.use_assoc || sym->attr.dummy))
     gfc_defer_symbol_init (sym);
 
   /* Dummy PDT 'len' parameters should be checked when they are explicit.  */
@@ -1728,7 +1737,6 @@ gfc_get_symbol_decl (gfc_symbol * sym)
 	  || sym->attr.if_source != IFSRC_DECL)
 	{
 	  decl = gfc_get_extern_function_decl (sym);
-	  gfc_set_decl_location (decl, &sym->declared_at);
 	}
       else
 	{
@@ -2090,11 +2098,16 @@ gfc_get_extern_function_decl (gfc_symbol * sym, gfc_actual_arglist *actual_args)
       if (gsym && !gsym->bind_c)
 	gsym = NULL;
     }
-  else
+  else if (sym->module == NULL)
     {
       gsym = gfc_find_gsymbol (gfc_gsym_root, sym->name);
       if (gsym && gsym->bind_c)
 	gsym = NULL;
+    }
+  else
+    {
+      /* Procedure from a different module.  */
+      gsym = NULL;
     }
 
   if (gsym && !gsym->defined)
@@ -2461,7 +2474,9 @@ build_function_decl (gfc_symbol * sym, bool global)
 }
 
 
-/* Create the DECL_ARGUMENTS for a procedure.  */
+/* Create the DECL_ARGUMENTS for a procedure.
+   NOTE: The arguments added here must match the argument type created by
+   gfc_get_function_type ().  */
 
 static void
 create_function_arglist (gfc_symbol * sym)
@@ -2780,6 +2795,7 @@ create_function_arglist (gfc_symbol * sym)
 	  DECL_ARG_TYPE (token) = TREE_VALUE (typelist);
 	  TREE_READONLY (token) = 1;
 	  hidden_arglist = chainon (hidden_arglist, token);
+	  hidden_typelist = TREE_CHAIN (hidden_typelist);
 	  gfc_finish_decl (token);
 
 	  offset = build_decl (input_location, PARM_DECL,
@@ -2805,6 +2821,7 @@ create_function_arglist (gfc_symbol * sym)
 	  DECL_ARG_TYPE (offset) = TREE_VALUE (typelist);
 	  TREE_READONLY (offset) = 1;
 	  hidden_arglist = chainon (hidden_arglist, offset);
+	  hidden_typelist = TREE_CHAIN (hidden_typelist);
 	  gfc_finish_decl (offset);
 	}
 
@@ -2995,8 +3012,9 @@ build_entry_thunks (gfc_namespace * ns, bool global)
       poplevel (1, 1);
       BLOCK_SUPERCONTEXT (DECL_INITIAL (thunk_fndecl)) = thunk_fndecl;
       DECL_SAVED_TREE (thunk_fndecl)
-	= build3_v (BIND_EXPR, tmp, DECL_SAVED_TREE (thunk_fndecl),
-		    DECL_INITIAL (thunk_fndecl));
+	= fold_build3_loc (DECL_SOURCE_LOCATION (thunk_fndecl), BIND_EXPR,
+			   void_type_node, tmp, DECL_SAVED_TREE (thunk_fndecl),
+			   DECL_INITIAL (thunk_fndecl));
 
       /* Output the GENERIC tree.  */
       dump_function (TDI_original, thunk_fndecl);
@@ -5749,8 +5767,8 @@ generate_coarray_init (gfc_namespace * ns __attribute((unused)))
   BLOCK_SUPERCONTEXT (DECL_INITIAL (fndecl)) = fndecl;
 
   DECL_SAVED_TREE (fndecl)
-    = build3_v (BIND_EXPR, decl, DECL_SAVED_TREE (fndecl),
-                DECL_INITIAL (fndecl));
+    = fold_build3_loc (DECL_SOURCE_LOCATION (fndecl), BIND_EXPR, void_type_node,
+		       decl, DECL_SAVED_TREE (fndecl), DECL_INITIAL (fndecl));
   dump_function (TDI_original, fndecl);
 
   cfun->function_end_locus = input_location;
@@ -6475,8 +6493,9 @@ create_main_function (tree fndecl)
   BLOCK_SUPERCONTEXT (DECL_INITIAL (ftn_main)) = ftn_main;
 
   DECL_SAVED_TREE (ftn_main)
-    = build3_v (BIND_EXPR, decl, DECL_SAVED_TREE (ftn_main),
-		DECL_INITIAL (ftn_main));
+    = fold_build3_loc (DECL_SOURCE_LOCATION (ftn_main), BIND_EXPR,
+		       void_type_node, decl, DECL_SAVED_TREE (ftn_main),
+		       DECL_INITIAL (ftn_main));
 
   /* Output the GENERIC tree.  */
   dump_function (TDI_original, ftn_main);
@@ -6967,8 +6986,8 @@ gfc_generate_function_code (gfc_namespace * ns)
   BLOCK_SUPERCONTEXT (DECL_INITIAL (fndecl)) = fndecl;
 
   DECL_SAVED_TREE (fndecl)
-    = build3_v (BIND_EXPR, decl, DECL_SAVED_TREE (fndecl),
-		DECL_INITIAL (fndecl));
+    = fold_build3_loc (DECL_SOURCE_LOCATION (fndecl), BIND_EXPR, void_type_node,
+		       decl, DECL_SAVED_TREE (fndecl), DECL_INITIAL (fndecl));
 
   /* Output the GENERIC tree.  */
   dump_function (TDI_original, fndecl);

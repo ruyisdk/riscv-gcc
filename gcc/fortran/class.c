@@ -228,7 +228,7 @@ gfc_add_component_ref (gfc_expr *e, const char *name)
 	break;
       tail = &((*tail)->next);
     }
-  if (derived->components && derived->components->next &&
+  if (derived && derived->components && derived->components->next &&
       derived->components->next->ts.type == BT_DERIVED &&
       derived->components->next->ts.u.derived == NULL)
     {
@@ -628,6 +628,7 @@ gfc_get_len_component (gfc_expr *e, int k)
    component '_vptr' which determines the dynamic type.  When this CLASS
    entity is unlimited polymorphic, then also add a component '_len' to
    store the length of string when that is stored in it.  */
+static int ctr = 0;
 
 bool
 gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
@@ -643,13 +644,6 @@ gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
 
   gcc_assert (as);
 
-  if (*as && (*as)->type == AS_ASSUMED_SIZE)
-    {
-      gfc_error ("Assumed size polymorphic objects or components, such "
-		 "as that at %C, have not yet been implemented");
-      return false;
-    }
-
   if (attr->class_ok)
     /* Class container has already been built.  */
     return true;
@@ -663,6 +657,10 @@ gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
 
   /* Determine the name of the encapsulating type.  */
   rank = !(*as) || (*as)->rank == -1 ? GFC_MAX_DIMENSIONS : (*as)->rank;
+
+  if (!ts->u.derived)
+    return false;
+
   get_unique_hashed_string (tname, ts->u.derived);
   if ((*as) && attr->allocatable)
     name = xasprintf ("__class_%s_%d_%da", tname, rank, (*as)->corank);
@@ -687,7 +685,30 @@ gfc_build_class_symbol (gfc_typespec *ts, symbol_attribute *attr,
   else
     ns = ts->u.derived->ns;
 
-  gfc_find_symbol (name, ns, 0, &fclass);
+  /* Although this might seem to be counterintuitive, we can build separate
+     class types with different array specs because the TKR interface checks
+     work on the declared type. All array type other than deferred shape or
+     assumed rank are added to the function namespace to ensure that they
+     are properly distinguished.  */
+  if (attr->dummy && !attr->codimension && (*as)
+      && !((*as)->type == AS_DEFERRED || (*as)->type == AS_ASSUMED_RANK))
+    {
+      char *sname;
+      ns = gfc_current_ns;
+      gfc_find_symbol (name, ns, 0, &fclass);
+      /* If a local class type with this name already exists, update the
+	 name with an index.  */
+      if (fclass)
+	{
+	  fclass = NULL;
+	  sname = xasprintf ("%s_%d", name, ++ctr);
+	  free (name);
+	  name = sname;
+	}
+    }
+  else
+    gfc_find_symbol (name, ns, 0, &fclass);
+
   if (fclass == NULL)
     {
       gfc_symtree *st;
@@ -2900,7 +2921,9 @@ gfc_find_vtab (gfc_typespec *ts)
     case BT_DERIVED:
       return gfc_find_derived_vtab (ts->u.derived);
     case BT_CLASS:
-      if (ts->u.derived->components && ts->u.derived->components->ts.u.derived)
+      if (ts->u.derived->attr.is_class
+	  && ts->u.derived->components
+	  && ts->u.derived->components->ts.u.derived)
 	return gfc_find_derived_vtab (ts->u.derived->components->ts.u.derived);
       else
 	return NULL;

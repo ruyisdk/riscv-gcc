@@ -105,7 +105,6 @@ namespace ranges
 	      return false;
 
 	    using _ValueType1 = iter_value_t<_Iter1>;
-	    using _ValueType2 = iter_value_t<_Iter2>;
 	    constexpr bool __use_memcmp
 	      = ((is_integral_v<_ValueType1> || is_pointer_v<_ValueType1>)
 		 && __memcmpable<_Iter1, _Iter2>::__value
@@ -246,7 +245,7 @@ namespace ranges
       else if constexpr (__is_normal_iterator<_Out>)
 	{
 	  auto [__in,__out]
-	    = ranges::__copy_or_move<_IsMove>(__first, __last, __result.base());
+	    = ranges::__copy_or_move<_IsMove>(std::move(__first), __last, __result.base());
 	  return {std::move(__in), decltype(__result){__out}};
 	}
       else if constexpr (sized_sentinel_for<_Sent, _Iter>)
@@ -500,13 +499,16 @@ namespace ranges
 		 _Out __result) const
       {
 	if constexpr (random_access_iterator<_Iter>)
-	  return ranges::copy(__first, __first + __n, std::move(__result));
+	  {
+	    if (__n > 0)
+	      return ranges::copy(__first, __first + __n, std::move(__result));
+	  }
 	else
 	  {
 	    for (; __n > 0; --__n, (void)++__result, (void)++__first)
 	      *__result = *__first;
-	    return {std::move(__first), std::move(__result)};
 	  }
+	return {std::move(__first), std::move(__result)};
       }
   };
 
@@ -524,17 +526,25 @@ namespace ranges
 	if (__n <= 0)
 	  return __first;
 
-	// TODO: Generalize this optimization to contiguous iterators.
-	if constexpr (is_pointer_v<_Out>
-		      // Note that __is_byte already implies !is_volatile.
-		      && __is_byte<remove_pointer_t<_Out>>::__value
-		      && integral<_Tp>)
+	if constexpr (is_scalar_v<_Tp>)
 	  {
-	    __builtin_memset(__first, static_cast<unsigned char>(__value), __n);
-	    return __first + __n;
-	  }
-	else if constexpr (is_scalar_v<_Tp>)
-	  {
+	    // TODO: Generalize this optimization to contiguous iterators.
+	    if constexpr (is_pointer_v<_Out>
+			  // Note that __is_byte already implies !is_volatile.
+			  && __is_byte<remove_pointer_t<_Out>>::__value
+			  && integral<_Tp>)
+	      {
+#ifdef __cpp_lib_is_constant_evaluated
+		if (!std::is_constant_evaluated())
+#endif
+		  {
+		    __builtin_memset(__first,
+				     static_cast<unsigned char>(__value),
+				     __n);
+		    return __first + __n;
+		  }
+	      }
+
 	    const auto __tmp = __value;
 	    for (; __n > 0; --__n, (void)++__first)
 	      *__first = __tmp;

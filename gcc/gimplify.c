@@ -230,6 +230,8 @@ struct gimplify_omp_ctx
   bool target_firstprivatize_array_bases;
   bool add_safelen1;
   bool order_concurrent;
+  bool has_depend;
+  bool in_for_exprs;
   int defaultmap[4];
 };
 
@@ -782,7 +784,7 @@ gimple_add_tmp_var (tree tmp)
       if (gimplify_omp_ctxp)
 	{
 	  struct gimplify_omp_ctx *ctx = gimplify_omp_ctxp;
-	  int flag = GOVD_LOCAL;
+	  int flag = GOVD_LOCAL | GOVD_SEEN;
 	  while (ctx
 		 && (ctx->region_type == ORT_WORKSHARE
 		     || ctx->region_type == ORT_TASKGROUP
@@ -795,14 +797,16 @@ gimple_add_tmp_var (tree tmp)
 		{
 		  if (TREE_CODE (DECL_SIZE_UNIT (tmp)) != INTEGER_CST)
 		    ctx->add_safelen1 = true;
-		  else
+		  else if (ctx->in_for_exprs)
 		    flag = GOVD_PRIVATE;
+		  else
+		    flag = GOVD_PRIVATE | GOVD_SEEN;
 		  break;
 		}
 	      ctx = ctx->outer_context;
 	    }
 	  if (ctx)
-	    omp_add_variable (ctx, tmp, flag | GOVD_SEEN);
+	    omp_add_variable (ctx, tmp, flag);
 	}
     }
   else if (cfun)
@@ -4588,7 +4592,11 @@ gimplify_init_ctor_eval_range (tree object, tree lower, tree upper,
     gimplify_init_ctor_eval (cref, CONSTRUCTOR_ELTS (value),
 			     pre_p, cleared);
   else
-    gimplify_seq_add_stmt (pre_p, gimple_build_assign (cref, value));
+    {
+      if (gimplify_expr (&value, pre_p, NULL, is_gimple_val, fb_rvalue)
+	  != GS_ERROR)
+	gimplify_seq_add_stmt (pre_p, gimple_build_assign (cref, value));
+    }
 
   /* We exit the loop when the index var is equal to the upper bound.  */
   gimplify_seq_add_stmt (pre_p,
@@ -7568,6 +7576,14 @@ omp_notice_variable (struct gimplify_omp_ctx *ctx, tree decl, bool in_code)
       goto do_outer;
     }
 
+  /* Don't mark as GOVD_SEEN addressable temporaries seen only in simd
+     lb, b or incr expressions, those shouldn't be turned into simd arrays.  */
+  if (ctx->region_type == ORT_SIMD
+      && ctx->in_for_exprs
+      && ((n->value & (GOVD_PRIVATE | GOVD_SEEN | GOVD_EXPLICIT))
+	  == GOVD_PRIVATE))
+    flags &= ~GOVD_SEEN;
+
   if ((n->value & (GOVD_SEEN | GOVD_LOCAL)) == 0
       && (flags & (GOVD_SEEN | GOVD_LOCAL)) == GOVD_SEEN
       && DECL_SIZE (decl))
@@ -7722,7 +7738,13 @@ omp_check_private (struct gimplify_omp_ctx *ctx, tree decl, bool copyprivate)
 
       if ((ctx->region_type & (ORT_TARGET | ORT_TARGET_DATA)) != 0
 	  && (n == NULL || (n->value & GOVD_DATA_SHARE_CLASS) == 0))
-	continue;
+	{
+	  if ((ctx->region_type & ORT_TARGET_DATA) != 0
+	      || n == NULL
+	      || (n->value & GOVD_MAP) == 0)
+	    continue;
+	  return false;
+	}
 
       if (n != NULL)
 	{
@@ -7731,11 +7753,16 @@ omp_check_private (struct gimplify_omp_ctx *ctx, tree decl, bool copyprivate)
 	    return false;
 	  return (n->value & GOVD_SHARED) == 0;
 	}
+
+      if (ctx->region_type == ORT_WORKSHARE
+	  || ctx->region_type == ORT_TASKGROUP
+	  || ctx->region_type == ORT_SIMD
+	  || ctx->region_type == ORT_ACC)
+	continue;
+
+      break;
     }
-  while (ctx->region_type == ORT_WORKSHARE
-	 || ctx->region_type == ORT_TASKGROUP
-	 || ctx->region_type == ORT_SIMD
-	 || ctx->region_type == ORT_ACC);
+  while (1);
   return false;
 }
 
@@ -8588,13 +8615,17 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	  if (TREE_CODE (decl) == MEM_REF)
 	    {
 	      tree type = TREE_TYPE (decl);
+	      bool saved_into_ssa = gimplify_ctxp->into_ssa;
+	      gimplify_ctxp->into_ssa = false;
 	      if (gimplify_expr (&TYPE_MAX_VALUE (TYPE_DOMAIN (type)), pre_p,
 				 NULL, is_gimple_val, fb_rvalue, false)
 		  == GS_ERROR)
 		{
+		  gimplify_ctxp->into_ssa = saved_into_ssa;
 		  remove = true;
 		  break;
 		}
+	      gimplify_ctxp->into_ssa = saved_into_ssa;
 	      tree v = TYPE_MAX_VALUE (TYPE_DOMAIN (type));
 	      if (DECL_P (v))
 		{
@@ -8604,13 +8635,16 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	      decl = TREE_OPERAND (decl, 0);
 	      if (TREE_CODE (decl) == POINTER_PLUS_EXPR)
 		{
+		  gimplify_ctxp->into_ssa = false;
 		  if (gimplify_expr (&TREE_OPERAND (decl, 1), pre_p,
 				     NULL, is_gimple_val, fb_rvalue, false)
 		      == GS_ERROR)
 		    {
+		      gimplify_ctxp->into_ssa = saved_into_ssa;
 		      remove = true;
 		      break;
 		    }
+		  gimplify_ctxp->into_ssa = saved_into_ssa;
 		  v = TREE_OPERAND (decl, 1);
 		  if (DECL_P (v))
 		    {
@@ -9266,6 +9300,8 @@ gimplify_scan_omp_clauses (tree *list_p, gimple_seq *pre_p,
 	      remove = true;
 	      break;
 	    }
+	  if (code == OMP_TASK)
+	    ctx->has_depend = true;
 	  break;
 
 	case OMP_CLAUSE_TO:
@@ -9952,6 +9988,11 @@ gimplify_adjust_omp_clauses_1 (splay_tree_node n, void *data)
 	    return 0;
 	}
       code = OMP_CLAUSE_SHARED;
+      /* Don't optimize shared into firstprivate for read-only vars
+	 on tasks with depend clause, we shouldn't try to copy them
+	 until the dependencies are satisfied.  */
+      if (gimplify_omp_ctxp->has_depend)
+	flags |= GOVD_WRITTEN;
     }
   else if (flags & GOVD_PRIVATE)
     code = OMP_CLAUSE_PRIVATE;
@@ -10237,6 +10278,10 @@ gimplify_adjust_omp_clauses (gimple_seq *pre_p, gimple_seq body, tree *list_p,
 		  OMP_CLAUSE_SET_CODE (c, OMP_CLAUSE_PRIVATE);
 		  OMP_CLAUSE_PRIVATE_DEBUG (c) = 1;
 		}
+              if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
+		  && ctx->has_depend
+		  && DECL_P (decl))
+		n->value |= GOVD_WRITTEN;
 	      if (OMP_CLAUSE_CODE (c) == OMP_CLAUSE_SHARED
 		  && (n->value & GOVD_WRITTEN) == 0
 		  && DECL_P (decl)
@@ -11751,8 +11796,10 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
       else
 	var = decl;
 
+      gimplify_omp_ctxp->in_for_exprs = true;
       tret = gimplify_expr (&TREE_OPERAND (t, 1), &for_pre_body, NULL,
 			    is_gimple_val, fb_rvalue, false);
+      gimplify_omp_ctxp->in_for_exprs = false;
       ret = MIN (ret, tret);
       if (ret == GS_ERROR)
 	return ret;
@@ -11762,8 +11809,10 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
       gcc_assert (COMPARISON_CLASS_P (t));
       gcc_assert (TREE_OPERAND (t, 0) == decl);
 
+      gimplify_omp_ctxp->in_for_exprs = true;
       tret = gimplify_expr (&TREE_OPERAND (t, 1), &for_pre_body, NULL,
 			    is_gimple_val, fb_rvalue, false);
+      gimplify_omp_ctxp->in_for_exprs = false;
       ret = MIN (ret, tret);
 
       /* Handle OMP_FOR_INCR.  */
@@ -11829,6 +11878,7 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
 	      gcc_unreachable ();
 	    }
 
+	  gimplify_omp_ctxp->in_for_exprs = true;
 	  tret = gimplify_expr (&TREE_OPERAND (t, 1), &for_pre_body, NULL,
 				is_gimple_val, fb_rvalue, false);
 	  ret = MIN (ret, tret);
@@ -11850,6 +11900,7 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
 		  ret = MIN (ret, tret);
 		}
 	    }
+	  gimplify_omp_ctxp->in_for_exprs = false;
 	  break;
 
 	default:
@@ -12204,21 +12255,15 @@ gimplify_omp_for (tree *expr_p, gimple_seq *pre_p)
 /* Helper for gimplify_omp_loop, called through walk_tree.  */
 
 static tree
-replace_reduction_placeholders (tree *tp, int *walk_subtrees, void *data)
+note_no_context_vars (tree *tp, int *, void *data)
 {
-  if (DECL_P (*tp))
+  if (VAR_P (*tp)
+      && DECL_CONTEXT (*tp) == NULL_TREE
+      && !is_global_var (*tp))
     {
-      tree *d = (tree *) data;
-      if (*tp == OMP_CLAUSE_REDUCTION_PLACEHOLDER (d[0]))
-	{
-	  *tp = OMP_CLAUSE_REDUCTION_PLACEHOLDER (d[1]);
-	  *walk_subtrees = 0;
-	}
-      else if (*tp == OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (d[0]))
-	{
-	  *tp = OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (d[1]);
-	  *walk_subtrees = 0;
-	}
+      vec<tree> *d = (vec<tree> *) data;
+      d->safe_push (*tp);
+      DECL_CONTEXT (*tp) = current_function_decl;
     }
   return NULL_TREE;
 }
@@ -12387,7 +12432,8 @@ gimplify_omp_loop (tree *expr_p, gimple_seq *pre_p)
     {
       if (pass == 2)
 	{
-	  tree bind = build3 (BIND_EXPR, void_type_node, NULL, NULL, NULL);
+	  tree bind = build3 (BIND_EXPR, void_type_node, NULL, NULL,
+			      make_node (BLOCK));
 	  append_to_statement_list (*expr_p, &BIND_EXPR_BODY (bind));
 	  *expr_p = make_node (OMP_PARALLEL);
 	  TREE_TYPE (*expr_p) = void_type_node;
@@ -12454,25 +12500,66 @@ gimplify_omp_loop (tree *expr_p, gimple_seq *pre_p)
 	    *pc = copy_node (c);
 	    OMP_CLAUSE_DECL (*pc) = unshare_expr (OMP_CLAUSE_DECL (c));
 	    TREE_TYPE (*pc) = unshare_expr (TREE_TYPE (c));
-	    OMP_CLAUSE_REDUCTION_INIT (*pc)
-	      = unshare_expr (OMP_CLAUSE_REDUCTION_INIT (c));
-	    OMP_CLAUSE_REDUCTION_MERGE (*pc)
-	      = unshare_expr (OMP_CLAUSE_REDUCTION_MERGE (c));
 	    if (OMP_CLAUSE_REDUCTION_PLACEHOLDER (*pc))
 	      {
+		auto_vec<tree> no_context_vars;
+		int walk_subtrees = 0;
+		note_no_context_vars (&OMP_CLAUSE_REDUCTION_PLACEHOLDER (c),
+				      &walk_subtrees, &no_context_vars);
+		if (tree p = OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (c))
+		  note_no_context_vars (&p, &walk_subtrees, &no_context_vars);
+		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_INIT (c),
+					      note_no_context_vars,
+					      &no_context_vars);
+		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_MERGE (c),
+					      note_no_context_vars,
+					      &no_context_vars);
+
 		OMP_CLAUSE_REDUCTION_PLACEHOLDER (*pc)
 		  = copy_node (OMP_CLAUSE_REDUCTION_PLACEHOLDER (c));
 		if (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc))
 		  OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc)
 		    = copy_node (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (c));
-		tree nc = *pc;
-		tree data[2] = { c, nc };
-		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_INIT (nc),
-					      replace_reduction_placeholders,
-					      data);
-		walk_tree_without_duplicates (&OMP_CLAUSE_REDUCTION_MERGE (nc),
-					      replace_reduction_placeholders,
-					      data);
+
+		hash_map<tree, tree> decl_map;
+		decl_map.put (OMP_CLAUSE_DECL (c), OMP_CLAUSE_DECL (c));
+		decl_map.put (OMP_CLAUSE_REDUCTION_PLACEHOLDER (c),
+			      OMP_CLAUSE_REDUCTION_PLACEHOLDER (*pc));
+		if (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc))
+		  decl_map.put (OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (c),
+				OMP_CLAUSE_REDUCTION_DECL_PLACEHOLDER (*pc));
+
+		copy_body_data id;
+		memset (&id, 0, sizeof (id));
+		id.src_fn = current_function_decl;
+		id.dst_fn = current_function_decl;
+		id.src_cfun = cfun;
+		id.decl_map = &decl_map;
+		id.copy_decl = copy_decl_no_change;
+		id.transform_call_graph_edges = CB_CGE_DUPLICATE;
+		id.transform_new_cfg = true;
+		id.transform_return_to_modify = false;
+		id.transform_lang_insert_block = NULL;
+		id.eh_lp_nr = 0;
+		walk_tree (&OMP_CLAUSE_REDUCTION_INIT (*pc), copy_tree_body_r,
+			   &id, NULL);
+		walk_tree (&OMP_CLAUSE_REDUCTION_MERGE (*pc), copy_tree_body_r,
+			   &id, NULL);
+
+		tree d;
+		unsigned i;
+		FOR_EACH_VEC_ELT (no_context_vars, i, d)
+		  {
+		    DECL_CONTEXT (d) = NULL_TREE;
+		    DECL_CONTEXT (*decl_map.get (d)) = NULL_TREE;
+		  }
+	      }
+	    else
+	      {
+		OMP_CLAUSE_REDUCTION_INIT (*pc)
+		  = unshare_expr (OMP_CLAUSE_REDUCTION_INIT (c));
+		OMP_CLAUSE_REDUCTION_MERGE (*pc)
+		  = unshare_expr (OMP_CLAUSE_REDUCTION_MERGE (c));
 	      }
 	    pc = &OMP_CLAUSE_CHAIN (*pc);
 	    break;

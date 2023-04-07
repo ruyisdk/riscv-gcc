@@ -969,6 +969,20 @@ vect_build_slp_tree_1 (unsigned char *swap,
 	      continue;
 	    }
 
+	  if (!load_p && rhs_code == CALL_EXPR)
+	    {
+	      if (!compatible_calls_p (as_a <gcall *> (stmts[0]->stmt),
+				       as_a <gcall *> (stmt)))
+		{
+		  if (dump_enabled_p ())
+		    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
+				     "Build SLP failed: different calls in %G",
+				     stmt);
+		  /* Mismatch.  */
+		  continue;
+		}
+	    }
+
 	  if (need_same_oprnds)
 	    {
 	      tree other_op1 = (call_stmt
@@ -980,20 +994,6 @@ vect_build_slp_tree_1 (unsigned char *swap,
 		    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
 				     "Build SLP failed: different shift "
 				     "arguments in %G", stmt);
-		  /* Mismatch.  */
-		  continue;
-		}
-	    }
-
-	  if (!load_p && rhs_code == CALL_EXPR)
-	    {
-	      if (!compatible_calls_p (as_a <gcall *> (stmts[0]->stmt),
-				       as_a <gcall *> (stmt)))
-		{
-		  if (dump_enabled_p ())
-		    dump_printf_loc (MSG_MISSED_OPTIMIZATION, vect_location,
-				     "Build SLP failed: different calls in %G",
-				     stmt);
 		  /* Mismatch.  */
 		  continue;
 		}
@@ -1515,6 +1515,10 @@ vect_build_slp_tree_2 (vec_info *vinfo,
 	      }
 	  if (dump_enabled_p ())
 	    dump_printf (MSG_NOTE, "\n");
+	  /* After swapping some operands we lost track whether an
+	     operand has any pattern defs so be conservative here.  */
+	  if (oprnds_info[0]->any_pattern || oprnds_info[1]->any_pattern)
+	    oprnds_info[0]->any_pattern = oprnds_info[1]->any_pattern = true;
 	  /* And try again with scratch 'matches' ... */
 	  bool *tem = XALLOCAVEC (bool, group_size);
 	  if ((child = vect_build_slp_tree (vinfo, oprnd_info->def_stmts,
@@ -1960,7 +1964,8 @@ vect_supported_load_permutation_p (slp_instance slp_instn)
   /* Reduction (there are no data-refs in the root).
      In reduction chain the order of the loads is not important.  */
   if (!STMT_VINFO_DATA_REF (stmt_info)
-      && !REDUC_GROUP_FIRST_ELEMENT (stmt_info))
+      && !REDUC_GROUP_FIRST_ELEMENT (stmt_info)
+      && !SLP_INSTANCE_ROOT_STMT (slp_instn))
     vect_attempt_slp_rearrange_stmts (slp_instn);
 
   /* In basic block vectorization we allow any subchain of an interleaving
@@ -2280,6 +2285,7 @@ vect_analyze_slp_instance (vec_info *vinfo,
 	  SLP_INSTANCE_UNROLLING_FACTOR (new_instance) = unrolling_factor;
 	  SLP_INSTANCE_LOADS (new_instance) = vNULL;
 	  SLP_INSTANCE_ROOT_STMT (new_instance) = constructor ? stmt_info : NULL;
+	  new_instance->reduc_phis = NULL;
 
 	  vect_gather_slp_loads (new_instance, node);
 	  if (dump_enabled_p ())
@@ -2309,9 +2315,8 @@ vect_analyze_slp_instance (vec_info *vinfo,
 		  /* The load requires permutation when unrolling exposes
 		     a gap either because the group is larger than the SLP
 		     group-size or because there is a gap between the groups.  */
-		  && (known_eq (unrolling_factor, 1U)
-		      || (group_size == DR_GROUP_SIZE (first_stmt_info)
-			  && DR_GROUP_GAP (first_stmt_info) == 0)))
+		  && group_size == DR_GROUP_SIZE (first_stmt_info)
+		  && DR_GROUP_GAP (first_stmt_info) == 0)
 		{
 		  SLP_TREE_LOAD_PERMUTATION (load_node).release ();
 		  continue;
@@ -2565,120 +2570,37 @@ vect_make_slp_decision (loop_vec_info loop_vinfo)
 }
 
 
-/* Find stmts that must be both vectorized and SLPed (since they feed stmts that
-   can't be SLPed) in the tree rooted at NODE.  Mark such stmts as HYBRID.  */
-
-static void
-vect_detect_hybrid_slp_stmts (slp_tree node, unsigned i, slp_vect_type stype,
-			      hash_map<slp_tree, unsigned> &visited)
+/* Private data for vect_detect_hybrid_slp.  */
+struct vdhs_data
 {
-  stmt_vec_info stmt_vinfo = SLP_TREE_SCALAR_STMTS (node)[i];
-  imm_use_iterator imm_iter;
-  gimple *use_stmt;
-  stmt_vec_info use_vinfo;
-  slp_tree child;
-  loop_vec_info loop_vinfo = STMT_VINFO_LOOP_VINFO (stmt_vinfo);
-  int j;
+  loop_vec_info loop_vinfo;
+  vec<stmt_vec_info> *worklist;
+};
 
-  /* We need to union stype over the incoming graph edges but we still
-     want to limit recursion to stay O(N+E).  */
-  unsigned visited_cnt = ++visited.get_or_insert (node);
-  gcc_assert (visited_cnt <= node->refcnt);
-  bool only_edge = (visited_cnt != node->refcnt);
-
-  /* Propagate hybrid down the SLP tree.  */
-  if (stype == hybrid)
-    ;
-  else if (HYBRID_SLP_STMT (stmt_vinfo))
-    stype = hybrid;
-  else if (!only_edge)
-    {
-      /* Check if a pure SLP stmt has uses in non-SLP stmts.  */
-      gcc_checking_assert (PURE_SLP_STMT (stmt_vinfo));
-      /* If we get a pattern stmt here we have to use the LHS of the
-         original stmt for immediate uses.  */
-      gimple *stmt = vect_orig_stmt (stmt_vinfo)->stmt;
-      tree def;
-      if (gimple_code (stmt) == GIMPLE_PHI)
-	def = gimple_phi_result (stmt);
-      else
-	def = SINGLE_SSA_TREE_OPERAND (stmt, SSA_OP_DEF);
-      if (def)
-	FOR_EACH_IMM_USE_STMT (use_stmt, imm_iter, def)
-	  {
-	    use_vinfo = loop_vinfo->lookup_stmt (use_stmt);
-	    if (!use_vinfo)
-	      continue;
-	    use_vinfo = vect_stmt_to_vectorize (use_vinfo);
-	    if (!STMT_SLP_TYPE (use_vinfo)
-		&& (STMT_VINFO_RELEVANT (use_vinfo)
-		    || VECTORIZABLE_CYCLE_DEF (STMT_VINFO_DEF_TYPE (use_vinfo)))
-		&& !(gimple_code (use_stmt) == GIMPLE_PHI
-		     && STMT_VINFO_DEF_TYPE (use_vinfo) == vect_reduction_def))
-	      {
-		if (dump_enabled_p ())
-		  dump_printf_loc (MSG_NOTE, vect_location, "use of SLP "
-				   "def in non-SLP stmt: %G", use_stmt);
-		stype = hybrid;
-	      }
-	  }
-    }
-
-  if (stype == hybrid
-      && !HYBRID_SLP_STMT (stmt_vinfo))
-    {
-      if (dump_enabled_p ())
-	dump_printf_loc (MSG_NOTE, vect_location, "marking hybrid: %G",
-			 stmt_vinfo->stmt);
-      STMT_SLP_TYPE (stmt_vinfo) = hybrid;
-    }
-
-  if (!only_edge)
-    FOR_EACH_VEC_ELT (SLP_TREE_CHILDREN (node), j, child)
-      if (SLP_TREE_DEF_TYPE (child) != vect_external_def
-	  && SLP_TREE_DEF_TYPE (child) != vect_constant_def)
-	vect_detect_hybrid_slp_stmts (child, i, stype, visited);
-}
-
-/* Helpers for vect_detect_hybrid_slp walking pattern stmt uses.  */
+/* Walker for walk_gimple_op.  */
 
 static tree
-vect_detect_hybrid_slp_1 (tree *tp, int *, void *data)
+vect_detect_hybrid_slp (tree *tp, int *, void *data)
 {
   walk_stmt_info *wi = (walk_stmt_info *)data;
-  loop_vec_info loop_vinfo = (loop_vec_info) wi->info;
+  vdhs_data *dat = (vdhs_data *)wi->info;
 
   if (wi->is_lhs)
     return NULL_TREE;
 
-  stmt_vec_info def_stmt_info = loop_vinfo->lookup_def (*tp);
-  if (def_stmt_info && PURE_SLP_STMT (def_stmt_info))
+  stmt_vec_info def_stmt_info = dat->loop_vinfo->lookup_def (*tp);
+  if (!def_stmt_info)
+    return NULL_TREE;
+  def_stmt_info = vect_stmt_to_vectorize (def_stmt_info);
+  if (PURE_SLP_STMT (def_stmt_info))
     {
       if (dump_enabled_p ())
 	dump_printf_loc (MSG_NOTE, vect_location, "marking hybrid: %G",
 			 def_stmt_info->stmt);
       STMT_SLP_TYPE (def_stmt_info) = hybrid;
+      dat->worklist->safe_push (def_stmt_info);
     }
 
-  return NULL_TREE;
-}
-
-static tree
-vect_detect_hybrid_slp_2 (gimple_stmt_iterator *gsi, bool *handled,
-			  walk_stmt_info *wi)
-{
-  loop_vec_info loop_vinfo = (loop_vec_info) wi->info;
-  stmt_vec_info use_vinfo = loop_vinfo->lookup_stmt (gsi_stmt (*gsi));
-  /* If the stmt is in a SLP instance then this isn't a reason
-     to mark use definitions in other SLP instances as hybrid.  */
-  if (! STMT_SLP_TYPE (use_vinfo)
-      && (STMT_VINFO_RELEVANT (use_vinfo)
-	  || VECTORIZABLE_CYCLE_DEF (STMT_VINFO_DEF_TYPE (use_vinfo)))
-      && ! (gimple_code (gsi_stmt (*gsi)) == GIMPLE_PHI
-	    && STMT_VINFO_DEF_TYPE (use_vinfo) == vect_reduction_def))
-    ;
-  else
-    *handled = true;
   return NULL_TREE;
 }
 
@@ -2687,17 +2609,23 @@ vect_detect_hybrid_slp_2 (gimple_stmt_iterator *gsi, bool *handled,
 void
 vect_detect_hybrid_slp (loop_vec_info loop_vinfo)
 {
-  unsigned int i;
-  vec<slp_instance> slp_instances = LOOP_VINFO_SLP_INSTANCES (loop_vinfo);
-  slp_instance instance;
-
   DUMP_VECT_SCOPE ("vect_detect_hybrid_slp");
 
-  /* First walk all pattern stmt in the loop and mark defs of uses as
-     hybrid because immediate uses in them are not recorded.  */
-  for (i = 0; i < LOOP_VINFO_LOOP (loop_vinfo)->num_nodes; ++i)
+  /* All stmts participating in SLP are marked pure_slp, all other
+     stmts are loop_vect.
+     First collect all loop_vect stmts into a worklist.  */
+  auto_vec<stmt_vec_info> worklist;
+  for (unsigned i = 0; i < LOOP_VINFO_LOOP (loop_vinfo)->num_nodes; ++i)
     {
       basic_block bb = LOOP_VINFO_BBS (loop_vinfo)[i];
+      for (gphi_iterator gsi = gsi_start_phis (bb); !gsi_end_p (gsi);
+	   gsi_next (&gsi))
+	{
+	  gphi *phi = gsi.phi ();
+	  stmt_vec_info stmt_info = loop_vinfo->lookup_stmt (phi);
+	  if (!STMT_SLP_TYPE (stmt_info) && STMT_VINFO_RELEVANT (stmt_info))
+	    worklist.safe_push (stmt_info);
+	}
       for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
 	   gsi_next (&gsi))
 	{
@@ -2705,36 +2633,40 @@ vect_detect_hybrid_slp (loop_vec_info loop_vinfo)
 	  stmt_vec_info stmt_info = loop_vinfo->lookup_stmt (stmt);
 	  if (STMT_VINFO_IN_PATTERN_P (stmt_info))
 	    {
-	      walk_stmt_info wi;
-	      memset (&wi, 0, sizeof (wi));
-	      wi.info = loop_vinfo;
-	      gimple_stmt_iterator gsi2
-		= gsi_for_stmt (STMT_VINFO_RELATED_STMT (stmt_info)->stmt);
-	      walk_gimple_stmt (&gsi2, vect_detect_hybrid_slp_2,
-				vect_detect_hybrid_slp_1, &wi);
-	      walk_gimple_seq (STMT_VINFO_PATTERN_DEF_SEQ (stmt_info),
-			       vect_detect_hybrid_slp_2,
-			       vect_detect_hybrid_slp_1, &wi);
+	      for (gimple_stmt_iterator gsi2
+		     = gsi_start (STMT_VINFO_PATTERN_DEF_SEQ (stmt_info));
+		   !gsi_end_p (gsi2); gsi_next (&gsi2))
+		{
+		  stmt_vec_info patt_info
+		    = loop_vinfo->lookup_stmt (gsi_stmt (gsi2));
+		  if (!STMT_SLP_TYPE (patt_info)
+		      && STMT_VINFO_RELEVANT (patt_info))
+		    worklist.safe_push (patt_info);
+		}
+	      stmt_info = STMT_VINFO_RELATED_STMT (stmt_info);
 	    }
+	  if (!STMT_SLP_TYPE (stmt_info) && STMT_VINFO_RELEVANT (stmt_info))
+	    worklist.safe_push (stmt_info);
 	}
     }
 
-  /* Then walk the SLP instance trees marking stmts with uses in
-     non-SLP stmts as hybrid, also propagating hybrid down the
-     SLP tree, collecting the above info on-the-fly.  */
-  for (unsigned j = 0;; ++j)
+  /* Now we have a worklist of non-SLP stmts, follow use->def chains and
+     mark any SLP vectorized stmt as hybrid.
+     ???  We're visiting def stmts N times (once for each non-SLP and
+     once for each hybrid-SLP use).  */
+  walk_stmt_info wi;
+  vdhs_data dat;
+  dat.worklist = &worklist;
+  dat.loop_vinfo = loop_vinfo;
+  memset (&wi, 0, sizeof (wi));
+  wi.info = (void *)&dat;
+  while (!worklist.is_empty ())
     {
-      hash_map<slp_tree, unsigned> visited;
-      bool any = false;
-      FOR_EACH_VEC_ELT (slp_instances, i, instance)
-	if (j < SLP_INSTANCE_GROUP_SIZE (instance))
-	  {
-	    any = true;
-	    vect_detect_hybrid_slp_stmts (SLP_INSTANCE_TREE (instance),
-					  j, pure_slp, visited);
-	  }
-      if (!any)
-	break;
+      stmt_vec_info stmt_info = worklist.pop ();
+      /* Since SSA operands are not set up for pattern stmts we need
+	 to use walk_gimple_op.  */
+      wi.is_lhs = 0;
+      walk_gimple_op (stmt_info->stmt, vect_detect_hybrid_slp, &wi);
     }
 }
 
@@ -3588,7 +3520,7 @@ duplicate_and_interleave (vec_info *vinfo, gimple_seq *seq, tree vector_type,
 
   tree_vector_builder partial_elts;
   auto_vec<tree, 32> pieces (nvectors * 2);
-  pieces.quick_grow (nvectors * 2);
+  pieces.quick_grow_cleared (nvectors * 2);
   for (unsigned int i = 0; i < nvectors; ++i)
     {
       /* (2) Replace ELTS[0:NELTS] with ELTS'[0:NELTS'], where each element of
@@ -3607,53 +3539,60 @@ duplicate_and_interleave (vec_info *vinfo, gimple_seq *seq, tree vector_type,
   /* (4) Use a tree of VEC_PERM_EXPRs to create a single VM with the
 	 correct byte contents.
 
-     We need to repeat the following operation log2(nvectors) times:
+     Conceptually, we need to repeat the following operation log2(nvectors)
+     times, where hi_start = nvectors / 2:
 
 	out[i * 2] = VEC_PERM_EXPR (in[i], in[i + hi_start], lo_permute);
 	out[i * 2 + 1] = VEC_PERM_EXPR (in[i], in[i + hi_start], hi_permute);
 
      However, if each input repeats every N elements and the VF is
-     a multiple of N * 2, the HI result is the same as the LO.  */
+     a multiple of N * 2, the HI result is the same as the LO result.
+     This will be true for the first N1 iterations of the outer loop,
+     followed by N2 iterations for which both the LO and HI results
+     are needed.  I.e.:
+
+	N1 + N2 = log2(nvectors)
+
+     Each "N1 iteration" doubles the number of redundant vectors and the
+     effect of the process as a whole is to have a sequence of nvectors/2**N1
+     vectors that repeats 2**N1 times.  Rather than generate these redundant
+     vectors, we halve the number of vectors for each N1 iteration.  */
   unsigned int in_start = 0;
   unsigned int out_start = nvectors;
-  unsigned int hi_start = nvectors / 2;
-  /* A bound on the number of outputs needed to produce NRESULTS results
-     in the final iteration.  */
-  unsigned int noutputs_bound = nvectors * nresults;
+  unsigned int new_nvectors = nvectors;
   for (unsigned int in_repeat = 1; in_repeat < nvectors; in_repeat *= 2)
     {
-      noutputs_bound /= 2;
-      unsigned int limit = MIN (noutputs_bound, nvectors);
-      for (unsigned int i = 0; i < limit; ++i)
+      unsigned int hi_start = new_nvectors / 2;
+      unsigned int out_i = 0;
+      for (unsigned int in_i = 0; in_i < new_nvectors; ++in_i)
 	{
-	  if ((i & 1) != 0
+	  if ((in_i & 1) != 0
 	      && multiple_p (TYPE_VECTOR_SUBPARTS (new_vector_type),
 			     2 * in_repeat))
-	    {
-	      pieces[out_start + i] = pieces[out_start + i - 1];
-	      continue;
-	    }
+	    continue;
 
 	  tree output = make_ssa_name (new_vector_type);
-	  tree input1 = pieces[in_start + (i / 2)];
-	  tree input2 = pieces[in_start + (i / 2) + hi_start];
+	  tree input1 = pieces[in_start + (in_i / 2)];
+	  tree input2 = pieces[in_start + (in_i / 2) + hi_start];
 	  gassign *stmt = gimple_build_assign (output, VEC_PERM_EXPR,
 					       input1, input2,
-					       permutes[i & 1]);
+					       permutes[in_i & 1]);
 	  gimple_seq_add_stmt (seq, stmt);
-	  pieces[out_start + i] = output;
+	  pieces[out_start + out_i] = output;
+	  out_i += 1;
 	}
       std::swap (in_start, out_start);
+      new_nvectors = out_i;
     }
 
   /* (5) Use VIEW_CONVERT_EXPR to cast the final VM to the required type.  */
   results.reserve (nresults);
   for (unsigned int i = 0; i < nresults; ++i)
-    if (i < nvectors)
+    if (i < new_nvectors)
       results.quick_push (gimple_build (seq, VIEW_CONVERT_EXPR, vector_type,
 					pieces[in_start + i]));
     else
-      results.quick_push (results[i - nvectors]);
+      results.quick_push (results[i - new_nvectors]);
 }
 
 
@@ -4407,6 +4346,25 @@ vect_schedule_slp (vec_info *vinfo)
       slp_tree root = SLP_INSTANCE_TREE (instance);
       stmt_vec_info store_info;
       unsigned int j;
+
+      /* For reductions set the latch values of the vectorized PHIs.  */
+      if (instance->reduc_phis
+	  && STMT_VINFO_REDUC_TYPE (SLP_TREE_SCALAR_STMTS
+			(instance->reduc_phis)[0]) != FOLD_LEFT_REDUCTION
+	  && STMT_VINFO_REDUC_TYPE (SLP_TREE_SCALAR_STMTS
+			(instance->reduc_phis)[0]) != EXTRACT_LAST_REDUCTION)
+	{
+	  slp_tree slp_node = root;
+	  slp_tree phi_node = instance->reduc_phis;
+	  gphi *phi = as_a <gphi *> (SLP_TREE_SCALAR_STMTS (phi_node)[0]->stmt);
+	  edge e = loop_latch_edge (gimple_bb (phi)->loop_father);
+	  gcc_assert (SLP_TREE_VEC_STMTS (phi_node).length ()
+		      == SLP_TREE_VEC_STMTS (slp_node).length ());
+	  for (unsigned j = 0; j < SLP_TREE_VEC_STMTS (phi_node).length (); ++j)
+	    add_phi_arg (as_a <gphi *> (SLP_TREE_VEC_STMTS (phi_node)[j]->stmt),
+			 gimple_get_lhs (SLP_TREE_VEC_STMTS (slp_node)[j]->stmt),
+			 e, gimple_phi_arg_location (phi, e->dest_idx));
+	}
 
       /* Remove scalar call stmts.  Do not do this for basic-block
 	 vectorization as not all uses may be vectorized.

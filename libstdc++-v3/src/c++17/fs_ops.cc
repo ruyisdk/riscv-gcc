@@ -65,19 +65,12 @@ namespace posix = std::filesystem::__gnu_posix;
 fs::path
 fs::absolute(const path& p)
 {
-#ifdef _GLIBCXX_FILESYSTEM_IS_WINDOWS
   error_code ec;
   path ret = absolute(p, ec);
   if (ec)
     _GLIBCXX_THROW_OR_ABORT(filesystem_error("cannot make absolute path", p,
 					     ec));
   return ret;
-#else
-  if (p.empty())
-    _GLIBCXX_THROW_OR_ABORT(filesystem_error("cannot make absolute path", p,
-	  make_error_code(std::errc::invalid_argument)));
-  return current_path() / p;
-#endif
 }
 
 fs::path
@@ -411,8 +404,12 @@ fs::copy(const path& from, const path& to, copy_options options,
       // set an unused bit in options to disable further recursion
       if (!is_set(options, copy_options::recursive))
 	options |= static_cast<copy_options>(4096);
-      for (const directory_entry& x : directory_iterator(from))
-	copy(x.path(), to/x.path().filename(), options, ec);
+      for (const directory_entry& x : directory_iterator(from, ec))
+	{
+	  copy(x.path(), to/x.path().filename(), options, ec);
+	  if (ec)
+	    return;
+	}
     }
   // _GLIBCXX_RESOLVE_LIB_DEFECTS
   // 2683. filesystem::copy() says "no effects"
@@ -496,7 +493,7 @@ fs::create_directories(const path& p, error_code& ec)
       return false;
     }
 
-  file_status st = symlink_status(p, ec);
+  file_status st = status(p, ec);
   if (is_directory(st))
     return false;
   else if (ec && !status_known(st))
@@ -577,8 +574,7 @@ namespace
   {
     bool created = false;
 #ifdef _GLIBCXX_HAVE_SYS_STAT_H
-    posix::mode_t mode
-      = static_cast<std::underlying_type_t<fs::perms>>(perm);
+    posix::mode_t mode = static_cast<std::underlying_type_t<fs::perms>>(perm);
     if (posix::mkdir(p.c_str(), mode))
       {
 	const int err = errno;
@@ -690,7 +686,7 @@ fs::create_hard_link(const path& to, const path& new_hard_link,
   if (CreateHardLinkW(new_hard_link.c_str(), to.c_str(), NULL))
     ec.clear();
   else
-    ec.assign((int)GetLastError(), generic_category());
+    ec.assign((int)GetLastError(), system_category());
 #else
   ec = std::make_error_code(std::errc::not_supported);
 #endif
@@ -882,12 +878,12 @@ fs::equivalent(const path& p1, const path& p2, error_code& ec) noexcept
       if (!h1 || !h2)
 	{
 	  if (!h1 && !h2)
-	    ec.assign((int)GetLastError(), generic_category());
+	    ec.assign((int)GetLastError(), system_category());
 	  return false;
 	}
       if (!h1.get_info() || !h2.get_info())
 	{
-	  ec.assign((int)GetLastError(), generic_category());
+	  ec.assign((int)GetLastError(), system_category());
 	  return false;
 	}
       return h1.info.dwVolumeSerialNumber == h2.info.dwVolumeSerialNumber
@@ -1175,11 +1171,17 @@ fs::path fs::read_symlink(const path& p, error_code& ec)
   path result;
 #if defined(_GLIBCXX_HAVE_READLINK) && defined(_GLIBCXX_HAVE_SYS_STAT_H)
   stat_type st;
-  if (::lstat(p.c_str(), &st))
+  if (posix::lstat(p.c_str(), &st))
     {
       ec.assign(errno, std::generic_category());
       return result;
     }
+  else if (!fs::is_symlink(make_file_status(st)))
+    {
+      ec.assign(EINVAL, std::generic_category());
+      return result;
+    }
+
   std::string buf(st.st_size ? st.st_size + 1 : 128, '\0');
   do
     {
@@ -1257,7 +1259,7 @@ fs::remove(const path& p, error_code& ec) noexcept
 	  return true;
 	}
       else if (!ec)
-	ec.assign((int)GetLastError(), generic_category());
+	ec.assign((int)GetLastError(), system_category());
     }
   else if (status_known(st))
     ec.clear();
@@ -1388,6 +1390,36 @@ fs::rename(const path& from, const path& to)
 void
 fs::rename(const path& from, const path& to, error_code& ec) noexcept
 {
+#if _GLIBCXX_FILESYSTEM_IS_WINDOWS
+  const auto to_status = fs::status(to, ec);
+  if (to_status.type() == file_type::not_found)
+    ec.clear();
+  else if (ec)
+    return;
+
+  if (fs::exists(to_status))
+  {
+    const auto from_status = fs::status(from, ec);
+    if (ec)
+      return;
+
+    if (fs::is_directory(to_status))
+    {
+      if (!fs::is_directory(from_status))
+      {
+	// Cannot rename a non-directory over an existing directory.
+	ec = std::make_error_code(std::errc::is_a_directory);
+	return;
+      }
+    }
+    else if (fs::is_directory(from_status))
+    {
+      // Cannot rename a directory over an existing non-directory.
+      ec = std::make_error_code(std::errc::not_a_directory);
+      return;
+    }
+  }
+#endif
   if (posix::rename(from.c_str(), to.c_str()))
     ec.assign(errno, std::generic_category());
   else
@@ -1456,7 +1488,6 @@ fs::status(const fs::path& p, error_code& ec) noexcept
   auto str = p.c_str();
 
 #if _GLIBCXX_FILESYSTEM_IS_WINDOWS
-#if ! defined __MINGW64_VERSION_MAJOR || __MINGW64_VERSION_MAJOR < 6
   // stat() fails if there's a trailing slash (PR 88881)
   path p2;
   if (p.has_relative_path() && !p.has_filename())
@@ -1473,7 +1504,6 @@ fs::status(const fs::path& p, error_code& ec) noexcept
 	}
       str = p2.c_str();
     }
-#endif
 #endif
 
   stat_type st;
@@ -1503,7 +1533,6 @@ fs::symlink_status(const fs::path& p, std::error_code& ec) noexcept
   auto str = p.c_str();
 
 #if _GLIBCXX_FILESYSTEM_IS_WINDOWS
-#if ! defined __MINGW64_VERSION_MAJOR || __MINGW64_VERSION_MAJOR < 6
   // stat() fails if there's a trailing slash (PR 88881)
   path p2;
   if (p.has_relative_path() && !p.has_filename())
@@ -1520,7 +1549,6 @@ fs::symlink_status(const fs::path& p, std::error_code& ec) noexcept
 	}
       str = p2.c_str();
     }
-#endif
 #endif
 
   stat_type st;

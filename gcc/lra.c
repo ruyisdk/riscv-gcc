@@ -490,13 +490,16 @@ void
 lra_emit_move (rtx x, rtx y)
 {
   int old;
-
+  rtx_insn *insn;
+  
   if (GET_CODE (y) != PLUS)
     {
       if (rtx_equal_p (x, y))
 	return;
       old = max_reg_num ();
-      rtx_insn *insn = emit_move_insn (x, y);
+
+      insn = (GET_CODE (x) != STRICT_LOW_PART
+	      ? emit_move_insn (x, y) : emit_insn (gen_rtx_SET (x, y)));
       /* The move pattern may require scratch registers, so convert them
 	 into real registers now.  */
       if (insn != NULL_RTX)
@@ -2303,6 +2306,9 @@ int lra_constraint_new_regno_start;
    it is possible.  */
 int lra_bad_spill_regno_start;
 
+/* A pseudo of Pmode.  */
+rtx lra_pmode_pseudo;
+
 /* Inheritance pseudo regnos before the new spill pass.	 */
 bitmap_head lra_inheritance_pseudos;
 
@@ -2363,6 +2369,7 @@ lra (FILE *f)
 
   lra_dump_file = f;
   lra_asm_error_p = false;
+  lra_pmode_pseudo = gen_reg_rtx (Pmode);
   
   timevar_push (TV_LRA);
 

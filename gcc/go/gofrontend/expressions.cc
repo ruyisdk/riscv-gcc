@@ -1621,15 +1621,14 @@ Func_descriptor_expression::do_get_backend(Translate_context* context)
 	      || no->name().find("equal") != std::string::npos))
 	is_exported_runtime = true;
 
-      bool is_referenced_by_inline =
-	no->is_function() && no->func_value()->is_referenced_by_inline();
-
       bool is_hidden = ((no->is_function()
 			 && no->func_value()->enclosing() != NULL)
 			|| (Gogo::is_hidden_name(no->name())
-			    && !is_exported_runtime
-			    && !is_referenced_by_inline)
+			    && !is_exported_runtime)
 			|| Gogo::is_thunk(no));
+
+      if (no->is_function() && no->func_value()->is_referenced_by_inline())
+	is_hidden = false;
 
       bvar = context->backend()->immutable_struct(var_name, asm_name,
                                                   is_hidden, false,
@@ -9076,7 +9075,7 @@ Builtin_call_expression::flatten_append(Gogo* gogo, Named_object* function,
               ref2 = Expression::make_cast(uint_type, ref2, loc);
               cond = Expression::make_binary(OPERATOR_GT, ref, ref2, loc);
               zero = Expression::make_integer_ul(0, int_type, loc);
-              call = Expression::make_conditional(cond, call, zero, loc);
+              call = Expression::make_conditional(cond, zero, call, loc);
             }
         }
       else

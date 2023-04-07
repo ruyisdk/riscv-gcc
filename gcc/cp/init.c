@@ -246,9 +246,12 @@ build_zero_init_1 (tree type, tree nelts, bool static_storage_p,
 
       /* Iterate over the array elements, building initializations.  */
       if (nelts)
-	max_index = fold_build2_loc (input_location,
-				 MINUS_EXPR, TREE_TYPE (nelts),
-				 nelts, integer_one_node);
+	max_index = fold_build2_loc (input_location, MINUS_EXPR,
+				     TREE_TYPE (nelts), nelts,
+				     build_one_cst (TREE_TYPE (nelts)));
+      /* Treat flexible array members like [0] arrays.  */
+      else if (TYPE_DOMAIN (type) == NULL_TREE)
+	return NULL_TREE;
       else
 	max_index = array_type_nelts (type);
 
@@ -260,20 +263,19 @@ build_zero_init_1 (tree type, tree nelts, bool static_storage_p,
 
       /* A zero-sized array, which is accepted as an extension, will
 	 have an upper bound of -1.  */
-      if (!tree_int_cst_equal (max_index, integer_minus_one_node))
+      if (!integer_minus_onep (max_index))
 	{
 	  constructor_elt ce;
 
 	  /* If this is a one element array, we just use a regular init.  */
-	  if (tree_int_cst_equal (size_zero_node, max_index))
+	  if (integer_zerop (max_index))
 	    ce.index = size_zero_node;
 	  else
 	    ce.index = build2 (RANGE_EXPR, sizetype, size_zero_node,
-				max_index);
+			       max_index);
 
-	  ce.value = build_zero_init_1 (TREE_TYPE (type),
-					 /*nelts=*/NULL_TREE,
-					 static_storage_p, NULL_TREE);
+	  ce.value = build_zero_init_1 (TREE_TYPE (type), /*nelts=*/NULL_TREE,
+					static_storage_p, NULL_TREE);
 	  if (ce.value)
 	    {
 	      vec_alloc (v, 1);
@@ -287,10 +289,7 @@ build_zero_init_1 (tree type, tree nelts, bool static_storage_p,
   else if (VECTOR_TYPE_P (type))
     init = build_zero_cst (type);
   else
-    {
-      gcc_assert (TYPE_REF_P (type));
-      init = build_zero_cst (type);
-    }
+    gcc_assert (TYPE_REF_P (type));
 
   /* In all cases, the initializer is a constant.  */
   if (init)
@@ -586,15 +585,20 @@ get_nsdmi (tree member, bool in_ctor, tsubst_flags_t complain)
 
 	  bool pushed = false;
 	  tree ctx = DECL_CONTEXT (member);
-	  if (!currently_open_class (ctx)
-	      && !LOCAL_CLASS_P (ctx))
+
+	  processing_template_decl_sentinel ptds (/*reset*/false);
+	  if (!currently_open_class (ctx))
 	    {
-	      push_to_top_level ();
+	      if (!LOCAL_CLASS_P (ctx))
+		push_to_top_level ();
+	      else
+		/* push_to_top_level would lose the necessary function context,
+		   just reset processing_template_decl.  */
+		processing_template_decl = 0;
 	      push_nested_class (ctx);
+	      push_deferring_access_checks (dk_no_deferred);
 	      pushed = true;
 	    }
-
-	  gcc_checking_assert (!processing_template_decl);
 
 	  inject_this_parameter (ctx, TYPE_UNQUALIFIED);
 
@@ -616,8 +620,10 @@ get_nsdmi (tree member, bool in_ctor, tsubst_flags_t complain)
 
 	  if (pushed)
 	    {
+	      pop_deferring_access_checks ();
 	      pop_nested_class ();
-	      pop_from_top_level ();
+	      if (!LOCAL_CLASS_P (ctx))
+		pop_from_top_level ();
 	    }
 
 	  input_location = sloc;
@@ -882,7 +888,7 @@ perform_member_init (tree member, tree init)
       init = build2 (INIT_EXPR, type, decl, init);
       finish_expr_stmt (init);
       FOR_EACH_VEC_ELT (*cleanups, i, t)
-	push_cleanup (decl, t, false);
+	push_cleanup (NULL_TREE, t, false);
     }
   else if (type_build_ctor_call (type)
 	   || (init && CLASS_TYPE_P (strip_array_types (type))))
@@ -1889,7 +1895,8 @@ expand_default_init (tree binfo, tree true_exp, tree exp, tree init, int flags,
     }
 
   if (init && TREE_CODE (init) != TREE_LIST
-      && (flags & LOOKUP_ONLYCONVERTING))
+      && (flags & LOOKUP_ONLYCONVERTING)
+      && !unsafe_return_slot_p (exp))
     {
       /* Base subobjects should only get direct-initialization.  */
       gcc_assert (true_exp == exp);
@@ -2272,10 +2279,12 @@ build_offset_ref (tree type, tree member, bool address_p,
    recursively); otherwise, return DECL.  If STRICT_P, the
    initializer is only returned if DECL is a
    constant-expression.  If RETURN_AGGREGATE_CST_OK_P, it is ok to
-   return an aggregate constant.  */
+   return an aggregate constant.  If UNSHARE_P, return an unshared
+   copy of the initializer.  */
 
 static tree
-constant_value_1 (tree decl, bool strict_p, bool return_aggregate_cst_ok_p)
+constant_value_1 (tree decl, bool strict_p, bool return_aggregate_cst_ok_p,
+		  bool unshare_p)
 {
   while (TREE_CODE (decl) == CONST_DECL
 	 || decl_constant_var_p (decl)
@@ -2343,9 +2352,9 @@ constant_value_1 (tree decl, bool strict_p, bool return_aggregate_cst_ok_p)
 	  && !DECL_INITIALIZED_BY_CONSTANT_EXPRESSION_P (decl)
 	  && DECL_NONTRIVIALLY_INITIALIZED_P (decl))
 	break;
-      decl = unshare_expr (init);
+      decl = init;
     }
-  return decl;
+  return unshare_p ? unshare_expr (decl) : decl;
 }
 
 /* If DECL is a CONST_DECL, or a constant VAR_DECL initialized by constant
@@ -2357,26 +2366,36 @@ tree
 scalar_constant_value (tree decl)
 {
   return constant_value_1 (decl, /*strict_p=*/true,
-			   /*return_aggregate_cst_ok_p=*/false);
+			   /*return_aggregate_cst_ok_p=*/false,
+			   /*unshare_p=*/true);
 }
 
-/* Like scalar_constant_value, but can also return aggregate initializers.  */
+/* Like scalar_constant_value, but can also return aggregate initializers.
+   If UNSHARE_P, return an unshared copy of the initializer.  */
 
 tree
-decl_really_constant_value (tree decl)
+decl_really_constant_value (tree decl, bool unshare_p /*= true*/)
 {
   return constant_value_1 (decl, /*strict_p=*/true,
-			   /*return_aggregate_cst_ok_p=*/true);
+			   /*return_aggregate_cst_ok_p=*/true,
+			   /*unshare_p=*/unshare_p);
 }
 
-/* A more relaxed version of scalar_constant_value, used by the
+/* A more relaxed version of decl_really_constant_value, used by the
    common C/C++ code.  */
+
+tree
+decl_constant_value (tree decl, bool unshare_p)
+{
+  return constant_value_1 (decl, /*strict_p=*/processing_template_decl,
+			   /*return_aggregate_cst_ok_p=*/true,
+			   /*unshare_p=*/unshare_p);
+}
 
 tree
 decl_constant_value (tree decl)
 {
-  return constant_value_1 (decl, /*strict_p=*/processing_template_decl,
-			   /*return_aggregate_cst_ok_p=*/true);
+  return decl_constant_value (decl, /*unshare_p=*/true);
 }
 
 /* Common subroutines of build_new and build_vec_delete.  */
@@ -2856,33 +2875,17 @@ std_placement_new_fn_p (tree alloc_fn)
 }
 
 /* For element type ELT_TYPE, return the appropriate type of the heap object
-   containing such element(s).  COOKIE_SIZE is NULL or the size of cookie
-   in bytes.  FULL_SIZE is NULL if it is unknown how big the heap allocation
-   will be, otherwise size of the heap object.  If COOKIE_SIZE is NULL,
-   return array type ELT_TYPE[FULL_SIZE / sizeof(ELT_TYPE)], otherwise return
+   containing such element(s).  COOKIE_SIZE is the size of cookie in bytes.
+   Return
    struct { size_t[COOKIE_SIZE/sizeof(size_t)]; ELT_TYPE[N]; }
-   where N is nothing (flexible array member) if FULL_SIZE is NULL, otherwise
-   it is computed such that the size of the struct fits into FULL_SIZE.  */
+   where N is nothing (flexible array member) if ITYPE2 is NULL, otherwise
+   the array has ITYPE2 as its TYPE_DOMAIN.  */
 
 tree
-build_new_constexpr_heap_type (tree elt_type, tree cookie_size, tree full_size)
+build_new_constexpr_heap_type (tree elt_type, tree cookie_size, tree itype2)
 {
-  gcc_assert (cookie_size == NULL_TREE || tree_fits_uhwi_p (cookie_size));
-  gcc_assert (full_size == NULL_TREE || tree_fits_uhwi_p (full_size));
-  unsigned HOST_WIDE_INT csz = cookie_size ? tree_to_uhwi (cookie_size) : 0;
-  tree itype2 = NULL_TREE;
-  if (full_size)
-    {
-      unsigned HOST_WIDE_INT fsz = tree_to_uhwi (full_size);
-      gcc_assert (fsz >= csz);
-      fsz -= csz;
-      fsz /= int_size_in_bytes (elt_type);
-      itype2 = build_index_type (size_int (fsz - 1));
-      if (!cookie_size)
-	return build_cplus_array_type (elt_type, itype2);
-    }
-  else
-    gcc_assert (cookie_size);
+  gcc_assert (tree_fits_uhwi_p (cookie_size));
+  unsigned HOST_WIDE_INT csz = tree_to_uhwi (cookie_size);
   csz /= int_size_in_bytes (sizetype);
   tree itype1 = build_index_type (size_int (csz - 1));
   tree atype1 = build_cplus_array_type (sizetype, itype1);
@@ -3226,7 +3229,13 @@ build_new_1 (vec<tree, va_gc> **placement, tree type, tree nelts,
 
   tree align_arg = NULL_TREE;
   if (type_has_new_extended_alignment (elt_type))
-    align_arg = build_int_cst (align_type_node, TYPE_ALIGN_UNIT (elt_type));
+    {
+      unsigned align = TYPE_ALIGN_UNIT (elt_type);
+      /* Also consider the alignment of the cookie, if any.  */
+      if (array_p && TYPE_VEC_NEW_USES_COOKIE (elt_type))
+	align = MAX (align, TYPE_ALIGN_UNIT (size_type_node));
+      align_arg = build_int_cst (align_type_node, align);
+    }
 
   alloc_fn = NULL_TREE;
 
@@ -3328,6 +3337,12 @@ build_new_1 (vec<tree, va_gc> **placement, tree type, tree nelts,
 	    outer_nelts_check = NULL_TREE;
 	}
 
+      /* If size is zero e.g. due to type having zero size, try to
+	 preserve outer_nelts for constant expression evaluation
+	 purposes.  */
+      if (integer_zerop (size) && outer_nelts)
+	size = build2 (MULT_EXPR, TREE_TYPE (size), size, outer_nelts);
+
       alloc_call = build_operator_new_call (fnname, placement,
 					    &size, &cookie_size,
 					    align_arg, outer_nelts_check,
@@ -3406,18 +3421,19 @@ build_new_1 (vec<tree, va_gc> **placement, tree type, tree nelts,
   if (TREE_CODE (alloc_call_expr) == CALL_EXPR)
     CALL_FROM_NEW_OR_DELETE_P (alloc_call_expr) = 1;
 
+  alloc_expr = alloc_call;
   if (cookie_size)
-    alloc_call = maybe_wrap_new_for_constexpr (alloc_call, elt_type,
+    alloc_expr = maybe_wrap_new_for_constexpr (alloc_call, type,
 					       cookie_size);
 
   /* In the simple case, we can stop now.  */
   pointer_type = build_pointer_type (type);
   if (!cookie_size && !is_initialized)
-    return build_nop (pointer_type, alloc_call);
+    return build_nop (pointer_type, alloc_expr);
 
   /* Store the result of the allocation call in a variable so that we can
      use it more than once.  */
-  alloc_expr = get_target_expr (alloc_call);
+  alloc_expr = get_target_expr (alloc_expr);
   alloc_node = TARGET_EXPR_SLOT (alloc_expr);
 
   /* Strip any COMPOUND_EXPRs from ALLOC_CALL.  */
@@ -4319,6 +4335,14 @@ build_vec_init (tree base, tree maxindex, tree init,
     }
   else
     ptype = atype;
+
+  if (integer_all_onesp (maxindex))
+    {
+      /* Shortcut zero element case to avoid unneeded constructor synthesis.  */
+      if (init && TREE_SIDE_EFFECTS (init))
+	base = build2 (COMPOUND_EXPR, ptype, init, base);
+      return base;
+    }
 
   /* The code we are generating looks like:
      ({

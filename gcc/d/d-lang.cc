@@ -1026,32 +1026,43 @@ d_parse_file (void)
     {
       if (strcmp (in_fnames[i], "-") == 0)
 	{
-	  /* Handling stdin, generate a unique name for the module.  */
-	  obstack buffer;
-	  gcc_obstack_init (&buffer);
-	  int c;
+	  /* Load the entire contents of stdin into memory.  8 kilobytes should
+	     be a good enough initial size, but double on each iteration.
+	     16 bytes are added for the final '\n' and 15 bytes of padding.  */
+	  ssize_t size = 8 * 1024;
+	  uchar *buffer = XNEWVEC (uchar, size + 16);
+	  ssize_t len = 0;
+	  ssize_t count;
 
+	  while ((count = read (STDIN_FILENO, buffer + len, size - len)) > 0)
+	    {
+	      len += count;
+	      if (len == size)
+		{
+		  size *= 2;
+		  buffer = XRESIZEVEC (uchar, buffer, size + 16);
+		}
+	    }
+
+	  if (count < 0)
+	    {
+	      error (Loc ("stdin", 0, 0), "%s", xstrerror (errno));
+	      free (buffer);
+	      continue;
+	    }
+
+	  /* Handling stdin, generate a unique name for the module.  */
 	  Module *m = Module::create (in_fnames[i],
 				      Identifier::generateId ("__stdin"),
 				      global.params.doDocComments,
 				      global.params.doHdrGeneration);
 	  modules.push (m);
 
-	  /* Load the entire contents of stdin into memory.  */
-	  while ((c = getc (stdin)) != EOF)
-	    obstack_1grow (&buffer, c);
-
-	  if (!obstack_object_size (&buffer))
-	    obstack_1grow (&buffer, '\0');
-
 	  /* Overwrite the source file for the module, the one created by
 	     Module::create would have a forced a `.d' suffix.  */
 	  m->srcfile = File::create ("<stdin>");
-	  m->srcfile->len = obstack_object_size (&buffer);
-	  m->srcfile->buffer = (unsigned char *) obstack_finish (&buffer);
-
-	  /* Tell the front-end not to free the buffer after parsing.  */
-	  m->srcfile->ref = 1;
+	  m->srcfile->len = len;
+	  m->srcfile->buffer = buffer;
 	}
       else
 	{
@@ -1814,6 +1825,7 @@ d_build_eh_runtime_type (tree type)
 #undef LANG_HOOKS_GET_ALIAS_SET
 #undef LANG_HOOKS_TYPES_COMPATIBLE_P
 #undef LANG_HOOKS_BUILTIN_FUNCTION
+#undef LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE
 #undef LANG_HOOKS_REGISTER_BUILTIN_TYPE
 #undef LANG_HOOKS_FINISH_INCOMPLETE_DECL
 #undef LANG_HOOKS_GIMPLIFY_EXPR
@@ -1844,6 +1856,7 @@ d_build_eh_runtime_type (tree type)
 #define LANG_HOOKS_GET_ALIAS_SET	    d_get_alias_set
 #define LANG_HOOKS_TYPES_COMPATIBLE_P	    d_types_compatible_p
 #define LANG_HOOKS_BUILTIN_FUNCTION	    d_builtin_function
+#define LANG_HOOKS_BUILTIN_FUNCTION_EXT_SCOPE d_builtin_function_ext_scope
 #define LANG_HOOKS_REGISTER_BUILTIN_TYPE    d_register_builtin_type
 #define LANG_HOOKS_FINISH_INCOMPLETE_DECL   d_finish_incomplete_decl
 #define LANG_HOOKS_GIMPLIFY_EXPR	    d_gimplify_expr

@@ -99,7 +99,7 @@ extern char *neon_output_shift_immediate (const char *, char, rtx *,
 					  machine_mode, int, bool);
 extern void neon_pairwise_reduce (rtx, rtx, machine_mode,
 				  rtx (*) (rtx, rtx, rtx));
-extern rtx neon_make_constant (rtx);
+extern rtx neon_make_constant (rtx, bool generate = true);
 extern tree arm_builtin_vectorized_function (unsigned int, tree, tree);
 extern void neon_expand_vector_init (rtx, rtx);
 extern void neon_lane_bounds (rtx, HOST_WIDE_INT, HOST_WIDE_INT, const_tree);
@@ -115,6 +115,8 @@ extern enum reg_class coproc_secondary_reload_class (machine_mode, rtx,
 extern bool arm_tls_referenced_p (rtx);
 
 extern int arm_coproc_mem_operand (rtx, bool);
+extern int arm_coproc_mem_operand_no_writeback (rtx);
+extern int arm_coproc_mem_operand_wb (rtx, int);
 extern int neon_vector_mem_operand (rtx, int, bool);
 extern int mve_vector_mem_operand (machine_mode, rtx, bool);
 extern int neon_struct_mem_operand (rtx);
@@ -239,8 +241,7 @@ extern bool arm_change_mode_p (tree);
 extern tree arm_valid_target_attribute_tree (tree, struct gcc_options *,
 					     struct gcc_options *);
 extern void arm_configure_build_target (struct arm_build_target *,
-					struct cl_target_option *,
-					struct gcc_options *, bool);
+					struct cl_target_option *, bool);
 extern void arm_option_reconfigure_globals (void);
 extern void arm_options_perform_arch_sanity_checks (void);
 extern void arm_pr_long_calls (struct cpp_reader *);

@@ -1956,6 +1956,37 @@ remap_gimple_stmt (gimple *stmt, copy_body_data *id)
       gimple_set_vuse (copy, NULL_TREE);
     }
 
+  if (cfun->can_throw_non_call_exceptions)
+    {
+      /* When inlining a function which does not have non-call exceptions
+	 enabled into a function that has (which only happens with
+	 always-inline) we have to fixup stmts that cannot throw.  */
+      if (gcond *cond = dyn_cast <gcond *> (copy))
+	if (gimple_could_trap_p (cond))
+	  {
+	    gassign *cmp
+	      = gimple_build_assign (make_ssa_name (boolean_type_node),
+				     gimple_cond_code (cond),
+				     gimple_cond_lhs (cond),
+				     gimple_cond_rhs (cond));
+	    gimple_seq_add_stmt (&stmts, cmp);
+	    gimple_cond_set_code (cond, NE_EXPR);
+	    gimple_cond_set_lhs (cond, gimple_assign_lhs (cmp));
+	    gimple_cond_set_rhs (cond, boolean_false_node);
+	  }
+      if (gassign *ass = dyn_cast <gassign *> (copy))
+	if ((gimple_assign_rhs_code (ass) == COND_EXPR
+	     || gimple_assign_rhs_code (ass) == VEC_COND_EXPR)
+	    && gimple_could_trap_p (ass))
+	  {
+	    gassign *cmp
+	      = gimple_build_assign (make_ssa_name (boolean_type_node),
+				     gimple_assign_rhs1 (ass));
+	    gimple_seq_add_stmt (&stmts, cmp);
+	    gimple_assign_set_rhs1 (ass, gimple_assign_lhs (cmp));
+	  }
+    }
+
   gimple_seq_add_stmt (&stmts, copy);
   return stmts;
 }
@@ -2070,27 +2101,35 @@ copy_bb (copy_body_data *id, basic_block bb,
 	      tree p;
 	      gcall *new_call;
 	      vec<tree> argarray;
-	      size_t nargs = gimple_call_num_args (id->call_stmt);
-	      size_t n;
+	      size_t nargs_caller = gimple_call_num_args (id->call_stmt);
+	      size_t nargs = nargs_caller;
 
 	      for (p = DECL_ARGUMENTS (id->src_fn); p; p = DECL_CHAIN (p))
-		nargs--;
+		{
+		  /* Avoid crashing on invalid IL that doesn't have a
+		     varargs function or that passes not enough arguments.  */
+		  if (nargs == 0)
+		    break;
+		  nargs--;
+		}
 
 	      /* Create the new array of arguments.  */
-	      n = nargs + gimple_call_num_args (call_stmt);
+	      size_t nargs_callee = gimple_call_num_args (call_stmt);
+	      size_t n = nargs + nargs_callee;
 	      argarray.create (n);
 	      argarray.safe_grow_cleared (n);
 
 	      /* Copy all the arguments before '...'  */
-	      memcpy (argarray.address (),
-		      gimple_call_arg_ptr (call_stmt, 0),
-		      gimple_call_num_args (call_stmt) * sizeof (tree));
+	      if (nargs_callee)
+		memcpy (argarray.address (),
+			gimple_call_arg_ptr (call_stmt, 0),
+			nargs_callee * sizeof (tree));
 
 	      /* Append the arguments passed in '...'  */
-	      memcpy (argarray.address () + gimple_call_num_args (call_stmt),
-		      gimple_call_arg_ptr (id->call_stmt, 0)
-		      + (gimple_call_num_args (id->call_stmt) - nargs),
-		      nargs * sizeof (tree));
+	      if (nargs)
+		memcpy (argarray.address () + nargs_callee,
+			gimple_call_arg_ptr (id->call_stmt, 0)
+			+ (nargs_caller - nargs), nargs * sizeof (tree));
 
 	      new_call = gimple_build_call_vec (gimple_call_fn (call_stmt),
 						argarray);
@@ -2101,6 +2140,7 @@ copy_bb (copy_body_data *id, basic_block bb,
 		 GF_CALL_VA_ARG_PACK.  */
 	      gimple_call_copy_flags (new_call, call_stmt);
 	      gimple_call_set_va_arg_pack (new_call, false);
+	      gimple_call_set_fntype (new_call, gimple_call_fntype (call_stmt));
 	      /* location includes block.  */
 	      gimple_set_location (new_call, gimple_location (stmt));
 	      gimple_call_set_lhs (new_call, gimple_call_lhs (call_stmt));

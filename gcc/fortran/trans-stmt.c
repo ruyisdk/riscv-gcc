@@ -1757,7 +1757,7 @@ trans_associate_var (gfc_symbol *sym, gfc_wrapped_block *block)
       if (e->ts.type == BT_CLASS)
 	{
 	  /* Go straight to the class data.  */
-	  if (sym2->attr.dummy)
+	  if (sym2->attr.dummy && !sym2->attr.optional)
 	    {
 	      class_decl = DECL_LANG_SPECIFIC (sym2->backend_decl) ?
 			   GFC_DECL_SAVED_DESCRIPTOR (sym2->backend_decl) :
@@ -1890,7 +1890,7 @@ trans_associate_var (gfc_symbol *sym, gfc_wrapped_block *block)
       gfc_conv_expr_descriptor (&se, e);
 
       if (sym->ts.type == BT_CHARACTER
-	  && !se.direct_byref && sym->ts.deferred
+	  && sym->ts.deferred
 	  && !sym->attr.select_type_temporary
 	  && VAR_P (sym->ts.u.cl->backend_decl)
 	  && se.string_length != sym->ts.u.cl->backend_decl)
@@ -3921,9 +3921,10 @@ check_forall_dependencies (gfc_code *c, stmtblock_t *pre, stmtblock_t *post)
      point to the copy instead.  Note that the shallow copy of
      the variable will not suffice for derived types with
      pointer components.  We therefore leave these to their
-     own devices.  */
+     own devices.  Likewise for allocatable components.  */
   if (lsym->ts.type == BT_DERIVED
-	&& lsym->ts.u.derived->attr.pointer_comp)
+      && (lsym->ts.u.derived->attr.pointer_comp
+	  || lsym->ts.u.derived->attr.alloc_comp))
     return need_temp;
 
   new_symtree = NULL;
@@ -6972,7 +6973,7 @@ gfc_trans_allocate (gfc_code * code)
 	  gfc_expr *init_expr = gfc_expr_to_initialize (expr);
 	  gfc_expr *rhs = e3rhs ? e3rhs : gfc_copy_expr (code->expr3);
 	  flag_realloc_lhs = 0;
-	  tmp = gfc_trans_assignment (init_expr, rhs, false, false, true,
+	  tmp = gfc_trans_assignment (init_expr, rhs, true, false, true,
 				      false);
 	  flag_realloc_lhs = realloc_lhs;
 	  /* Free the expression allocated for init_expr.  */

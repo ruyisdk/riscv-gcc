@@ -24,6 +24,9 @@ features. See <link linkend="manual.intro.using.flags">dialect</link>
 options. The pre-defined symbol
 <constant>__cplusplus</constant> is used to check for the
 presence of the required flag.
+GCC 5.1 was the first release with non-experimental C++11 support,
+so the API and ABI of features added in C++11 is only stable
+since that release.
 </para>
 
 <para>
@@ -31,8 +34,7 @@ This status table is based on the table of contents of ISO/IEC 14882:2011.
 </para>
 
 <para>
-This section describes the C++11 support in mainline GCC, not in any
-particular release.
+This section describes the C++11 support in the GCC 10 release series.
 </para>
 
 <!-- Status is Yes or No, Broken/Partial-->

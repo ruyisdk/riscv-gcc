@@ -669,9 +669,6 @@ build_aggr_init_expr (tree type, tree init)
   else
     rval = init;
 
-  if (location_t loc = EXPR_LOCATION (init))
-    SET_EXPR_LOCATION (rval, loc);
-
   return rval;
 }
 
@@ -782,7 +779,15 @@ build_vec_init_expr (tree type, tree init, tsubst_flags_t complain)
 {
   tree slot;
   bool value_init = false;
-  tree elt_init = build_vec_init_elt (type, init, complain);
+  tree elt_init;
+  if (init && TREE_CODE (init) == CONSTRUCTOR)
+    {
+      gcc_assert (!BRACE_ENCLOSED_INITIALIZER_P (init));
+      /* We built any needed constructor calls in digest_init.  */
+      elt_init = init;
+    }
+  else
+    elt_init = build_vec_init_elt (type, init, complain);
 
   if (init == void_type_node)
     {
@@ -1245,6 +1250,8 @@ move (tree expr)
 {
   tree type = TREE_TYPE (expr);
   gcc_assert (!TYPE_REF_P (type));
+  if (xvalue_p (expr))
+    return expr;
   type = cp_build_reference_type (type, /*rval*/true);
   return build_static_cast (input_location, type, expr,
 			    tf_warning_or_error);
@@ -1445,9 +1452,9 @@ apply_identity_attributes (tree result, tree attribs, bool *remove_attributes)
 	      p = &TREE_CHAIN (*p);
 	    }
 	}
-      else if (first_ident)
+      else if (first_ident && first_ident != error_mark_node)
 	{
-	  for (tree a2 = first_ident; a2; a2 = TREE_CHAIN (a2))
+	  for (tree a2 = first_ident; a2 != a; a2 = TREE_CHAIN (a2))
 	    {
 	      *p = tree_cons (TREE_PURPOSE (a2), TREE_VALUE (a2), NULL_TREE);
 	      p = &TREE_CHAIN (*p);
@@ -3017,6 +3024,48 @@ bot_manip (tree* tp, int* walk_subtrees, void* data_)
 	}
       return NULL_TREE;
     }
+  if (TREE_CODE (*tp) == DECL_EXPR
+      && VAR_P (DECL_EXPR_DECL (*tp))
+      && DECL_ARTIFICIAL (DECL_EXPR_DECL (*tp))
+      && !TREE_STATIC (DECL_EXPR_DECL (*tp)))
+    {
+      tree t;
+      splay_tree_node n
+	= splay_tree_lookup (target_remap,
+			     (splay_tree_key) DECL_EXPR_DECL (*tp));
+      if (n)
+	t = (tree) n->value;
+      else
+	{
+	  t = create_temporary_var (TREE_TYPE (DECL_EXPR_DECL (*tp)));
+	  DECL_INITIAL (t) = DECL_INITIAL (DECL_EXPR_DECL (*tp));
+	  splay_tree_insert (target_remap,
+			     (splay_tree_key) DECL_EXPR_DECL (*tp),
+			     (splay_tree_value) t);
+	}
+      copy_tree_r (tp, walk_subtrees, NULL);
+      DECL_EXPR_DECL (*tp) = t;
+      if (data.clear_location && EXPR_HAS_LOCATION (*tp))
+	SET_EXPR_LOCATION (*tp, input_location);
+      return NULL_TREE;
+    }
+  if (TREE_CODE (*tp) == BIND_EXPR && BIND_EXPR_VARS (*tp))
+    {
+      copy_tree_r (tp, walk_subtrees, NULL);
+      for (tree *p = &BIND_EXPR_VARS (*tp); *p; p = &DECL_CHAIN (*p))
+	{
+	  gcc_assert (VAR_P (*p) && DECL_ARTIFICIAL (*p) && !TREE_STATIC (*p));
+	  tree t = create_temporary_var (TREE_TYPE (*p));
+	  DECL_INITIAL (t) = DECL_INITIAL (*p);
+	  DECL_CHAIN (t) = DECL_CHAIN (*p);
+	  splay_tree_insert (target_remap, (splay_tree_key) *p,
+			     (splay_tree_value) t);
+	  *p = t;
+	}
+      if (data.clear_location && EXPR_HAS_LOCATION (*tp))
+	SET_EXPR_LOCATION (*tp, input_location);
+      return NULL_TREE;
+    }
 
   /* Make a copy of this node.  */
   t = copy_tree_r (tp, walk_subtrees, NULL);
@@ -3811,6 +3860,8 @@ cp_tree_equal (tree t1, tree t2)
 	    if (SIZEOF_EXPR_TYPE_P (t2))
 	      o2 = TREE_TYPE (o2);
 	  }
+	else if (ALIGNOF_EXPR_STD_P (t1) != ALIGNOF_EXPR_STD_P (t2))
+	  return false;
 
 	if (TREE_CODE (o1) != TREE_CODE (o2))
 	  return false;
@@ -5006,8 +5057,18 @@ cp_walk_subtrees (tree *tp, int *walk_subtrees_p, walk_tree_fn func,
   while (0)
 
   if (TYPE_P (*tp))
-    /* Walk into template args without looking through typedefs.  */
-    if (tree ti = TYPE_TEMPLATE_INFO_MAYBE_ALIAS (*tp))
+    /* If *WALK_SUBTREES_P is 1, we're interested in the syntactic form of
+       the argument, so don't look through typedefs, but do walk into
+       template arguments for alias templates (and non-typedefed classes).
+
+       If *WALK_SUBTREES_P > 1, we're interested in type identity or
+       equivalence, so look through typedefs, ignoring template arguments for
+       alias templates, and walk into template args of classes.
+
+       See find_abi_tags_r for an example of setting *WALK_SUBTREES_P to 2
+       when that's the behavior the walk_tree_fn wants.  */
+    if (tree ti = (*walk_subtrees_p > 1 ? TYPE_TEMPLATE_INFO (*tp)
+		   : TYPE_TEMPLATE_INFO_MAYBE_ALIAS (*tp)))
       WALK_SUBTREE (TI_ARGS (ti));
 
   /* Not one of the easy cases.  We must explicitly go through the
@@ -5015,12 +5076,15 @@ cp_walk_subtrees (tree *tp, int *walk_subtrees_p, walk_tree_fn func,
   result = NULL_TREE;
   switch (code)
     {
+    case TEMPLATE_TYPE_PARM:
+      if (template_placeholder_p (*tp))
+	WALK_SUBTREE (CLASS_PLACEHOLDER_TEMPLATE (*tp));
+      /* Fall through.  */
     case DEFERRED_PARSE:
     case TEMPLATE_TEMPLATE_PARM:
     case BOUND_TEMPLATE_TEMPLATE_PARM:
     case UNBOUND_CLASS_TEMPLATE:
     case TEMPLATE_PARM_INDEX:
-    case TEMPLATE_TYPE_PARM:
     case TYPENAME_TYPE:
     case TYPEOF_TYPE:
     case UNDERLYING_TYPE:

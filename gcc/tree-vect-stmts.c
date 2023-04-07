@@ -2413,25 +2413,23 @@ get_group_load_store_type (stmt_vec_info stmt_info, tree vectype, bool slp,
 	  /* First cope with the degenerate case of a single-element
 	     vector.  */
 	  if (known_eq (TYPE_VECTOR_SUBPARTS (vectype), 1U))
-	    *memory_access_type = VMAT_CONTIGUOUS;
+	    ;
 
 	  /* Otherwise try using LOAD/STORE_LANES.  */
-	  if (*memory_access_type == VMAT_ELEMENTWISE
-	      && (vls_type == VLS_LOAD
-		  ? vect_load_lanes_supported (vectype, group_size, masked_p)
-		  : vect_store_lanes_supported (vectype, group_size,
-						masked_p)))
+	  else if (vls_type == VLS_LOAD
+		   ? vect_load_lanes_supported (vectype, group_size, masked_p)
+		   : vect_store_lanes_supported (vectype, group_size,
+						 masked_p))
 	    {
 	      *memory_access_type = VMAT_LOAD_STORE_LANES;
 	      overrun_p = would_overrun_p;
 	    }
 
 	  /* If that fails, try using permuting loads.  */
-	  if (*memory_access_type == VMAT_ELEMENTWISE
-	      && (vls_type == VLS_LOAD
-		  ? vect_grouped_load_supported (vectype, single_element_p,
-						 group_size)
-		  : vect_grouped_store_supported (vectype, group_size)))
+	  else if (vls_type == VLS_LOAD
+		   ? vect_grouped_load_supported (vectype, single_element_p,
+						  group_size)
+		   : vect_grouped_store_supported (vectype, group_size))
 	    {
 	      *memory_access_type = VMAT_CONTIGUOUS_PERMUTE;
 	      overrun_p = would_overrun_p;
@@ -8278,7 +8276,7 @@ vectorizable_store (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 	      /* Emit:
 		   MASK_STORE_LANES (DATAREF_PTR, ALIAS_PTR, VEC_MASK,
 				     VEC_ARRAY).  */
-	      unsigned int align = TYPE_ALIGN_UNIT (TREE_TYPE (vectype));
+	      unsigned int align = TYPE_ALIGN (TREE_TYPE (vectype));
 	      tree alias_ptr = build_int_cst (ref_type, align);
 	      call = gimple_build_call_internal (IFN_MASK_STORE_LANES, 4,
 						 dataref_ptr, alias_ptr,
@@ -8370,6 +8368,7 @@ vectorizable_store (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 		  && TREE_CODE (dataref_ptr) == SSA_NAME)
 		set_ptr_info_alignment (get_ptr_info (dataref_ptr), align,
 					misalign);
+	      align = least_bit_hwi (misalign | align);
 
 	      if (memory_access_type == VMAT_CONTIGUOUS_REVERSE)
 		{
@@ -8391,8 +8390,7 @@ vectorizable_store (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 	      /* Arguments are ready.  Create the new vector stmt.  */
 	      if (final_mask)
 		{
-		  align = least_bit_hwi (misalign | align);
-		  tree ptr = build_int_cst (ref_type, align);
+		  tree ptr = build_int_cst (ref_type, align * BITS_PER_UNIT);
 		  gcall *call
 		    = gimple_build_call_internal (IFN_MASK_STORE, 4,
 						  dataref_ptr, ptr,
@@ -8410,14 +8408,10 @@ vectorizable_store (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 					  : build_int_cst (ref_type, 0));
 		  if (aligned_access_p (first_dr_info))
 		    ;
-		  else if (DR_MISALIGNMENT (first_dr_info) == -1)
-		    TREE_TYPE (data_ref)
-		      = build_aligned_type (TREE_TYPE (data_ref),
-					    align * BITS_PER_UNIT);
 		  else
 		    TREE_TYPE (data_ref)
 		      = build_aligned_type (TREE_TYPE (data_ref),
-					    TYPE_ALIGN (elem_type));
+					    align * BITS_PER_UNIT);
 		  vect_copy_ref_info (data_ref, DR_REF (first_dr_info->dr));
 		  gassign *new_stmt
 		    = gimple_build_assign (data_ref, vec_oprnd);
@@ -9472,7 +9466,7 @@ vectorizable_load (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 	      /* Emit:
 		   VEC_ARRAY = MASK_LOAD_LANES (DATAREF_PTR, ALIAS_PTR,
 		                                VEC_MASK).  */
-	      unsigned int align = TYPE_ALIGN_UNIT (TREE_TYPE (vectype));
+	      unsigned int align = TYPE_ALIGN (TREE_TYPE (vectype));
 	      tree alias_ptr = build_int_cst (ref_type, align);
 	      call = gimple_build_call_internal (IFN_MASK_LOAD_LANES, 3,
 						 dataref_ptr, alias_ptr,
@@ -9569,11 +9563,12 @@ vectorizable_load (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 			&& TREE_CODE (dataref_ptr) == SSA_NAME)
 		      set_ptr_info_alignment (get_ptr_info (dataref_ptr),
 					      align, misalign);
+		    align = least_bit_hwi (misalign | align);
 
 		    if (final_mask)
 		      {
-			align = least_bit_hwi (misalign | align);
-			tree ptr = build_int_cst (ref_type, align);
+			tree ptr = build_int_cst (ref_type,
+						  align * BITS_PER_UNIT);
 			gcall *call
 			  = gimple_build_call_internal (IFN_MASK_LOAD, 3,
 							dataref_ptr, ptr,
@@ -9622,14 +9617,10 @@ vectorizable_load (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
 			  = fold_build2 (MEM_REF, ltype, dataref_ptr, offset);
 			if (alignment_support_scheme == dr_aligned)
 			  ;
-			else if (DR_MISALIGNMENT (first_dr_info) == -1)
-			  TREE_TYPE (data_ref)
-			    = build_aligned_type (TREE_TYPE (data_ref),
-						  align * BITS_PER_UNIT);
 			else
 			  TREE_TYPE (data_ref)
 			    = build_aligned_type (TREE_TYPE (data_ref),
-						  TYPE_ALIGN (elem_type));
+						  align * BITS_PER_UNIT);
 			if (ltype != vectype)
 			  {
 			    vect_copy_ref_info (data_ref,
@@ -11192,56 +11183,6 @@ vect_transform_stmt (stmt_vec_info stmt_info, gimple_stmt_iterator *gsi,
   if (STMT_VINFO_TYPE (stmt_info) == store_vec_info_type)
     return is_store;
 
-  /* If this stmt defines a value used on a backedge, update the
-     vectorized PHIs.  */
-  stmt_vec_info orig_stmt_info = vect_orig_stmt (stmt_info);
-  stmt_vec_info reduc_info;
-  if (STMT_VINFO_REDUC_DEF (orig_stmt_info)
-      && vect_stmt_to_vectorize (orig_stmt_info) == stmt_info
-      && (reduc_info = info_for_reduction (orig_stmt_info))
-      && STMT_VINFO_REDUC_TYPE (reduc_info) != FOLD_LEFT_REDUCTION
-      && STMT_VINFO_REDUC_TYPE (reduc_info) != EXTRACT_LAST_REDUCTION)
-    {
-      gphi *phi;
-      edge e;
-      if (!slp_node
-	  && (phi = dyn_cast <gphi *>
-		      (STMT_VINFO_REDUC_DEF (orig_stmt_info)->stmt))
-	  && dominated_by_p (CDI_DOMINATORS,
-			     gimple_bb (orig_stmt_info->stmt), gimple_bb (phi))
-	  && (e = loop_latch_edge (gimple_bb (phi)->loop_father))
-	  && (PHI_ARG_DEF_FROM_EDGE (phi, e)
-	      == gimple_get_lhs (orig_stmt_info->stmt)))
-	{
-	  stmt_vec_info phi_info
-	    = STMT_VINFO_VEC_STMT (STMT_VINFO_REDUC_DEF (orig_stmt_info));
-	  stmt_vec_info vec_stmt = STMT_VINFO_VEC_STMT (stmt_info);
-	  do
-	    {
-	      add_phi_arg (as_a <gphi *> (phi_info->stmt),
-			   gimple_get_lhs (vec_stmt->stmt), e,
-			   gimple_phi_arg_location (phi, e->dest_idx));
-	      phi_info = STMT_VINFO_RELATED_STMT (phi_info);
-	      vec_stmt = STMT_VINFO_RELATED_STMT (vec_stmt);
-	    }
-	  while (phi_info);
-	  gcc_assert (!vec_stmt);
-	}
-      else if (slp_node
-	       && slp_node != slp_node_instance->reduc_phis)
-	{
-	  slp_tree phi_node = slp_node_instance->reduc_phis;
-	  gphi *phi = as_a <gphi *> (SLP_TREE_SCALAR_STMTS (phi_node)[0]->stmt);
-	  e = loop_latch_edge (gimple_bb (phi)->loop_father);
-	  gcc_assert (SLP_TREE_VEC_STMTS (phi_node).length ()
-		      == SLP_TREE_VEC_STMTS (slp_node).length ());
-	  for (unsigned i = 0; i < SLP_TREE_VEC_STMTS (phi_node).length (); ++i)
-	    add_phi_arg (as_a <gphi *> (SLP_TREE_VEC_STMTS (phi_node)[i]->stmt),
-			 gimple_get_lhs (SLP_TREE_VEC_STMTS (slp_node)[i]->stmt),
-			 e, gimple_phi_arg_location (phi, e->dest_idx));
-	}
-    }
-
   /* Handle stmts whose DEF is used outside the loop-nest that is
      being vectorized.  */
   done = can_vectorize_live_stmts (stmt_info, gsi, slp_node,
@@ -12300,8 +12241,12 @@ vect_get_vector_types_for_stmt (stmt_vec_info stmt_info,
 	}
     }
 
-  gcc_assert (multiple_p (TYPE_VECTOR_SUBPARTS (nunits_vectype),
-			  TYPE_VECTOR_SUBPARTS (*stmt_vectype_out)));
+  if (!multiple_p (TYPE_VECTOR_SUBPARTS (nunits_vectype),
+		   TYPE_VECTOR_SUBPARTS (*stmt_vectype_out)))
+    return opt_result::failure_at (stmt,
+				   "Not vectorized: Incompatible number "
+				   "of vector subparts between %T and %T\n",
+				   nunits_vectype, *stmt_vectype_out);
 
   if (dump_enabled_p ())
     {

@@ -2899,6 +2899,16 @@ duplicate_decls (tree newdecl, tree olddecl, bool newdecl_is_friend)
 	snode->remove ();
     }
 
+  if (TREE_CODE (olddecl) == FUNCTION_DECL)
+    {
+      tree clone;
+      FOR_EACH_CLONE (clone, olddecl)
+	{
+	  DECL_ATTRIBUTES (clone) = DECL_ATTRIBUTES (olddecl);
+	  DECL_PRESERVE_P (clone) |= DECL_PRESERVE_P (olddecl);
+	}
+    }
+
   /* Remove the associated constraints for newdecl, if any, before
      reclaiming memory. */
   if (flag_concepts)
@@ -3635,17 +3645,17 @@ void
 pop_switch (void)
 {
   struct cp_switch *cs = switch_stack;
-  location_t switch_location;
 
   /* Emit warnings as needed.  */
-  switch_location = cp_expr_loc_or_input_loc (cs->switch_stmt);
+  location_t switch_location = cp_expr_loc_or_input_loc (cs->switch_stmt);
+  tree cond = SWITCH_STMT_COND (cs->switch_stmt);
   const bool bool_cond_p
     = (SWITCH_STMT_TYPE (cs->switch_stmt)
        && TREE_CODE (SWITCH_STMT_TYPE (cs->switch_stmt)) == BOOLEAN_TYPE);
   if (!processing_template_decl)
     c_do_switch_warnings (cs->cases, switch_location,
-			  SWITCH_STMT_TYPE (cs->switch_stmt),
-			  SWITCH_STMT_COND (cs->switch_stmt), bool_cond_p);
+			  SWITCH_STMT_TYPE (cs->switch_stmt), cond,
+			  bool_cond_p);
 
   /* For the benefit of block_may_fallthru remember if the switch body
      case labels cover all possible values and if there are break; stmts.  */
@@ -3656,6 +3666,15 @@ pop_switch (void)
     SWITCH_STMT_ALL_CASES_P (cs->switch_stmt) = 1;
   if (!cs->break_stmt_seen_p)
     SWITCH_STMT_NO_BREAK_P (cs->switch_stmt) = 1;
+  /* Now that we're done with the switch warnings, set the switch type
+     to the type of the condition if the index type was of scoped enum type.
+     (Such types don't participate in the integer promotions.)  We do this
+     because of bit-fields whose declared type is a scoped enum type:
+     gimplification will use the lowered index type, but convert the
+     case values to SWITCH_STMT_TYPE, which would have been the declared type
+     and verify_gimple_switch doesn't accept that.  */
+  if (is_bitfield_expr_with_lowered_type (cond))
+    SWITCH_STMT_TYPE (cs->switch_stmt) = TREE_TYPE (cond);
   gcc_assert (!cs->in_loop_body_p);
   splay_tree_delete (cs->cases);
   switch_stack = switch_stack->next;
@@ -5428,7 +5447,7 @@ start_decl (const cp_declarator *declarator,
       && DECL_DECLARED_CONSTEXPR_P (current_function_decl))
     {
       bool ok = false;
-      if (CP_DECL_THREAD_LOCAL_P (decl))
+      if (CP_DECL_THREAD_LOCAL_P (decl) && !DECL_REALLY_EXTERN (decl))
 	error_at (DECL_SOURCE_LOCATION (decl),
 		  "%qD declared %<thread_local%> in %qs function", decl,
 		  DECL_IMMEDIATE_FUNCTION_P (current_function_decl)
@@ -5811,6 +5830,38 @@ layout_var_decl (tree decl)
 	  error_at (DECL_SOURCE_LOCATION (decl),
 		    "storage size of %qD isn%'t constant", decl);
 	  TREE_TYPE (decl) = error_mark_node;
+	  type = error_mark_node;
+	}
+    }
+
+  /* If the final element initializes a flexible array field, add the size of
+     that initializer to DECL's size.  */
+  if (type != error_mark_node
+      && DECL_INITIAL (decl)
+      && TREE_CODE (DECL_INITIAL (decl)) == CONSTRUCTOR
+      && !vec_safe_is_empty (CONSTRUCTOR_ELTS (DECL_INITIAL (decl)))
+      && DECL_SIZE (decl) != NULL_TREE
+      && TREE_CODE (DECL_SIZE (decl)) == INTEGER_CST
+      && TYPE_SIZE (type) != NULL_TREE
+      && TREE_CODE (TYPE_SIZE (type)) == INTEGER_CST
+      && tree_int_cst_equal (DECL_SIZE (decl), TYPE_SIZE (type)))
+    {
+      constructor_elt &elt = CONSTRUCTOR_ELTS (DECL_INITIAL (decl))->last ();
+      if (elt.index)
+	{
+	  tree itype = TREE_TYPE (elt.index);
+	  tree vtype = TREE_TYPE (elt.value);
+	  if (TREE_CODE (itype) == ARRAY_TYPE
+	      && TYPE_DOMAIN (itype) == NULL
+	      && TREE_CODE (vtype) == ARRAY_TYPE
+	      && COMPLETE_TYPE_P (vtype))
+	    {
+	      DECL_SIZE (decl)
+		= size_binop (PLUS_EXPR, DECL_SIZE (decl), TYPE_SIZE (vtype));
+	      DECL_SIZE_UNIT (decl)
+		= size_binop (PLUS_EXPR, DECL_SIZE_UNIT (decl),
+			      TYPE_SIZE_UNIT (vtype));
+	    }
 	}
     }
 }
@@ -6368,7 +6419,7 @@ reshape_init_r (tree type, reshape_iter *d, tree first_initializer_p,
      non-empty subaggregate, brace elision is assumed and the
      initializer is considered for the initialization of the first
      member of the subaggregate.  */
-  if (TREE_CODE (init) != CONSTRUCTOR
+  if ((TREE_CODE (init) != CONSTRUCTOR || COMPOUND_LITERAL_P (init))
       /* But don't try this for the first initializer, since that would be
 	 looking through the outermost braces; A a2 = { a1 }; is not a
 	 valid aggregate initialization.  */
@@ -6553,6 +6604,19 @@ bool
 check_array_initializer (tree decl, tree type, tree init)
 {
   tree element_type = TREE_TYPE (type);
+
+  /* Structured binding when initialized with an array type needs
+     to have complete type.  */
+  if (decl
+      && DECL_DECOMPOSITION_P (decl)
+      && !DECL_DECOMP_BASE (decl)
+      && !COMPLETE_TYPE_P (type))
+    {
+      error_at (DECL_SOURCE_LOCATION (decl),
+		"structured binding has incomplete type %qT", type);
+      TREE_TYPE (decl) = error_mark_node;
+      return true;
+    }
 
   /* The array type itself need not be complete, because the
      initializer may tell us how many elements are in the array.
@@ -6805,12 +6869,19 @@ check_initializer (tree decl, tree init, int flags, vec<tree, va_gc> **cleanups)
 	      /* Declared constexpr or constinit, but no suitable initializer;
 		 massage init appropriately so we can pass it into
 		 store_init_value for the error.  */
-	      if (CLASS_TYPE_P (type)
-		  && (!init || TREE_CODE (init) == TREE_LIST))
+	      tree new_init = NULL_TREE;
+	      if (!processing_template_decl
+		  && TREE_CODE (init_code) == CALL_EXPR)
+		new_init = build_cplus_new (type, init_code, tf_none);
+	      else if (CLASS_TYPE_P (type)
+		       && (!init || TREE_CODE (init) == TREE_LIST))
+		new_init = build_functional_cast (input_location, type,
+						  init, tf_none);
+	      if (new_init)
 		{
-		  init = build_functional_cast (input_location, type,
-						init, tf_none);
-		  if (TREE_CODE (init) == TARGET_EXPR)
+		  init = new_init;
+		  if (TREE_CODE (init) == TARGET_EXPR
+		      && !(flags & LOOKUP_ONLYCONVERTING))
 		    TARGET_EXPR_DIRECT_INIT_P (init) = true;
 		}
 	      init_code = NULL_TREE;
@@ -6864,6 +6935,10 @@ check_initializer (tree decl, tree init, int flags, vec<tree, va_gc> **cleanups)
 
   if (init && init != error_mark_node)
     init_code = build2 (INIT_EXPR, type, decl, init);
+
+  if (init_code && !TREE_SIDE_EFFECTS (init_code)
+      && init_code != error_mark_node)
+    init_code = NULL_TREE;
 
   if (init_code)
     {
@@ -7450,10 +7525,13 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
   if (asmspec_tree && asmspec_tree != error_mark_node)
     asmspec = TREE_STRING_POINTER (asmspec_tree);
 
-  if (current_class_type
-      && CP_DECL_CONTEXT (decl) == current_class_type
-      && TYPE_BEING_DEFINED (current_class_type)
-      && !CLASSTYPE_TEMPLATE_INSTANTIATION (current_class_type)
+  bool in_class_decl
+    = (current_class_type
+       && CP_DECL_CONTEXT (decl) == current_class_type
+       && TYPE_BEING_DEFINED (current_class_type)
+       && !CLASSTYPE_TEMPLATE_INSTANTIATION (current_class_type));
+
+  if (in_class_decl
       && (DECL_INITIAL (decl) || init))
     DECL_INITIALIZED_IN_CLASS_P (decl) = 1;
 
@@ -7647,6 +7725,12 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	  retrofit_lang_decl (decl);
 	  SET_DECL_DEPENDENT_INIT_P (decl, true);
 	}
+
+      if (VAR_P (decl) && DECL_REGISTER (decl) && asmspec)
+	{
+	  set_user_assembler_name (decl, asmspec);
+	  DECL_HARD_REGISTER (decl) = 1;
+	}
       return;
     }
 
@@ -7826,6 +7910,13 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
 	  if (!flag_weak)
 	    /* Check again now that we have an initializer.  */
 	    maybe_commonize_var (decl);
+	  /* A class-scope constexpr variable with an out-of-class declaration.
+	     C++17 makes them implicitly inline, but still force it out.  */
+	  if (DECL_INLINE_VAR_P (decl)
+	      && !DECL_VAR_DECLARED_INLINE_P (decl)
+	      && !DECL_TEMPLATE_INSTANTIATION (decl)
+	      && !in_class_decl)
+	    mark_needed (decl);
 	}
 
       if (var_definition_p
@@ -7910,7 +8001,7 @@ cp_finish_decl (tree decl, tree init, bool init_const_expr_p,
     {
       unsigned i; tree t;
       FOR_EACH_VEC_ELT (*cleanups, i, t)
-	push_cleanup (decl, t, false);
+	push_cleanup (NULL_TREE, t, false);
       release_tree_vector (cleanups);
     }
 
@@ -8348,6 +8439,12 @@ cp_finish_decomp (tree decl, tree first, unsigned int count)
 			 : get_tuple_element_type (type, i));
 	  input_location = sloc;
 
+	  if (VOID_TYPE_P (eltype))
+	    {
+	      error ("%<std::tuple_element<%u, %T>::type%> is %<void%>",
+		     i, type);
+	      eltype = error_mark_node;
+	    }
 	  if (init == error_mark_node || eltype == error_mark_node)
 	    {
 	      inform (dloc, "in initialization of structured binding "
@@ -8964,17 +9061,25 @@ expand_static_init (tree decl, tree init)
 
 	  /* Do the initialization itself.  */
 	  init = add_stmt_to_compound (begin, init);
-	  init = add_stmt_to_compound
-	    (init, build2 (MODIFY_EXPR, void_type_node, flag, boolean_true_node));
-	  init = add_stmt_to_compound
-	    (init, build_call_n (release_fn, 1, guard_addr));
+	  init = add_stmt_to_compound (init,
+				       build2 (MODIFY_EXPR, void_type_node,
+					       flag, boolean_true_node));
+
+	  /* Use atexit to register a function for destroying this static
+	     variable.  Do this before calling __cxa_guard_release.  */
+	  init = add_stmt_to_compound (init, register_dtor_fn (decl));
+
+	  init = add_stmt_to_compound (init, build_call_n (release_fn, 1,
+							   guard_addr));
 	}
       else
-	init = add_stmt_to_compound (init, set_guard (guard));
+	{
+	  init = add_stmt_to_compound (init, set_guard (guard));
 
-      /* Use atexit to register a function for destroying this static
-	 variable.  */
-      init = add_stmt_to_compound (init, register_dtor_fn (decl));
+	  /* Use atexit to register a function for destroying this static
+	     variable.  */
+	  init = add_stmt_to_compound (init, register_dtor_fn (decl));
+	}
 
       finish_expr_stmt (init);
 

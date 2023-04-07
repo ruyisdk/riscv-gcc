@@ -645,7 +645,16 @@ Expression *ctfeInterpret(Expression *e)
     case TOKfloat64:
     case TOKcomplex80:
     case TOKnull:
+    case TOKvoid:
     case TOKstring:
+    case TOKthis:
+    case TOKsuper:
+    case TOKtype:
+    case TOKtypeid:
+    case TOKtemplate:   // non-eponymous template/instance
+    case TOKscope:      // ditto
+    case TOKdottd:      // ditto, e.e1 doesn't matter here
+    case TOKdot:        // ditto
         if (e->type->ty == Terror)
             return new ErrorExp();
         /* fall through */
@@ -1946,15 +1955,6 @@ public:
             // Check for unsupported type painting operations
             Type *elemtype = ((TypeArray *)(val->type))->next;
             d_uns64 elemsize = elemtype->size();
-
-            // It's OK to cast from fixed length to dynamic array, eg &int[3] to int[]*
-            if (val->type->ty == Tsarray && pointee->ty == Tarray &&
-                elemsize == pointee->nextOf()->size())
-            {
-                new(pue) AddrExp(e->loc, val, e->type);
-                result = pue->exp();
-                return;
-            }
 
             // It's OK to cast from fixed length to fixed length array, eg &int[n] to int[d]*.
             if (val->type->ty == Tsarray && pointee->ty == Tsarray &&

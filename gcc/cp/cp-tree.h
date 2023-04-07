@@ -464,6 +464,7 @@ extern GTY(()) tree cp_global_trees[CPTI_MAX];
       IMPLICIT_CONV_EXPR_BRACED_INIT (in IMPLICIT_CONV_EXPR)
       TINFO_VAR_DECLARED_CONSTINIT (in TEMPLATE_INFO)
       CALL_FROM_NEW_OR_DELETE_P (in CALL_EXPR)
+      PACK_EXPANSION_AUTO_P (in *_PACK_EXPANSION)
    3: (TREE_REFERENCE_EXPR) (in NON_LVALUE_EXPR) (commented-out).
       ICS_BAD_FLAG (in _CONV)
       FN_TRY_BLOCK_P (in TRY_BLOCK)
@@ -3728,6 +3729,9 @@ struct GTY(()) lang_decl {
 /* True iff this pack expansion is for sizeof....  */
 #define PACK_EXPANSION_SIZEOF_P(NODE) TREE_LANG_FLAG_1 (NODE)
 
+/* True iff this pack expansion is for auto... in lambda init-capture.  */
+#define PACK_EXPANSION_AUTO_P(NODE) TREE_LANG_FLAG_2 (NODE)
+
 /* True iff the wildcard can match a template parameter pack.  */
 #define WILDCARD_PACK_P(NODE) TREE_LANG_FLAG_0 (NODE)
 
@@ -5024,6 +5028,21 @@ more_aggr_init_expr_args_p (const aggr_init_expr_arg_iterator *iter)
 #define DECL_COROUTINE_P(NODE) \
   (LANG_DECL_FN_CHECK (DECL_COMMON_CHECK (NODE))->coroutine_p)
 
+/* For a FUNCTION_DECL of a coroutine, this holds the ACTOR helper function
+   decl.  */
+#define DECL_ACTOR_FN(NODE) \
+  (coro_get_actor_function ((NODE)))
+
+/* For a FUNCTION_DECL of a coroutine, this holds the DESTROY helper function
+  decl.  */
+#define DECL_DESTROY_FN(NODE) \
+  (coro_get_destroy_function ((NODE)))
+
+/* For a FUNCTION_DECL of a coroutine helper (ACTOR or DESTROY), this points
+   back to the original (ramp) function.  */
+#define DECL_RAMP_FN(NODE) \
+  (coro_get_ramp_function (NODE))
+
 /* True for an OMP_ATOMIC that has dependent parameters.  These are stored
    as an expr in operand 1, and integer_zero_node or clauses in operand 0.  */
 #define OMP_ATOMIC_DEPENDENT_P(NODE) \
@@ -5459,6 +5478,7 @@ extern GTY(()) vec<tree, va_gc> *keyed_classes;
 #ifndef NO_DOT_IN_LABEL
 
 #define JOINER '.'
+#define JOIN_STR "."
 
 #define AUTO_TEMP_NAME "_.tmp_"
 #define VFIELD_BASE ".vf"
@@ -5470,6 +5490,7 @@ extern GTY(()) vec<tree, va_gc> *keyed_classes;
 #ifndef NO_DOLLAR_IN_LABEL
 
 #define JOINER '$'
+#define JOIN_STR "$"
 
 #define AUTO_TEMP_NAME "_$tmp_"
 #define VFIELD_BASE "$vf"
@@ -5477,6 +5498,8 @@ extern GTY(()) vec<tree, va_gc> *keyed_classes;
 #define VFIELD_NAME_FORMAT "_vptr$%s"
 
 #else /* NO_DOLLAR_IN_LABEL */
+
+#define JOIN_STR "_"
 
 #define VTABLE_NAME "__vt_"
 #define VTABLE_NAME_P(ID_NODE) \
@@ -6378,6 +6401,7 @@ extern bool is_std_init_list			(tree);
 extern bool is_list_ctor			(tree);
 extern void validate_conversion_obstack		(void);
 extern void mark_versions_used			(tree);
+extern bool unsafe_return_slot_p		(tree);
 extern bool cp_warn_deprecated_use		(tree, tsubst_flags_t = tf_warning_or_error);
 extern void cp_warn_deprecated_use_scopes	(tree);
 extern tree get_function_version_dispatcher	(tree);
@@ -6779,7 +6803,8 @@ extern tree build_vec_delete			(location_t, tree, tree,
 extern tree create_temporary_var		(tree);
 extern void initialize_vtbl_ptrs		(tree);
 extern tree scalar_constant_value		(tree);
-extern tree decl_really_constant_value		(tree);
+extern tree decl_constant_value			(tree, bool);
+extern tree decl_really_constant_value		(tree, bool = true);
 extern int diagnose_uninitialized_cst_or_ref_member (tree, bool, bool);
 extern tree build_vtbl_address                  (tree);
 extern bool maybe_reject_flexarray_init		(tree, tree);
@@ -7960,7 +7985,7 @@ extern tree maybe_fold_non_dependent_expr	(tree,
 						 tsubst_flags_t = tf_warning_or_error);
 extern tree fold_non_dependent_init		(tree,
 						 tsubst_flags_t = tf_warning_or_error,
-						 bool = false);
+						 bool = false, tree = NULL_TREE);
 extern tree fold_simple				(tree);
 extern bool reduced_constant_expression_p       (tree);
 extern bool is_instantiation_of_constexpr       (tree);
@@ -7986,6 +8011,9 @@ extern tree finish_co_yield_expr		(location_t, tree);
 extern tree coro_validate_builtin_call		(tree,
 						 tsubst_flags_t = tf_warning_or_error);
 extern bool morph_fn_to_coro			(tree, tree *, tree *);
+extern tree coro_get_actor_function		(tree);
+extern tree coro_get_destroy_function		(tree);
+extern tree coro_get_ramp_function		(tree);
 
 /* Inline bodies.  */
 
@@ -8129,6 +8157,37 @@ is_constrained_auto (const_tree t)
 {
   return is_auto (t) && PLACEHOLDER_TYPE_CONSTRAINTS (t);
 }
+
+/* True if CODE, a tree code, denotes a tree whose operand is not evaluated
+   as per [expr.context], i.e., an operand to sizeof, typeof, decltype, or
+   alignof.  */
+
+inline bool
+unevaluated_p (tree_code code)
+{
+  return (code == DECLTYPE_TYPE
+	  || code == ALIGNOF_EXPR
+	  || code == SIZEOF_EXPR
+	  || code == NOEXCEPT_EXPR);
+}
+
+/* RAII class to push/pop class scope T; if T is not a class, do nothing.  */
+
+struct push_nested_class_guard
+{
+  bool push;
+  push_nested_class_guard (tree t)
+    : push (t && CLASS_TYPE_P (t))
+  {
+    if (push)
+      push_nested_class (t);
+  }
+  ~push_nested_class_guard ()
+  {
+    if (push)
+      pop_nested_class ();
+  }
+};
 
 #if CHECKING_P
 namespace selftest {

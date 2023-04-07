@@ -285,7 +285,9 @@ get_symbol_constant_value (tree sym)
       if (val)
 	{
 	  val = canonicalize_constructor_val (unshare_expr (val), sym);
-	  if (val && is_gimple_min_invariant (val))
+	  if (val
+	      && is_gimple_min_invariant (val)
+	      && useless_type_conversion_p (TREE_TYPE (sym), TREE_TYPE (val)))
 	    return val;
 	  else
 	    return NULL_TREE;
@@ -445,7 +447,8 @@ fold_gimple_assign (gimple_stmt_iterator *si)
 					   CONSTRUCTOR_ELTS (rhs));
 	  }
 
-	else if (DECL_P (rhs))
+	else if (DECL_P (rhs)
+		 && is_gimple_reg_type (TREE_TYPE (rhs)))
 	  return get_symbol_constant_value (rhs);
       }
       break;
@@ -4302,7 +4305,7 @@ gimple_fold_mask_load_store_mem_ref (gcall *call, tree vectype)
   if (!tree_fits_uhwi_p (alias_align) || !integer_all_onesp (mask))
     return NULL_TREE;
 
-  unsigned HOST_WIDE_INT align = tree_to_uhwi (alias_align) * BITS_PER_UNIT;
+  unsigned HOST_WIDE_INT align = tree_to_uhwi (alias_align);
   if (TYPE_ALIGN (vectype) != align)
     vectype = build_aligned_type (vectype, align);
   tree offset = build_zero_cst (TREE_TYPE (alias_align));
@@ -4837,9 +4840,10 @@ replace_stmt_with_simplification (gimple_stmt_iterator *gsi,
 /* Canonicalize MEM_REFs invariant address operand after propagation.  */
 
 static bool
-maybe_canonicalize_mem_ref_addr (tree *t)
+maybe_canonicalize_mem_ref_addr (tree *t, bool is_debug = false)
 {
   bool res = false;
+  tree *orig_t = t;
 
   if (TREE_CODE (*t) == ADDR_EXPR)
     t = &TREE_OPERAND (*t, 0);
@@ -4900,7 +4904,11 @@ maybe_canonicalize_mem_ref_addr (tree *t)
 	  base = get_addr_base_and_unit_offset (TREE_OPERAND (addr, 0),
 						&coffset);
 	  if (!base)
-	    gcc_unreachable ();
+	    {
+	      if (is_debug)
+		return false;
+	      gcc_unreachable ();
+	    }
 
 	  TREE_OPERAND (*t, 0) = build_fold_addr_expr (base);
 	  TREE_OPERAND (*t, 1) = int_const_binop (PLUS_EXPR,
@@ -4948,6 +4956,8 @@ maybe_canonicalize_mem_ref_addr (tree *t)
       if (tem)
 	{
 	  *t = tem;
+	  if (TREE_CODE (*orig_t) == ADDR_EXPR)
+	    recompute_tree_invariant_for_addr_expr (*orig_t);
 	  res = true;
 	}
     }
@@ -5055,7 +5065,7 @@ fold_stmt_1 (gimple_stmt_iterator *gsi, bool inplace, tree (*valueize) (tree))
 	  if (*val
 	      && (REFERENCE_CLASS_P (*val)
 		  || TREE_CODE (*val) == ADDR_EXPR)
-	      && maybe_canonicalize_mem_ref_addr (val))
+	      && maybe_canonicalize_mem_ref_addr (val, true))
 	    changed = true;
 	}
       break;
@@ -7078,7 +7088,7 @@ fold_const_aggregate_ref_1 (tree t, tree (*valueize) (tree))
 	      poly_offset_int woffset
 		= wi::sext (wi::to_poly_offset (idx)
 			    - wi::to_poly_offset (low_bound),
-			    TYPE_PRECISION (TREE_TYPE (idx)));
+			    TYPE_PRECISION (sizetype));
 	      woffset *= tree_to_uhwi (unit_size);
 	      woffset *= BITS_PER_UNIT;
 	      if (woffset.to_shwi (&offset))

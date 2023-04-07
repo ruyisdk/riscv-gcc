@@ -52,9 +52,10 @@
 #define b (
 #endif
 // <queue> and <stack> defined data members called c
-#define d (
 #if __cplusplus <= 201703L
-// <numbers> defines std::numbers::e
+// <chrono> defines operator""d in C++20
+#define d (
+// <numbers> defines std::numbers::e in C++20
 #define e (
 #endif
 #define f (
@@ -98,13 +99,23 @@
 #define v (
 #define w (
 #define x (
+#if __cplusplus <= 201703L
+// <chrono> defines operator""y in C++20
 #define y (
+#endif
 #define z (
 
 #define tmp (
+#define sz (
+#define token (
 
 #if __cplusplus < 201103L
 #define uses_allocator  (
+#endif
+
+#if __cplusplus < 201402L
+// <complex> defines operator""il
+#define il  (
 #endif
 
 #if __cplusplus < 201703L
@@ -184,6 +195,15 @@
 #undef r
 #undef x
 #undef y
+// <sys/var.h> defines vario::v
+#undef v
+// <sys/timer.h> defines trb::func and cputime_tmr::func
+#undef func
+#endif
+
+#ifdef __APPLE__
+// inttypes.h:  extern intmax_t imaxabs(intmax_t j);
+#undef j
 #endif
 
 #ifdef __hpux__

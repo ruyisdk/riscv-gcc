@@ -840,9 +840,9 @@ c_common_post_options (const char **pfilename)
   else if (!flag_gnu89_inline && !flag_isoc99)
     error ("%<-fno-gnu89-inline%> is only supported in GNU99 or C99 mode");
 
-  /* Default to ObjC sjlj exception handling if NeXT runtime.  */
+  /* Default to ObjC sjlj exception handling if NeXT runtime < v2.  */
   if (flag_objc_sjlj_exceptions < 0)
-    flag_objc_sjlj_exceptions = flag_next_runtime;
+    flag_objc_sjlj_exceptions = (flag_next_runtime && flag_objc_abi < 2);
   if (flag_objc_exceptions && !flag_objc_sjlj_exceptions)
     flag_exceptions = 1;
 
@@ -913,10 +913,12 @@ c_common_post_options (const char **pfilename)
   if (warn_shift_overflow == -1)
     warn_shift_overflow = cxx_dialect >= cxx11 || flag_isoc99;
 
-  /* -Wshift-negative-value is enabled by -Wextra in C99 and C++11 modes.  */
+  /* -Wshift-negative-value is enabled by -Wextra in C99 and C++11 to C++17
+     modes.  */
   if (warn_shift_negative_value == -1)
     warn_shift_negative_value = (extra_warnings
-				 && (cxx_dialect >= cxx11 || flag_isoc99));
+				 && (cxx_dialect >= cxx11 || flag_isoc99)
+				 && cxx_dialect < cxx2a);
 
   /* -Wregister is enabled by default in C++17.  */
   SET_OPTION_IF_UNSET (&global_options, &global_options_set, warn_register,
@@ -943,7 +945,7 @@ c_common_post_options (const char **pfilename)
 
   /* Change flag_abi_version to be the actual current ABI level, for the
      benefit of c_cpp_builtins, and to make comparison simpler.  */
-  const int latest_abi_version = 14;
+  const int latest_abi_version = 15;
   /* Generate compatibility aliases for ABI v11 (7.1) by default.  */
   const int abi_compat_default = 11;
 

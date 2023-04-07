@@ -208,10 +208,10 @@ static unsigned int next_operand_entry_id;
 /* Starting rank number for a given basic block, so that we can rank
    operations using unmovable instructions in that BB based on the bb
    depth.  */
-static long *bb_rank;
+static int64_t *bb_rank;
 
 /* Operand->rank hashtable.  */
-static hash_map<tree, long> *operand_rank;
+static hash_map<tree, int64_t> *operand_rank;
 
 /* Vector of SSA_NAMEs on which after reassociate_bb is done with
    all basic blocks the CFG should be adjusted - basic blocks
@@ -220,7 +220,7 @@ static hash_map<tree, long> *operand_rank;
 static vec<tree> reassoc_branch_fixups;
 
 /* Forward decls.  */
-static long get_rank (tree);
+static int64_t get_rank (tree);
 static bool reassoc_stmt_dominates_stmt_p (gimple *, gimple *);
 
 /* Wrapper around gsi_remove, which adjusts gimple_uid of debug stmts
@@ -265,7 +265,7 @@ reassoc_remove_stmt (gimple_stmt_iterator *gsi)
    calculated into an accumulator variable to be independent for each
    iteration of the loop.  If STMT is some other phi, the rank is the
    block rank of its containing block.  */
-static long
+static int64_t
 phi_rank (gimple *stmt)
 {
   basic_block bb = gimple_bb (stmt);
@@ -319,7 +319,7 @@ static bool
 loop_carried_phi (tree exp)
 {
   gimple *phi_stmt;
-  long block_rank;
+  int64_t block_rank;
 
   if (TREE_CODE (exp) != SSA_NAME
       || SSA_NAME_IS_DEFAULT_DEF (exp))
@@ -345,10 +345,10 @@ loop_carried_phi (tree exp)
    from expression OP.  For most operands, this is just the rank of OP.
    For loop-carried phis, the value is zero to avoid undoing the bias
    in favor of the phi.  */
-static long
-propagate_rank (long rank, tree op)
+static int64_t
+propagate_rank (int64_t rank, tree op)
 {
-  long op_rank;
+  int64_t op_rank;
 
   if (loop_carried_phi (op))
     return rank;
@@ -360,17 +360,17 @@ propagate_rank (long rank, tree op)
 
 /* Look up the operand rank structure for expression E.  */
 
-static inline long
+static inline int64_t
 find_operand_rank (tree e)
 {
-  long *slot = operand_rank->get (e);
+  int64_t *slot = operand_rank->get (e);
   return slot ? *slot : -1;
 }
 
 /* Insert {E,RANK} into the operand rank hashtable.  */
 
 static inline void
-insert_operand_rank (tree e, long rank)
+insert_operand_rank (tree e, int64_t rank)
 {
   gcc_assert (rank > 0);
   gcc_assert (!operand_rank->put (e, rank));
@@ -378,7 +378,7 @@ insert_operand_rank (tree e, long rank)
 
 /* Given an expression E, return the rank of the expression.  */
 
-static long
+static int64_t
 get_rank (tree e)
 {
   /* SSA_NAME's have the rank of the expression they are the result
@@ -422,7 +422,7 @@ get_rank (tree e)
     {
       ssa_op_iter iter;
       gimple *stmt;
-      long rank;
+      int64_t rank;
       tree op;
 
       if (SSA_NAME_IS_DEFAULT_DEF (e))
@@ -454,7 +454,7 @@ get_rank (tree e)
 	{
 	  fprintf (dump_file, "Rank for ");
 	  print_generic_expr (dump_file, e);
-	  fprintf (dump_file, " is %ld\n", (rank + 1));
+	  fprintf (dump_file, " is %" PRId64 "\n", (rank + 1));
 	}
 
       /* Note the rank in the hashtable so we don't recompute it.  */
@@ -4798,17 +4798,26 @@ swap_ops_for_binary_stmt (vec<operand_entry *> ops,
 }
 
 /* If definition of RHS1 or RHS2 dominates STMT, return the later of those
-   two definitions, otherwise return STMT.  */
+   two definitions, otherwise return STMT.  Sets INSERT_BEFORE to indicate
+   whether RHS1 op RHS2 can be inserted before or needs to be inserted
+   after the returned stmt.  */
 
 static inline gimple *
-find_insert_point (gimple *stmt, tree rhs1, tree rhs2)
+find_insert_point (gimple *stmt, tree rhs1, tree rhs2, bool &insert_before)
 {
+  insert_before = true;
   if (TREE_CODE (rhs1) == SSA_NAME
       && reassoc_stmt_dominates_stmt_p (stmt, SSA_NAME_DEF_STMT (rhs1)))
-    stmt = SSA_NAME_DEF_STMT (rhs1);
+    {
+      stmt = SSA_NAME_DEF_STMT (rhs1);
+      insert_before = false;
+    }
   if (TREE_CODE (rhs2) == SSA_NAME
       && reassoc_stmt_dominates_stmt_p (stmt, SSA_NAME_DEF_STMT (rhs2)))
-    stmt = SSA_NAME_DEF_STMT (rhs2);
+    {
+      stmt = SSA_NAME_DEF_STMT (rhs2);
+      insert_before = false;
+    }
   return stmt;
 }
 
@@ -4820,7 +4829,8 @@ insert_stmt_before_use (gimple *stmt, gimple *stmt_to_insert)
   gcc_assert (is_gimple_assign (stmt_to_insert));
   tree rhs1 = gimple_assign_rhs1 (stmt_to_insert);
   tree rhs2 = gimple_assign_rhs2 (stmt_to_insert);
-  gimple *insert_point = find_insert_point (stmt, rhs1, rhs2);
+  bool insert_before;
+  gimple *insert_point = find_insert_point (stmt, rhs1, rhs2, insert_before);
   gimple_stmt_iterator gsi = gsi_for_stmt (insert_point);
   gimple_set_uid (stmt_to_insert, gimple_uid (insert_point));
 
@@ -4828,7 +4838,7 @@ insert_stmt_before_use (gimple *stmt, gimple *stmt_to_insert)
      the point where operand rhs1 or rhs2 is defined. In this case,
      stmt_to_insert has to be inserted afterwards. This would
      only happen when the stmt insertion point is flexible. */
-  if (stmt == insert_point)
+  if (insert_before)
     gsi_insert_before (&gsi, stmt_to_insert, GSI_NEW_STMT);
   else
     insert_stmt_after (stmt_to_insert, insert_point);
@@ -4844,7 +4854,7 @@ insert_stmt_before_use (gimple *stmt, gimple *stmt_to_insert)
    recursive invocations.  */
 
 static tree
-rewrite_expr_tree (gimple *stmt, unsigned int opindex,
+rewrite_expr_tree (gimple *stmt, enum tree_code rhs_code, unsigned int opindex,
 		   vec<operand_entry *> ops, bool changed, bool next_changed)
 {
   tree rhs1 = gimple_assign_rhs1 (stmt);
@@ -4887,22 +4897,25 @@ rewrite_expr_tree (gimple *stmt, unsigned int opindex,
 	     return lhs), force creation of a new SSA_NAME.  */
 	  if (changed || ((rhs1 != oe2->op || rhs2 != oe1->op) && opindex))
 	    {
+	      bool insert_before;
 	      gimple *insert_point
-		= find_insert_point (stmt, oe1->op, oe2->op);
+		= find_insert_point (stmt, oe1->op, oe2->op, insert_before);
 	      lhs = make_ssa_name (TREE_TYPE (lhs));
 	      stmt
-		= gimple_build_assign (lhs, gimple_assign_rhs_code (stmt),
+		= gimple_build_assign (lhs, rhs_code,
 				       oe1->op, oe2->op);
 	      gimple_set_uid (stmt, uid);
 	      gimple_set_visited (stmt, true);
-	      if (insert_point == gsi_stmt (gsi))
+	      if (insert_before)
 		gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
 	      else
 		insert_stmt_after (stmt, insert_point);
 	    }
 	  else
 	    {
-	      gcc_checking_assert (find_insert_point (stmt, oe1->op, oe2->op)
+	      bool insert_before;
+	      gcc_checking_assert (find_insert_point (stmt, oe1->op, oe2->op,
+						      insert_before)
 				   == stmt);
 	      gimple_assign_set_rhs1 (stmt, oe1->op);
 	      gimple_assign_set_rhs2 (stmt, oe2->op);
@@ -4935,7 +4948,7 @@ rewrite_expr_tree (gimple *stmt, unsigned int opindex,
   /* Recurse on the LHS of the binary operator, which is guaranteed to
      be the non-leaf side.  */
   tree new_rhs1
-    = rewrite_expr_tree (SSA_NAME_DEF_STMT (rhs1), opindex + 1, ops,
+    = rewrite_expr_tree (SSA_NAME_DEF_STMT (rhs1), rhs_code, opindex + 1, ops,
 			 changed || oe->op != rhs2 || next_changed,
 			 false);
 
@@ -4958,21 +4971,25 @@ rewrite_expr_tree (gimple *stmt, unsigned int opindex,
 	{
 	  gimple_stmt_iterator gsi = gsi_for_stmt (stmt);
 	  unsigned int uid = gimple_uid (stmt);
-	  gimple *insert_point = find_insert_point (stmt, new_rhs1, oe->op);
+	  bool insert_before;
+	  gimple *insert_point = find_insert_point (stmt, new_rhs1, oe->op,
+						    insert_before);
 
 	  lhs = make_ssa_name (TREE_TYPE (lhs));
-	  stmt = gimple_build_assign (lhs, gimple_assign_rhs_code (stmt),
+	  stmt = gimple_build_assign (lhs, rhs_code,
 				      new_rhs1, oe->op);
 	  gimple_set_uid (stmt, uid);
 	  gimple_set_visited (stmt, true);
-	  if (insert_point == gsi_stmt (gsi))
+	  if (insert_before)
 	    gsi_insert_before (&gsi, stmt, GSI_SAME_STMT);
 	  else
 	    insert_stmt_after (stmt, insert_point);
 	}
       else
 	{
-	  gcc_checking_assert (find_insert_point (stmt, new_rhs1, oe->op)
+	  bool insert_before;
+	  gcc_checking_assert (find_insert_point (stmt, new_rhs1, oe->op,
+						  insert_before)
 			       == stmt);
 	  gimple_assign_set_rhs1 (stmt, new_rhs1);
 	  gimple_assign_set_rhs2 (stmt, oe->op);
@@ -5514,13 +5531,20 @@ linearize_expr_tree (vec<operand_entry *> *ops, gimple *stmt,
 
       if (!binrhsisreassoc)
 	{
-	  if (!try_special_add_to_ops (ops, rhscode, binrhs, binrhsdef))
+	  bool swap = false;
+	  if (try_special_add_to_ops (ops, rhscode, binrhs, binrhsdef))
+	    /* If we add ops for the rhs we expect to be able to recurse
+	       to it via the lhs during expression rewrite so swap
+	       operands.  */
+	    swap = true;
+	  else
 	    add_to_ops_vec (ops, binrhs);
 
 	  if (!try_special_add_to_ops (ops, rhscode, binlhs, binlhsdef))
 	    add_to_ops_vec (ops, binlhs);
 
-	  return;
+	  if (!swap)
+	    return;
 	}
 
       if (dump_file && (dump_flags & TDF_DETAILS))
@@ -5539,6 +5563,8 @@ linearize_expr_tree (vec<operand_entry *> *ops, gimple *stmt,
 	  fprintf (dump_file, " is now ");
 	  print_gimple_stmt (dump_file, stmt, 0);
 	}
+      if (!binrhsisreassoc)
+	return;
 
       /* We want to make it so the lhs is always the reassociative op,
 	 so swap.  */
@@ -5573,8 +5599,12 @@ repropagate_negates (void)
   FOR_EACH_VEC_ELT (plus_negates, i, negate)
     {
       gimple *user = get_single_immediate_use (negate);
-
       if (!user || !is_gimple_assign (user))
+	continue;
+
+      tree negateop = gimple_assign_rhs1 (SSA_NAME_DEF_STMT (negate));
+      if (TREE_CODE (negateop) == SSA_NAME
+	  && SSA_NAME_OCCURS_IN_ABNORMAL_PHI (negateop))
 	continue;
 
       /* The negate operand can be either operand of a PLUS_EXPR
@@ -5599,9 +5629,9 @@ repropagate_negates (void)
 	  if (gimple_assign_rhs2 (user) == negate)
 	    {
 	      tree rhs1 = gimple_assign_rhs1 (user);
-	      tree rhs2 = gimple_assign_rhs1 (SSA_NAME_DEF_STMT (negate));
 	      gimple_stmt_iterator gsi = gsi_for_stmt (user);
-	      gimple_assign_set_rhs_with_ops (&gsi, MINUS_EXPR, rhs1, rhs2);
+	      gimple_assign_set_rhs_with_ops (&gsi, MINUS_EXPR, rhs1,
+					      negateop);
 	      update_stmt (user);
 	    }
 	}
@@ -5610,21 +5640,20 @@ repropagate_negates (void)
 	  if (gimple_assign_rhs1 (user) == negate)
 	    {
 	      /* We have
-	           x = -a
+		   x = -negateop
 		   y = x - b
 		 which we transform into
-		   x = a + b
+		   x = negateop + b
 		   y = -x .
 		 This pushes down the negate which we possibly can merge
 		 into some other operation, hence insert it into the
 		 plus_negates vector.  */
 	      gimple *feed = SSA_NAME_DEF_STMT (negate);
-	      tree a = gimple_assign_rhs1 (feed);
 	      tree b = gimple_assign_rhs2 (user);
 	      gimple_stmt_iterator gsi = gsi_for_stmt (feed);
 	      gimple_stmt_iterator gsi2 = gsi_for_stmt (user);
 	      tree x = make_ssa_name (TREE_TYPE (gimple_assign_lhs (feed)));
-	      gimple *g = gimple_build_assign (x, PLUS_EXPR, a, b);
+	      gimple *g = gimple_build_assign (x, PLUS_EXPR, negateop, b);
 	      gsi_insert_before (&gsi2, g, GSI_SAME_STMT);
 	      gimple_assign_set_rhs_with_ops (&gsi2, NEGATE_EXPR, x);
 	      user = gsi_stmt (gsi2);
@@ -5635,13 +5664,11 @@ repropagate_negates (void)
 	    }
 	  else
 	    {
-	      /* Transform "x = -a; y = b - x" into "y = b + a", getting
-	         rid of one operation.  */
-	      gimple *feed = SSA_NAME_DEF_STMT (negate);
-	      tree a = gimple_assign_rhs1 (feed);
+	      /* Transform "x = -negateop; y = b - x" into "y = b + negateop",
+		 getting rid of one operation.  */
 	      tree rhs1 = gimple_assign_rhs1 (user);
 	      gimple_stmt_iterator gsi = gsi_for_stmt (user);
-	      gimple_assign_set_rhs_with_ops (&gsi, PLUS_EXPR, rhs1, a);
+	      gimple_assign_set_rhs_with_ops (&gsi, PLUS_EXPR, rhs1, negateop);
 	      update_stmt (gsi_stmt (gsi));
 	    }
 	}
@@ -6408,7 +6435,7 @@ reassociate_bb (basic_block bb)
                       if (len >= 3)
                         swap_ops_for_binary_stmt (ops, len - 3, stmt);
 
-		      new_lhs = rewrite_expr_tree (stmt, 0, ops,
+		      new_lhs = rewrite_expr_tree (stmt, rhs_code, 0, ops,
 						   powi_result != NULL
 						   || negate_result,
 						   len != orig_len);
@@ -6578,7 +6605,7 @@ static void
 init_reassoc (void)
 {
   int i;
-  long rank = 2;
+  int64_t rank = 2;
   int *bbs = XNEWVEC (int, n_basic_blocks_for_fn (cfun) - NUM_FIXED_BLOCKS);
 
   /* Find the loops, so that we can prevent moving calculations in
@@ -6592,8 +6619,8 @@ init_reassoc (void)
   /* Reverse RPO (Reverse Post Order) will give us something where
      deeper loops come later.  */
   pre_and_rev_post_order_compute (NULL, bbs, false);
-  bb_rank = XCNEWVEC (long, last_basic_block_for_fn (cfun));
-  operand_rank = new hash_map<tree, long>;
+  bb_rank = XCNEWVEC (int64_t, last_basic_block_for_fn (cfun));
+  operand_rank = new hash_map<tree, int64_t>;
 
   /* Give each default definition a distinct rank.  This includes
      parameters and the static chain.  Walk backwards over all

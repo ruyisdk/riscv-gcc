@@ -331,6 +331,15 @@ build_base_path (enum tree_code code,
       return error_mark_node;
     }
 
+  bool uneval = (cp_unevaluated_operand != 0
+		 || processing_template_decl
+		 || in_template_function ());
+
+  /* For a non-pointer simple base reference, express it as a COMPONENT_REF
+     without taking its address (and so causing lambda capture, 91933).  */
+  if (code == PLUS_EXPR && !v_binfo && !want_pointer && !has_empty && !uneval)
+    return build_simple_base_path (expr, binfo);
+
   if (!want_pointer)
     {
       rvalue = !lvalue_p (expr);
@@ -358,9 +367,7 @@ build_base_path (enum tree_code code,
      template (even in instantiate_non_dependent_expr), we don't have vtables
      set up properly yet, and the value doesn't matter there either; we're
      just interested in the result of overload resolution.  */
-  if (cp_unevaluated_operand != 0
-      || processing_template_decl
-      || in_template_function ())
+  if (uneval)
     {
       expr = build_nop (ptr_target_type, expr);
       goto indout;
@@ -1450,6 +1457,10 @@ mark_or_check_tags (tree t, tree *tp, abi_tag_data *p, bool val)
 static tree
 find_abi_tags_r (tree *tp, int *walk_subtrees, void *data)
 {
+  if (TYPE_P (*tp) && *walk_subtrees == 1 && flag_abi_version != 14)
+    /* Tell cp_walk_subtrees to look though typedefs. [PR98481] */
+    *walk_subtrees = 2;
+
   if (!OVERLOAD_TYPE_P (*tp))
     return NULL_TREE;
 
@@ -1470,6 +1481,10 @@ find_abi_tags_r (tree *tp, int *walk_subtrees, void *data)
 static tree
 mark_abi_tags_r (tree *tp, int *walk_subtrees, void *data)
 {
+  if (TYPE_P (*tp) && *walk_subtrees == 1 && flag_abi_version != 14)
+    /* Tell cp_walk_subtrees to look though typedefs.  */
+    *walk_subtrees = 2;
+
   if (!OVERLOAD_TYPE_P (*tp))
     return NULL_TREE;
 

@@ -583,7 +583,7 @@ warn_logical_not_parentheses (location_t location, enum tree_code code,
    (potential) location of the expression.  */
 
 bool
-warn_if_unused_value (const_tree exp, location_t locus)
+warn_if_unused_value (const_tree exp, location_t locus, bool quiet)
 {
  restart:
   if (TREE_USED (exp) || TREE_NO_WARNING (exp))
@@ -631,7 +631,7 @@ warn_if_unused_value (const_tree exp, location_t locus)
       goto restart;
 
     case COMPOUND_EXPR:
-      if (warn_if_unused_value (TREE_OPERAND (exp, 0), locus))
+      if (warn_if_unused_value (TREE_OPERAND (exp, 0), locus, quiet))
 	return true;
       /* Let people do `(foo (), 0)' without a warning.  */
       if (TREE_CONSTANT (TREE_OPERAND (exp, 1)))
@@ -645,6 +645,13 @@ warn_if_unused_value (const_tree exp, location_t locus)
       if (TREE_SIDE_EFFECTS (exp))
 	return false;
       goto warn;
+
+    case COMPLEX_EXPR:
+      /* Warn only if both operands are unused.  */
+      if (warn_if_unused_value (TREE_OPERAND (exp, 0), locus, true)
+	  && warn_if_unused_value (TREE_OPERAND (exp, 1), locus, true))
+	goto warn;
+      return false;
 
     case INDIRECT_REF:
       /* Don't warn about automatic dereferencing of references, since
@@ -669,6 +676,8 @@ warn_if_unused_value (const_tree exp, location_t locus)
 	return false;
 
     warn:
+      if (quiet)
+	return true;
       return warning_at (locus, OPT_Wunused_value, "value computed is not used");
     }
 }
@@ -1292,6 +1301,34 @@ conversion_warning (location_t loc, tree type, tree expr, tree result)
 	return (conversion_warning (loc, type, op1, result)
 		|| conversion_warning (loc, type, op2, result));
       }
+
+    case BIT_AND_EXPR:
+      if (TREE_CODE (expr_type) == INTEGER_TYPE
+	  && TREE_CODE (type) == INTEGER_TYPE)
+	for (int i = 0; i < 2; ++i)
+	  {
+	    tree op = TREE_OPERAND (expr, i);
+	    if (TREE_CODE (op) != INTEGER_CST)
+	      continue;
+
+	    /* If one of the operands is a non-negative constant
+	       that fits in the target type, then the type of the
+	       other operand does not matter.  */
+	    if (int_fits_type_p (op, c_common_signed_type (type))
+		&& int_fits_type_p (op, c_common_unsigned_type (type)))
+	      return false;
+
+	    /* If constant is unsigned and fits in the target
+	       type, then the result will also fit.  */
+	    if (TYPE_UNSIGNED (TREE_TYPE (op)) && int_fits_type_p (op, type))
+	      return false;
+	  }
+      /* FALLTHRU */
+    case BIT_IOR_EXPR:
+    case BIT_XOR_EXPR:
+      return (conversion_warning (loc, type, TREE_OPERAND (expr, 0), result)
+	      || conversion_warning (loc, type, TREE_OPERAND (expr, 1),
+				     result));
 
     default_:
     default:
@@ -2578,7 +2615,7 @@ maybe_warn_shift_overflow (location_t loc, tree op0, tree op1)
   unsigned int prec0 = TYPE_PRECISION (type0);
 
   /* Left-hand operand must be signed.  */
-  if (TYPE_UNSIGNED (type0) || cxx_dialect >= cxx2a)
+  if (TYPE_OVERFLOW_WRAPS (type0) || cxx_dialect >= cxx2a)
     return false;
 
   unsigned int min_prec = (wi::min_precision (wi::to_wide (op0), SIGNED)

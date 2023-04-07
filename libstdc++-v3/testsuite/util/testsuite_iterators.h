@@ -122,7 +122,7 @@ namespace __gnu_test
    */
   template<class T>
   struct output_iterator_wrapper
-  : public std::iterator<std::output_iterator_tag, T, std::ptrdiff_t, T*, T&>
+  : public std::iterator<std::output_iterator_tag, void, std::ptrdiff_t, void, void>
   {
   protected:
     output_iterator_wrapper() : ptr(0), SharedInfo(0)
@@ -175,10 +175,14 @@ namespace __gnu_test
 #if __cplusplus >= 201103L
     template<typename U>
       void operator,(const U&) const = delete;
+
+    void operator&() const = delete;
 #else
   private:
     template<typename U>
       void operator,(const U&) const;
+
+    void operator&() const;
 #endif
   };
 
@@ -275,10 +279,14 @@ namespace __gnu_test
 #if __cplusplus >= 201103L
     template<typename U>
       void operator,(const U&) const = delete;
+
+    void operator&() const = delete;
 #else
   private:
     template<typename U>
       void operator,(const U&) const;
+
+    void operator&() const;
 #endif
   };
 
@@ -496,7 +504,7 @@ namespace __gnu_test
 	}
       else
 	{
-	  ITERATOR_VERIFY(n <= this->ptr - this->SharedInfo->first);
+	  ITERATOR_VERIFY(-n <= this->ptr - this->SharedInfo->first);
 	  this->ptr += n;
 	}
       return *this;
@@ -614,6 +622,28 @@ namespace __gnu_test
     { return bounds.size(); }
   };
 
+#if __cplusplus >= 201103L
+  template<typename T>
+    using output_container
+      = test_container<T, output_iterator_wrapper>;
+
+  template<typename T>
+    using input_container
+      = test_container<T, input_iterator_wrapper>;
+
+  template<typename T>
+    using forward_container
+      = test_container<T, forward_iterator_wrapper>;
+
+  template<typename T>
+    using bidirectional_container
+      = test_container<T, bidirectional_iterator_wrapper>;
+
+  template<typename T>
+    using random_access_container
+      = test_container<T, random_access_iterator_wrapper>;
+#endif
+
 #if __cplusplus > 201703L
   template<typename T>
     struct contiguous_iterator_wrapper
@@ -676,6 +706,10 @@ namespace __gnu_test
       operator-(contiguous_iterator_wrapper iter, std::ptrdiff_t n)
       { return iter -= n; }
     };
+
+  template<typename T>
+    using contiguous_container
+      = test_container<T, contiguous_iterator_wrapper>;
 
   // A move-only input iterator type.
   template<typename T>

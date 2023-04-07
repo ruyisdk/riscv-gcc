@@ -132,9 +132,12 @@
 ; TARGET_32BIT, "t1" or "t2" to specify a specific Thumb mode.  "v6"
 ; for ARM or Thumb-2 with arm_arch6, and nov6 for ARM without
 ; arm_arch6.  "v6t2" for Thumb-2 with arm_arch6 and "v8mb" for ARMv8-M
-; Baseline.  This attribute is used to compute attribute "enabled",
+; Baseline.  "fix_vlldm" is for fixing the v8-m/v8.1-m VLLDM erratum.
+; This attribute is used to compute attribute "enabled",
 ; use type "any" to enable an alternative in all cases.
-(define_attr "arch" "any,a,t,32,t1,t2,v6,nov6,v6t2,v8mb,iwmmxt,iwmmxt2,armv6_or_vfpv3,neon,mve"
+(define_attr "arch" "any, a, t, 32, t1, t2, v6,nov6, v6t2, \
+		     v8mb, fix_vlldm, iwmmxt, iwmmxt2, armv6_or_vfpv3, \
+		     neon, mve"
   (const_string "any"))
 
 (define_attr "arch_enabled" "no,yes"
@@ -175,6 +178,10 @@
 
 	 (and (eq_attr "arch" "v8mb")
 	      (match_test "TARGET_THUMB1 && arm_arch8"))
+	 (const_string "yes")
+
+	 (and (eq_attr "arch" "fix_vlldm")
+	      (match_test "fix_vlldm"))
 	 (const_string "yes")
 
 	 (and (eq_attr "arch" "iwmmxt2")
@@ -7289,7 +7296,9 @@
 (define_insn "*arm32_mov<mode>"
   [(set (match_operand:HFBF 0 "nonimmediate_operand" "=r,m,r,r")
 	(match_operand:HFBF 1 "general_operand"	   " m,r,r,F"))]
-  "TARGET_32BIT && !TARGET_HARD_FLOAT
+  "TARGET_32BIT
+   && !TARGET_HARD_FLOAT
+   && !TARGET_HAVE_MVE
    && (	  s_register_operand (operands[0], <MODE>mode)
        || s_register_operand (operands[1], <MODE>mode))"
   "*
@@ -7355,7 +7364,7 @@
   if (arm_disable_literal_pool
       && (REG_P (operands[0]) || SUBREG_P (operands[0]))
       && CONST_DOUBLE_P (operands[1])
-      && TARGET_HARD_FLOAT
+      && TARGET_VFP_BASE
       && !vfp3_const_double_rtx (operands[1]))
     {
       rtx clobreg = gen_reg_rtx (SFmode);
@@ -7452,7 +7461,7 @@
   if (arm_disable_literal_pool
       && (REG_P (operands[0]) || SUBREG_P (operands[0]))
       && CONSTANT_P (operands[1])
-      && TARGET_HARD_FLOAT
+      && TARGET_VFP_BASE
       && !arm_const_double_rtx (operands[1])
       && !(TARGET_VFP_DOUBLE && vfp3_const_double_rtx (operands[1])))
     {
@@ -8577,18 +8586,21 @@
 	      (use (match_operand 2 "" ""))
 	      (clobber (reg:SI LR_REGNUM))])]
   "use_cmse"
-  "
   {
+    rtx addr = XEXP (operands[0], 0);
+    rtx tmp = REG_P (addr) ? addr : force_reg (SImode, addr);
+
     if (!TARGET_HAVE_FPCXT_CMSE)
       {
-	rtx tmp =
-	  copy_to_suggested_reg (XEXP (operands[0], 0),
-				 gen_rtx_REG (SImode, R4_REGNUM),
-				 SImode);
-
-	operands[0] = replace_equiv_address (operands[0], tmp);
+	rtx r4 = gen_rtx_REG (SImode, R4_REGNUM);
+	emit_move_insn (r4, tmp);
+	tmp = r4;
       }
-  }")
+
+    if (tmp != addr)
+      operands[0] = replace_equiv_address (operands[0], tmp);
+  }
+)
 
 (define_insn "*call_reg_armv5"
   [(call (mem:SI (match_operand:SI 0 "s_register_operand" "r"))
@@ -9212,7 +9224,7 @@
 	operands[2] = operands[1];
       else
 	{
-	  rtx mem = XEXP (force_const_mem (SImode, operands[1]), 0);
+	  rtx mem = force_const_mem (SImode, operands[1]);
 	  emit_move_insn (operands[2], mem);
 	}
     }
@@ -9295,7 +9307,7 @@
 	operands[3] = operands[1];
       else
 	{
-	  rtx mem = XEXP (force_const_mem (SImode, operands[1]), 0);
+	  rtx mem = force_const_mem (SImode, operands[1]);
 	  emit_move_insn (operands[3], mem);
 	}
     }
@@ -9320,6 +9332,8 @@
   [(set_attr "arch" "t1,32")]
 )
 
+;; DO NOT SPLIT THIS PATTERN.  It is important for security reasons that the
+;; canary value does not live beyond the end of this sequence.
 (define_insn "arm_stack_protect_test_insn"
   [(set (reg:CC_Z CC_REGNUM)
 	(compare:CC_Z (unspec:SI [(match_operand:SI 1 "memory_operand" "m,m")
@@ -9329,8 +9343,8 @@
    (clobber (match_operand:SI 0 "register_operand" "=&l,&r"))
    (clobber (match_dup 2))]
   "TARGET_32BIT"
-  "ldr\t%0, [%2]\;ldr\t%2, %1\;eors\t%0, %2, %0"
-  [(set_attr "length" "8,12")
+  "ldr\t%0, [%2]\;ldr\t%2, %1\;eors\t%0, %2, %0\;mov\t%2, #0"
+  [(set_attr "length" "12,16")
    (set_attr "conds" "set")
    (set_attr "type" "multiple")
    (set_attr "arch" "t,32")]

@@ -1618,7 +1618,7 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, gfc_packed packed,
       GFC_TYPE_ARRAY_STRIDE (type, n) = tmp;
 
       expr = as->lower[n];
-      if (expr->expr_type == EXPR_CONSTANT)
+      if (expr && expr->expr_type == EXPR_CONSTANT)
         {
           tmp = gfc_conv_mpz_to_tree (expr->value.integer,
 				      gfc_index_integer_kind);
@@ -1668,7 +1668,7 @@ gfc_get_nodesc_array_type (tree etype, gfc_array_spec * as, gfc_packed packed,
   for (n = as->rank; n < as->rank + as->corank; n++)
     {
       expr = as->lower[n];
-      if (expr->expr_type == EXPR_CONSTANT)
+      if (expr && expr->expr_type == EXPR_CONSTANT)
 	tmp = gfc_conv_mpz_to_tree (expr->value.integer,
 				    gfc_index_integer_kind);
       else
@@ -2975,6 +2975,10 @@ create_fn_spec (gfc_symbol *sym, tree fntype)
   return build_type_attribute_variant (fntype, tmp);
 }
 
+
+/* NOTE: The returned function type must match the argument list created by
+   create_function_arglist.  */
+
 tree
 gfc_get_function_type (gfc_symbol * sym, gfc_actual_arglist *actual_args)
 {
@@ -3082,10 +3086,11 @@ gfc_get_function_type (gfc_symbol * sym, gfc_actual_arglist *actual_args)
         }
     }
 
-  /* Add hidden string length parameters.  */
+  /* Add hidden arguments.  */
   for (f = gfc_sym_get_dummy_args (sym); f; f = f->next)
     {
       arg = f->sym;
+      /* Add hidden string length parameters.  */
       if (arg && arg->ts.type == BT_CHARACTER && !sym->attr.is_bind_c)
 	{
 	  if (!arg->ts.deferred)
@@ -3108,6 +3113,20 @@ gfc_get_function_type (gfc_symbol * sym, gfc_actual_arglist *actual_args)
 	       && arg->ts.type != BT_CLASS
 	       && !gfc_bt_struct (arg->ts.type))
 	vec_safe_push (typelist, boolean_type_node);
+      /* Coarrays which are descriptorless or assumed-shape pass with
+	 -fcoarray=lib the token and the offset as hidden arguments.  */
+      if (arg
+	  && flag_coarray == GFC_FCOARRAY_LIB
+	  && ((arg->ts.type != BT_CLASS
+	       && arg->attr.codimension
+	       && !arg->attr.allocatable)
+	      || (arg->ts.type == BT_CLASS
+		  && CLASS_DATA (arg)->attr.codimension
+		  && !CLASS_DATA (arg)->attr.allocatable)))
+	{
+	  vec_safe_push (typelist, pvoid_type_node);  /* caf_token.  */
+	  vec_safe_push (typelist, gfc_array_index_type);  /* caf_offset.  */
+	}
     }
 
   if (!vec_safe_is_empty (typelist)
@@ -3367,8 +3386,8 @@ gfc_get_array_descr_info (const_tree type, struct array_descr_info *info)
       if (!integer_zerop (dtype_off))
 	t = fold_build_pointer_plus (t, rank_off);
 
-      t = build1 (NOP_EXPR, build_pointer_type (gfc_array_index_type), t);
-      t = build1 (INDIRECT_REF, gfc_array_index_type, t);
+      t = build1 (NOP_EXPR, build_pointer_type (TREE_TYPE (field)), t);
+      t = build1 (INDIRECT_REF, TREE_TYPE (field), t);
       info->rank = t;
       t = build0 (PLACEHOLDER_EXPR, TREE_TYPE (dim_off));
       t = size_binop (MULT_EXPR, t, dim_size);

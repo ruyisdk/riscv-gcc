@@ -1980,6 +1980,13 @@ prune_clobbered_mems (bitmap_set_t set, basic_block block)
 			  && value_dies_in_block_x (expr, block))))
 		to_remove = i;
 	    }
+	  /* If the REFERENCE may trap make sure the block does not contain
+	     a possible exit point.
+	     ???  This is overly conservative if we translate AVAIL_OUT
+	     as the available expression might be after the exit point.  */
+	  if (BB_MAY_NOTRETURN (block)
+	      && vn_reference_may_trap (ref))
+	    to_remove = i;
 	}
       else if (expr->kind == NARY)
 	{
@@ -2644,6 +2651,7 @@ create_component_ref_by_pieces_1 (basic_block block, vn_reference_t ref,
       }
     case STRING_CST:
     case INTEGER_CST:
+    case POLY_INT_CST:
     case COMPLEX_CST:
     case VECTOR_CST:
     case REAL_CST:
@@ -2952,7 +2960,8 @@ create_expression_by_pieces (basic_block block, pre_expr expr,
 	      VN_INFO (forcedname)->value_id = get_next_value_id ();
 	      nameexpr = get_or_alloc_expr_for_name (forcedname);
 	      add_to_value (VN_INFO (forcedname)->value_id, nameexpr);
-	      bitmap_value_replace_in_set (NEW_SETS (block), nameexpr);
+	      if (NEW_SETS (block))
+		bitmap_value_replace_in_set (NEW_SETS (block), nameexpr);
 	      bitmap_value_replace_in_set (AVAIL_OUT (block), nameexpr);
 	    }
 
@@ -3117,8 +3126,8 @@ insert_into_preds_of_block (basic_block block, unsigned int exprnum,
   bitmap_insert_into_set (PHI_GEN (block), newphi);
   bitmap_value_replace_in_set (AVAIL_OUT (block),
 			       newphi);
-  bitmap_insert_into_set (NEW_SETS (block),
-			  newphi);
+  if (NEW_SETS (block))
+    bitmap_insert_into_set (NEW_SETS (block), newphi);
 
   /* If we insert a PHI node for a conversion of another PHI node
      in the same basic-block try to preserve range information.
@@ -3310,7 +3319,11 @@ do_pre_regular_insertion (basic_block block, basic_block dom)
 	  /* If all edges produce the same value and that value is
 	     an invariant, then the PHI has the same value on all
 	     edges.  Note this.  */
-	  else if (!cant_insert && all_same)
+	  else if (!cant_insert
+		   && all_same
+		   && (edoubleprime->kind != NAME
+		       || !SSA_NAME_OCCURS_IN_ABNORMAL_PHI
+			     (PRE_EXPR_NAME (edoubleprime))))
 	    {
 	      gcc_assert (edoubleprime->kind == CONSTANT
 			  || edoubleprime->kind == NAME);
@@ -3571,6 +3584,16 @@ do_hoist_insertion (basic_block block)
 	  continue;
 	}
 
+      /* If we end up with a punned expression representation and this
+	 happens to be a float typed one give up - we can't know for
+	 sure whether all paths perform the floating-point load we are
+	 about to insert and on some targets this can cause correctness
+	 issues.  See PR88240.  */
+      if (expr->kind == REFERENCE
+	  && PRE_EXPR_REFERENCE (expr)->punned
+	  && FLOAT_TYPE_P (get_expr_type (expr)))
+	continue;
+
       /* OK, we should hoist this value.  Perform the transformation.  */
       pre_stats.hoist_insert++;
       if (dump_file && (dump_flags & TDF_DETAILS))
@@ -3668,10 +3691,6 @@ insert (void)
 		  if (do_partial_partial)
 		    changed |= do_pre_partial_partial_insertion (block, dom);
 		}
-
-	      /* Insert expressions for hoisting.  */
-	      if (flag_code_hoisting && EDGE_COUNT (block->succs) >= 2)
-		changed |= do_hoist_insertion (block);
 	    }
 	}
 
@@ -3684,6 +3703,28 @@ insert (void)
   while (changed);
 
   statistics_histogram_event (cfun, "insert iterations", num_iterations);
+
+  /* AVAIL_OUT is not needed after insertion so we don't have to
+     propagate NEW_SETS from hoist insertion.  */
+  FOR_ALL_BB_FN (bb, cfun)
+    {
+      bitmap_set_pool.remove (NEW_SETS (bb));
+      NEW_SETS (bb) = NULL;
+    }
+
+  /* Insert expressions for hoisting.  Do a backward walk here since
+     inserting into BLOCK exposes new opportunities in its predecessors.
+     Since PRE and hoist insertions can cause back-to-back iteration
+     and we are interested in PRE insertion exposed hoisting opportunities
+     but not in hoisting exposed PRE ones do hoist insertion only after
+     PRE insertion iteration finished and do not iterate it.  */
+  if (flag_code_hoisting)
+    for (int idx = rpo_num - 1; idx >= 0; --idx)
+      {
+	basic_block block = BASIC_BLOCK_FOR_FN (cfun, rpo[idx]);
+	if (EDGE_COUNT (block->succs) >= 2)
+	  changed |= do_hoist_insertion (block);
+      }
 
   free (rpo);
 }
@@ -4004,6 +4045,16 @@ compute_avail (void)
 		      if (ref->set == set
 			  || alias_set_subset_of (set, ref->set))
 			;
+		      else if (ref1->opcode != ref2->opcode
+			       || (ref1->opcode != MEM_REF
+				   && ref1->opcode != TARGET_MEM_REF))
+			{
+			  /* With mismatching base opcodes or bases
+			     other than MEM_REF or TARGET_MEM_REF we
+			     can't do any easy TBAA adjustment.  */
+			  operands.release ();
+			  continue;
+			}
 		      else if (alias_set_subset_of (ref->set, set))
 			{
 			  ref->set = set;

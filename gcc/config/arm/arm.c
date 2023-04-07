@@ -77,10 +77,6 @@
 typedef struct minipool_node    Mnode;
 typedef struct minipool_fixup   Mfix;
 
-/* The last .arch and .fpu assembly strings that we printed.  */
-static std::string arm_last_printed_arch_string;
-static std::string arm_last_printed_fpu_string;
-
 void (*arm_lang_output_object_attributes_hook)(void);
 
 struct four_ints
@@ -332,6 +328,7 @@ static HOST_WIDE_INT arm_constant_alignment (const_tree, HOST_WIDE_INT);
 static rtx_insn * thumb1_md_asm_adjust (vec<rtx> &, vec<rtx> &,
 					vec<const char *> &, vec<rtx> &,
 					HARD_REG_SET &);
+static const char *arm_identify_fpu_from_isa (sbitmap);
 
 /* Table of machine attributes.  */
 static const struct attribute_spec arm_attribute_table[] =
@@ -3036,7 +3033,7 @@ arm_override_options_after_change (void)
 {
   arm_configure_build_target (&arm_active_target,
 			      TREE_TARGET_OPTION (target_option_default_node),
-			      &global_options_set, false);
+			      false);
 
   arm_override_options_after_change_1 (&global_options);
 }
@@ -3057,8 +3054,8 @@ arm_option_restore (struct gcc_options *opts, struct cl_target_option *ptr)
   opts->x_arm_arch_string = ptr->x_arm_arch_string;
   opts->x_arm_cpu_string = ptr->x_arm_cpu_string;
   opts->x_arm_tune_string = ptr->x_arm_tune_string;
-  arm_configure_build_target (&arm_active_target, ptr, &global_options_set,
-			      false);
+  arm_configure_build_target (&arm_active_target, ptr, false);
+  arm_option_reconfigure_globals ();
 }
 
 /* Reset options between modes that the user has specified.  */
@@ -3181,7 +3178,6 @@ static sbitmap isa_quirkbits;
 void
 arm_configure_build_target (struct arm_build_target *target,
 			    struct cl_target_option *opts,
-			    struct gcc_options *opts_set,
 			    bool warn_compatible)
 {
   const cpu_option *arm_selected_tune = NULL;
@@ -3196,7 +3192,7 @@ arm_configure_build_target (struct arm_build_target *target,
   target->core_name = NULL;
   target->arch_name = NULL;
 
-  if (opts_set->x_arm_arch_string)
+  if (opts->x_arm_arch_string)
     {
       arm_selected_arch = arm_parse_arch_option_name (all_architectures,
 						      "-march",
@@ -3204,7 +3200,7 @@ arm_configure_build_target (struct arm_build_target *target,
       arch_opts = strchr (opts->x_arm_arch_string, '+');
     }
 
-  if (opts_set->x_arm_cpu_string)
+  if (opts->x_arm_cpu_string)
     {
       arm_selected_cpu = arm_parse_cpu_option_name (all_cores, "-mcpu",
 						    opts->x_arm_cpu_string);
@@ -3214,7 +3210,7 @@ arm_configure_build_target (struct arm_build_target *target,
 	 options for tuning.  */
     }
 
-  if (opts_set->x_arm_tune_string)
+  if (opts->x_arm_tune_string)
     {
       arm_selected_tune = arm_parse_cpu_option_name (all_cores, "-mtune",
 						     opts->x_arm_tune_string);
@@ -3407,6 +3403,25 @@ arm_configure_build_target (struct arm_build_target *target,
       bitmap_ior (target->isa, target->isa, fpu_bits);
     }
 
+  /* If we have the soft-float ABI, clear any feature bits relating to use of
+     floating-point operations.  They'll just confuse things later on.  */
+  if (arm_float_abi == ARM_FLOAT_ABI_SOFT)
+    bitmap_and_compl (target->isa, target->isa, isa_all_fpbits);
+
+  /* There may be implied bits which we still need to enable. These are
+     non-named features which are needed to complete other sets of features,
+     but cannot be enabled from arm-cpus.in due to being shared between
+     multiple fgroups. Each entry in all_implied_fbits is of the form
+     ante -> cons, meaning that if the feature "ante" is enabled, we should
+     implicitly enable "cons".  */
+  const struct fbit_implication *impl = all_implied_fbits;
+  while (impl->ante)
+    {
+      if (bitmap_bit_p (target->isa, impl->ante))
+	bitmap_set_bit (target->isa, impl->cons);
+      impl++;
+    }
+
   if (!arm_selected_tune)
     arm_selected_tune = arm_selected_cpu;
   else /* Validate the features passed to -mtune.  */
@@ -3415,6 +3430,8 @@ arm_configure_build_target (struct arm_build_target *target,
   const cpu_tune *tune_data = &all_tunes[arm_selected_tune - all_cores];
 
   /* Finish initializing the target structure.  */
+  if (!target->arch_name)
+    target->arch_name = arm_selected_arch->common.name;
   target->arch_pp_name = arm_selected_arch->arch;
   target->base_arch = arm_selected_arch->base_arch;
   target->profile = arm_selected_arch->profile;
@@ -3422,7 +3439,6 @@ arm_configure_build_target (struct arm_build_target *target,
   target->tune_flags = tune_data->tune_flags;
   target->tune = tune_data->tune;
   target->tune_core = tune_data->scheduler;
-  arm_option_reconfigure_globals ();
 }
 
 /* Fix up any incompatible options that the user has specified.  */
@@ -3431,8 +3447,9 @@ arm_option_override (void)
 {
   static const enum isa_feature fpu_bitlist_internal[]
     = { ISA_ALL_FPU_INTERNAL, isa_nobit };
+  /* isa_bit_mve_float is also part of FP bit list for arch v8.1-m.main.  */
   static const enum isa_feature fp_bitlist[]
-    = { ISA_ALL_FP, isa_nobit };
+    = { ISA_ALL_FP, isa_bit_mve_float, isa_nobit };
   static const enum isa_feature quirk_bitlist[] = { ISA_ALL_QUIRKS, isa_nobit};
   cl_target_option opts;
 
@@ -3458,8 +3475,7 @@ arm_option_override (void)
     }
 
   cl_target_option_save (&opts, &global_options);
-  arm_configure_build_target (&arm_active_target, &opts, &global_options_set,
-			      true);
+  arm_configure_build_target (&arm_active_target, &opts, true);
 
 #ifdef SUBTARGET_OVERRIDE_OPTIONS
   SUBTARGET_OVERRIDE_OPTIONS;
@@ -3593,6 +3609,15 @@ arm_option_override (void)
 	fix_cm3_ldrd = 1;
       else
 	fix_cm3_ldrd = 0;
+    }
+
+  /* Enable fix_vlldm by default if required.  */
+  if (fix_vlldm == 2)
+    {
+      if (bitmap_bit_p (arm_active_target.isa, isa_bit_quirk_vlldm))
+	fix_vlldm = 1;
+      else
+	fix_vlldm = 0;
     }
 
   /* Hot/Cold partitioning is not currently supported, since we can't
@@ -3835,7 +3860,7 @@ arm_options_perform_arch_sanity_checks (void)
 
   /* We don't clear D16-D31 VFP registers for cmse_nonsecure_call functions
      and ARMv8-M Baseline and Mainline do not allow such configuration.  */
-  if (use_cmse && LAST_VFP_REGNUM > LAST_LO_VFP_REGNUM)
+  if (use_cmse && TARGET_HARD_FLOAT && LAST_VFP_REGNUM > LAST_LO_VFP_REGNUM)
     error ("ARMv8-M Security Extensions incompatible with selected FPU");
 
 
@@ -5552,9 +5577,20 @@ arm_canonicalize_comparison (int *code, rtx *op0, rtx *op1,
 			return;
 		      *op1 = GEN_INT (i + 1);
 		      *code = *code == GT ? GE : LT;
-		      return;
 		    }
-		  break;
+		  else
+		    {
+		      /* GT maxval is always false, LE maxval is always true.
+			 We can't fold that away here as we must make a
+			 comparison, but we can fold them to comparisons
+			 with the same result that can be handled:
+			   op0 GT maxval -> op0 LT minval
+			   op0 LE maxval -> op0 GE minval
+			 where minval = (-maxval - 1).  */
+		      *op1 = GEN_INT (-maxval - 1);
+		      *code = *code == GT ? LT : GE;
+		    }
+		  return;
 
 		case GTU:
 		case LEU:
@@ -5567,9 +5603,19 @@ arm_canonicalize_comparison (int *code, rtx *op0, rtx *op1,
 			return;
 		      *op1 = GEN_INT (i + 1);
 		      *code = *code == GTU ? GEU : LTU;
-		      return;
 		    }
-		  break;
+		  else
+		    {
+		      /* GTU ~0 is always false, LEU ~0 is always true.
+			 We can't fold that away here as we must make a
+			 comparison, but we can fold them to comparisons
+			 with the same result that can be handled:
+			   op0 GTU ~0 -> op0 LTU 0
+			   op0 LEU ~0 -> op0 GEU 0.  */
+		      *op1 = const0_rtx;
+		      *code = *code == GTU ? LTU : GEU;
+		    }
+		  return;
 
 		default:
 		  gcc_unreachable ();
@@ -5771,6 +5817,10 @@ arm_libcall_uses_aapcs_base (const_rtx libcall)
 		   convert_optab_libfunc (sfix_optab, DImode, SFmode));
       add_libcall (libcall_htab,
 		   convert_optab_libfunc (ufix_optab, DImode, SFmode));
+      add_libcall (libcall_htab,
+		   convert_optab_libfunc (sfix_optab, SImode, SFmode));
+      add_libcall (libcall_htab,
+		   convert_optab_libfunc (ufix_optab, SImode, SFmode));
 
       /* Values from double-precision helper functions are returned in core
 	 registers if the selected core only supports single-precision
@@ -9445,6 +9495,9 @@ arm_tls_referenced_p (rtx x)
 static bool
 arm_legitimate_constant_p_1 (machine_mode, rtx x)
 {
+  if (GET_CODE (x) == CONST_VECTOR && !neon_make_constant (x, false))
+    return false;
+
   return flag_pic || !label_mentioned_p (x);
 }
 
@@ -12988,12 +13041,14 @@ neon_pairwise_reduce (rtx op0, rtx op1, machine_mode mode,
     }
 }
 
-/* If VALS is a vector constant that can be loaded into a register
-   using VDUP, generate instructions to do so and return an RTX to
-   assign to the register.  Otherwise return NULL_RTX.  */
+/* Return a non-NULL RTX iff VALS is a vector constant that can be
+   loaded into a register using VDUP.
+
+   If this is the case, and GENERATE is set, we also generate
+   instructions to do this and return an RTX to assign to the register.  */
 
 static rtx
-neon_vdup_constant (rtx vals)
+neon_vdup_constant (rtx vals, bool generate)
 {
   machine_mode mode = GET_MODE (vals);
   machine_mode inner_mode = GET_MODE_INNER (mode);
@@ -13009,6 +13064,9 @@ neon_vdup_constant (rtx vals)
        vdup.i16).  */
     return NULL_RTX;
 
+  if (!generate)
+    return x;
+
   /* We can load this constant by using VDUP and a constant in a
      single ARM register.  This will be cheaper than a vector
      load.  */
@@ -13017,13 +13075,15 @@ neon_vdup_constant (rtx vals)
   return gen_vec_duplicate (mode, x);
 }
 
-/* Generate code to load VALS, which is a PARALLEL containing only
-   constants (for vec_init) or CONST_VECTOR, efficiently into a
-   register.  Returns an RTX to copy into the register, or NULL_RTX
-   for a PARALLEL that cannot be converted into a CONST_VECTOR.  */
+/* Return a non-NULL RTX iff VALS, which is a PARALLEL containing only
+   constants (for vec_init) or CONST_VECTOR, can be effeciently loaded
+   into a register.
+
+   If this is the case, and GENERATE is set, we also generate code to do
+   this and return an RTX to copy into the register.  */
 
 rtx
-neon_make_constant (rtx vals)
+neon_make_constant (rtx vals, bool generate)
 {
   machine_mode mode = GET_MODE (vals);
   rtx target;
@@ -13055,7 +13115,7 @@ neon_make_constant (rtx vals)
       && simd_immediate_valid_for_move (const_vec, mode, NULL, NULL))
     /* Load using VMOV.  On Cortex-A8 this takes one cycle.  */
     return const_vec;
-  else if ((target = neon_vdup_constant (vals)) != NULL_RTX)
+  else if ((target = neon_vdup_constant (vals, generate)) != NULL_RTX)
     /* Loaded using VDUP.  On Cortex-A8 the VDUP takes one NEON
        pipeline cycle; creating the constant takes one or two ARM
        pipeline cycles.  */
@@ -13065,7 +13125,7 @@ neon_make_constant (rtx vals)
        (for either double or quad vectors).  We cannot take advantage
        of single-cycle VLD1 because we need a PC-relative addressing
        mode.  */
-    return const_vec;
+    return arm_disable_literal_pool ? NULL_RTX : const_vec;
   else
     /* A PARALLEL containing something not valid inside CONST_VECTOR.
        We cannot construct an initializer.  */
@@ -13192,13 +13252,14 @@ neon_element_bits (machine_mode mode)
 /* Predicates for `match_operand' and `match_operator'.  */
 
 /* Return TRUE if OP is a valid coprocessor memory address pattern.
-   WB is true if full writeback address modes are allowed and is false
+   WB level is 2 if full writeback address modes are allowed, 1
    if limited writeback address modes (POST_INC and PRE_DEC) are
-   allowed.  */
+   allowed and 0 if no writeback at all is supported.  */
 
 int
-arm_coproc_mem_operand (rtx op, bool wb)
+arm_coproc_mem_operand_wb (rtx op, int wb_level)
 {
+  gcc_assert (wb_level == 0 || wb_level == 1 || wb_level == 2);
   rtx ind;
 
   /* Reject eliminable registers.  */
@@ -13231,16 +13292,18 @@ arm_coproc_mem_operand (rtx op, bool wb)
 
   /* Autoincremment addressing modes.  POST_INC and PRE_DEC are
      acceptable in any case (subject to verification by
-     arm_address_register_rtx_p).  We need WB to be true to accept
+     arm_address_register_rtx_p).  We need full writeback to accept
+     PRE_INC and POST_DEC, and at least restricted writeback for
      PRE_INC and POST_DEC.  */
-  if (GET_CODE (ind) == POST_INC
-      || GET_CODE (ind) == PRE_DEC
-      || (wb
-	  && (GET_CODE (ind) == PRE_INC
-	      || GET_CODE (ind) == POST_DEC)))
+  if (wb_level > 0
+      && (GET_CODE (ind) == POST_INC
+	  || GET_CODE (ind) == PRE_DEC
+	  || (wb_level > 1
+	      && (GET_CODE (ind) == PRE_INC
+		  || GET_CODE (ind) == POST_DEC))))
     return arm_address_register_rtx_p (XEXP (ind, 0), 0);
 
-  if (wb
+  if (wb_level > 1
       && (GET_CODE (ind) == POST_MODIFY || GET_CODE (ind) == PRE_MODIFY)
       && arm_address_register_rtx_p (XEXP (ind, 0), 0)
       && GET_CODE (XEXP (ind, 1)) == PLUS
@@ -13249,17 +13312,40 @@ arm_coproc_mem_operand (rtx op, bool wb)
 
   /* Match:
      (plus (reg)
-	   (const)).  */
+	   (const))
+
+     The encoded immediate for 16-bit modes is multiplied by 2,
+     while the encoded immediate for 32-bit and 64-bit modes is
+     multiplied by 4.  */
+  int factor = MIN (GET_MODE_SIZE (GET_MODE (op)), 4);
   if (GET_CODE (ind) == PLUS
       && REG_P (XEXP (ind, 0))
       && REG_MODE_OK_FOR_BASE_P (XEXP (ind, 0), VOIDmode)
       && CONST_INT_P (XEXP (ind, 1))
-      && INTVAL (XEXP (ind, 1)) > -1024
-      && INTVAL (XEXP (ind, 1)) <  1024
-      && (INTVAL (XEXP (ind, 1)) & 3) == 0)
+      && IN_RANGE (INTVAL (XEXP (ind, 1)), -255 * factor, 255 * factor)
+      && (INTVAL (XEXP (ind, 1)) & (factor - 1)) == 0)
     return TRUE;
 
   return FALSE;
+}
+
+/* Return TRUE if OP is a valid coprocessor memory address pattern.
+   WB is true if full writeback address modes are allowed and is false
+   if limited writeback address modes (POST_INC and PRE_DEC) are
+   allowed.  */
+
+int arm_coproc_mem_operand (rtx op, bool wb)
+{
+  return arm_coproc_mem_operand_wb (op, wb ? 2 : 1);
+}
+
+/* Return TRUE if OP is a valid coprocessor memory address pattern in a
+   context in which no writeback address modes are allowed.  */
+
+int
+arm_coproc_mem_operand_no_writeback (rtx op)
+{
+  return arm_coproc_mem_operand_wb (op, 0);
 }
 
 /* This function returns TRUE on matching mode and op.
@@ -13334,6 +13420,7 @@ mve_vector_mem_operand (machine_mode mode, rtx op, bool strict)
 	    if (val % 4 == 0 && val >= 0 && val <= 1020)
 	      return ((reg_no < LAST_ARM_REGNUM && reg_no != SP_REGNUM)
 		      || (!strict && reg_no >= FIRST_PSEUDO_REGISTER));
+	    return FALSE;
 	  default:
 	    return FALSE;
 	}
@@ -13388,7 +13475,9 @@ neon_vector_mem_operand (rtx op, int type, bool strict)
   /* Allow post-increment by register for VLDn */
   if (type == 2 && GET_CODE (ind) == POST_MODIFY
       && GET_CODE (XEXP (ind, 1)) == PLUS
-      && REG_P (XEXP (XEXP (ind, 1), 1)))
+      && REG_P (XEXP (XEXP (ind, 1), 1))
+      && REG_P (XEXP (ind, 0))
+      && rtx_equal_p (XEXP (ind, 0), XEXP (XEXP (ind, 1), 0)))
      return true;
 
   /* Match:
@@ -15425,13 +15514,21 @@ gen_cpymem_ldrd_strd (rtx *operands)
     {
       len -= 8;
       reg0 = gen_reg_rtx (DImode);
-      rtx low_reg = NULL_RTX;
-      rtx hi_reg = NULL_RTX;
+      rtx first_reg = NULL_RTX;
+      rtx second_reg = NULL_RTX;
 
       if (!src_aligned || !dst_aligned)
 	{
-	  low_reg = gen_lowpart (SImode, reg0);
-	  hi_reg = gen_highpart_mode (SImode, DImode, reg0);
+	  if (BYTES_BIG_ENDIAN)
+	    {
+	      second_reg = gen_lowpart (SImode, reg0);
+	      first_reg = gen_highpart_mode (SImode, DImode, reg0);
+	    }
+	  else
+	    {
+	      first_reg = gen_lowpart (SImode, reg0);
+	      second_reg = gen_highpart_mode (SImode, DImode, reg0);
+	    }
 	}
       if (MEM_ALIGN (src) >= 2 * BITS_PER_WORD)
 	emit_move_insn (reg0, src);
@@ -15439,9 +15536,9 @@ gen_cpymem_ldrd_strd (rtx *operands)
 	emit_insn (gen_unaligned_loaddi (reg0, src));
       else
 	{
-	  emit_insn (gen_unaligned_loadsi (low_reg, src));
+	  emit_insn (gen_unaligned_loadsi (first_reg, src));
 	  src = next_consecutive_mem (src);
-	  emit_insn (gen_unaligned_loadsi (hi_reg, src));
+	  emit_insn (gen_unaligned_loadsi (second_reg, src));
 	}
 
       if (MEM_ALIGN (dst) >= 2 * BITS_PER_WORD)
@@ -15450,9 +15547,9 @@ gen_cpymem_ldrd_strd (rtx *operands)
 	emit_insn (gen_unaligned_storedi (dst, reg0));
       else
 	{
-	  emit_insn (gen_unaligned_storesi (dst, low_reg));
+	  emit_insn (gen_unaligned_storesi (dst, first_reg));
 	  dst = next_consecutive_mem (dst);
-	  emit_insn (gen_unaligned_storesi (dst, hi_reg));
+	  emit_insn (gen_unaligned_storesi (dst, second_reg));
 	}
 
       src = next_consecutive_mem (src);
@@ -18686,10 +18783,14 @@ cmse_nonsecure_call_inline_register_clear (void)
 		  imm = gen_int_mode (- lazy_store_stack_frame_size, SImode);
 		  add_insn = emit_insn (gen_addsi3 (stack_pointer_rtx,
 						    stack_pointer_rtx, imm));
-		  arm_add_cfa_adjust_cfa_note (add_insn,
-					       - lazy_store_stack_frame_size,
-					       stack_pointer_rtx,
-					       stack_pointer_rtx);
+		  /* If we have the frame pointer, then it will be the
+		     CFA reg.  Otherwise, the stack pointer is the CFA
+		     reg, so we need to emit a CFA adjust.  */
+		  if (!frame_pointer_needed)
+		    arm_add_cfa_adjust_cfa_note (add_insn,
+						 - lazy_store_stack_frame_size,
+						 stack_pointer_rtx,
+						 stack_pointer_rtx);
 		  emit_insn (gen_lazy_store_multiple_insn (stack_pointer_rtx));
 		}
 	      /* Save VFP callee-saved registers.  */
@@ -18727,10 +18828,11 @@ cmse_nonsecure_call_inline_register_clear (void)
 		  rtx_insn *add_insn =
 		    emit_insn (gen_addsi3 (stack_pointer_rtx,
 					   stack_pointer_rtx, imm));
-		  arm_add_cfa_adjust_cfa_note (add_insn,
-					       lazy_store_stack_frame_size,
-					       stack_pointer_rtx,
-					       stack_pointer_rtx);
+		  if (!frame_pointer_needed)
+		    arm_add_cfa_adjust_cfa_note (add_insn,
+						 lazy_store_stack_frame_size,
+						 stack_pointer_rtx,
+						 stack_pointer_rtx);
 		}
 	      /* Restore VFP callee-saved registers.  */
 	      else
@@ -23532,7 +23634,7 @@ arm_print_condition (FILE *stream)
 /* Globally reserved letters: acln
    Puncutation letters currently used: @_|?().!#
    Lower case letters currently used: bcdefhimpqtvwxyz
-   Upper case letters currently used: ABCDFGHJKLMNOPQRSTU
+   Upper case letters currently used: ABCDEFGHIJKLMNOPQRSTU
    Letters previously used, but now deprecated/obsolete: sVWXYZ.
 
    Note that the global reservation for 'c' is only for CONSTANT_ADDRESS_P.
@@ -24098,11 +24200,12 @@ arm_print_operand (FILE *stream, rtx x, int code)
       }
       return;
 
-    /* To print the memory operand with "Ux" constraint.  Based on the rtx_code
-       the memory operands output looks like following.
+    /* To print the memory operand with "Ux" or "Uj" constraint.  Based on the
+       rtx_code the memory operands output looks like following.
        1. [Rn], #+/-<imm>
        2. [Rn, #+/-<imm>]!
-       3. [Rn].  */
+       3. [Rn, #+/-<imm>]
+       4. [Rn].  */
     case 'E':
       {
 	rtx addr;
@@ -24136,6 +24239,16 @@ arm_print_operand (FILE *stream, rtx x, int code)
 		else
 		  asm_fprintf (stream, ", #%wd]!",INTVAL (postinc_reg));
 	      }
+	  }
+	else if (code == PLUS)
+	  {
+	    rtx base = XEXP (addr, 0);
+	    rtx index = XEXP (addr, 1);
+
+	    gcc_assert (REG_P (base) && CONST_INT_P (index));
+
+	    HOST_WIDE_INT offset = INTVAL (index);
+	    asm_fprintf (stream, "[%r, #%wd]", REGNO (base), offset);
 	  }
 	else
 	  {
@@ -25177,7 +25290,7 @@ arm_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
     return false;
 
   if (IS_VPR_REGNUM (regno))
-    return true;
+    return mode == HImode;
 
   if (TARGET_THUMB1)
     /* For the Thumb we only allow values bigger than SImode in
@@ -26942,7 +27055,7 @@ cmse_nonsecure_entry_clear_before_return (void)
 	continue;
       if (IN_RANGE (regno, IP_REGNUM, PC_REGNUM))
 	continue;
-      if (call_used_or_fixed_reg_p (regno)
+      if (!callee_saved_reg_p (regno)
 	  && (!IN_RANGE (regno, FIRST_VFP_REGNUM, LAST_VFP_REGNUM)
 	      || TARGET_HARD_FLOAT))
 	bitmap_set_bit (to_clear_bitmap, regno);
@@ -27975,20 +28088,65 @@ arm_print_tune_info (void)
 	       (int) current_tune->sched_autopref);
 }
 
+/* The last set of target options used to emit .arch directives, etc.  This
+   could be a function-local static if it were not required to expose it as a
+   root to the garbage collector.  */
+static GTY(()) cl_target_option *last_asm_targ_options = NULL;
+
 /* Print .arch and .arch_extension directives corresponding to the
    current architecture configuration.  */
 static void
-arm_print_asm_arch_directives ()
+arm_print_asm_arch_directives (FILE *stream, cl_target_option *targ_options)
 {
+  arm_build_target build_target;
+  /* If the target options haven't changed since the last time we were called
+     there is nothing to do.  This should be sufficient to suppress the
+     majority of redundant work.  */
+  if (last_asm_targ_options == targ_options)
+    return;
+
+  last_asm_targ_options = targ_options;
+
+  build_target.isa = sbitmap_alloc (isa_num_bits);
+  arm_configure_build_target (&build_target, targ_options, false);
+
+  if (build_target.core_name
+      && !bitmap_bit_p (build_target.isa, isa_bit_quirk_no_asmcpu))
+    {
+      const char* truncated_name
+	= arm_rewrite_selected_cpu (build_target.core_name);
+      asm_fprintf (stream, "\t.cpu %s\n", truncated_name);
+    }
+
   const arch_option *arch
     = arm_parse_arch_option_name (all_architectures, "-march",
-				  arm_active_target.arch_name);
+				  build_target.arch_name);
   auto_sbitmap opt_bits (isa_num_bits);
 
   gcc_assert (arch);
 
-  asm_fprintf (asm_out_file, "\t.arch %s\n", arm_active_target.arch_name);
-  arm_last_printed_arch_string = arm_active_target.arch_name;
+  if (strcmp (build_target.arch_name, "armv7ve") == 0)
+    {
+      /* Keep backward compatability for assemblers which don't support
+	 armv7ve.  Fortunately, none of the following extensions are reset
+	 by a .fpu directive.  */
+      asm_fprintf (stream, "\t.arch armv7-a\n");
+      asm_fprintf (stream, "\t.arch_extension virt\n");
+      asm_fprintf (stream, "\t.arch_extension idiv\n");
+      asm_fprintf (stream, "\t.arch_extension sec\n");
+      asm_fprintf (stream, "\t.arch_extension mp\n");
+    }
+  else
+    asm_fprintf (stream, "\t.arch %s\n", build_target.arch_name);
+
+  /* The .fpu directive will reset any architecture extensions from the
+     assembler that relate to the fp/vector extensions.  So put this out before
+     any .arch_extension directives.  */
+  const char *fpu_name = (TARGET_SOFT_FLOAT
+			  ? "softvfp"
+			  : arm_identify_fpu_from_isa (build_target.isa));
+  asm_fprintf (stream, "\t.fpu %s\n", fpu_name);
+
   if (!arch->common.extensions)
     return;
 
@@ -28014,13 +28172,12 @@ arm_print_asm_arch_directives ()
 		  && !TARGET_HAVE_MVE_FLOAT))
 	    continue;
 
-	  /* If every feature bit of this option is set in the target
-	     ISA specification, print out the option name.  However,
-	     don't print anything if all the bits are part of the
-	     FPU specification.  */
-	  if (bitmap_subset_p (opt_bits, arm_active_target.isa)
+	  /* If every feature bit of this option is set in the target ISA
+	     specification, print out the option name.  However, don't print
+	     anything if all the bits are part of the FPU specification.  */
+	  if (bitmap_subset_p (opt_bits, build_target.isa)
 	      && !bitmap_subset_p (opt_bits, isa_all_fpubits_internal))
-	    asm_fprintf (asm_out_file, "\t.arch_extension %s\n", opt->name);
+	    asm_fprintf (stream, "\t.arch_extension %s\n", opt->name);
 	}
     }
 }
@@ -28030,46 +28187,23 @@ arm_file_start (void)
 {
   int val;
 
+  arm_print_asm_arch_directives
+    (asm_out_file, TREE_TARGET_OPTION (target_option_default_node));
+
   if (TARGET_BPABI)
     {
-      /* We don't have a specified CPU.  Use the architecture to
-	 generate the tags.
-
-	 Note: it might be better to do this unconditionally, then the
-	 assembler would not need to know about all new CPU names as
-	 they are added.  */
-      if (!arm_active_target.core_name)
-	{
-	  /* armv7ve doesn't support any extensions.  */
-	  if (strcmp (arm_active_target.arch_name, "armv7ve") == 0)
-	    {
-	      /* Keep backward compatability for assemblers
-		 which don't support armv7ve.  */
-	      asm_fprintf (asm_out_file, "\t.arch armv7-a\n");
-	      asm_fprintf (asm_out_file, "\t.arch_extension virt\n");
-	      asm_fprintf (asm_out_file, "\t.arch_extension idiv\n");
-	      asm_fprintf (asm_out_file, "\t.arch_extension sec\n");
-	      asm_fprintf (asm_out_file, "\t.arch_extension mp\n");
-	      arm_last_printed_arch_string = "armv7ve";
-	    }
-	  else
-	    arm_print_asm_arch_directives ();
-	}
-      else if (strncmp (arm_active_target.core_name, "generic", 7) == 0)
-	{
-	  asm_fprintf (asm_out_file, "\t.arch %s\n",
-		       arm_active_target.core_name + 8);
-	  arm_last_printed_arch_string = arm_active_target.core_name + 8;
-	}
-      else
+      /* If we have a named cpu, but we the assembler does not support that
+	 name via .cpu, put out a cpu name attribute; but don't do this if the
+	 name starts with the fictitious prefix, 'generic'.  */
+      if (arm_active_target.core_name
+	  && bitmap_bit_p (arm_active_target.isa, isa_bit_quirk_no_asmcpu)
+	  && strncmp (arm_active_target.core_name, "generic", 7) != 0)
 	{
 	  const char* truncated_name
 	    = arm_rewrite_selected_cpu (arm_active_target.core_name);
 	  if (bitmap_bit_p (arm_active_target.isa, isa_bit_quirk_no_asmcpu))
 	    asm_fprintf (asm_out_file, "\t.eabi_attribute 5, \"%s\"\n",
 			 truncated_name);
-	  else
-	    asm_fprintf (asm_out_file, "\t.cpu %s\n", truncated_name);
 	}
 
       if (print_tune_info)
@@ -28136,6 +28270,13 @@ static void
 arm_file_end (void)
 {
   int regno;
+
+  /* Just in case the last function output in the assembler had non-default
+     architecture directives, we force the assembler state back to the default
+     set, so that any 'calculated' build attributes are based on the default
+     options rather than the special options for that function.  */
+  arm_print_asm_arch_directives
+    (asm_out_file, TREE_TARGET_OPTION (target_option_default_node));
 
   if (NEED_INDICATE_EXEC_STACK)
     /* Add .note.GNU-stack.  */
@@ -30405,13 +30546,31 @@ arm_split_compare_and_swap (rtx operands[])
     }
   else
     {
-      emit_move_insn (neg_bval, const1_rtx);
       cond = gen_rtx_NE (VOIDmode, rval, oldval);
       if (thumb1_cmpneg_operand (oldval, SImode))
-	emit_unlikely_jump (gen_cbranchsi4_scratch (neg_bval, rval, oldval,
-						    label2, cond));
+	{
+	  rtx src = rval;
+	  if (!satisfies_constraint_L (oldval))
+	    {
+	      gcc_assert (satisfies_constraint_J (oldval));
+
+	      /* For such immediates, ADDS needs the source and destination regs
+		 to be the same.
+
+		 Normally this would be handled by RA, but this is all happening
+		 after RA.  */
+	      emit_move_insn (neg_bval, rval);
+	      src = neg_bval;
+	    }
+
+	  emit_unlikely_jump (gen_cbranchsi4_neg_late (neg_bval, src, oldval,
+						       label2, cond));
+	}
       else
-	emit_unlikely_jump (gen_cbranchsi4_insn (cond, rval, oldval, label2));
+	{
+	  emit_move_insn (neg_bval, const1_rtx);
+	  emit_unlikely_jump (gen_cbranchsi4_insn (cond, rval, oldval, label2));
+	}
     }
 
   arm_emit_store_exclusive (mode, neg_bval, mem, newval, use_release);
@@ -30530,7 +30689,7 @@ arm_split_atomic_op (enum rtx_code code, rtx old_out, rtx new_out, rtx mem,
     case MINUS:
       if (CONST_INT_P (value))
 	{
-	  value = GEN_INT (-INTVAL (value));
+	  value = gen_int_mode (-INTVAL (value), wmode);
 	  code = PLUS;
 	}
       /* FALLTHRU */
@@ -32332,10 +32491,8 @@ arm_can_inline_p (tree caller, tree callee)
   caller_target.isa = sbitmap_alloc (isa_num_bits);
   callee_target.isa = sbitmap_alloc (isa_num_bits);
 
-  arm_configure_build_target (&caller_target, caller_opts, &global_options_set,
-			      false);
-  arm_configure_build_target (&callee_target, callee_opts, &global_options_set,
-			      false);
+  arm_configure_build_target (&caller_target, caller_opts, false);
+  arm_configure_build_target (&callee_target, callee_opts, false);
   if (!bitmap_subset_p (callee_target.isa, caller_target.isa))
     can_inline = false;
 
@@ -32471,7 +32628,7 @@ arm_valid_target_attribute_tree (tree args, struct gcc_options *opts,
     return NULL_TREE;
 
   cl_target_option_save (&cl_opts, opts);
-  arm_configure_build_target (&arm_active_target, &cl_opts, opts_set, false);
+  arm_configure_build_target (&arm_active_target, &cl_opts, false);
   arm_option_check_internal (opts);
   /* Do any overrides, such as global options arch=xxx.
      We do this since arm_active_target was overridden.  */
@@ -32615,58 +32772,7 @@ arm_declare_function_name (FILE *stream, const char *name, tree decl)
     targ_options = TREE_TARGET_OPTION (target_option_current_node);
   gcc_assert (targ_options);
 
-  /* Only update the assembler .arch string if it is distinct from the last
-     such string we printed. arch_to_print is set conditionally in case
-     targ_options->x_arm_arch_string is NULL which can be the case
-     when cc1 is invoked directly without passing -march option.  */
-  std::string arch_to_print;
-  if (targ_options->x_arm_arch_string)
-    arch_to_print = targ_options->x_arm_arch_string;
-
-  if (arch_to_print != arm_last_printed_arch_string)
-    {
-      std::string arch_name
-	= arch_to_print.substr (0, arch_to_print.find ("+"));
-      asm_fprintf (asm_out_file, "\t.arch %s\n", arch_name.c_str ());
-      const arch_option *arch
-	= arm_parse_arch_option_name (all_architectures, "-march",
-				      targ_options->x_arm_arch_string);
-      auto_sbitmap opt_bits (isa_num_bits);
-
-      gcc_assert (arch);
-      if (arch->common.extensions)
-	{
-	  for (const struct cpu_arch_extension *opt = arch->common.extensions;
-	       opt->name != NULL;
-	       opt++)
-	    {
-	      if (!opt->remove)
-		{
-		  arm_initialize_isa (opt_bits, opt->isa_bits);
-		  /* For the cases "-march=armv8.1-m.main+mve -mfloat-abi=soft"
-		     and "-march=armv8.1-m.main+mve.fp -mfloat-abi=soft" MVE and
-		     MVE with floating point instructions is disabled.  So the
-		     following check restricts the printing of ".arch_extension
-		     mve" and ".arch_extension fp" (for mve.fp) in the assembly
-		     file.    MVE needs this special behaviour because the
-		     feature bit "mve" and "mve_float" are not part of
-		     "fpu bits", so they are not cleared when -mfloat-abi=soft
-		     (i.e nofp) but the marco TARGET_HAVE_MVE and
-		     TARGET_HAVE_MVE_FLOAT are disabled.  */
-		  if ((bitmap_bit_p (opt_bits, isa_bit_mve) && !TARGET_HAVE_MVE)
-		      || (bitmap_bit_p (opt_bits, isa_bit_mve_float)
-			  && !TARGET_HAVE_MVE_FLOAT))
-		    continue;
-		  if (bitmap_subset_p (opt_bits, arm_active_target.isa)
-		      && !bitmap_subset_p (opt_bits, isa_all_fpubits_internal))
-		    asm_fprintf (asm_out_file, "\t.arch_extension %s\n",
-				 opt->name);
-		}
-	     }
-	}
-
-      arm_last_printed_arch_string = arch_to_print;
-    }
+  arm_print_asm_arch_directives (stream, targ_options);
 
   fprintf (stream, "\t.syntax unified\n");
 
@@ -32683,17 +32789,6 @@ arm_declare_function_name (FILE *stream, const char *name, tree decl)
     }
   else
     fprintf (stream, "\t.arm\n");
-
-  std::string fpu_to_print
-    = TARGET_SOFT_FLOAT
-	? "softvfp" : arm_identify_fpu_from_isa (arm_active_target.isa);
-
-  if (!(!strcmp (fpu_to_print.c_str (), "softvfp") && TARGET_VFP_BASE)
-      && (fpu_to_print != arm_last_printed_arch_string))
-    {
-      asm_fprintf (asm_out_file, "\t.fpu %s\n", fpu_to_print.c_str ());
-      arm_last_printed_fpu_string = fpu_to_print;
-    }
 
   if (TARGET_POKE_FUNCTION_NAME)
     arm_poke_function_name (stream, (const char *) name);

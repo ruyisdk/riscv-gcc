@@ -3232,7 +3232,7 @@ vect_vfa_access_size (dr_vec_info *dr_info)
 static unsigned int
 vect_vfa_align (dr_vec_info *dr_info)
 {
-  return TYPE_ALIGN_UNIT (TREE_TYPE (DR_REF (dr_info->dr)));
+  return dr_alignment (dr_info->dr);
 }
 
 /* Function vect_no_alias_p.
@@ -3457,9 +3457,9 @@ vect_prune_runtime_alias_test_list (loop_vec_info loop_vinfo)
   /* Step values are irrelevant for aliasing if the number of vector
      iterations is equal to the number of scalar iterations (which can
      happen for fully-SLP loops).  */
-  bool ignore_step_p = known_eq (LOOP_VINFO_VECT_FACTOR (loop_vinfo), 1U);
+  bool vf_one_p = known_eq (LOOP_VINFO_VECT_FACTOR (loop_vinfo), 1U);
 
-  if (!ignore_step_p)
+  if (!vf_one_p)
     {
       /* Convert the checks for nonzero steps into bound tests.  */
       tree value;
@@ -3512,6 +3512,11 @@ vect_prune_runtime_alias_test_list (loop_vec_info loop_vinfo)
 
       bool preserves_scalar_order_p
 	= vect_preserves_scalar_order_p (dr_info_a, dr_info_b);
+      bool ignore_step_p
+	  = (vf_one_p
+	     && (preserves_scalar_order_p
+		 || operand_equal_p (DR_STEP (dr_info_a->dr),
+				     DR_STEP (dr_info_b->dr))));
 
       /* Skip the pair if inter-iteration dependencies are irrelevant
 	 and intra-iteration dependencies are guaranteed to be honored.  */
@@ -4645,7 +4650,8 @@ vect_create_addr_base_for_vector_ref (stmt_vec_info stmt_info,
 
   if (DR_PTR_INFO (dr)
       && TREE_CODE (addr_base) == SSA_NAME
-      && !SSA_NAME_PTR_INFO (addr_base))
+      /* We should only duplicate pointer info to newly created SSA names.  */
+      && SSA_NAME_VAR (addr_base) == dest)
     {
       vect_duplicate_ssa_name_ptr_info (addr_base, dr_info);
       if (offset || byte_offset)

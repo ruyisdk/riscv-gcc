@@ -661,7 +661,20 @@ split_nonconstant_init_1 (tree dest, tree init, bool nested)
 		sub = build3 (COMPONENT_REF, inner_type, dest, field_index,
 			      NULL_TREE);
 
-	      if (!split_nonconstant_init_1 (sub, value, true))
+	      if (!split_nonconstant_init_1 (sub, value, true)
+		      /* For flexible array member with initializer we
+			 can't remove the initializer, because only the
+			 initializer determines how many elements the
+			 flexible array member has.  */
+		  || (!array_type_p
+		      && TREE_CODE (inner_type) == ARRAY_TYPE
+		      && TYPE_DOMAIN (inner_type) == NULL
+		      && TREE_CODE (TREE_TYPE (value)) == ARRAY_TYPE
+		      && COMPLETE_TYPE_P (TREE_TYPE (value))
+		      && !integer_zerop (TYPE_SIZE (TREE_TYPE (value)))
+		      && idx == CONSTRUCTOR_NELTS (init) - 1
+		      && TYPE_HAS_TRIVIAL_DESTRUCTOR
+				(strip_array_types (inner_type))))
 		complete_p = false;
 	      else
 		{
@@ -706,7 +719,31 @@ split_nonconstant_init_1 (tree dest, tree init, bool nested)
 		    sub = build3 (COMPONENT_REF, inner_type, dest, field_index,
 				  NULL_TREE);
 
-		  code = build2 (INIT_EXPR, inner_type, sub, value);
+		  /* We may need to add a copy constructor call if
+		     the field has [[no_unique_address]].  */
+		  if (unsafe_return_slot_p (sub))
+		    {
+		      /* But not if the initializer is an implicit ctor call
+			 we just built in digest_init.  */
+		      if (TREE_CODE (value) == TARGET_EXPR
+			  && TARGET_EXPR_LIST_INIT_P (value))
+			{
+			  tree init = TARGET_EXPR_INITIAL (value);
+			  if (init && TREE_CODE (init) == AGGR_INIT_EXPR
+			      && AGGR_INIT_VIA_CTOR_P (init))
+			    goto build_init;
+			}
+
+		      releasing_vec args = make_tree_vector_single (value);
+		      code = build_special_member_call
+			(sub, complete_ctor_identifier, &args, inner_type,
+			 LOOKUP_NORMAL, tf_warning_or_error);
+		    }
+		  else
+		    {
+		    build_init:
+		      code = build2 (INIT_EXPR, inner_type, sub, value);
+		    }
 		  code = build_stmt (input_location, EXPR_STMT, code);
 		  code = maybe_cleanup_point_expr_void (code);
 		  add_stmt (code);
@@ -871,11 +908,13 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
     {
       bool const_init;
       tree oldval = value;
-      value = fold_non_dependent_expr (value, tf_warning_or_error, true, decl);
       if (DECL_DECLARED_CONSTEXPR_P (decl)
 	  || (DECL_IN_AGGR_P (decl)
 	      && DECL_INITIALIZED_IN_CLASS_P (decl)))
 	{
+	  value = fold_non_dependent_expr (value, tf_warning_or_error,
+					   /*manifestly_const_eval=*/true,
+					   decl);
 	  /* Diagnose a non-constant initializer for constexpr variable or
 	     non-inline in-class-initialized static data member.  */
 	  if (!require_constant_expression (value))
@@ -889,7 +928,8 @@ store_init_value (tree decl, tree init, vec<tree, va_gc>** cleanups, int flags)
 	    value = cxx_constant_init (value, decl);
 	}
       else
-	value = maybe_constant_init (value, decl, true);
+	value = fold_non_dependent_init (value, tf_warning_or_error,
+					 /*manifestly_const_eval=*/true, decl);
       if (TREE_CODE (value) == CONSTRUCTOR && cp_has_mutable_p (type))
 	/* Poison this CONSTRUCTOR so it can't be copied to another
 	   constexpr variable.  */
@@ -1415,9 +1455,6 @@ massage_init_elt (tree type, tree init, int nested, int flags,
   if (flags & LOOKUP_AGGREGATE_PAREN_INIT)
     new_flags |= LOOKUP_AGGREGATE_PAREN_INIT;
   init = digest_init_r (type, init, nested ? 2 : 1, new_flags, complain);
-  /* Strip a simple TARGET_EXPR when we know this is an initializer.  */
-  if (SIMPLE_TARGET_EXPR_P (init))
-    init = TARGET_EXPR_INITIAL (init);
   /* When we defer constant folding within a statement, we may want to
      defer this folding as well.  */
   tree t = fold_non_dependent_init (init, complain);
@@ -1506,6 +1543,14 @@ process_init_constructor_array (tree type, tree init, int nested, int flags,
 	      strip_array_types (TREE_TYPE (ce->value)))));
 
       picflags |= picflag_from_initializer (ce->value);
+      /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer
+	 CONSTRUCTOR.  */
+      if (TREE_CODE (ce->value) == CONSTRUCTOR
+	  && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value))
+	{
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value) = 0;
+	}
     }
 
   /* No more initializers. If the array is unbounded, we are done. Otherwise,
@@ -1547,6 +1592,14 @@ process_init_constructor_array (tree type, tree init, int nested, int flags,
 	if (next)
 	  {
 	    picflags |= picflag_from_initializer (next);
+	    /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer
+	       CONSTRUCTOR.  */
+	    if (TREE_CODE (next) == CONSTRUCTOR
+		&& CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next))
+	      {
+		CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+		CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next) = 0;
+	      }
 	    if (len > i+1
 		&& (initializer_constant_valid_p (next, TREE_TYPE (next))
 		    == null_pointer_node))
@@ -1729,10 +1782,14 @@ process_init_constructor_record (tree type, tree init, int nested, int flags,
 	    warning (OPT_Wmissing_field_initializers,
 		     "missing initializer for member %qD", field);
 
-	  if (!zero_init_p (fldtype)
-	      || skipped < 0)
-	    next = build_zero_init (TREE_TYPE (field), /*nelts=*/NULL_TREE,
-				    /*static_storage_p=*/false);
+	  if (!zero_init_p (fldtype) || skipped < 0)
+	    {
+	      if (TYPE_REF_P (fldtype))
+		next = build_zero_cst (TREE_TYPE (field));
+	      else
+		next = build_zero_init (TREE_TYPE (field), /*nelts=*/NULL_TREE,
+					/*static_storage_p=*/false);
+	    }
 	  else
 	    {
 	      /* The default zero-initialization is fine for us; don't
@@ -1753,6 +1810,13 @@ process_init_constructor_record (tree type, tree init, int nested, int flags,
       if (type != TREE_TYPE (field))
 	next = cp_convert_and_check (TREE_TYPE (field), next, complain);
       picflags |= picflag_from_initializer (next);
+      /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer CONSTRUCTOR.  */
+      if (TREE_CODE (next) == CONSTRUCTOR
+	  && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next))
+	{
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+	  CONSTRUCTOR_PLACEHOLDER_BOUNDARY (next) = 0;
+	}
       CONSTRUCTOR_APPEND_ELT (v, field, next);
     }
 
@@ -1906,6 +1970,14 @@ process_init_constructor_union (tree type, tree init, int nested, int flags,
     ce->value = massage_init_elt (TREE_TYPE (ce->index), ce->value, nested,
 				  flags, complain);
 
+  /* Propagate CONSTRUCTOR_PLACEHOLDER_BOUNDARY to outer CONSTRUCTOR.  */
+  if (ce->value
+      && TREE_CODE (ce->value) == CONSTRUCTOR
+      && CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value))
+    {
+      CONSTRUCTOR_PLACEHOLDER_BOUNDARY (init) = 1;
+      CONSTRUCTOR_PLACEHOLDER_BOUNDARY (ce->value) = 0;
+    }
   return picflag_from_initializer (ce->value);
 }
 

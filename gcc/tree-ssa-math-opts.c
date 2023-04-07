@@ -1328,7 +1328,7 @@ powi_cost (HOST_WIDE_INT n)
     return 0;
 
   /* Ignore the reciprocal when calculating the cost.  */
-  val = (n < 0) ? -n : n;
+  val = absu_hwi (n);
 
   /* Initialize the exponent cache.  */
   memset (cache, 0, POWI_TABLE_SIZE * sizeof (bool));
@@ -1361,7 +1361,7 @@ powi_cost (HOST_WIDE_INT n)
 
 static tree
 powi_as_mults_1 (gimple_stmt_iterator *gsi, location_t loc, tree type,
-		 HOST_WIDE_INT n, tree *cache)
+		 unsigned HOST_WIDE_INT n, tree *cache)
 {
   tree op0, op1, ssa_target;
   unsigned HOST_WIDE_INT digit;
@@ -1414,7 +1414,7 @@ powi_as_mults (gimple_stmt_iterator *gsi, location_t loc,
   memset (cache, 0,  sizeof (cache));
   cache[1] = arg0;
 
-  result = powi_as_mults_1 (gsi, loc, type, (n < 0) ? -n : n, cache);
+  result = powi_as_mults_1 (gsi, loc, type, absu_hwi (n), cache);
   if (n >= 0)
     return result;
 
@@ -1438,11 +1438,9 @@ static tree
 gimple_expand_builtin_powi (gimple_stmt_iterator *gsi, location_t loc, 
 			    tree arg0, HOST_WIDE_INT n)
 {
-  /* Avoid largest negative number.  */
-  if (n != -n
-      && ((n >= -1 && n <= 2)
-	  || (optimize_function_for_speed_p (cfun)
-	      && powi_cost (n) <= POWI_MAX_MULTS)))
+  if ((n >= -1 && n <= 2)
+      || (optimize_function_for_speed_p (cfun)
+	  && powi_cost (n) <= POWI_MAX_MULTS))
     return powi_as_mults (gsi, loc, arg0, n);
 
   return NULL_TREE;
@@ -3091,8 +3089,8 @@ convert_mult_to_fma (gimple *mul_stmt, tree op1, tree op2,
 
   bool check_defer
     = (state->m_deferring_p
-       && (tree_to_shwi (TYPE_SIZE (type))
-	   <= param_avoid_fma_max_bits));
+       && maybe_le (tree_to_poly_int64 (TYPE_SIZE (type)),
+		    param_avoid_fma_max_bits));
   bool defer = check_defer;
   bool seen_negate_p = false;
   /* Make sure that the multiplication statement becomes dead after

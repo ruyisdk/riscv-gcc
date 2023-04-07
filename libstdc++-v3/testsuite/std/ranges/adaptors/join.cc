@@ -123,6 +123,42 @@ test06()
   b = ranges::end(v);
 }
 
+void
+test07()
+{
+  // LWG 3474. Nesting join_views is broken because of CTAD
+  std::vector<std::vector<std::vector<int>>> nested_vectors = {
+    {{1, 2, 3}, {4, 5}, {6}},
+    {{7},       {8, 9}, {10, 11, 12}},
+    {{13}}
+  };
+  auto joined = nested_vectors | std::views::join | std::views::join;
+
+  using V = decltype(joined);
+  static_assert( std::same_as<std::ranges::range_value_t<V>, int> );
+}
+
+void
+test08()
+{
+  // LWG 3500. join_view::iterator::operator->() is bogus
+  struct X { int a; };
+  ranges::single_view<ranges::single_view<X>> s{std::in_place, std::in_place, 5};
+  auto v = s | views::join;
+  auto i = v.begin();
+  VERIFY( i->a == 5 );
+}
+
+void
+test10()
+{
+  // PR libstdc++/100290
+  auto v = views::single(0)
+    | views::transform([](const auto& s) { return views::single(s); })
+    | views::join;
+  VERIFY( ranges::next(v.begin()) == v.end() );
+}
+
 int
 main()
 {
@@ -132,4 +168,7 @@ main()
   test04();
   test05();
   test06();
+  test07();
+  test08();
+  test10();
 }

@@ -1269,6 +1269,7 @@ component_ref (tree object, tree field)
 tree
 build_assign (tree_code code, tree lhs, tree rhs)
 {
+  tree result;
   tree init = stabilize_expr (&lhs);
   init = compound_expr (init, stabilize_expr (&rhs));
 
@@ -1287,19 +1288,27 @@ build_assign (tree_code code, tree lhs, tree rhs)
   if (TREE_CODE (rhs) == TARGET_EXPR)
     {
       /* If CODE is not INIT_EXPR, can't initialize LHS directly,
-	 since that would cause the LHS to be constructed twice.
-	 So we force the TARGET_EXPR to be expanded without a target.  */
+	 since that would cause the LHS to be constructed twice.  */
       if (code != INIT_EXPR)
-	rhs = compound_expr (rhs, TARGET_EXPR_SLOT (rhs));
+	{
+	  init = compound_expr (init, rhs);
+	  result = build_assign (code, lhs, TARGET_EXPR_SLOT (rhs));
+	}
       else
 	{
 	  d_mark_addressable (lhs);
-	  rhs = TARGET_EXPR_INITIAL (rhs);
+	  TARGET_EXPR_INITIAL (rhs) = build_assign (code, lhs,
+						    TARGET_EXPR_INITIAL (rhs));
+	  result = rhs;
 	}
     }
+  else
+    {
+      /* Simple assignment.  */
+      result = fold_build2_loc (input_location, code,
+				TREE_TYPE (lhs), lhs, rhs);
+    }
 
-  tree result = fold_build2_loc (input_location, code,
-				 TREE_TYPE (lhs), lhs, rhs);
   return compound_expr (init, result);
 }
 
@@ -1421,6 +1430,11 @@ compound_expr (tree arg0, tree arg1)
   if (arg0 == NULL_TREE || !TREE_SIDE_EFFECTS (arg0))
     return arg1;
 
+  /* Remove intermediate expressions that have no side-effects.  */
+  while (TREE_CODE (arg0) == COMPOUND_EXPR
+	 && !TREE_SIDE_EFFECTS (TREE_OPERAND (arg0, 1)))
+    arg0 = TREE_OPERAND (arg0, 0);
+
   if (TREE_CODE (arg1) == TARGET_EXPR)
     {
       /* If the rhs is a TARGET_EXPR, then build the compound expression
@@ -1441,6 +1455,19 @@ compound_expr (tree arg0, tree arg1)
 tree
 return_expr (tree ret)
 {
+  /* Same as build_assign, the DECL_RESULT assignment replaces the temporary
+     in TARGET_EXPR_SLOT.  */
+  if (ret != NULL_TREE && TREE_CODE (ret) == TARGET_EXPR)
+    {
+      tree exp = TARGET_EXPR_INITIAL (ret);
+      tree init = stabilize_expr (&exp);
+
+      exp = fold_build1_loc (input_location, RETURN_EXPR, void_type_node, exp);
+      TARGET_EXPR_INITIAL (ret) = compound_expr (init, exp);
+
+      return ret;
+    }
+
   return fold_build1_loc (input_location, RETURN_EXPR,
 			  void_type_node, ret);
 }
@@ -1544,21 +1571,9 @@ build_array_index (tree ptr, tree index)
   /* Array element size.  */
   tree size_exp = size_in_bytes (target_type);
 
-  if (integer_zerop (size_exp))
+  if (integer_zerop (size_exp) || integer_onep (size_exp))
     {
-      /* Test for array of void.  */
-      if (TYPE_MODE (target_type) == TYPE_MODE (void_type_node))
-	index = fold_convert (type, index);
-      else
-	{
-	  /* Should catch this earlier.  */
-	  error ("invalid use of incomplete type %qD", TYPE_NAME (target_type));
-	  ptr_type = error_mark_node;
-	}
-    }
-  else if (integer_onep (size_exp))
-    {
-      /* Array of bytes -- No need to multiply.  */
+      /* Array of void or bytes -- No need to multiply.  */
       index = fold_convert (type, index);
     }
   else
@@ -1910,10 +1925,10 @@ d_build_call (TypeFunction *tf, tree callable, tree object,
 	      targ = build2 (COMPOUND_EXPR, TREE_TYPE (t), targ, t);
 	    }
 
-	  /* Parameter is a struct passed by invisible reference.  */
+	  /* Parameter is a struct or array passed by invisible reference.  */
 	  if (TREE_ADDRESSABLE (TREE_TYPE (targ)))
 	    {
-	      Type *t = arg->type->toBasetype ();
+	      Type *t = arg->type->toBasetype ()->baseElemOf ();
 	      gcc_assert (t->ty == Tstruct);
 	      StructDeclaration *sd = ((TypeStruct *) t)->sym;
 
@@ -2051,6 +2066,17 @@ build_vthis_function (tree basetype, tree type)
   return fntype;
 }
 
+/* Raise an error at that the context pointer of the function or object SYM is
+   not accessible from the current scope.  */
+
+tree
+error_no_frame_access (Dsymbol *sym)
+{
+  error_at (input_location, "cannot get frame pointer to %qs",
+	    sym->toPrettyChars ());
+  return null_pointer_node;
+}
+
 /* If SYM is a nested function, return the static chain to be
    used when calling that function from the current function.
 
@@ -2115,7 +2141,7 @@ get_frame_for_symbol (Dsymbol *sym)
 	{
 	  error_at (make_location_t (sym->loc),
 		    "%qs is a nested function and cannot be accessed from %qs",
-		    fd->toPrettyChars (), thisfd->toPrettyChars ());
+		    fdparent->toPrettyChars (), thisfd->toPrettyChars ());
 	  return null_pointer_node;
 	}
 
@@ -2126,39 +2152,35 @@ get_frame_for_symbol (Dsymbol *sym)
       while (fd != dsym)
 	{
 	  /* Check if enclosing function is a function.  */
-	  FuncDeclaration *fd = dsym->isFuncDeclaration ();
+	  FuncDeclaration *fdp = dsym->isFuncDeclaration ();
+	  Dsymbol *parent = dsym->toParent2 ();
 
-	  if (fd != NULL)
+	  if (fdp != NULL)
 	    {
-	      if (fdparent == fd->toParent2 ())
+	      if (fdparent == parent)
 		break;
 
-	      gcc_assert (fd->isNested () || fd->vthis);
-	      dsym = dsym->toParent2 ();
+	      gcc_assert (fdp->isNested () || fdp->vthis);
+	      dsym = parent;
 	      continue;
 	    }
 
 	  /* Check if enclosed by an aggregate.  That means the current
 	     function must be a member function of that aggregate.  */
-	  AggregateDeclaration *ad = dsym->isAggregateDeclaration ();
+	  AggregateDeclaration *adp = dsym->isAggregateDeclaration ();
 
-	  if (ad == NULL)
-	    goto Lnoframe;
-	  if (ad->isClassDeclaration () && fdparent == ad->toParent2 ())
-	    break;
-	  if (ad->isStructDeclaration () && fdparent == ad->toParent2 ())
-	    break;
-
-	  if (!ad->isNested () || !ad->vthis)
+	  if (adp != NULL)
 	    {
-	    Lnoframe:
-	      error_at (make_location_t (thisfd->loc),
-			"cannot get frame pointer to %qs",
-			sym->toPrettyChars ());
-	      return null_pointer_node;
+	      if ((adp->isClassDeclaration () || adp->isStructDeclaration ())
+		  && fdparent == parent)
+		break;
 	    }
 
-	  dsym = dsym->toParent2 ();
+	  /* No frame to outer function found.  */
+	  if (!adp || !adp->isNested () || !adp->vthis)
+	    return error_no_frame_access (sym);
+
+	  dsym = parent;
 	}
     }
 
@@ -2648,8 +2670,10 @@ get_framedecl (FuncDeclaration *inner, FuncDeclaration *outer)
 	break;
     }
 
+  if (fd != outer)
+    return error_no_frame_access (outer);
+
   /* Go get our frame record.  */
-  gcc_assert (fd == outer);
   tree frame_type = FRAMEINFO_TYPE (get_frameinfo (outer));
 
   if (frame_type != NULL_TREE)
