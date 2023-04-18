@@ -83,6 +83,8 @@ extern bool riscv_all_fusion_pair_p (rtx_insn *, rtx_insn *);
 bool riscv_const_vec_all_same_in_range_p (rtx, HOST_WIDE_INT, HOST_WIDE_INT);
 extern poly_uint64 riscv_regmode_natural_size (machine_mode);
 extern void riscv_expand_vtuple_create (rtx *);
+extern void riscv_subword_address (rtx, rtx *, rtx *, rtx *, rtx *);
+extern void riscv_lshift_subword (machine_mode, rtx, rtx, rtx *);
 
 /* Routines implemented in riscv-c.c.  */
 void riscv_cpu_cpp_builtins (cpp_reader *);

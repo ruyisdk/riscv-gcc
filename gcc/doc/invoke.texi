@@ -1138,7 +1138,9 @@ See RS/6000 and PowerPC Options.
 -mexplicit-relocs  -mno-explicit-relocs @gol
 -mrelax  -mno-relax @gol
 -mriscv-attribute  -mmo-riscv-attribute @gol
--malign-data=@var{type}}
+-malign-data=@var{type}
+-minline-atomics  -mno-inline-atomics}
+
 
 @emph{RL78 Options}
 @gccoptlist{-msim  -mmul=none  -mmul=g13  -mmul=g14  -mallregs @gol
@@ -25442,6 +25444,14 @@ Do or don't use smaller but slower prologue and epilogue code that uses
 library function calls.  The default is to use fast inline prologues and
 epilogues.
 
+@opindex minline-atomics
+@item -minline-atomics
+@itemx -mno-inline-atomics
+Do or don't use smaller but slower subword atomic emulation code that uses
+libatomic function calls.  The default is to use fast inline subword atomics
+that do not require libatomic.
+
+@opindex mshorten-memrefs
 @item -mshorten-memrefs
 @itemx -mno-shorten-memrefs
 @opindex mshorten-memrefs

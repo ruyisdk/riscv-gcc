@@ -384,6 +384,10 @@ malign-data=
 Target RejectNegative Joined Var(riscv_align_data_type) Enum(riscv_align_data) Init(riscv_align_data_type_xlen)
 Use the given data alignment.
 
+minline-atomics
+Target Var(TARGET_INLINE_SUBWORD_ATOMIC) Init(1)
+Always inline subword atomic operations.
+
 Enum
 Name(riscv_align_data) Type(enum riscv_align_data)
 Known data alignment choices (for use with the -malign-data= option):
