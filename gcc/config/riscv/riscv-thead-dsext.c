@@ -224,6 +224,10 @@ can_delete_sext (rtx_insn *insn)
 	continue;
 
       use_insn = DF_REF_INSN (use_of_def->ref);
+
+      if (DEBUG_INSN_P (use_insn))
+	continue;
+
       if (!NONJUMP_INSN_P (use_insn) || GET_CODE (PATTERN (use_insn)) != SET)
 	{
 	  if (dump_file)
