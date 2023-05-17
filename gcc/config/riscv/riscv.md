@@ -2737,6 +2737,10 @@
   "reload_completed"
   [(const_int 0)]
 {
+  if (GET_MODE (operands[0]) != Pmode)
+    operands[0] = convert_to_mode (Pmode, operands[0], 0);  
+  if (GET_MODE (operands[1]) != Pmode)
+    operands[1] = convert_to_mode (Pmode, operands[1], 0);
   riscv_set_return_address (operands[0], operands[1]);
   DONE;
 })
@@ -2946,8 +2950,8 @@
 
 (define_insn "stack_tie<mode>"
   [(set (mem:BLK (scratch))
-	(unspec:BLK [(match_operand:X 0 "register_operand" "r")
-		     (match_operand:X 1 "register_operand" "r")]
+	(unspec:BLK [(match_operand:P 0 "register_operand" "r")
+		     (match_operand:P 1 "register_operand" "r")]
 		    UNSPEC_TIE))]
   ""
   ""
