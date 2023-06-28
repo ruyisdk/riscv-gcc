@@ -72,8 +72,25 @@ IMPLIED_EXT = {
   # XXX: WORK-AROUND for v = zvbase + zvlsseg + zvamo.
   #      We don't have formal name for zvbase yet, so just add zvlsseg and zvamo
   #      to implied list for resolve multi-lib issue.
-  "v"   : ['zvlsseg', 'zvamo'],
+  "v" : ["zvl128b", "zve64d"],
   "v0p7"   : ['zvlsseg0p7', 'zvamo0p7'],
+  "zve32x" : ["zvl32b"],
+  "zve64x" : ["zve32x", "zvl64b"],
+  "zve32f" : ["f", "zve32x"],
+  "zve64f" : ["f", "zve32f", "zve64x"],
+  "zve64d" : ["d", "zve64f"],
+
+  "zvl64b" : ["zvl32b"],
+  "zvl128b" : ["zvl64b"],
+  "zvl256b" : ["zvl128b"],
+  "zvl512b" : ["zvl256b"],
+  "zvl1024b" : ["zvl512b"],
+  "zvl2048b" : ["zvl1024b"],
+  "zvl4096b" : ["zvl2048b"],
+  "zvl8192b" : ["zvl4096b"],
+  "zvl16384b" : ["zvl8192b"],
+  "zvl32768b" : ["zvl16384b"],
+  "zvl65536b" : ["zvl32768b"],
   # XXX: WORK-AROUND for zvqmac, zvqmac need v, which mean we also implied
   #      zvlsseg and zvamo
   "zvqmac"   : ['v', 'zvlsseg', 'zvamo'],

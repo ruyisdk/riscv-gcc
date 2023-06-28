@@ -43,14 +43,42 @@ struct riscv_implied_info_t
 riscv_implied_info_t riscv_implied_info[] =
 {
   {"d", "f"},
-  /* XXX: Work-around, zvbase + zvamo + zvlsseg, but zvbase not defined yet.  */
-  {"v", "zvamo"},
-  {"v", "zvlsseg"},
+  /* XXX: Work-around, base vector extension zve64d + load/store zvl128b.  */
+  {"v", "zvl128b"},
+  {"v", "zve64d"},
 
-  /* XXX: Work-around, zvqmac need v, and v implied zvamo and zvlsseg.  */
+  {"zve32f", "f"},
+  {"zve64f", "f"},
+  {"zve64d", "d"},
+
+  {"zve32x", "zvl32b"},
+  {"zve32f", "zve32x"},
+  {"zve32f", "zvl32b"},
+
+  {"zve64x", "zve32x"},
+  {"zve64x", "zvl64b"},
+  {"zve64f", "zve32f"},
+  {"zve64f", "zve64x"},
+  {"zve64f", "zvl64b"},
+  {"zve64d", "zve64f"},
+  {"zve64d", "zvl64b"},
+
+  {"zvl64b", "zvl32b"},
+  {"zvl128b", "zvl64b"},
+  {"zvl256b", "zvl128b"},
+  {"zvl512b", "zvl256b"},
+  {"zvl1024b", "zvl512b"},
+  {"zvl2048b", "zvl1024b"},
+  {"zvl4096b", "zvl2048b"},
+  {"zvl8192b", "zvl4096b"},
+  {"zvl16384b", "zvl8192b"},
+  {"zvl32768b", "zvl16384b"},
+  {"zvl65536b", "zvl32768b"},
+
+  /* XXX: Work-around, zvqmac need v, and v implied zve64d and zvl128b.  */
   {"zvqmac", "v"},
-  {"zvqmac", "zvamo"},
-  {"zvqmac", "zvlsseg"},
+  {"zvqmac", "zve64d"},
+  {"zvqmac", "zvl28b"},
 
   {"f", "zicsr"},
   {"d", "zicsr"},
@@ -117,8 +145,28 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"zifencei", ISA_SPEC_CLASS_20190608, 2, 0},
 
   {"zfh",     ISA_SPEC_CLASS_NONE, 1, 0},
-  {"zvamo",   ISA_SPEC_CLASS_NONE, 1, 0},
-  {"zvlsseg", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvamo",   ISA_SPEC_CLASS_NONE, 0, 7},
+  {"zvlsseg", ISA_SPEC_CLASS_NONE, 0, 7},
+
+  {"zve32x", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zve32f", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zve32d", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zve64x", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zve64f", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zve64d", ISA_SPEC_CLASS_NONE, 1, 0},
+
+  {"zvl32b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl64b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl128b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl256b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl512b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl1024b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl2048b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl4096b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl8192b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl16384b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl32768b", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zvl65536b", ISA_SPEC_CLASS_NONE, 1, 0},
 
   {"xtheadc", ISA_SPEC_CLASS_NONE, 2, 0},
   {"xtheade", ISA_SPEC_CLASS_NONE, 2, 0},
@@ -741,15 +789,20 @@ riscv_subset_list::handle_implied_ext (riscv_subset_t *ext)
       /* Skip if implied extension already present.  */
       if (lookup (implied_info->implied_ext))
 	continue;
-
-      if (ext->explicit_version_p)
+      /* If need imply(currently check extension sub-version much than 7).  */
+      if(ext->minor_version > 7)
+      {
+	if (ext->explicit_version_p)
 	/* Version of implied extension will get from current ISA spec
 	   version.  */
-	add (implied_info->implied_ext, ext->major_version, ext->minor_version,
-	     ext->explicit_version_p, true);
-      else
+	  add (implied_info->implied_ext, ext->major_version, ext->minor_version,
+		  ext->explicit_version_p, true);
+	else
 	/* Version of implied extension will get its default version.  */
-	add (implied_info->implied_ext, true);
+	  add (implied_info->implied_ext, true);
+      }
+      else
+	continue;
     }
 
   /* For RISC-V ISA version 2.2 or earlier version, zicsr and zifence is
