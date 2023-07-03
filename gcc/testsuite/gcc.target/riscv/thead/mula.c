@@ -20,7 +20,7 @@ int t_run_test()
 
 }
 
-/* { dg-final { scan-assembler-times "mulaw" 2} }*/
+/* { dg-final { scan-assembler-times "th.mulaw" 2} }*/
 
 /* { dg-final { cleanup-saved-temps } } */
 

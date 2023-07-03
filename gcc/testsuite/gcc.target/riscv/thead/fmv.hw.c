@@ -7,7 +7,7 @@ double func(long long a)
   return (double)(a + 3);
 }
 
-/* { dg-final { scan-assembler "fmv.hw.x" } }*/
-/* { dg-final { scan-assembler "fmv.x.hw" } }*/
+/* { dg-final { scan-assembler "th.fmv.hw.x" } }*/
+/* { dg-final { scan-assembler "th.fmv.x.hw" } }*/
 
 /* { dg-final { cleanup-saved-temps } } */

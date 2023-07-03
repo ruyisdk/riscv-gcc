@@ -9,7 +9,7 @@ __attribute__((interrupt)) void func(void)
   f ();
 }
 
-/* { dg-final { scan-assembler "ipush" } }*/
-/* { dg-final { scan-assembler "ipop" } }*
+/* { dg-final { scan-assembler "th.ipush" } }*/
+/* { dg-final { scan-assembler "th.ipop" } }*
 
 /* { dg-final { cleanup-saved-temps } } */

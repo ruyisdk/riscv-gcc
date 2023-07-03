@@ -9,7 +9,7 @@ void fun(unsigned long b,unsigned long c)
   a = b + (c << 2);
 }
 
-/* { dg-final { scan-assembler "addsl" } }*/
+/* { dg-final { scan-assembler "th.addsl" } }*/
 
 /* { dg-final { cleanup-saved-temps } } */
 

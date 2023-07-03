@@ -1224,10 +1224,10 @@
   "TARGET_64BIT && !(TARGET_ZBA || TARGET_ZBB)"
   "@
    #
-   lurwu\t%0,%1
-   lrwu\t%0,%1
-   lwuia\t%0,%1
-   lwuib\t%0,%1
+   th.lurwu\t%0,%1
+   th.lrwu\t%0,%1
+   th.lwuia\t%0,%1
+   th.lwuib\t%0,%1
    lwu\t%0,%1"
   "&& reload_completed
    && REG_P (operands[1])
@@ -1252,10 +1252,10 @@
   "!(TARGET_ZBA || TARGET_ZBB)"
   "@
    #
-   lurhu\t%0,%1
-   lrhu\t%0,%1
-   lhuia\t%0,%1
-   lhuib\t%0,%1
+   th.lurhu\t%0,%1
+   th.lrhu\t%0,%1
+   th.lhuia\t%0,%1
+   th.lhuib\t%0,%1
    lhu\t%0,%1"
   "&& reload_completed
    && REG_P (operands[1])
@@ -1280,10 +1280,10 @@
   ""
   "@
    andi\t%0,%1,0xff
-   lurbu\t%0,%1
-   lrbu\t%0,%1
-   lbuia\t%0,%1
-   lbuib\t%0,%1
+   th.lurbu\t%0,%1
+   th.lrbu\t%0,%1
+   th.lbuia\t%0,%1
+   th.lbuib\t%0,%1
    lbu\t%0,%1"
   [(set_attr "move_type" "andi,load,load,load,load,load")
    (set_attr "mode" "<SUPERQI:MODE>")])
@@ -1302,10 +1302,10 @@
   "TARGET_64BIT"
   "@
    sext.w\t%0,%1
-   lurw\t%0,%1
-   lrw\t%0,%1
-   lwia\t%0,%1
-   lwib\t%0,%1
+   th.lurw\t%0,%1
+   th.lrw\t%0,%1
+   th.lwia\t%0,%1
+   th.lwib\t%0,%1
    lw\t%0,%1"
   [(set_attr "move_type" "move,load,load,load,load,load")
    (set_attr "mode" "DI")])
@@ -1322,10 +1322,10 @@
   "!TARGET_ZBB"
   "@
    #
-   lur<SHORT:size>\t%0,%1
-   lr<SHORT:size>\t%0,%1
-   l<SHORT:size>ia\t%0,%1
-   l<SHORT:size>ib\t%0,%1
+   th.lur<SHORT:size>\t%0,%1
+   th.lr<SHORT:size>\t%0,%1
+   th.l<SHORT:size>ia\t%0,%1
+   th.l<SHORT:size>ib\t%0,%1
    l<SHORT:size>\t%0,%1"
   "&& reload_completed
    && REG_P (operands[1])

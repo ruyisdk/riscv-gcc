@@ -281,16 +281,16 @@ riscv_output_move_modify (rtx x, machine_mode mode, bool ldi)
   const char *const insn[][4] =
   {
     {
-      "sbi%s\t%%z1,%%0",
-      "shi%s\t%%z1,%%0",
-      "swi%s\t%%z1,%%0",
-      "sdi%s\t%%z1,%%0"
+      "th.sbi%s\t%%z1,%%0",
+      "th.shi%s\t%%z1,%%0",
+      "th.swi%s\t%%z1,%%0",
+      "th.sdi%s\t%%z1,%%0"
     },
     {
-      "lbui%s\t%%0,%%1",
-      "lhui%s\t%%0,%%1",
-      "lwi%s\t%%0,%%1",
-      "ldi%s\t%%0,%%1"
+      "th.lbui%s\t%%0,%%1",
+      "th.lhui%s\t%%0,%%1",
+      "th.lwi%s\t%%0,%%1",
+      "th.ldi%s\t%%0,%%1"
     }
   };
 
@@ -339,16 +339,16 @@ riscv_output_move_index (rtx x, machine_mode mode, bool ldr)
   const char *const insn[][4] =
   {
     {
-      "s%srb\t%%z1,%%0",
-      "s%srh\t%%z1,%%0",
-      "s%srw\t%%z1,%%0",
-      "s%srd\t%%z1,%%0"
+      "th.s%srb\t%%z1,%%0",
+      "th.s%srh\t%%z1,%%0",
+      "th.s%srw\t%%z1,%%0",
+      "th.s%srd\t%%z1,%%0"
     },
     {
-      "l%srbu\t%%0,%%1",
-      "l%srhu\t%%0,%%1",
-      "l%srw\t%%0,%%1",
-      "l%srd\t%%0,%%1"
+      "th.l%srbu\t%%0,%%1",
+      "th.l%srhu\t%%0,%%1",
+      "th.l%srw\t%%0,%%1",
+      "th.l%srd\t%%0,%%1"
     }
   };
 
@@ -374,16 +374,16 @@ riscv_output_move_index_float (rtx x, machine_mode mode, bool ldr)
   const char *const insn[][4] =
   {
     {
-      "fs%srb\t%%z1,%%0",
-      "fs%srh\t%%z1,%%0",
-      "fs%srw\t%%z1,%%0",
-      "fs%srd\t%%z1,%%0"
+      "th.fs%srb\t%%z1,%%0",
+      "th.fs%srh\t%%z1,%%0",
+      "th.fs%srw\t%%z1,%%0",
+      "th.fs%srd\t%%z1,%%0"
     },
     {
-      "fl%srb\t%%0,%%1",
-      "fl%srh\t%%0,%%1",
-      "fl%srw\t%%0,%%1",
-      "fl%srd\t%%0,%%1"
+      "th.fl%srb\t%%0,%%1",
+      "th.fl%srh\t%%0,%%1",
+      "th.fl%srw\t%%0,%%1",
+      "th.fl%srd\t%%0,%%1"
     }
   };
 

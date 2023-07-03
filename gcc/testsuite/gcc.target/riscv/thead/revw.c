@@ -17,7 +17,7 @@ void process(const unsigned char data[32] )
     GET_ULONG_BE( W, data);
 }
 
-/* { dg-final { scan-assembler "revw" } }*/
+/* { dg-final { scan-assembler "th.revw" } }*/
 
 /* { dg-final { cleanup-saved-temps } } */
 

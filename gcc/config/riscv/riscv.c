@@ -2373,7 +2373,7 @@ riscv_output_move (rtx dest, rtx src)
 	  && src_code == REG && FP_REG_P (REGNO (src))
 	  && dbl_p
 	  && !TARGET_64BIT)
-	return "fmv.x.w\t%0,%1\n\tfmv.x.hw\t%N0,%1";
+	return "fmv.x.w\t%0,%1\n\tth.fmv.x.hw\t%N0,%1";
 
       if (src_code == REG && FP_REG_P (REGNO (src)))
 	switch (width)
@@ -2460,7 +2460,7 @@ riscv_output_move (rtx dest, rtx src)
 		return "fmv.d.x\t%0,%z1";
 	      if (TARGET_XTHEAD_FMVHW32
 		  && src != CONST0_RTX (mode))
-		return "fmv.s.x\t%0,%1\n\tfmv.hw.x\t%0,%N1";
+		return "fmv.s.x\t%0,%1\n\tth.fmv.hw.x\t%0,%N1";
 	      /* in RV32, we can emulate fmv.d.x %0, x0 using fcvt.d.w */
 	      gcc_assert (src == CONST0_RTX (mode));
 	      return "fcvt.d.w\t%0,x0";

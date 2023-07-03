@@ -21,7 +21,7 @@ void process(const unsigned char data[64] )
     GET_ULONGLONG_BE( W, data);
 }
 
-/* { dg-final { scan-assembler "rev" } }*/
+/* { dg-final { scan-assembler "th.rev" } }*/
 
 /* { dg-final { cleanup-saved-temps } } */
 

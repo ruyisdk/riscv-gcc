@@ -6,7 +6,7 @@ __attribute__((interrupt)) void func(void)
 {
 }
 
-/* { dg-final { scan-assembler-not "ipush\n" } }*/
-/* { dg-final { scan-assembler-not "ipop\n" } }*
+/* { dg-final { scan-assembler-not "th.ipush\n" } }*/
+/* { dg-final { scan-assembler-not "th.ipop\n" } }*
 
 /* { dg-final { cleanup-saved-temps } } */
