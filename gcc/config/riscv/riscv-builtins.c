@@ -174,6 +174,17 @@ AVAIL (zpsfoperand, TARGET_XTHEAD_ZPSFOPERAND)
 AVAIL (dsp32, TARGET_XTHEAD_DSP && !TARGET_64BIT)
 AVAIL (dsp64, TARGET_XTHEAD_DSP && TARGET_64BIT)
 
+AVAIL (clean32, TARGET_ZICBOM && !TARGET_64BIT)
+AVAIL (clean64, TARGET_ZICBOM && TARGET_64BIT)
+AVAIL (flush32, TARGET_ZICBOM && !TARGET_64BIT)
+AVAIL (flush64, TARGET_ZICBOM && TARGET_64BIT)
+AVAIL (inval32, TARGET_ZICBOM && !TARGET_64BIT)
+AVAIL (inval64, TARGET_ZICBOM && TARGET_64BIT)
+AVAIL (zero32,  TARGET_ZICBOZ && !TARGET_64BIT)
+AVAIL (zero64,  TARGET_ZICBOZ && TARGET_64BIT)
+AVAIL (prefetchi32, TARGET_ZICBOP && !TARGET_64BIT)
+AVAIL (prefetchi64, TARGET_ZICBOP && TARGET_64BIT)
+
 DECL_CHECKER(vector_insert)
 DECL_CHECKER(vector_tuple_insert)
 DECL_CHECKER(vector_extract)
@@ -280,6 +291,7 @@ DECL_CHECKER(vector_v0p7)
 #define RISCV_ATYPE_DI int64_type_node
 #define RISCV_ATYPE_SIZE size_type_node
 #define RISCV_ATYPE_LONG long_integer_type_node
+#define RISCV_ATYPE_VOID_PTR ptr_type_node
 
 #define RISCV_ATYPE_PTRDIFF ptrdiff_type_node
 
@@ -2404,6 +2416,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   #include "config/riscv/riscv-builtins-p.def"
   #include "config/riscv/riscv-builtins-vector-v0p7.def"
   #include "config/riscv/riscv-builtins-vector-thead.def"
+  #include "config/riscv/riscv-cmo.def"
 
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),

@@ -372,3 +372,8 @@
 (define_predicate "const63_operand"
   (and (match_code "const_int")
        (match_test "INTVAL (op) == 63")))
+
+;; Predicates for the CMO extension.
+(define_predicate "imm5_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) < 5")))

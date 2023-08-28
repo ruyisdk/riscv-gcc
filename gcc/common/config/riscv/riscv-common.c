@@ -179,6 +179,11 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"zbb", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zbc", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zbs", ISA_SPEC_CLASS_NONE, 1, 0},
+
+  {"zicboz", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zicbom", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"zicbop", ISA_SPEC_CLASS_NONE, 1, 0},
+
   /* Terminate the list.  */
   {NULL, ISA_SPEC_CLASS_NONE, 0, 0}
 };
@@ -1081,6 +1086,11 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   {"zbb", &gcc_options::x_riscv_bitmanip_subext, MASK_ZBB},
   {"zbc", &gcc_options::x_riscv_bitmanip_subext, MASK_ZBC},
   {"zbs", &gcc_options::x_riscv_bitmanip_subext, MASK_ZBS},
+
+  {"zicboz", &gcc_options::x_riscv_zicmo_subext, MASK_ZICBOZ},
+  {"zicbom", &gcc_options::x_riscv_zicmo_subext, MASK_ZICBOM},
+  {"zicbop", &gcc_options::x_riscv_zicmo_subext, MASK_ZICBOP},
+
   {NULL, NULL, 0}
 };
 
