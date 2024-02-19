@@ -1,8 +1,8 @@
 /* { dg-do compile } */
 /* { dg-options "-O2 -fdump-tree-forwprop2-details" } */
 /* { dg-additional-options "-mbmi" { target { { i?86-*-* x86_64-*-* } && { ! { ia32 } } } } } */
-/* { dg-additional-options "-march=rv64gc_zbb" { target { rv64 } } } */
-/* { dg-additional-options "-march=rv32gc_zbb" { target { rv32 } } } */
+/* { dg-additional-options "-march=rv64gc_zbb -mabi=lp64d" { target { rv64 } } } */
+/* { dg-additional-options "-march=rv32gc_zbb -mabi=ilp32d" { target { rv32 } } } */
 
 int ctz1 (unsigned x)
 {
@@ -53,9 +53,9 @@ static const char table[64] = {
      9, 30, 45, 41,  8, 40,  7,  6,
 };
 
-int ctz4 (unsigned long x)
+int ctz4 (unsigned long long x)
 {
-  unsigned long lsb = x & -x;
+  unsigned long long lsb = x & -x;
   return table[(lsb * magic) >> 58];
 }
 
