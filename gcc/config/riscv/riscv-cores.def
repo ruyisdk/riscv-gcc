@@ -38,6 +38,7 @@ RISCV_TUNE("sifive-3-series", generic, rocket_tune_info)
 RISCV_TUNE("sifive-5-series", generic, rocket_tune_info)
 RISCV_TUNE("sifive-7-series", sifive_7, sifive_7_tune_info)
 RISCV_TUNE("thead-c906", generic, thead_c906_tune_info)
+RISCV_TUNE("xiangshan-nanhu", xiangshan, xiangshan_nanhu_tune_info)
 RISCV_TUNE("size", generic, optimize_size_tune_info)
 
 #undef RISCV_TUNE
@@ -77,4 +78,9 @@ RISCV_CORE("thead-c906",      "rv64imafdc_xtheadba_xtheadbb_xtheadbs_xtheadcmo_"
 			      "xtheadcondmov_xtheadfmemidx_xtheadmac_"
 			      "xtheadmemidx_xtheadmempair_xtheadsync",
 			      "thead-c906")
+
+RISCV_CORE("xiangshan-nanhu",      "rv64imafdc_zba_zbb_zbc_zbs_"
+			      "zbkb_zbkc_zbkx_zknd_zkne_zknh_zksed_zksh_"
+			      "svinval_zicbom_zicboz",
+			      "xiangshan-nanhu")
 #undef RISCV_CORE
