@@ -47,7 +47,7 @@
 
 (define_insn_reservation "generic_branch" 1
   (and (eq_attr "tune" "generic")
-       (eq_attr "type" "branch,jump,call,jalr"))
+       (eq_attr "type" "branch,jump,call"))
   "alu")
 
 (define_insn_reservation "generic_imul" 10

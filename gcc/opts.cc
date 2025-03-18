@@ -624,7 +624,7 @@ static const struct default_options default_options_table[] =
     { OPT_LEVELS_2_PLUS, OPT_fgcse, NULL, 1 },
     { OPT_LEVELS_2_PLUS, OPT_fhoist_adjacent_loads, NULL, 1 },
     { OPT_LEVELS_2_PLUS, OPT_findirect_inlining, NULL, 1 },
-    { OPT_LEVELS_2_PLUS, OPT_finline_small_functions, NULL, 1 },
+    { OPT_LEVELS_3_PLUS, OPT_finline_small_functions, NULL, 1 },
     { OPT_LEVELS_2_PLUS, OPT_fipa_bit_cp, NULL, 1 },
     { OPT_LEVELS_2_PLUS, OPT_fipa_cp, NULL, 1 },
     { OPT_LEVELS_2_PLUS, OPT_fipa_icf, NULL, 1 },
