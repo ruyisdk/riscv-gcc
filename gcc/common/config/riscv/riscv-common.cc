@@ -441,16 +441,25 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
 
   {"sdtrig",  ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"sha",  ISA_SPEC_CLASS_NONE, 1, 0},
+
   {"smaia",     ISA_SPEC_CLASS_NONE, 1, 0},
   {"smepmp",    ISA_SPEC_CLASS_NONE, 1, 0},
   {"smstateen", ISA_SPEC_CLASS_NONE, 1, 0},
 
   {"ssaia",     ISA_SPEC_CLASS_NONE, 1, 0},
+  {"ssccptr",   ISA_SPEC_CLASS_NONE, 1, 0},
   {"sscofpmf",  ISA_SPEC_CLASS_NONE, 1, 0},
+  {"sscounterenw", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"ssnpm",     ISA_SPEC_CLASS_NONE, 1, 0},
   {"ssstateen", ISA_SPEC_CLASS_NONE, 1, 0},
   {"sstc",      ISA_SPEC_CLASS_NONE, 1, 0},
+  {"sstvala",   ISA_SPEC_CLASS_NONE, 1, 0},
+  {"sstvecd",   ISA_SPEC_CLASS_NONE, 1, 0},
   {"ssstrict",  ISA_SPEC_CLASS_NONE, 1, 0},
+  {"ssu64xl",   ISA_SPEC_CLASS_NONE, 1, 0},
 
+  {"svbare",  ISA_SPEC_CLASS_NONE, 1, 0},
   {"svade",   ISA_SPEC_CLASS_NONE, 1, 0},
   {"svadu",   ISA_SPEC_CLASS_NONE, 1, 0},
   {"svinval", ISA_SPEC_CLASS_NONE, 1, 0},
@@ -543,7 +552,14 @@ static const riscv_profiles riscv_profiles_table[] =
    "_zicboz_zfhmin_zkt_zihintntl_zicond_zimop_zcmop_zcb"
    "_zfa_zawrs"},
 
-  /* Currently we do not define S/M mode Profiles in gcc part.  */
+  /* RVA23S contains all mandatory base ISA for RVA23U64 and the privileged
+     as mandatory extensions.  */
+  {"rva23s64", "rv64imafdcv_zicsr_zicntr_zihpm_ziccif_ziccrse_ziccamoa"
+   "_zicclsm_zic64b_za64rs_zihintpause_zba_zbb_zbs_zicbom_zicbop"
+   "_zicboz_zfhmin_zkt_zvfhmin_zvbb_zvkt_zihintntl_zicond_zimop_zcmop_zcb"
+   "_zfa_zawrs_svbare_svade_ssccptr_sstvecd_sstvala_sscounterenw_svpbmt"
+   "_svinval_svnapot_sstc_sscofpmf_ssnpm_ssu64xl_sha"
+  },
 
   /* Terminate the list.  */
   {NULL, NULL}
