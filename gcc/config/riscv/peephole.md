@@ -39,6 +39,22 @@
   operands[5] = GEN_INT (INTVAL (operands[2]) - INTVAL (operands[5]));
 })
 
+;; ZBS
+(define_peephole2
+  [(set (match_operand:X 1 "register_operand")
+	(and:X (rotate:X (const_int -2)
+			 (match_operand:QI 3 "register_operand"))
+	       (match_operand:X 2 "register_operand")))
+   (set (match_operand:X 0 "register_operand")
+	(xor:X (ashift:X (const_int 1)
+			 (match_dup 3))
+	       (match_dup 1)))]
+  "TARGET_ZBS"
+  [(set (match_dup 0)
+	(ior:X (match_dup 2)
+	       (ashift:X (const_int 1)
+			 (match_dup 3))))])
+
 ;; ZCMP
 (define_peephole2
   [(set (match_operand:X 0 "a0a1_reg_operand")
