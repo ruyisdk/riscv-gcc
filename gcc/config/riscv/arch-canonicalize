@@ -90,6 +90,8 @@ IMPLIED_EXT = {
   "zvknhb" : ["zve64x"],
   "zvksed" : ["zve32x"],
   "zvksh"  : ["zve32x"],
+
+  "p" : ["zpn", "zbpbo", "zpsfoperand"],
 }
 
 def arch_canonicalize(arch, isa_spec):

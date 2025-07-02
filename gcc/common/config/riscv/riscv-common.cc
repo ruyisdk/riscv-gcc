@@ -259,6 +259,10 @@ static const riscv_implied_info_t riscv_implied_info[] =
   {"ssstateen", "zicsr"},
   {"sstc", "zicsr"},
 
+  {"p", "zpn"},
+  {"p", "zbpbo"},
+  {"p", "zpsfoperand"},
+
   {"xsfvcp", "zve32x"},
 
   {NULL, NULL}
@@ -315,6 +319,8 @@ static const struct riscv_ext_version riscv_ext_version_table[] =
   {"b",       ISA_SPEC_CLASS_NONE, 1, 0},
 
   {"h",       ISA_SPEC_CLASS_NONE, 1, 0},
+
+  {"p", ISA_SPEC_CLASS_NONE, 0, 9},
 
   {"v",       ISA_SPEC_CLASS_NONE, 1, 0},
 
@@ -513,6 +519,7 @@ static const struct riscv_ext_version riscv_combine_info[] =
   {"zvks", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zvksc", ISA_SPEC_CLASS_NONE, 1, 0},
   {"zvksg", ISA_SPEC_CLASS_NONE, 1, 0},
+  {"p", ISA_SPEC_CLASS_NONE, 0, 9},
   /* Terminate the list.  */
   {NULL, ISA_SPEC_CLASS_NONE, 0, 0}
 };
@@ -805,6 +812,17 @@ standard_extensions_p (const char *ext)
   return false;
 }
 
+/* Return true if EXT is p extension */
+
+static bool
+rvp_extension_p (const char *ext)
+{
+  return !(std::strncmp("zpn", ext, 3) &&
+        std::strncmp("zbpbo", ext, 5) &&
+        std::strncmp("zpsfoperand", ext, 11));
+
+}
+
 /* Add new subset to list.  */
 
 void
@@ -846,7 +864,9 @@ riscv_subset_list::add (const char *subset, int major_version,
 		m_arch, subset);
       return;
     }
-  else if (subset[0] == 'z' && !standard_extensions_p (subset))
+  else if (subset[0] == 'z' &&
+      !standard_extensions_p (subset) &&
+      !rvp_extension_p(subset))
     {
       error_at (m_loc,
 		"%<-march=%s%>: extension %qs starts with 'z' but is "
@@ -1889,6 +1909,10 @@ static const riscv_ext_flag_table_t riscv_ext_flag_table[] =
   RISCV_EXT_FLAG_ENTRY ("svvptc",      x_riscv_sv_subext, MASK_SVVPTC),
 
   RISCV_EXT_FLAG_ENTRY ("ztso", x_riscv_ztso_subext, MASK_ZTSO),
+
+  RISCV_EXT_FLAG_ENTRY ("zbpbo",       x_riscv_rvp_subext, MASK_ZBPBO),
+  RISCV_EXT_FLAG_ENTRY ("zpn",         x_riscv_rvp_subext, MASK_ZPN),
+  RISCV_EXT_FLAG_ENTRY ("zpsfoperand", x_riscv_rvp_subext, MASK_ZPSFOPERAND),
 
   RISCV_EXT_FLAG_ENTRY ("xcvmac",  x_riscv_xcv_subext, MASK_XCVMAC),
   RISCV_EXT_FLAG_ENTRY ("xcvalu",  x_riscv_xcv_subext, MASK_XCVALU),
