@@ -54,6 +54,10 @@
 @tab 1.0
 @tab Vector extension
 
+@item p
+@tab 0.1
+@tab p extension
+
 @item h
 @tab 1.0
 @tab Hypervisor extension
