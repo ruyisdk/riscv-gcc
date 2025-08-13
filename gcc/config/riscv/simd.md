@@ -24,10 +24,12 @@
   UNSPEC_PSLL
 ])
 
-;; (define_insn "psll_ws"
-;;   [(set (match_operand:X 0 "register_operand" "=r")
-;; 	(unspec:X [(match_operand:X 1 "register_operand" "r")] UNSPEC_PSLL))]
-;;   "TARGET_RVP"
-;;   "psll_ws\t%0,%1"
-;;   [(set_attr "type" "simd")
-;;    (set_attr "mode" "SI")])
+(define_insn "riscv_psll_bs_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (unspec:SI [(match_operand:SI 1 "register_operand" "r")
+                    (match_operand:SI 2 "register_operand" "r")]
+         UNSPEC_PSLL))]
+  "TARGET_RVP"
+  "psll.bs\t%0,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])

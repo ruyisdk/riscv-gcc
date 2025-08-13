@@ -129,6 +129,7 @@ AVAIL (zbb, TARGET_ZBB)
 AVAIL (zbb64, TARGET_ZBB && TARGET_64BIT)
 AVAIL (zbb64_or_zbkb64, (TARGET_ZBKB || TARGET_ZBB) && TARGET_64BIT)
 AVAIL (zbb_or_zbkb, (TARGET_ZBKB || TARGET_ZBB))
+AVAIL (simd, TARGET_RVP)
 AVAIL (hint_pause, (!0))
 
 // CORE-V AVAIL
@@ -212,6 +213,7 @@ static const struct riscv_builtin_description riscv_builtins[] = {
   #include "riscv-cmo.def"
   #include "riscv-scalar-crypto.def"
   #include "corev.def"
+  #include "simd.def"
 
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_NO_TARGET_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
