@@ -1408,8 +1408,13 @@
 (define_expand "mov<mode>"
   [(set (match_operand:VLS_AVL_IMM 0 "reg_or_mem_operand")
 	(match_operand:VLS_AVL_IMM 1 "general_operand"))]
-  "TARGET_VECTOR"
+  "TARGET_VECTOR || TARGET_RVP"
 {
+  if (TARGET_RVP)
+  {
+   if (riscv_legitimize_move (<MODE>mode, operands[0], operands[1]))
+     DONE;
+  }
   if (riscv_vector::legitimize_move (operands[0], &operands[1]))
     DONE;
 })
