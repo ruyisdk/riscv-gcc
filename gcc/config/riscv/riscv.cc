@@ -2791,7 +2791,7 @@ riscv_load_store_insns (rtx mem, rtx_insn *insn)
   else if (GET_MODE_BITSIZE (mode).to_constant () == 64)
     {
       set = single_set (insn);
-      if (set && !riscv_split_64bit_move_p (SET_DEST (set), SET_SRC (set)))
+      if (set && !riscv_split_move_p (SET_DEST (set), SET_SRC (set)))
 	might_split_p = false;
     }
 
@@ -4926,11 +4926,13 @@ riscv_noce_conversion_profitable_p (rtx_insn *seq,
 rtx
 riscv_subword (rtx op, bool high_p)
 {
-  unsigned int byte = (high_p != BYTES_BIG_ENDIAN) ? UNITS_PER_WORD : 0;
+  unsigned int byte;
   machine_mode mode = GET_MODE (op);
 
   if (mode == VOIDmode)
     mode = TARGET_64BIT ? TImode : DImode;
+
+  byte = high_p ? (GET_MODE_SIZE (mode).to_constant () / 2 ) : 0;
 
   if (MEM_P (op))
     return adjust_address (op, word_mode, byte);
@@ -4941,12 +4943,14 @@ riscv_subword (rtx op, bool high_p)
   return simplify_gen_subreg (word_mode, op, mode, byte);
 }
 
-/* Return true if a 64-bit move from SRC to DEST should be split into two.  */
+/* Return true if move from SRC to DEST should be split into two.  */
 
 bool
-riscv_split_64bit_move_p (rtx dest, rtx src)
+riscv_split_move_p (rtx dest, rtx src)
 {
-  if (TARGET_64BIT)
+  machine_mode mode = GET_MODE (dest);
+
+  if (GET_MODE_SIZE (mode).to_constant () <= UNITS_PER_WORD)
     return false;
 
   /* Zilsd provides load/store with even-odd register pair. */
@@ -4968,7 +4972,7 @@ riscv_split_64bit_move_p (rtx dest, rtx src)
 
   /* Allow FPR <-> FPR and FPR <-> MEM moves, and permit the special case
      of zeroing an FPR with FCVT.D.W.  */
-  if (TARGET_DOUBLE_FLOAT
+  if (GET_MODE_SIZE (mode).to_constant () <= UNITS_PER_FP_REG
       && ((FP_REG_RTX_P (src) && FP_REG_RTX_P (dest))
 	  || (FP_REG_RTX_P (dest) && MEM_P (src))
 	  || (FP_REG_RTX_P (src) && MEM_P (dest))
@@ -4979,7 +4983,7 @@ riscv_split_64bit_move_p (rtx dest, rtx src)
 }
 
 /* Split a doubleword move from SRC to DEST.  On 32-bit targets,
-   this function handles 64-bit moves for which riscv_split_64bit_move_p
+   this function handles 64-bit moves for which riscv_split_move_p
    holds.  For 64-bit targets, this function handles 128-bit moves.  */
 
 void
@@ -5081,7 +5085,7 @@ riscv_output_move (rtx dest, rtx src)
   dbl_p = (GET_MODE_SIZE (mode).to_constant () == 8);
   width = GET_MODE_SIZE (mode).to_constant ();
 
-  if (dbl_p && riscv_split_64bit_move_p (dest, src))
+  if (dbl_p && riscv_split_move_p (dest, src))
     return "#";
 
   if (dest_code == REG && GP_REG_P (REGNO (dest)))
@@ -5098,6 +5102,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "fmv.x.s\t%0,%1";
 	  case 8:
 	    return "fmv.x.d\t%0,%1";
+    case 16:
+      return "fmv.x.q\t%0,%1";
 	  }
 
       if (src_code == MEM)
@@ -5159,6 +5165,13 @@ riscv_output_move (rtx dest, rtx src)
 		/* in RV32, we can emulate fmv.d.x %0, x0 using fcvt.d.w */
 		gcc_assert (src == CONST0_RTX (mode));
 		return "fcvt.d.w\t%0,x0";
+        case 16:
+    gcc_assert (src == CONST0_RTX (mode));
+    /* In RV64, we can emulate fmv.q.x %0, x0 using fcvt.d.x.  */
+    if(TARGET_64BIT)
+      return "fmv.d.x\t%0,x0";
+    /* in RV32, we can emulate fmv.d.x %0, x0 using fcvt.d.w */
+    return "fcvt.d.w\t%0,x0";
 	      }
 	}
       if (dest_code == MEM)
@@ -5183,6 +5196,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "fmv.s\t%0,%1";
 	  case 8:
 	    return "fmv.d\t%0,%1";
+    case 16:
+      return "fmv.q\t%0,%1";
 	  }
 
       if (dest_code == MEM)
@@ -5194,6 +5209,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "fsw\t%1,%0";
 	  case 8:
 	    return "fsd\t%1,%0";
+    case 16:
+      return "fsq\t%1,%0";
 	  }
     }
   if (dest_code == REG && FP_REG_P (REGNO (dest)))
@@ -5207,6 +5224,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "flw\t%0,%1";
 	  case 8:
 	    return "fld\t%0,%1";
+    case 16:
+      return "flq\t%0,%1";
 	  }
 
       if (src_code == CONST_DOUBLE && satisfies_constraint_zfli (src))
@@ -5567,6 +5586,10 @@ riscv_emit_float_compare (enum rtx_code *code, rtx *op0, rtx *op1,
 	emit_insn (gen_f##CMP##_quiethfdi4 (*op0, cmp_op0, cmp_op1));	\
       else if (GET_MODE (cmp_op0) == HFmode)				\
 	emit_insn (gen_f##CMP##_quiethfsi4 (*op0, cmp_op0, cmp_op1));	\
+      else if (GET_MODE (cmp_op0) == TFmode && TARGET_64BIT)		\
+	emit_insn (gen_f##CMP##_quiettfdi4 (*op0, cmp_op0, cmp_op1));	\
+      else if (GET_MODE (cmp_op0) == TFmode)				\
+	emit_insn (gen_f##CMP##_quiettfsi4 (*op0, cmp_op0, cmp_op1));	\
       else								\
 	gcc_unreachable ();						\
       *op1 = const0_rtx;						\
@@ -9283,7 +9306,8 @@ riscv_for_each_saved_reg (poly_int64 sp_offset, riscv_save_restore_fn fn,
     if (BITSET_P (cfun->machine->frame.fmask, regno - FP_REG_FIRST))
       {
 	bool handle_reg = !cfun->machine->reg_is_wrapped_separately[regno];
-	machine_mode mode = TARGET_DOUBLE_FLOAT ? DFmode : SFmode;
+	machine_mode mode = TARGET_QUAD_FLOAT ? TFmode : 
+                      TARGET_DOUBLE_FLOAT ? DFmode : SFmode;
 	unsigned int slot = (riscv_use_multi_push (&cfun->machine->frame))
 			      ? CALLEE_SAVED_FREG_NUMBER (regno)
 			      : num_masked_fp;

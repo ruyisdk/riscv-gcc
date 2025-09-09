@@ -158,6 +158,21 @@ DEFINE_RISCV_EXT(
   /* EXTRA_EXTENSION_FLAGS */ 0)
 
 DEFINE_RISCV_EXT(
+  /* NAME */ q,
+  /* UPPERCASE_NAME */ QUAD_FLOAT,
+  /* FULL_NAME */ "Quad-precision floating-point extension",
+  /* DESC */ "",
+  /* URL */ ,
+  /* DEP_EXTS */ ({"d", "zicsr"}),
+  /* SUPPORTED_VERSIONS */ ({{2, 2, ISA_SPEC_CLASS_20191213},
+           {2, 2, ISA_SPEC_CLASS_20190608},
+           {2, 0, ISA_SPEC_CLASS_2P2}}),
+  /* FLAG_GROUP */ base,
+  /* BITMASK_GROUP_ID */ 0,
+  /* BITMASK_BIT_POSITION*/ 16,
+  /* EXTRA_EXTENSION_FLAGS */ 0)
+
+DEFINE_RISCV_EXT(
   /* NAME */ c,
   /* UPPERCASE_NAME */ RVC,
   /* FULL_NAME */ "Compressed extension",

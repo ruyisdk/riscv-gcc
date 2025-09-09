@@ -42,6 +42,10 @@
 @tab 2.0 2.2
 @tab Double-precision floating-point extension
 
+@item @samp{q}
+@tab 2.0 2.2
+@tab Quad-precision floating-point extension
+
 @item @samp{c}
 @tab 2.0
 @tab Compressed extension

@@ -1823,6 +1823,22 @@
   [(set_attr "type" "fcvt")
    (set_attr "mode" "BF")])
 
+(define_insn "trunctfsf2"
+  [(set (match_operand:SF 0 "register_operand" "=f")
+        (float_truncate:SF (match_operand:TF 1 "register_operand" "f")))]
+  "TARGET_QUAD_FLOAT"
+  "fcvt.s.q\t%0,%1"
+  [(set_attr "type"     "fcvt")
+   (set_attr "mode"     "SF")])
+
+(define_insn "trunctfdf2"
+  [(set (match_operand:DF 0 "register_operand" "=f")
+        (float_truncate:DF (match_operand:TF 1 "register_operand" "f")))]
+  "TARGET_QUAD_FLOAT"
+  "fcvt.d.q\t%0,%1"
+  [(set_attr "type"     "fcvt")
+   (set_attr "mode"     "DF")])
+
 ;; The conversion of HF/DF/TF to BF needs to be done with SF if there is a
 ;; chance to generate at least one instruction, otherwise just using
 ;; libfunc __trunc[h|d|t]fbf2.
@@ -2034,6 +2050,22 @@
   "fcvt.d.h\t%0,%1"
   [(set_attr "type" "fcvt")
    (set_attr "mode" "DF")])
+
+(define_insn "extendsftf2"
+  [(set (match_operand:TF 0 "register_operand" "=f")
+        (float_extend:TF (match_operand:SF 1 "register_operand" "f")))]
+  "TARGET_QUAD_FLOAT"
+  "fcvt.q.s\t%0,%1"
+  [(set_attr "type"     "fcvt")
+   (set_attr "mode"     "TF")])
+
+(define_insn "extenddftf2"
+  [(set (match_operand:TF 0 "register_operand" "=f")
+        (float_extend:TF (match_operand:DF 1 "register_operand" "f")))]
+  "TARGET_QUAD_FLOAT"
+  "fcvt.q.d\t%0,%1"
+  [(set_attr "type"     "fcvt")
+   (set_attr "mode"     "TF")])
 
 ;; 16-bit floating point moves
 (define_expand "mov<mode>"
@@ -2754,7 +2786,40 @@
   [(set (match_operand:MOVE64 0 "nonimmediate_operand")
 	(match_operand:MOVE64 1 "move_operand"))]
   "reload_completed
-   && riscv_split_64bit_move_p (operands[0], operands[1])"
+   && riscv_split_move_p (operands[0], operands[1])"
+  [(const_int 0)]
+{
+  riscv_split_doubleword_move (operands[0], operands[1]);
+  DONE;
+})
+
+;; 128-bit floating point moves
+(define_expand "movtf"
+  [(set (match_operand:TF 0 "")
+        (match_operand:TF 1 ""))]
+  "TARGET_QUAD_FLOAT"
+{
+  if (riscv_legitimize_move (TFmode, operands[0], operands[1]))
+    DONE;
+})
+
+;; In RV64, we lack fmv.x.q and fmv.q.x.  Go through memory instead.
+;; (However, we can still use fcvt.q.w to zero a floating-point register.)
+(define_insn "*movtf_hardfloat_rv64"
+  [(set (match_operand:TF 0 "nonimmediate_operand" "=f,f,f,m,m,  *r,*r,*m")
+        (match_operand:TF 1 "move_operand"         " f,G,m,f,G,*r*G,*m,*r"))]
+  "TARGET_64BIT && TARGET_QUAD_FLOAT
+   && (register_operand (operands[0], TFmode)
+       || reg_or_0_operand (operands[1], TFmode))"
+  { return riscv_output_move (operands[0], operands[1]); }
+  [(set_attr "move_type" "fmove,mtc,fpload,fpstore,store,move,load,store")
+   (set_attr "mode" "TF")])
+
+(define_split
+  [(set (match_operand:TF 0 "nonimmediate_operand")
+        (match_operand:TF 1 "move_operand"))]
+  "reload_completed
+   && riscv_split_move_p (operands[0], operands[1])"
   [(const_int 0)]
 {
   riscv_split_doubleword_move (operands[0], operands[1]);

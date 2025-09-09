@@ -62,6 +62,9 @@ EnumValue
 Enum(abi_type) String(ilp32d) Value(ABI_ILP32D)
 
 EnumValue
+Enum(abi_type) String(ilp32q) Value(ABI_ILP32Q)
+
+EnumValue
 Enum(abi_type) String(lp64) Value(ABI_LP64)
 
 EnumValue
@@ -72,6 +75,9 @@ Enum(abi_type) String(lp64f) Value(ABI_LP64F)
 
 EnumValue
 Enum(abi_type) String(lp64d) Value(ABI_LP64D)
+
+EnumValue
+Enum(abi_type) String(lp64q) Value(ABI_LP64Q)
 
 mfdiv
 Target Mask(FDIV)

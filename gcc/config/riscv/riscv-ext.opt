@@ -124,6 +124,8 @@ Mask(HARD_FLOAT) Var(riscv_base_subext)
 
 Mask(DOUBLE_FLOAT) Var(riscv_base_subext)
 
+Mask(QUAD_FLOAT) Var(riscv_base_subext)
+
 Mask(RVC) Var(riscv_base_subext)
 
 Mask(RVB) Var(riscv_base_subext)
