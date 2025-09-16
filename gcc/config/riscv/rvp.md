@@ -3176,9 +3176,9 @@
 	(truncate:V2SI
 	  (lshiftrt:V2DI
 	    (ss_mult:V2DI
-	      (mult:V2DI (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" " r")) (const_int 2))
-	      (mult:V2DI (sign_extend:V2DI (match_operand:V2SI 2 "register_operand" " r")) (const_int 2)))
-	    (const_int 32))))]
+	      (mult:V2DI (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" " r")) (const_vector:V2DI [(const_int 2) (const_int 2)]))
+	      (mult:V2DI (sign_extend:V2DI (match_operand:V2SI 2 "register_operand" " r")) (const_vector:V2DI [(const_int 2) (const_int 2)])))
+	    (const_vector:V2DI [(const_int 32) (const_int 32)]))))]
   "TARGET_ZPN && TARGET_64BIT"
   "kwmmul\t%0,%1,%2"
   [(set_attr "type" "simd")])
@@ -3203,10 +3203,12 @@
 	  (lshiftrt:V2DI
 	    (unspec:V2DI [
 	      (ss_mult:V2DI
-		(mult:V2DI (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" " r")) (const_int 2))
-		(mult:V2DI (sign_extend:V2DI (match_operand:V2SI 2 "register_operand" " r")) (const_int 2)))]
+		(mult:V2DI (sign_extend:V2DI (match_operand:V2SI 1 "register_operand" " r"))
+		(const_vector:V2DI [(const_int 2) (const_int 2)]))
+		(mult:V2DI (sign_extend:V2DI (match_operand:V2SI 2 "register_operand" " r"))
+		(const_vector:V2DI [(const_int 2) (const_int 2)])))]
 	      UNSPEC_ROUND)
-	    (const_int 32))))]
+	    (const_vector:V2DI [(const_int 32) (const_int 32)]))))]
   "TARGET_ZPN && TARGET_64BIT"
   "kwmmul.u\t%0,%1,%2"
   [(set_attr "type" "simd")])
