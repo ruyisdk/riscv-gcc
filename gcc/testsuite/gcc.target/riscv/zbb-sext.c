@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -march=rv64gc_zbb -mabi=lp64" } */
+/* { dg-options "-O2 -march=rv64gc_zbb -mabi=lp64d" } */
 
 #include<stdint.h>
 
