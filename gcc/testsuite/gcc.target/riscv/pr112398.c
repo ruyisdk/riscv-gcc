@@ -1,6 +1,6 @@
 /* { dg-do compile } */
 /* { dg-options "-march=rv64gc -mabi=lp64d" } */
-/* { dg-skip-if "" { *-*-* } { "-O0" "-Og" } } */
+/* { dg-skip-if "" { *-*-* } { "-O0" "-Og" "-mabi=ilp32d" } } */
 
 #include <stdint.h>
 
