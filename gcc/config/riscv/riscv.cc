@@ -13657,6 +13657,11 @@ riscv_get_mask_mode (machine_mode mode)
   if (TARGET_VECTOR && riscv_vector_mode_p (mode))
     return riscv_vector::get_mask_mode (mode);
 
+  /* For RVP modes, use the same mode for mask.
+     RVP comparisons return all-1s or all-0s in the same vector mode.  */
+  if (TARGET_RVP && riscv_pext_mode_supported_p (mode))
+    return mode;
+
   return default_get_mask_mode (mode);
 }
 
@@ -14506,8 +14511,20 @@ extract_base_offset_in_addr (rtx mem, rtx *base, rtx *offset)
 /* Implements target hook vector_mode_supported_any_target_p.  */
 
 static bool
-riscv_vector_mode_supported_any_target_p (machine_mode)
+riscv_vector_mode_supported_any_target_p (machine_mode mode)
 {
+  /* When RVP is enabled, only support RVP modes.  */
+  if (!TARGET_VECTOR && TARGET_RVP)
+    {
+      /* Support RVP modes (PV prefix).  */
+      if (riscv_pext_mode_supported_p (mode))
+	return true;
+
+      /* Reject all other vector modes.  */
+      if (VECTOR_MODE_P (mode))
+	return false;
+    }
+
   return true;
 }
 
