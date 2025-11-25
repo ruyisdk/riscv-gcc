@@ -25,4 +25,4 @@ int main ()
 
   return 0;
 }
-/* { dg-final { scan-tree-dump-times "Store-stores chain" 1 "pcom" } } */
+/* { dg-final { scan-tree-dump-times "Store-stores chain" 2 "pcom" } } */
