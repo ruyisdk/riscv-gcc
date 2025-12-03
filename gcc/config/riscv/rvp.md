@@ -243,3 +243,170 @@
   { return riscv_output_move (operands[0], operands[1]); }
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
+
+;; Pack operations for scalar mode
+(define_insn "*ppairoe_h_1"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI (ashift:SI (match_operand:SI 1 "register_operand" "r")
+                       (const_int 16))
+		    (lshiftrt:SI (match_operand:SI 2 "register_operand" "r")
+                         (const_int 16))))]
+  "TARGET_RVP"
+  "ppairoe.h\t%0, %2, %1"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "SI")])
+
+(define_insn "*ppairoe_h_2"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI (lshiftrt:SI (match_operand:SI 1 "register_operand" "r")
+                       (const_int 16))
+		    (ashift:SI (match_operand:SI 2 "register_operand" "r")
+                         (const_int 16))))]
+  "TARGET_RVP"
+  "ppairoe.h\t%0, %1, %2"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "SI")])
+
+(define_insn "*ppairoe_w_1"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI (ashift:DI (match_operand:DI 2 "register_operand" "r")
+                      (const_int 32))
+		    (lshiftrt:DI (match_operand:DI 1 "register_operand" "r")
+                         (const_int 32))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.w\t%0, %1, %2"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "DI")])
+
+(define_insn "*ppaireo_h_1"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+    (ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+                    (const_int -65536))
+            (and:SI (match_operand:SI 2 "register_operand" "r")
+                    (const_int 65535))))]
+  "TARGET_RVP"
+  "ppaireo.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppaireo_w_1"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+    (ior:DI (and:DI (match_operand:DI 1 "register_operand" "r")
+                    (const_int -4294967296))
+            (and:DI (match_operand:DI 2 "register_operand" "r")
+                    (const_int 4294967295))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.w\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ppairo_h"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+     (ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+                     (const_int -65536))
+             (lshiftrt:SI (match_operand:SI 2 "register_operand" "r")
+                          (const_int 16))))]
+  "TARGET_RVP"
+  "ppairo.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppairo_w"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+     (ior:DI (and:DI (match_operand:DI 1 "register_operand" "r")
+                     (const_int -4294967296))
+             (lshiftrt:DI (match_operand:DI 2 "register_operand" "r")
+                          (const_int 32))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.w\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; Pack vector pattern
+
+(define_expand "vec_setpv2hi"
+  [(match_operand:PV2HI 0 "register_operand" "")
+   (match_operand:HI 1 "register_operand" "")
+   (match_operand:SI 2 "immediate_operand" "")]
+  "TARGET_RVP"
+{
+  HOST_WIDE_INT pos = INTVAL (operands[2]);
+  if (pos > 1)
+    gcc_unreachable ();
+  HOST_WIDE_INT elem = (HOST_WIDE_INT) 1 << pos;
+  emit_insn (gen_vec_setv2hi_internal (operands[0], operands[1],
+				       operands[0], GEN_INT (elem)));
+  DONE;
+})
+
+(define_insn "vec_setv2hi_internal"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+    (vec_merge:PV2HI
+      (vec_duplicate:PV2HI
+        (match_operand:HI 1 "register_operand" "r, r"))
+      (match_operand:PV2HI 2 "register_operand" "r, r")
+      (match_operand:SI 3 "immediate_operand" "k01, k02")))]
+  "TARGET_RVP"
+  "@
+   ppaireo.h\t%0, %1, %2
+   pack\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pack_concatpv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_concat:PV2HI
+          (match_operand:HI 1 "register_operand" "r") 
+          (match_operand:HI 2 "register_operand" "r")))]
+  "TARGET_RVP"
+  "pack\t%0, %1, %2"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "SI")])
+
+;; ppaireo.h pattern: take bottom of first operand and top of second operand
+;; Matches vec_concat where the top element comes from a shift (extracting top half)
+;; For little-endian: ppaireo.h Rd, Ra, Rb means Rd[0] = Ra[0], Rd[1] = Rb[1]
+(define_insn "*ppaireo_concatpv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_concat:PV2HI
+          (match_operand:HI 1 "register_operand" "r") 
+          (subreg:HI (lshiftrt:SI
+                       (match_operand:SI 2 "register_operand" "r") 
+                       (const_int 16)) 0)))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "ppaireo.h\t%0, %1, %2"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "SI")])
+
+;; ppairoe.h pattern: take top of first operand and bottom of second operand
+;; Matches vec_concat where the top element comes from a shift (extracting top half)
+;; For little-endian: ppairoe.h Rd, Ra, Rb means Rd[0] = Ra[1], Rd[1] = Rb[0]
+(define_insn "*ppairoe_concatpv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_concat:PV2HI
+          (subreg:HI (lshiftrt:SI
+                       (match_operand:SI 1 "register_operand" "r")
+                       (const_int 16)) 0)
+          (match_operand:HI 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "ppairoe.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; ppairo.h pattern: take top of first operand and top of second operand
+;; Matches vec_concat where the top element comes from a shift (extracting top half)
+;; For little-endian: ppairo.h Rd, Ra, Rb means Rd[0] = Ra[1], Rd[1] = Rb[1]
+(define_insn "*ppairo_concatpv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_concat:PV2HI
+          (subreg:HI (lshiftrt:SI
+                       (match_operand:SI 1 "register_operand" "r")
+                       (const_int 16)) 0)
+          (subreg:HI (lshiftrt:SI
+                       (match_operand:SI 2 "register_operand" "r")
+                       (const_int 16)) 0)))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "ppairo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
