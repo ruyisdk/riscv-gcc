@@ -149,6 +149,9 @@ extern bool synthesize_add (rtx [3]);
 extern bool synthesize_add_extended (rtx [3]);
 extern bool riscv_pext_mode_supported_p (machine_mode);
 
+/* P-extension packed load immediate (PLI/PLUI) support.  */
+extern bool riscv_pli_operand_p (HOST_WIDE_INT);
+
 #ifdef RTX_CODE
 extern void riscv_expand_int_scc (rtx, enum rtx_code, rtx, rtx, bool *invert_ptr = 0);
 extern void riscv_expand_float_scc (rtx, enum rtx_code, rtx, rtx,
