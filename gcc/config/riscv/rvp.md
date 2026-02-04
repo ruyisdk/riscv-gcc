@@ -353,6 +353,35 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
+(define_expand "vec_setpv2si"
+  [(match_operand:PV2SI 0 "register_operand" "")
+   (match_operand:SI 1 "register_operand" "")
+   (match_operand:SI 2 "immediate_operand" "")]
+  "TARGET_RVP && TARGET_64BIT"
+{
+  HOST_WIDE_INT pos = INTVAL (operands[2]);
+  if (pos > 1)
+    gcc_unreachable ();
+  HOST_WIDE_INT elem = (HOST_WIDE_INT) 1 << pos;
+  emit_insn (gen_vec_setv2si_internal (operands[0], operands[1],
+				       operands[0], GEN_INT (elem)));
+  DONE;
+})
+
+(define_insn "vec_setv2si_internal"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
+    (vec_merge:PV2SI
+      (vec_duplicate:PV2SI
+        (match_operand:SI 1 "register_operand" "r, r"))
+      (match_operand:PV2SI 2 "register_operand" "r, r")
+      (match_operand:SI 3 "immediate_operand" "k01, k02")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   ppaireo.w\t%0, %1, %2
+   pack\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 (define_insn "*pack_concatpv2hi"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (vec_concat:PV2HI
@@ -362,6 +391,16 @@
   "pack\t%0, %1, %2"
   [(set_attr "type"  "arith")
    (set_attr "mode"  "SI")])
+
+(define_insn "*pack_concatpv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_concat:PV2SI
+          (match_operand:SI 1 "register_operand" "r") 
+          (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pack\t%0, %1, %2"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "DI")])
 
 ;; ppaireo.h pattern: take bottom of first operand and top of second operand
 ;; Matches vec_concat where the top element comes from a shift (extracting top half)
@@ -378,6 +417,21 @@
   [(set_attr "type"  "arith")
    (set_attr "mode"  "SI")])
 
+;; ppaireo.w pattern: take bottom of first operand and top of second operand
+;; Matches vec_concat where the top element comes from a shift (extracting top word)
+;; For little-endian: ppaireo.w Rd, Ra, Rb means Rd[0] = Ra[0], Rd[1] = Rb[1]
+(define_insn "*ppaireo_concatpv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_concat:PV2SI
+          (match_operand:SI 1 "register_operand" "r") 
+          (subreg:SI (lshiftrt:DI
+                       (match_operand:DI 2 "register_operand" "r") 
+                       (const_int 32)) 0)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "ppaireo.w\t%0, %1, %2"
+  [(set_attr "type"  "arith")
+   (set_attr "mode"  "DI")])
+
 ;; ppairoe.h pattern: take top of first operand and bottom of second operand
 ;; Matches vec_concat where the top element comes from a shift (extracting top half)
 ;; For little-endian: ppairoe.h Rd, Ra, Rb means Rd[0] = Ra[1], Rd[1] = Rb[0]
@@ -392,6 +446,21 @@
   "ppairoe.h\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
+
+;; ppairoe.w pattern: take top of first operand and bottom of second operand
+;; Matches vec_concat where the top element comes from a shift (extracting top word)
+;; For little-endian: ppairoe.w Rd, Ra, Rb means Rd[0] = Ra[1], Rd[1] = Rb[0]
+(define_insn "*ppairoe_concatpv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_concat:PV2SI
+          (subreg:SI (lshiftrt:DI
+                       (match_operand:DI 1 "register_operand" "r")
+                       (const_int 32)) 0)
+          (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "ppairoe.w\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
 
 ;; ppairo.h pattern: take top of first operand and top of second operand
 ;; Matches vec_concat where the top element comes from a shift (extracting top half)
@@ -410,3 +479,278 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
+;; ppairo.w pattern: take top of first operand and top of second operand
+;; Matches vec_concat where the top element comes from a shift (extracting top word)
+;; For little-endian: ppairo.w Rd, Ra, Rb means Rd[0] = Ra[1], Rd[1] = Rb[1]
+(define_insn "*ppairo_concatpv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_concat:PV2SI
+          (subreg:SI (lshiftrt:DI
+                       (match_operand:DI 1 "register_operand" "r")
+                       (const_int 32)) 0)
+          (subreg:SI (lshiftrt:DI
+                       (match_operand:DI 2 "register_operand" "r")
+                       (const_int 32)) 0)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "ppairo.w\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; ============================================================================
+;; Pair instructions (PV4QI mode) (PV4HI mode)
+;; ============================================================================
+
+;; PPAIRE.B using vec_merge + vec_select
+;; Result: rd[0]=op1[0], rd[1]=op2[0], rd[2]=op1[2], rd[3]=op2[2]
+;; vec_select produces {op[0], op[0], op[2], op[2]} for each operand
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppaireb_mergepv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_merge:PV4QI
+          (vec_select:PV4QI (match_operand:PV4QI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (vec_select:PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppaire.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PPAIRE.H using vec_merge + vec_select
+;; Result: rd[0]=op1[0], rd[1]=op2[0], rd[2]=op1[2], rd[3]=op2[2]
+;; vec_select produces {op[0], op[0], op[2], op[2]} for each operand
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppaireh_mergepv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_merge:PV4HI
+          (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (const_int 10)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIREO.B using vec_merge + vec_select
+;; Result: rd[0]=op1[0], rd[1]=op2[1], rd[2]=op1[2], rd[3]=op2[3]
+;; vec_select on op1: {0, 0, 2, 2}, on op2: {1, 1, 3, 3}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppaireob_mergepv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_merge:PV4QI
+          (vec_select:PV4QI (match_operand:PV4QI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (vec_select:PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppaireo.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PPAIREO.H using vec_merge + vec_select
+;; Result: rd[0]=op1[0], rd[1]=op2[1], rd[2]=op1[2], rd[3]=op2[3]
+;; vec_select on op1: {0, 0, 2, 2}, on op2: {1, 1, 3, 3}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppaireoh_mergepv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_merge:PV4HI
+          (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (const_int 10)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIROE.B using vec_merge + vec_select
+;; Result: rd[0]=op1[1], rd[1]=op2[0], rd[2]=op1[3], rd[3]=op2[2]
+;; vec_select on op1: {1, 1, 3, 3}, on op2: {0, 0, 2, 2}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppairoeb_mergepv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_merge:PV4QI
+          (vec_select:PV4QI (match_operand:PV4QI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (vec_select:PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppairoe.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PPAIROE.H using vec_merge + vec_select
+;; Result: rd[0]=op1[1], rd[1]=op2[0], rd[2]=op1[3], rd[3]=op2[2]
+;; vec_select on op1: {1, 1, 3, 3}, on op2: {0, 0, 2, 2}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppairoeh_mergepv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_merge:PV4HI
+          (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)]))
+          (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (const_int 10)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIRO.B using vec_merge + vec_select
+;; Result: rd[0]=op1[1], rd[1]=op2[1], rd[2]=op1[3], rd[3]=op2[3]
+;; vec_select on op1: {1, 1, 3, 3}, on op2: {1, 1, 3, 3}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppairob_mergepv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_merge:PV4QI
+          (vec_select:PV4QI (match_operand:PV4QI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (vec_select:PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppairo.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PPAIRO.H using vec_merge + vec_select
+;; Result: rd[0]=op1[1], rd[1]=op2[1], rd[2]=op1[3], rd[3]=op2[3]
+;; vec_select on op1: {1, 1, 3, 3}, on op2: {1, 1, 3, 3}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppairoh_mergepv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_merge:PV4HI
+          (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)]))
+          (const_int 10)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; ============================================================================
+;; Pair instructions (PV8QI mode)
+;; ============================================================================
+;; PPAIRE.B: pairs low bytes from each 16-bit halfword
+;; Result = {s2[55:48]@s1[55:48], s2[39:32]@s1[39:32], s2[23:16]@s1[23:16], s2[7:0]@s1[7:0]}
+;; For V8QI: combines bytes from two operands element-wise
+;; Pattern: rd[0]=op0[0], rd[1]=op1[0], rd[2]=op0[2], rd[3]=op1[2], rd[4]=op0[4], rd[5]=op1[4],
+;;          rd[6]=op0[6], rd[7]=op1[6]
+;; VEC_PERM indices: {0, 8, 2, 10, 4, 12, 6, 14}
+(define_insn "*ppaireb_mergepv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_merge:PV8QI
+          (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)
+                                       (const_int 4) (const_int 4)
+                                       (const_int 6) (const_int 6)]))
+          (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)
+                                       (const_int 4) (const_int 4)
+                                       (const_int 6) (const_int 6)]))
+          (const_int 170)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIREO.B: pairs low bytes from op0 and high bytes from op1
+;; Result = {s2[63:56]@s1[55:48], s2[47:40]@s1[39:32], s2[31:24]@s1[23:16], s2[15:8]@s1[7:0]} 
+;; For V8QI: combines bytes from two operands element-wise
+;; Pattern: rd[0]=op0[0], rd[1]=op1[1], rd[2]=op0[2], rd[3]=op1[3], rd[4]=op0[4], rd[5]=op1[5],
+;;          rd[6]=op0[6], rd[7]=op1[7]
+;; VEC_PERM indices: {0, 9, 2, 11, 4, 13, 6, 15}
+(define_insn "*ppaireob_mergepv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_merge:PV8QI
+          (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)
+                                       (const_int 5) (const_int 5)
+                                       (const_int 7) (const_int 7)]))
+          (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)
+                                       (const_int 4) (const_int 4)
+                                       (const_int 6) (const_int 6)]))
+          (const_int 170)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIROE.B: pairs high bytes from op0 and low bytes from op1
+;; Result = {s2[55:48]@s1[63:56], s2[39:32]@s1[47:40], s2[23:16]@s1[31:24], s2[7:0]@s1[15:8]}
+;; For V8QI: combines bytes from two operands element-wise
+;; Pattern: rd[0]=op0[1], rd[1]=op1[0], rd[2]=op0[3], rd[3]=op1[2], rd[4]=op0[5], rd[5]=op1[4],
+;;          rd[6]=op0[7], rd[7]=op1[6]
+;; VEC_PERM indices: {1, 8, 3, 10, 5, 12, 7, 14}
+(define_insn "*ppairoeb_mergepv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_merge:PV8QI
+          (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 2) (const_int 2)
+                                       (const_int 4) (const_int 4)
+                                       (const_int 6) (const_int 6)]))
+          (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)
+                                       (const_int 5) (const_int 5)
+                                       (const_int 7) (const_int 7)]))
+          (const_int 170)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIRO.B: pairs high bytes from op0 and high bytes from op1
+;; Result = {s2[63:56]@s1[63:56], s2[47:40]@s1[47:40], s2[31:24]@s1[31:24], s2[15:8]@s1[15:8]}
+;; For V8QI: combines bytes from two operands element-wise
+;; Pattern: rd[0]=op0[1], rd[1]=op1[1], rd[2]=op0[3], rd[3]=op1[3], rd[4]=op0[5], rd[5]=op1[5],
+;;          rd[6]=op0[7], rd[7]=op1[7]
+;; VEC_PERM indices: {1, 9, 3, 11, 5, 13, 7, 15}
+(define_insn "*ppairob_mergepv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_merge:PV8QI
+          (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)
+                                       (const_int 5) (const_int 5)
+                                       (const_int 7) (const_int 7)]))
+          (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)
+                                       (const_int 3) (const_int 3)
+                                       (const_int 5) (const_int 5)
+                                       (const_int 7) (const_int 7)]))
+          (const_int 170)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])

@@ -142,6 +142,10 @@ extern void riscv_expand_ustrunc (rtx, rtx);
 extern void riscv_expand_sstrunc (rtx, rtx);
 extern void riscv_p_expand_vec_cmp (rtx *);
 extern void riscv_p_expand_vcond_mask (rtx *);
+#ifdef GCC_TARGET_H
+extern bool riscv_expand_pext_vec_perm_const (machine_mode, rtx, rtx, rtx,
+                                              const vec_perm_indices &);
+#endif
 extern int riscv_register_move_cost (machine_mode, reg_class_t, reg_class_t);
 extern bool synthesize_ior_xor (rtx_code, rtx [3]);
 extern bool synthesize_and (rtx [3]);

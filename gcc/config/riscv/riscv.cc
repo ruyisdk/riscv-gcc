@@ -14302,6 +14302,8 @@ riscv_vectorize_vec_perm_const (machine_mode vmode, machine_mode op_mode,
   if (TARGET_VECTOR && riscv_vector_mode_p (vmode))
     return riscv_vector::expand_vec_perm_const (vmode, op_mode, target, op0,
 						op1, sel);
+  if (TARGET_RVP)
+    return riscv_expand_pext_vec_perm_const (vmode, target, op0, op1, sel);
 
   return false;
 }

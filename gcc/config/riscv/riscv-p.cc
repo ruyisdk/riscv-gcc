@@ -163,3 +163,239 @@ riscv_p_expand_vcond_mask (rtx *operands)
   /* result = tmp1 | tmp2 */
   emit_insn (gen_rtx_SET (result, gen_rtx_IOR (mode, tmp1, tmp2)));
 }
+
+/* Emit ppair RTL pattern for 4-element vectors using vec_merge/vec_select.
+   Supports both PV4QI and PV4HI modes.
+   op0_odd/op1_odd: false = even selector {0,0,2,2}, true = odd selector {1,1,3,3}
+
+   Patterns:
+   - ppaire:  op0_odd=false, op1_odd=false (even/even)
+   - ppaireo: op0_odd=false, op1_odd=true  (even/odd)
+   - ppairoe: op0_odd=true,  op1_odd=false (odd/even)
+   - ppairo:  op0_odd=true,  op1_odd=true  (odd/odd)  */
+
+static void
+riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
+                         bool op0_odd, bool op1_odd)
+{
+  int base0 = op0_odd ? 1 : 0;
+  int base1 = op1_odd ? 1 : 0;
+  const int nelems = 4;
+  const int elem_offset = 2;
+  const int mask = 0b1010;
+
+  rtx sel0 = gen_rtx_PARALLEL (VOIDmode,
+                               gen_rtvec (nelems, GEN_INT (base0), GEN_INT (base0),
+                                           GEN_INT (base0 + elem_offset),
+                                           GEN_INT (base0 + elem_offset)));
+
+  rtx sel1 = gen_rtx_PARALLEL (VOIDmode,
+                               gen_rtvec (nelems, GEN_INT (base1), GEN_INT (base1),
+                                           GEN_INT (base1 + elem_offset),
+                                           GEN_INT (base1 + elem_offset)));
+
+  rtx vec_sel_op0 = gen_rtx_VEC_SELECT (vmode, op0, sel0);
+  rtx vec_sel_op1 = gen_rtx_VEC_SELECT (vmode, op1, sel1);
+
+  rtx result = gen_rtx_VEC_MERGE (vmode, vec_sel_op1, vec_sel_op0,
+                                  GEN_INT (mask));
+
+  emit_insn (gen_rtx_SET (target, result));
+}
+
+/* Helper function to emit ppairxx.b in PV8QImode which has 8 elements.
+ 
+ ppaire.b RTL pattern for PV8QI mode using vec_merge/vec_select.
+   Pattern: rd[0]=op0[0], rd[1]=op1[0], rd[2]=op0[2], rd[3]=op1[2],
+            rd[4]=op0[4], rd[5]=op1[4], rd[6]=op0[6], rd[7]=op1[6]  
+ ppaireo.b RTL pattern for PV8QI mode using vec_merge/vec_select.
+   Pattern: rd[0]=op0[0], rd[1]=op1[1], rd[2]=op0[2], rd[3]=op1[3],
+            rd[4]=op0[4], rd[5]=op1[5], rd[6]=op0[6], rd[7]=op1[7]  
+ ppairoe.b RTL pattern for PV8QI mode using vec_merge/vec_select.
+   Pattern: rd[0]=op0[1], rd[1]=op1[0], rd[2]=op0[3], rd[3]=op1[2],
+            rd[4]=op0[5], rd[5]=op1[4], rd[6]=op0[7], rd[7]=op1[6]  
+ ppairo.b RTL pattern for PV8QI mode using vec_merge/vec_select.
+   Pattern: rd[0]=op0[1], rd[1]=op1[1], rd[2]=op0[3], rd[3]=op1[3],
+            rd[4]=op0[5], rd[5]=op1[5], rd[6]=op0[7], rd[7]=op1[7]  */
+
+static void
+riscv_emit_ppair_b_8elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
+                          bool op0_odd, bool op1_odd)
+{
+  int base0 = op0_odd ? 1 : 0;
+  int base1 = op1_odd ? 1 : 0;
+  const int nelems = 8;
+  const int elem_offset = 2;
+  const int mask = 0b10101010;
+  rtx sel0 = gen_rtx_PARALLEL (VOIDmode, gen_rtvec (nelems, GEN_INT (base0), GEN_INT (base0),
+                                                   GEN_INT (base0 + elem_offset),
+                                                   GEN_INT (base0 + elem_offset),
+                                                   GEN_INT (base0 + 2*elem_offset),
+                                                   GEN_INT (base0 + 2*elem_offset),
+                                                   GEN_INT (base0 + 3*elem_offset),
+                                                   GEN_INT (base0 + 3*elem_offset)));
+  rtx sel1 = gen_rtx_PARALLEL (VOIDmode, gen_rtvec (nelems, GEN_INT (base1), GEN_INT (base1),
+                                                   GEN_INT (base1 + elem_offset),
+                                                   GEN_INT (base1 + elem_offset),
+                                                   GEN_INT (base1 + 2*elem_offset),
+                                                   GEN_INT (base1 + 2*elem_offset),
+                                                   GEN_INT (base1 + 3*elem_offset),
+                                                   GEN_INT (base1 + 3*elem_offset)));
+  rtx vec_sel_op0 = gen_rtx_VEC_SELECT (vmode, op0, sel0);
+  rtx vec_sel_op1 = gen_rtx_VEC_SELECT (vmode, op1, sel1);
+
+  rtx result = gen_rtx_VEC_MERGE (vmode, vec_sel_op1, vec_sel_op0,
+                                 GEN_INT (mask));
+
+  emit_insn (gen_rtx_SET (target, result));
+}
+
+typedef enum {
+  /* No match pattern found */
+  ERROR_MATCH = 0,
+  /* Match with the normal pattern */
+  NORMAL_MATCH = 1,
+  /* Match with the swapped pattern */
+  SWAPPED_MATCH = 2
+} vec_perm_match_type;
+
+/* Helper function to check if permutation indices match a pattern,
+   considering both normal and swapped operand order.
+   Returns: 0 if no match, 1 if normal match, 2 if swapped match.  */
+static vec_perm_match_type
+match_vec_perm_pattern (const int *pattern, int len,
+                        const vec_perm_indices &sel)
+{
+  if (!known_eq (sel.length (), len))
+    return ERROR_MATCH;
+
+  /* Try normal pattern match.  */
+  bool normal_match = true;
+  for (int i = 0; i < len; i++)
+    {
+      if (!known_eq (sel[i], pattern[i]))
+	{
+	  normal_match = false;
+	  break;
+	}
+    }
+  if (normal_match)
+    return NORMAL_MATCH;
+
+  /* Try swapped pattern match.
+     For swapped patterns, indices from op0 (< len) become indices from op1 (>= len)
+     and vice versa. So we need to check if sel[i] matches pattern[i] with
+     operands swapped: if pattern[i] < len, check sel[i] == pattern[i] + len,
+     otherwise check sel[i] == pattern[i] - len.  */
+  bool swapped_match = true;
+  for (int i = 0; i < len; i++)
+    {
+      int expected = (pattern[i] < len) ? (pattern[i] + len) : (pattern[i] - len);
+      if (!known_eq (sel[i], expected))
+	{
+	  swapped_match = false;
+	  break;
+	}
+    }
+  if (swapped_match)
+    return SWAPPED_MATCH;
+
+  return ERROR_MATCH;
+}
+
+/* Pattern table entry for N-element vector permutations.  */
+template<int N>
+struct vec_perm_pattern {
+  int indices[N];
+  bool op0_odd;
+  bool op1_odd;
+};
+
+/* Supported 4-element vector permutation patterns.
+   Only non-swapped patterns are stored; swapped patterns are detected
+   and normalized at runtime.  */
+static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
+  /* ppaire: op0_even, op1_even  */
+  {{0, 4, 2, 6}, false, false},
+  /* ppaireo: op0_even, op1_odd  */
+  {{0, 5, 2, 7}, false, true},
+  /* ppairoe: op0_odd, op1_even  */
+  {{1, 4, 3, 6}, true, false},
+  /* ppairo: op0_odd, op1_odd  */
+  {{1, 5, 3, 7}, true, true},
+};
+
+/* Supported 8-element vector permutation patterns.
+   Only non-swapped patterns are stored; swapped patterns are detected
+   and normalized at runtime.  */
+static const vec_perm_pattern<8> vec_perm_patterns_8elem[] = {
+  /* ppaire: op0_even, op1_even  */
+  {{0, 8, 2, 10, 4, 12, 6, 14}, false, false},
+  /* ppaireo: op0_even, op1_odd  */
+  {{0, 9, 2, 11, 4, 13, 6, 15}, false, true},
+  /* ppairoe: op0_odd, op1_even  */
+  {{1, 8, 3, 10, 5, 12, 7, 14}, true, false},
+  /* ppairo: op0_odd, op1_odd  */
+  {{1, 9, 3, 11, 5, 13, 7, 15}, true, true},
+};
+
+/* Implement P extension vec_perm_const pattern matching.
+   Similar to RVV's expand_vec_perm_const, this function tries various
+   pattern matchers in sequence and emits the appropriate instruction.  */
+
+bool
+riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
+                                  rtx op0, rtx op1, const vec_perm_indices &sel)
+{
+  bool testing_p = (target == NULL_RTX);
+
+  if (vmode == PV4QImode || vmode == PV4HImode)
+    {
+      for (const auto &pattern : vec_perm_patterns_4elem)
+	{
+	  vec_perm_match_type match_result = match_vec_perm_pattern (pattern.indices,
+                                                                     4, sel);
+	  if (match_result != ERROR_MATCH)
+	    {
+	      if (testing_p)
+		return true;
+
+	      /* match_result: 1 = normal match, 2 = swapped match.  */
+	      bool swap_operands = (match_result == SWAPPED_MATCH);
+	      if (swap_operands)
+		riscv_emit_ppair_4_elem (target, vmode, op1, op0,
+		                         pattern.op0_odd, pattern.op1_odd);
+	      else
+		riscv_emit_ppair_4_elem (target, vmode, op0, op1,
+		                         pattern.op0_odd, pattern.op1_odd);
+	      return true;
+	    }
+	}
+    }
+  else if (vmode == PV8QImode)
+    {
+      for (const auto &pattern : vec_perm_patterns_8elem)
+	{
+	  vec_perm_match_type match_result = match_vec_perm_pattern (pattern.indices,
+                                                                     8, sel);
+	  if (match_result != ERROR_MATCH)
+	    {
+	      if (testing_p)
+		return true;
+
+	      /* match_result: 1 = normal match, 2 = swapped match.  */
+	      bool swap_operands = (match_result == SWAPPED_MATCH);
+	      if (swap_operands)
+		riscv_emit_ppair_b_8elem (target, vmode, op1, op0,
+                                         pattern.op0_odd, pattern.op1_odd);
+	      else
+		riscv_emit_ppair_b_8elem (target, vmode, op0, op1,
+                                         pattern.op0_odd, pattern.op1_odd);
+	      return true;
+	    }
+	}
+    }
+
+  return false;
+}
+
