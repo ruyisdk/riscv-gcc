@@ -10889,8 +10889,9 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
       if (riscv_vector_mode_p (mode))
 	return false;
 
-      /* Zilsd require load/store with even-odd reg pair.  */
-      if (TARGET_ZILSD && riscv_2x_xlen_mode_p (mode) && ((regno % 2) != 0))
+      /* Zilsd/RVP require load/store with even-odd reg pair.  */
+      if ((TARGET_ZILSD || (TARGET_RVP && !TARGET_64BIT))
+	  && riscv_2x_xlen_mode_p (mode) && ((regno % 2) != 0))
 	return false;
 
       if (!GP_REG_P (regno + nregs - 1))

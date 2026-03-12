@@ -754,3 +754,81 @@
   "ppairo.b\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; =========================================================================
+;; Sign/Zero Extension for RV32 with RVP
+;; =========================================================================
+;; On RV32 with RVP, we want to keep sign_extend and zero_extend as single
+;; RTX operations so they can be matched by widening instructions like WADD/WADDU.
+;; Without these patterns, GCC would expand them into subreg operations.
+
+;; Sign extend SI to DI on RV32
+;; This pattern is matched by the extendsidi2 expander in riscv.md
+(define_insn_and_split "*extendsidi2_rvp"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (sign_extend:DI (match_operand:SI 1 "register_operand" "r")))]
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "#"
+  "&& reload_completed"
+  [(set (subreg:SI (match_dup 0) 0) (match_dup 1))
+   (set (subreg:SI (match_dup 0) 4) (ashiftrt:SI (match_dup 1) (const_int 31)))]
+  ""
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; Zero extend SI to DI on RV32
+;; This pattern is matched by the zero_extendsidi2 expander in riscv.md
+(define_insn_and_split "*zero_extendsidi2_rvp"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (zero_extend:DI (match_operand:SI 1 "register_operand" "r")))]
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "#"
+  "&& reload_completed"
+  [(set (subreg:SI (match_dup 0) 0) (match_dup 1))
+   (set (subreg:SI (match_dup 0) 4) (const_int 0))]
+  ""
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; =========================================================================
+;; Widening Add Instructions (WADD/WADDU)
+;; =========================================================================
+;; WADD: Widening signed add - takes two 32-bit operands, produces 64-bit result
+;; WADDU: Widening unsigned add - takes two 32-bit unsigned operands, produces 64-bit result
+;;
+;; Operation: rd_p = sign_extend(rs1) + sign_extend(rs2)
+;; Result stored in register pair: X[2*rd_p] = result[31:0], X[2*rd_p+1] = result[63:32]
+;; Only available on RV32 (on RV64, use regular 64-bit add)
+
+;; Signed widening add (WADD)
+;; This pattern matches: (long long)a + (long long)b
+(define_insn "*waddsi3"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wadd\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; Unsigned widening add (WADDU)
+;; This pattern matches: (unsigned long long)a + (unsigned long long)b
+(define_insn "*waddusi3"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "waddu\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; DI-mode addition for RV32 with RVP
+;; Uses ADDD instruction; operands must be register pairs (R constraint)
+(define_insn "*adddi3_rvp32"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (match_operand:DI 1 "register_operand" "R")
+                 (match_operand:DI 2 "register_operand" "R")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "addd\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])

@@ -762,11 +762,18 @@
   [(set (match_operand:DI          0 "register_operand")
 	(plus:DI (match_operand:DI 1 "register_operand")
 		 (match_operand:DI 2 "reg_or_const_int_operand")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
 {
+  /* On RV32 with RVP, keep the DI add as a single RTX operation so that the
+     widening add patterns can match it in the combine pass.  */
+  if (!TARGET_64BIT && TARGET_RVP)
+    {
+      if (!REG_P (operands[2]))
+	operands[2] = force_reg (DImode, operands[2]);
+    }
   /* We may be able to find a faster sequence, if so, then we are
      done.  Otherwise let expansion continue normally.  */
-  if (CONST_INT_P (operands[2]) && synthesize_add (operands))
+  else if (CONST_INT_P (operands[2]) && synthesize_add (operands))
     DONE;
 })
 
@@ -774,7 +781,7 @@
   [(set (match_operand:DI          0 "register_operand" "=r,r")
 	(plus:DI (match_operand:DI 1 "register_operand" " r,r")
 		 (match_operand:DI 2 "arith_operand"    " r,I")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
   "add%i2\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -1852,13 +1859,24 @@
 (define_expand "zero_extendsidi2"
   [(set (match_operand:DI 0 "register_operand")
 	(zero_extend:DI (match_operand:SI 1 "nonimmediate_operand")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
 {
-  if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
-      && SUBREG_PROMOTED_UNSIGNED_P (operands[1]))
+  if (TARGET_64BIT)
     {
-      emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
-      DONE;
+      if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
+          && SUBREG_PROMOTED_UNSIGNED_P (operands[1]))
+        {
+          emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
+          DONE;
+        }
+    }
+  else if (TARGET_RVP)
+    {
+      /* For RV32+RVP, keep the zero_extend as a single RTX operation
+         so it can be matched by widening instructions like WADDU.
+         It will be split after reload by the pattern in rvp.md */
+      if (!REG_P (operands[1]))
+        operands[1] = force_reg (SImode, operands[1]);
     }
 })
 
@@ -1943,13 +1961,24 @@
   [(set (match_operand:DI     0 "register_operand"     "=r,r")
 	(sign_extend:DI
 	    (match_operand:SI 1 "nonimmediate_operand" " r,m")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
 {
-  if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
-      && SUBREG_PROMOTED_SIGNED_P (operands[1]))
+  if (TARGET_64BIT)
     {
-      emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
-      DONE;
+      if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
+          && SUBREG_PROMOTED_SIGNED_P (operands[1]))
+        {
+          emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
+          DONE;
+        }
+    }
+  else if (TARGET_RVP)
+    {
+      /* For RV32+RVP, keep the sign_extend as a single RTX operation
+         so it can be matched by widening instructions like WADD.
+         It will be split after reload by the pattern in rvp.md */
+      if (!REG_P (operands[1]))
+        operands[1] = force_reg (SImode, operands[1]);
     }
 })
 
