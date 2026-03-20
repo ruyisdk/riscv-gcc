@@ -832,3 +832,31 @@
   "addd\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; widen-multiply for RV32 with RVP
+(define_insn "*smulsidi3_rvp"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wmul\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*umulsidi3_rvp"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wmulu\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*sumulsidi3_rvp"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wmulsu\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
