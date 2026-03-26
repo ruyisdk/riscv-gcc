@@ -1307,6 +1307,31 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Widening accumulate (WADDA/WADDAU)
+;; rd = acc + sign_extend(rs1) + sign_extend(rs2)
+;;   - rd is a DI register pair (R constraint)
+;;   - rs1, rs2 are 32-bit registers sign-extended to DI
+;;   - "acc" is a DI accumulator tied to rd by the "0" constraint
+(define_insn "*wadda<su>si3"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (plus:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                          (any_extend:DI (match_operand:SI 2 "reg_or_0_operand" "rJ")))
+                       (match_operand:DI 3 "register_operand" "0")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wadda<u>\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; Rtl pattern for wadda(u) when the operand has x0 register.
+(define_insn "*<su>extend_add"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (match_operand:DI 2 "register_operand" "0")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wadda<u>\t%0, %1, zero"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; DI-mode addition for RV32 with RVP
 ;; Uses ADDD instruction; operands must be register pairs (R constraint)
 (define_insn "*adddi3_rvp32"
