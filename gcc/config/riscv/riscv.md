@@ -932,7 +932,15 @@
   [(set_attr "type" "fadd")
    (set_attr "mode" "<UNITMODE>")])
 
-(define_insn "subdi3"
+(define_expand "subdi3"
+  [(set (match_operand:DI 0           "register_operand")
+        (minus:DI (match_operand:DI 1 "reg_or_0_operand")
+                  (match_operand:DI 2 "register_operand")))]
+  "TARGET_64BIT || TARGET_RVP"
+  ""
+)
+
+(define_insn "*subdi3"
   [(set (match_operand:DI 0            "register_operand" "= r")
 	(minus:DI (match_operand:DI 1  "reg_or_0_operand" " rJ")
 		   (match_operand:DI 2 "register_operand" "  r")))]

@@ -909,6 +909,17 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Signed widening sub (WSUB)
+;; This pattern matches: (long long)a - (long long)b
+(define_insn "*wsubsi3"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (minus:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wsub\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; Unsigned widening add (WADDU)
 ;; This pattern matches: (unsigned long long)a + (unsigned long long)b
 (define_insn "*waddusi3"
@@ -920,6 +931,17 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Unsigned widening sub (WSUBU)
+;; This pattern matches: (unsigned long long)a - (unsigned long long)b
+(define_insn "*wsubusi3"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (minus:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                  (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wsubu\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; DI-mode addition for RV32 with RVP
 ;; Uses ADDD instruction; operands must be register pairs (R constraint)
 (define_insn "*adddi3_rvp32"
@@ -928,6 +950,17 @@
                  (match_operand:DI 2 "register_operand" "R")))]
   "!TARGET_64BIT && TARGET_RVP"
   "addd\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; DI-mode subtraction for RV32 with RVP
+;; Uses SUBD instruction; operands must be register pairs (R constraint)
+(define_insn "*subdi3_rvp32"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (minus:DI (match_operand:DI 1 "register_operand" "R")
+                  (match_operand:DI 2 "register_operand" "R")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "subd\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
