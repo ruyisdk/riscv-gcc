@@ -81,29 +81,31 @@ int32x2_t test_paadd_w (int32x2_t a, int32x2_t b)
   };
 }
 
-/* paaddu.b: unsigned averaging add byte (8 bytes) */
+/* paaddu.b: unsigned averaging add byte (8 bytes)
+   Use (uint32_t) cast to ensure unsigned arithmetic and logical shift.  */
 uint8x8_t test_paaddu_b (uint8x8_t a, uint8x8_t b)
 {
   return (uint8x8_t){
-    (uint8_t)(((uint16_t)a[0] + (uint16_t)b[0]) >> 1),
-    (uint8_t)(((uint16_t)a[1] + (uint16_t)b[1]) >> 1),
-    (uint8_t)(((uint16_t)a[2] + (uint16_t)b[2]) >> 1),
-    (uint8_t)(((uint16_t)a[3] + (uint16_t)b[3]) >> 1),
-    (uint8_t)(((uint16_t)a[4] + (uint16_t)b[4]) >> 1),
-    (uint8_t)(((uint16_t)a[5] + (uint16_t)b[5]) >> 1),
-    (uint8_t)(((uint16_t)a[6] + (uint16_t)b[6]) >> 1),
-    (uint8_t)(((uint16_t)a[7] + (uint16_t)b[7]) >> 1)
+    (uint8_t)(((uint32_t)(uint16_t)a[0] + (uint32_t)(uint16_t)b[0]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[1] + (uint32_t)(uint16_t)b[1]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[2] + (uint32_t)(uint16_t)b[2]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[3] + (uint32_t)(uint16_t)b[3]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[4] + (uint32_t)(uint16_t)b[4]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[5] + (uint32_t)(uint16_t)b[5]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[6] + (uint32_t)(uint16_t)b[6]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[7] + (uint32_t)(uint16_t)b[7]) >> 1)
   };
 }
 
-/* paaddu.b: unsigned averaging add byte (4 bytes) */
+/* paaddu.b: unsigned averaging add byte (4 bytes)
+   Use (uint32_t) cast to ensure unsigned arithmetic and logical shift.  */
 uint8x4_t test_paaddu_b_4 (uint8x4_t a, uint8x4_t b)
 {
   return (uint8x4_t){
-    (uint8_t)(((uint16_t)a[0] + (uint16_t)b[0]) >> 1),
-    (uint8_t)(((uint16_t)a[1] + (uint16_t)b[1]) >> 1),
-    (uint8_t)(((uint16_t)a[2] + (uint16_t)b[2]) >> 1),
-    (uint8_t)(((uint16_t)a[3] + (uint16_t)b[3]) >> 1)
+    (uint8_t)(((uint32_t)(uint16_t)a[0] + (uint32_t)(uint16_t)b[0]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[1] + (uint32_t)(uint16_t)b[1]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[2] + (uint32_t)(uint16_t)b[2]) >> 1),
+    (uint8_t)(((uint32_t)(uint16_t)a[3] + (uint32_t)(uint16_t)b[3]) >> 1)
   };
 }
 

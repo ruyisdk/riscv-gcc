@@ -119,7 +119,8 @@
 ;;
 ;; GCC's tree-vect-patterns.cc recognizes widening average patterns like:
 ;;   (int8_t)(((int16_t)a + (int16_t)b) >> 1)
-;; and lowers them to IFN_AVG_FLOOR, which maps to avg<mode>3_floor optab.
+;; and lowers them to IFN_AVG_FLOOR/IFN_AVG_SUB_FLOOR, which map to
+;; avg<mode>3_floor/avg_sub<mode>3_floor optabs.
 ;;
 ;; P-extension averaging instructions:
 ;;   paadd/paaddu: signed/unsigned averaging add: (a + b) >> 1
