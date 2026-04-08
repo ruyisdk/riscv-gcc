@@ -164,6 +164,40 @@ riscv_p_expand_vcond_mask (rtx *operands)
   emit_insn (gen_rtx_SET (result, gen_rtx_IOR (mode, tmp1, tmp2)));
 }
 
+/* Emit ppair RTL pattern for 2-element vectors using vec_merge/vec_select.
+   Supports both PV2HI and PV2SI modes.
+   op0_odd/op1_odd: false = even selector {0,0}, true = odd selector {1,1}
+
+   Patterns:
+   - ppaire:  op0_odd=false, op1_odd=false (even/even)
+   - ppaireo: op0_odd=false, op1_odd=true  (even/odd)
+   - ppairoe: op0_odd=true,  op1_odd=false (odd/even)
+   - ppairo:  op0_odd=true,  op1_odd=true  (odd/odd)  */
+
+static void
+riscv_emit_ppair_2_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
+                         bool op0_odd, bool op1_odd)
+{
+  int base0 = op0_odd ? 1 : 0;
+  int base1 = op1_odd ? 1 : 0;
+  const int nelems = 2;
+  const int mask = 0b10;
+
+  rtx sel0 = gen_rtx_PARALLEL (VOIDmode,
+                               gen_rtvec (nelems, GEN_INT (base0), GEN_INT (base0)));
+                                          
+  rtx sel1 = gen_rtx_PARALLEL (VOIDmode,
+                               gen_rtvec (nelems, GEN_INT (base1), GEN_INT (base1)));
+
+  rtx vec_sel_op0 = gen_rtx_VEC_SELECT (vmode, op0, sel0);
+  rtx vec_sel_op1 = gen_rtx_VEC_SELECT (vmode, op1, sel1);
+
+  rtx result = gen_rtx_VEC_MERGE (vmode, vec_sel_op1, vec_sel_op0,
+                                  GEN_INT (mask));
+
+  emit_insn (gen_rtx_SET (target, result));
+}
+
 /* Emit ppair RTL pattern for 4-element vectors using vec_merge/vec_select.
    Supports both PV4QI and PV4HI modes.
    op0_odd/op1_odd: false = even selector {0,0,2,2}, true = odd selector {1,1,3,3}
@@ -311,6 +345,20 @@ struct vec_perm_pattern {
   bool op1_odd;
 };
 
+/* Supported 2-element vector permutation patterns.
+   Only non-swapped patterns are stored; swapped patterns are detected
+   and normalized at runtime.  */
+static const vec_perm_pattern<2> vec_perm_patterns_2elem[] = {
+  /* ppaire: op0_even, op1_even  */
+  {{0, 2}, false, false},
+  /* ppaireo: op0_even, op1_odd  */
+  {{0, 3}, false, true},
+  /* ppairoe: op0_odd, op1_even  */
+  {{1, 2}, true, false},
+  /* ppairo: op0_odd, op1_odd  */
+  {{1, 3}, true, true},
+};
+
 /* Supported 4-element vector permutation patterns.
    Only non-swapped patterns are stored; swapped patterns are detected
    and normalized at runtime.  */
@@ -394,6 +442,29 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
 	      return true;
 	    }
 	}
+    }
+  else if (vmode == PV2HImode || vmode == PV2SImode)
+    {
+      for (const auto &pattern : vec_perm_patterns_2elem)
+        {
+          vec_perm_match_type match_result = match_vec_perm_pattern (pattern.indices,
+                                                                     2, sel);
+          if (match_result != ERROR_MATCH)
+            {
+              if (testing_p)
+                return true;
+
+              /* match_result: 1 = normal match, 2 = swapped match.  */
+              bool swap_operands = (match_result == SWAPPED_MATCH);
+              if (swap_operands)
+                riscv_emit_ppair_2_elem (target, vmode, op1, op0,
+                                          pattern.op0_odd, pattern.op1_odd);
+              else
+                riscv_emit_ppair_2_elem (target, vmode, op0, op1,
+                                          pattern.op0_odd, pattern.op1_odd);
+              return true;
+            }
+        }
     }
 
   return false;

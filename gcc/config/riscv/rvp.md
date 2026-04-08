@@ -497,6 +497,113 @@
    (set_attr "mode" "DI")])
 
 ;; ============================================================================
+;; Pair instructions (PV2HI mode) (PV2SI mode)
+;; ============================================================================
+(define_insn "*ppaireh_mergepv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_merge:PV2HI
+          (vec_select:PV2HI (match_operand:PV2HI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (vec_select:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (const_int 2)))]
+  "TARGET_RVP"
+  "pack\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppaireoh_mergepv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_merge:PV2HI
+          (vec_select:PV2HI (match_operand:PV2HI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (vec_select:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (const_int 2)))]
+  "TARGET_RVP"
+  "ppaireo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppairoeh_mergepv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_merge:PV2HI
+          (vec_select:PV2HI (match_operand:PV2HI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (vec_select:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (const_int 2)))]
+  "TARGET_RVP"
+  "ppairoe.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppairoh_mergepv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_merge:PV2HI
+          (vec_select:PV2HI (match_operand:PV2HI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (vec_select:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (const_int 2)))]
+  "TARGET_RVP"
+  "ppairo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppairew_mergepv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_merge:PV2SI
+          (vec_select:PV2SI (match_operand:PV2SI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (vec_select:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (const_int 2)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pack\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ppaireow_mergepv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_merge:PV2SI
+          (vec_select:PV2SI (match_operand:PV2SI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (vec_select:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (const_int 2)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.w\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ppairoew_mergepv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_merge:PV2SI
+          (vec_select:PV2SI (match_operand:PV2SI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)]))
+          (vec_select:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (const_int 2)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.w\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ppairow_mergepv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (vec_merge:PV2SI
+          (vec_select:PV2SI (match_operand:PV2SI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (vec_select:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 1)]))
+          (const_int 2)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.w\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; ============================================================================
 ;; Pair instructions (PV4QI mode) (PV4HI mode)
 ;; ============================================================================
 
