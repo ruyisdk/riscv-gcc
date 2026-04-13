@@ -47,11 +47,13 @@
   (PV2SI "22")])
 
 ;; PVQIHI: Packed vector modes for byte and halfword elements only
-(define_mode_iterator PVQIHI [(PV4QI "!TARGET_64BIT") (PV2HI "!TARGET_64BIT")
+;; On RV64, we support both 4-byte (PV4QI, PV2HI) and 8-byte (PV8QI, PV4HI) vectors
+(define_mode_iterator PVQIHI [PV4QI PV2HI
 			      (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")])
 
 ;; PVALL: All packed vector modes for basic arithmetic operations
-(define_mode_iterator PVALL [(PV4QI "!TARGET_64BIT") (PV2HI "!TARGET_64BIT")
+;; On RV64, we support both 4-byte (PV4QI, PV2HI) and 8-byte (PV8QI, PV4HI, PV2SI) vectors
+(define_mode_iterator PVALL [PV4QI PV2HI
 			     (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")
 			     (PV2SI "TARGET_64BIT")])
 

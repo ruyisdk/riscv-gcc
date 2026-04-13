@@ -16682,10 +16682,12 @@ bool riscv_pext_mode_supported_p (machine_mode mode)
 
   switch (mode)
     {
+    /* 4-byte packed vectors are supported on both RV32 and RV64.  */
     case PV4QImode:
     case PV2HImode:
-      return !TARGET_64BIT;
+      return true;
 
+    /* 8-byte packed vectors are only supported on RV64.  */
     case PV8QImode:
     case PV4HImode:
     case PV2SImode:

@@ -514,7 +514,7 @@
                             (parallel [(const_int 0) (const_int 0)
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
   "ppaire.b\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
@@ -552,7 +552,7 @@
                             (parallel [(const_int 0) (const_int 0)
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
   "ppaireo.b\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
@@ -590,7 +590,7 @@
                             (parallel [(const_int 1) (const_int 1)
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
   "ppairoe.b\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
@@ -628,7 +628,7 @@
                             (parallel [(const_int 1) (const_int 1)
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
   "ppairo.b\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
