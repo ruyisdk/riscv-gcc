@@ -164,6 +164,44 @@ riscv_p_expand_vcond_mask (rtx *operands)
   emit_insn (gen_rtx_SET (result, gen_rtx_IOR (mode, tmp1, tmp2)));
 }
 
+static rtx
+build_sel_parallel (const unsigned N, const int *idx)
+{
+  rtvec v = rtvec_alloc (N);
+  for (unsigned i = 0; i < N; ++i)
+    RTVEC_ELT (v, i) = GEN_INT (idx[i]);
+  return gen_rtx_PARALLEL (VOIDmode, v);
+}
+
+/* Helper function to emit zip pattern with vec_merge */
+template<unsigned N>
+void emit_vec_merge_with_select (rtx target, machine_mode vmode,
+                                 rtx op0, rtx op1, const int *idx,
+                                 const int mask)
+{
+  rtx sel0 = build_sel_parallel (N, idx);
+  rtx sel1 = build_sel_parallel (N, idx);
+  emit_insn (gen_rtx_SET (target,
+             gen_rtx_VEC_MERGE (vmode,
+                                gen_rtx_VEC_SELECT (vmode, op1, sel1),
+                                gen_rtx_VEC_SELECT (vmode, op0, sel0),
+                                GEN_INT (mask))));
+}
+
+/* Helper function to emit unzip pattern with vec_concat */
+template<unsigned N>
+void emit_vec_concat_with_select (rtx target, machine_mode vmode,
+                                  machine_mode sel_mode,
+                                  rtx op0, rtx op1, const int *idx)
+{
+  rtx sel0 = build_sel_parallel (N/2, idx);
+  rtx sel1 = build_sel_parallel (N/2, idx);
+  emit_insn (gen_rtx_SET (target,
+             gen_rtx_VEC_CONCAT (vmode,
+                                 gen_rtx_VEC_SELECT (sel_mode, op0, sel0),
+                                 gen_rtx_VEC_SELECT (sel_mode, op1, sel1))));
+}
+
 /* Emit ppair RTL pattern for 2-element vectors using vec_merge/vec_select.
    Supports both PV2HI and PV2SI modes.
    op0_odd/op1_odd: false = even selector {0,0}, true = odd selector {1,1}
@@ -237,6 +275,21 @@ riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
   emit_insn (gen_rtx_SET (target, result));
 }
 
+static void
+riscv_emit_zip_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
+                       const int *indices)
+{
+  const int mask = 0b1010;
+  emit_vec_merge_with_select<4> (target, vmode, op0, op1, indices, mask);
+}
+
+static void
+riscv_emit_unzip_4_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
+                         rtx op0, rtx op1, const int *indices)
+{
+  emit_vec_concat_with_select<4> (target, vmode, sel_mode, op0, op1, indices);
+}
+
 /* Helper function to emit ppairxx.b in PV8QImode which has 8 elements.
  
  ppaire.b RTL pattern for PV8QI mode using vec_merge/vec_select.
@@ -253,8 +306,8 @@ riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
             rd[4]=op0[5], rd[5]=op1[5], rd[6]=op0[7], rd[7]=op1[7]  */
 
 static void
-riscv_emit_ppair_b_8elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
-                          bool op0_odd, bool op1_odd)
+riscv_emit_ppair_8_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
+                         bool op0_odd, bool op1_odd)
 {
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
@@ -284,6 +337,21 @@ riscv_emit_ppair_b_8elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
   emit_insn (gen_rtx_SET (target, result));
 }
 
+static void
+riscv_emit_zip_8_elem (rtx target, machine_mode vmode,
+                       rtx op0, rtx op1, const int *indices)
+{
+  const int mask = 0b10101010;
+  emit_vec_merge_with_select<8> (target, vmode, op0, op1, indices, mask);
+}
+
+static void
+riscv_emit_unzip_8_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
+                         rtx op0, rtx op1, const int *indices)
+{
+  emit_vec_concat_with_select<8> (target, vmode, sel_mode, op0, op1, indices);
+}
+
 typedef enum {
   /* No match pattern found */
   ERROR_MATCH = 0,
@@ -297,7 +365,7 @@ typedef enum {
    considering both normal and swapped operand order.
    Returns: 0 if no match, 1 if normal match, 2 if swapped match.  */
 static vec_perm_match_type
-match_vec_perm_pattern (const int *pattern, int len,
+match_vec_perm_pattern (const int *pattern, unsigned len,
                         const vec_perm_indices &sel)
 {
   if (!known_eq (sel.length (), len))
@@ -305,7 +373,7 @@ match_vec_perm_pattern (const int *pattern, int len,
 
   /* Try normal pattern match.  */
   bool normal_match = true;
-  for (int i = 0; i < len; i++)
+  for (unsigned i = 0; i < len; i++)
     {
       if (!known_eq (sel[i], pattern[i]))
 	{
@@ -337,12 +405,22 @@ match_vec_perm_pattern (const int *pattern, int len,
   return ERROR_MATCH;
 }
 
+typedef enum {
+  /* permutation for ppair.* instructions */
+  PAIR_PERM_TYPE = 0,
+  /* permutation for zip.* instructions */
+  ZIP_PERM_TYPE = 1,
+  /* permutation for unzip.* instructions */
+  UNZIP_PERM_TYPE = 2
+} perm_type_t;
+
 /* Pattern table entry for N-element vector permutations.  */
 template<int N>
 struct vec_perm_pattern {
-  int indices[N];
+  const int indices[N];
   bool op0_odd;
   bool op1_odd;
+  perm_type_t perm;
 };
 
 /* Supported 2-element vector permutation patterns.
@@ -350,13 +428,13 @@ struct vec_perm_pattern {
    and normalized at runtime.  */
 static const vec_perm_pattern<2> vec_perm_patterns_2elem[] = {
   /* ppaire: op0_even, op1_even  */
-  {{0, 2}, false, false},
+  {{0, 2}, false, false, PAIR_PERM_TYPE},
   /* ppaireo: op0_even, op1_odd  */
-  {{0, 3}, false, true},
+  {{0, 3}, false, true, PAIR_PERM_TYPE},
   /* ppairoe: op0_odd, op1_even  */
-  {{1, 2}, true, false},
+  {{1, 2}, true, false, PAIR_PERM_TYPE},
   /* ppairo: op0_odd, op1_odd  */
-  {{1, 3}, true, true},
+  {{1, 3}, true, true, PAIR_PERM_TYPE}
 };
 
 /* Supported 4-element vector permutation patterns.
@@ -364,13 +442,21 @@ static const vec_perm_pattern<2> vec_perm_patterns_2elem[] = {
    and normalized at runtime.  */
 static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
   /* ppaire: op0_even, op1_even  */
-  {{0, 4, 2, 6}, false, false},
+  {{0, 4, 2, 6}, false, false, PAIR_PERM_TYPE},
   /* ppaireo: op0_even, op1_odd  */
-  {{0, 5, 2, 7}, false, true},
+  {{0, 5, 2, 7}, false, true, PAIR_PERM_TYPE},
   /* ppairoe: op0_odd, op1_even  */
-  {{1, 4, 3, 6}, true, false},
+  {{1, 4, 3, 6}, true, false, PAIR_PERM_TYPE},
   /* ppairo: op0_odd, op1_odd  */
-  {{1, 5, 3, 7}, true, true},
+  {{1, 5, 3, 7}, true, true, PAIR_PERM_TYPE},
+  /* zip16p: don't care the even-odd */
+  {{0, 4, 1, 5}, false, false, ZIP_PERM_TYPE},
+  /* zip16hp: don't care the even-odd */
+  {{2, 6, 3, 7}, false , false, ZIP_PERM_TYPE},
+  /* unzip16p: don't care the even-odd */
+  {{0, 2, 4, 6}, false, false, UNZIP_PERM_TYPE},
+  /* unzip16hp: don't care the even-odd */
+  {{1, 3, 5, 7}, false, false, UNZIP_PERM_TYPE}
 };
 
 /* Supported 8-element vector permutation patterns.
@@ -378,13 +464,21 @@ static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
    and normalized at runtime.  */
 static const vec_perm_pattern<8> vec_perm_patterns_8elem[] = {
   /* ppaire: op0_even, op1_even  */
-  {{0, 8, 2, 10, 4, 12, 6, 14}, false, false},
+  {{0, 8, 2, 10, 4, 12, 6, 14}, false, false, PAIR_PERM_TYPE},
   /* ppaireo: op0_even, op1_odd  */
-  {{0, 9, 2, 11, 4, 13, 6, 15}, false, true},
+  {{0, 9, 2, 11, 4, 13, 6, 15}, false, true, PAIR_PERM_TYPE},
   /* ppairoe: op0_odd, op1_even  */
-  {{1, 8, 3, 10, 5, 12, 7, 14}, true, false},
+  {{1, 8, 3, 10, 5, 12, 7, 14}, true, false, PAIR_PERM_TYPE},
   /* ppairo: op0_odd, op1_odd  */
-  {{1, 9, 3, 11, 5, 13, 7, 15}, true, true},
+  {{1, 9, 3, 11, 5, 13, 7, 15}, true, true, PAIR_PERM_TYPE},
+  /* zip8p: don't care the even-odd */
+  {{0, 8, 1, 9, 2, 10, 3, 11}, false, false, ZIP_PERM_TYPE},
+  /* zip8hp: don't care the even-odd */
+  {{4, 12, 5, 13, 6, 14, 7, 15}, false, false, ZIP_PERM_TYPE},
+  /* unzip8p: don't care the even-odd */
+  {{0, 2, 4, 6, 8, 10, 12, 14}, false, false, UNZIP_PERM_TYPE},
+  /* unzip8hp: don't care the even-odd */
+  {{1, 3, 5, 7, 9, 11, 13, 15}, false, false, UNZIP_PERM_TYPE}
 };
 
 /* Implement P extension vec_perm_const pattern matching.
@@ -409,13 +503,40 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
 		return true;
 
 	      /* match_result: 1 = normal match, 2 = swapped match.  */
-	      bool swap_operands = (match_result == SWAPPED_MATCH);
-	      if (swap_operands)
-		riscv_emit_ppair_4_elem (target, vmode, op1, op0,
-		                         pattern.op0_odd, pattern.op1_odd);
-	      else
-		riscv_emit_ppair_4_elem (target, vmode, op0, op1,
-		                         pattern.op0_odd, pattern.op1_odd);
+              bool swap_operands = (match_result == SWAPPED_MATCH);
+
+              switch (pattern.perm) {
+
+                case PAIR_PERM_TYPE:
+                  if (swap_operands)
+                    riscv_emit_ppair_4_elem (target, vmode, op1, op0,
+                                             pattern.op0_odd, pattern.op1_odd);
+                  else
+                    riscv_emit_ppair_4_elem (target, vmode, op0, op1,
+                                             pattern.op0_odd, pattern.op1_odd);
+                  break;
+
+                case ZIP_PERM_TYPE:
+                  {
+                    const int idx[4] = {pattern.indices[0], pattern.indices[0],
+                                        pattern.indices[2], pattern.indices[2]};
+                    if (swap_operands)
+                      riscv_emit_zip_4_elem (target, vmode, op1, op0, idx);
+                    else
+                      riscv_emit_zip_4_elem (target, vmode, op0, op1, idx);
+                  }
+                  break;
+
+                case UNZIP_PERM_TYPE:
+                  {
+                    const int idx[2] = {pattern.indices[0], pattern.indices[1]};
+                    if (swap_operands)
+                      riscv_emit_unzip_4_elem (target, vmode, PV2HImode, op1, op0, idx);
+                    else
+                      riscv_emit_unzip_4_elem (target, vmode, PV2HImode, op0, op1, idx); 
+                  }
+                  break;
+              }
 	      return true;
 	    }
 	}
@@ -431,14 +552,44 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
 	      if (testing_p)
 		return true;
 
-	      /* match_result: 1 = normal match, 2 = swapped match.  */
-	      bool swap_operands = (match_result == SWAPPED_MATCH);
-	      if (swap_operands)
-		riscv_emit_ppair_b_8elem (target, vmode, op1, op0,
-                                         pattern.op0_odd, pattern.op1_odd);
-	      else
-		riscv_emit_ppair_b_8elem (target, vmode, op0, op1,
-                                         pattern.op0_odd, pattern.op1_odd);
+              /* match_result: 1 = normal match, 2 = swapped match.  */
+              bool swap_operands = (match_result == SWAPPED_MATCH);
+
+              switch (pattern.perm) {
+        
+                case PAIR_PERM_TYPE:
+                  if (swap_operands)
+                    riscv_emit_ppair_8_elem (target, vmode, op1, op0,
+                                             pattern.op0_odd, pattern.op1_odd);
+                  else
+                    riscv_emit_ppair_8_elem (target, vmode, op0, op1,
+                                             pattern.op0_odd, pattern.op1_odd);
+                  break;
+
+                case ZIP_PERM_TYPE:
+                  {
+                    const int idx[8] = {pattern.indices[0], pattern.indices[0],
+                                        pattern.indices[2], pattern.indices[2],
+                                        pattern.indices[4], pattern.indices[4],
+                                        pattern.indices[6], pattern.indices[6]};
+                    if (swap_operands)
+                      riscv_emit_zip_8_elem (target, vmode, op1, op0, idx);
+                    else
+                      riscv_emit_zip_8_elem (target, vmode, op0, op1, idx);
+                  }
+                  break;
+
+                case UNZIP_PERM_TYPE:
+                  {
+                    const int idx[4] = {pattern.indices[0], pattern.indices[1],
+                                        pattern.indices[2], pattern.indices[3]};
+                    if (swap_operands)
+                      riscv_emit_unzip_8_elem (target, vmode, PV4QImode, op1, op0, idx);
+                    else
+                      riscv_emit_unzip_8_elem (target, vmode, PV4QImode, op0, op1, idx);
+                  }
+                  break;
+              }
 	      return true;
 	    }
 	}

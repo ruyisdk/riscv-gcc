@@ -868,6 +868,138 @@
    (set_attr "mode" "DI")])
 
 ;; =========================================================================
+;; zip8p/zip8hp
+;; =========================================================================
+(define_insn "*zip_mergepv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_merge:PV8QI
+          (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 1) (const_int 1)
+                                       (const_int 2) (const_int 2)
+                                       (const_int 3) (const_int 3)]))
+          (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 1) (const_int 1)
+                                       (const_int 2) (const_int 2)
+                                       (const_int 3) (const_int 3)]))
+          (const_int 170)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "zip8p\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ziph_mergepv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_merge:PV8QI
+          (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 4) (const_int 4)
+                                       (const_int 5) (const_int 5)
+                                       (const_int 6) (const_int 6)
+                                       (const_int 7) (const_int 7)]))
+          (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 4) (const_int 4)
+                                       (const_int 5) (const_int 5)
+                                       (const_int 6) (const_int 6)
+                                       (const_int 7) (const_int 7)]))
+          (const_int 170)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "zip8hp\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; =========================================================================
+;; zip16p/zip16hp
+;; =========================================================================
+(define_insn "*zip_mergepv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_merge:PV4HI
+          (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 1) (const_int 1)]))
+          (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 0)
+                                       (const_int 1) (const_int 1)]))
+          (const_int 10)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "zip16p\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ziph_mergepv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_merge:PV4HI
+          (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 2) (const_int 2)
+                                       (const_int 3) (const_int 3)]))
+          (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 2) (const_int 2)
+                                       (const_int 3) (const_int 3)]))
+          (const_int 10)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "zip16hp\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; =========================================================================
+;; unzip8p/unzip8hp
+;; =========================================================================
+(define_insn "*unzip_concatpv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_concat:PV8QI
+          (vec_select:PV4QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 2)
+                                       (const_int 4) (const_int 6)]))
+          (vec_select:PV4QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 2)
+                                       (const_int 4) (const_int 6)]))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "unzip8p\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*unziph_concatpv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_concat:PV8QI
+          (vec_select:PV4QI (match_operand:PV8QI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 3)
+                                       (const_int 5) (const_int 7)]))
+          (vec_select:PV4QI (match_operand:PV8QI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 3)
+                                       (const_int 5) (const_int 7)]))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "unzip8hp\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; =========================================================================
+;; unzip16p/unzip16hp
+;; =========================================================================
+(define_insn "*unzip_concatpv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_concat:PV4HI
+          (vec_select:PV2HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 2)]))
+          (vec_select:PV2HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 0) (const_int 2)]))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "unzip16p\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*unziph_concatpv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_concat:PV4HI
+          (vec_select:PV2HI (match_operand:PV4HI 1 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 3)]))
+          (vec_select:PV2HI (match_operand:PV4HI 2 "register_operand" "r")
+                            (parallel [(const_int 1) (const_int 3)]))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "unzip16hp\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; =========================================================================
 ;; Sign/Zero Extension for RV32 with RVP
 ;; =========================================================================
 ;; On RV32 with RVP, we want to keep sign_extend and zero_extend as single
