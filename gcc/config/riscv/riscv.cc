@@ -1060,6 +1060,18 @@ riscv_build_integer_1 (struct riscv_integer_op codes[RISCV_MAX_INTEGER_OPS],
       codes[0].save_temporary = false;
       return 1;
     }
+
+  /* P-extension PLI/PLUI: check if value is a replicated pattern.
+     Skip SMALL_OPERAND values (like 0 and -1) since li is preferred.  */
+  if (TARGET_RVP && !SMALL_OPERAND (value) && riscv_pli_operand_p (value))
+    {
+      codes[0].code = UNKNOWN;
+      codes[0].value = value;
+      codes[0].use_uw = false;
+      codes[0].save_temporary = false;
+      return 1;
+    }
+
   if (TARGET_ZBS && SINGLE_BIT_MASK_OPERAND (value))
     {
       /* Simply BSETI.  */
@@ -2621,6 +2633,24 @@ riscv_const_insns (rtx x, bool allow_new_pseudos)
       return x == CONST0_RTX (GET_MODE (x)) ? 1 : 0;
     case CONST_VECTOR:
       {
+	/* P-extension const_vector handling.  */
+	if (TARGET_RVP && riscv_pext_mode_supported_p (GET_MODE (x)))
+	  {
+	    if (riscv_rvp_const_vector_p (x))
+	      {
+		/* For vectors larger than word_mode, we need multiple
+		   PLI instructions (one per word).  */
+		unsigned int total_bits
+		  = GET_MODE_BITSIZE (GET_MODE (x)).to_constant ();
+		unsigned int word_bits = GET_MODE_BITSIZE (word_mode);
+		unsigned int num_words
+		  = (total_bits + word_bits - 1) / word_bits;
+		return num_words;
+	      }
+	    /* Not a valid P-extension const_vector.  */
+	    return 0;
+	  }
+
 	/* TODO: This is not accurate, we will need to
 	   adapt the COST of CONST_VECTOR in the future
 	   for the following cases:
@@ -3421,9 +3451,22 @@ riscv_legitimize_const_move (machine_mode mode, rtx dest, rtx src)
 {
   rtx base, offset;
 
-  /* For P-extension, check if this constant can be loaded with PLI/PLUI.
-     These instructions are more efficient than lui+addi for replicated
-     constants.  Skip if li or lui can handle it in one instruction.  */
+  /* For P-extension P-SIMD modes, prefer PLI/PLUI for replicated patterns
+     even if the value is SMALL_OPERAND.  This ensures consistent use of
+     PLI for packed SIMD constants.  */
+  if (TARGET_RVP
+      && CONST_INT_P (src)
+      && riscv_pext_mode_supported_p (mode)
+      && riscv_pli_operand_p (INTVAL (src)))
+    {
+      riscv_emit_set (dest, src);
+      return;
+    }
+
+  /* For P-extension scalar modes, check if this constant can be loaded
+     with PLI/PLUI.  These instructions are more efficient than lui+addi
+     for replicated constants.  Skip if li or lui can handle it in one
+     instruction.  */
   if (TARGET_RVP
       && CONST_INT_P (src)
       && !SMALL_OPERAND (INTVAL (src))
@@ -5114,8 +5157,8 @@ riscv_split_sum_of_two_s12 (HOST_WIDE_INT val, HOST_WIDE_INT *base,
 }
 
 
-/* Forward declaration for P-extension PLI/PLUI output.  */
-static const char *riscv_output_pli (rtx, HOST_WIDE_INT);
+/* Forward declarations for P-extension PLI/PLUI output.  */
+static const char *riscv_output_pli (rtx, HOST_WIDE_INT, int);
 
 /* Return the appropriate instructions to move SRC into DEST.  Assume
    that SRC is operand 1 and DEST is operand 0.  */
@@ -5171,20 +5214,61 @@ riscv_output_move (rtx dest, rtx src)
 	  if (SMALL_OPERAND (INTVAL (src)) || LUI_OPERAND (INTVAL (src)))
 	    return "li\t%0,%1";
 
-	  if (TARGET_ZBS
-	      && SINGLE_BIT_MASK_OPERAND (INTVAL (src)))
-	    return "bseti\t%0,zero,%S1";
-
-	  /* P-extension packed load immediate instructions.  */
+	  /* P-extension packed load immediate instructions.
+	     Use pli.b/pli.h for replicated patterns that are not
+	     SMALL_OPERAND (0, -1, etc. prefer li).  */
 	  if (TARGET_RVP)
 	    {
-	      const char *pli_result = riscv_output_pli (dest, INTVAL (src));
+	      int container_bits = (width <= 4) ? 32 : 64;
+	      const char *pli_result
+		= riscv_output_pli (dest, INTVAL (src), container_bits);
 	      if (pli_result)
 		return pli_result;
 	    }
 
-	  /* Should never reach here.  */
-	  abort ();
+	  if (TARGET_ZBS
+	      && SINGLE_BIT_MASK_OPERAND (INTVAL (src)))
+	    return "bseti\t%0,zero,%S1";
+	}
+
+      /* P-extension const_vector handling for PLI/PLUI.  */
+      if (src_code == CONST_VECTOR && TARGET_RVP)
+	{
+	  rtx elt;
+	  if (const_vec_duplicate_p (src, &elt) && CONST_INT_P (elt))
+	    {
+	      HOST_WIDE_INT val = INTVAL (elt);
+	      machine_mode inner_mode = GET_MODE_INNER (mode);
+	      unsigned int elem_bits
+		= GET_MODE_BITSIZE (inner_mode).to_constant ();
+	      /* Use the vector size as container, not word_mode.  */
+	      int container_bits = (width <= 4) ? 32 : 64;
+
+	      /* Build the replicated value.  */
+	      HOST_WIDE_INT replicated = 0;
+	      unsigned HOST_WIDE_INT elem = val & GET_MODE_MASK (inner_mode);
+	      for (int i = 0; i < container_bits; i += elem_bits)
+		replicated |= (HOST_WIDE_INT) elem << i;
+
+	      /* Sign-extend replicated value to HOST_WIDE_INT for proper
+		 SMALL_OPERAND check.  */
+	      if (container_bits == 32)
+		replicated = sext_hwi (replicated, 32);
+
+	      /* Prefer li for SMALL_OPERAND values like 0 and -1.  */
+	      if (SMALL_OPERAND (replicated))
+		{
+		  rtx ops[2] = { dest, GEN_INT (replicated) };
+		  output_asm_insn ("li\t%0,%1", ops);
+		  return "";
+		}
+
+	      const char *pli_result
+		= riscv_output_pli (dest, replicated, container_bits);
+	      if (pli_result)
+		return pli_result;
+	    }
+	  gcc_unreachable ();
 	}
 
       if (src_code == HIGH)
@@ -16710,79 +16794,271 @@ bool riscv_pext_mode_supported_p (machine_mode mode)
    The 10-bit signed immediate range is [-512, 511].
    PLUI.H shifts by 6 bits, PLUI.W shifts by 22 bits.  */
 
+/* Helper: check if the lower 32 bits of VAL have a replicated element
+   pattern for MODE.  Returns true if all elements of size MODE in the
+   lower 32 bits of VAL have the same value.  */
+
+static bool
+riscv_replicated_const_32bit_p (HOST_WIDE_INT val, scalar_int_mode mode)
+{
+  unsigned HOST_WIDE_INT uval = (unsigned HOST_WIDE_INT) val & 0xffffffffULL;
+  unsigned HOST_WIDE_INT elem = uval & GET_MODE_MASK (mode);
+  int elem_bits = GET_MODE_BITSIZE (mode);
+  unsigned HOST_WIDE_INT replicated = 0;
+
+  for (int i = 0; i < 32; i += elem_bits)
+    replicated |= elem << i;
+
+  return uval == replicated;
+}
+
 /* Helper: check if VAL has a replicated element pattern for MODE.
-   Returns true if all elements of size MODE in VAL have the same value.  */
+   Returns true if all elements of size MODE in VAL have the same value.
+   Uses word_mode as the container size.  */
 
 static bool
 riscv_replicated_const_p (HOST_WIDE_INT val, scalar_int_mode mode)
 {
   unsigned HOST_WIDE_INT elem = val & GET_MODE_MASK (mode);
-  unsigned HOST_WIDE_INT mask = GET_MODE_MASK (word_mode);
   int elem_bits = GET_MODE_BITSIZE (mode);
+  int container_bits = GET_MODE_BITSIZE (word_mode);
   unsigned HOST_WIDE_INT replicated = 0;
 
-  for (int i = 0; i < GET_MODE_BITSIZE (word_mode); i += elem_bits)
+  for (int i = 0; i < container_bits; i += elem_bits)
     replicated |= elem << i;
 
-  return ((unsigned HOST_WIDE_INT) val & mask) == (replicated & mask);
+  return (unsigned HOST_WIDE_INT) val == replicated;
 }
 
-/* Return true if VAL can be loaded with a P-extension PLI/PLUI instruction.  */
+/* Return true if VAL can be loaded with a P-extension PLI/PLUI instruction.
+   This checks both 32-bit and 64-bit replicated patterns.  */
 
 bool
 riscv_pli_operand_p (HOST_WIDE_INT val)
 {
-  /* PLI.B: replicated byte (any 8-bit value).  */
-  if (riscv_replicated_const_p (val, QImode))
-    return true;
+  /* Check if value fits in 32 bits.  */
+  bool fits_32bit = IN_RANGE (val, HOST_WIDE_INT_M1U << 31,
+			      (HOST_WIDE_INT_1U << 32) - 1);
 
-  /* PLI.H / PLUI.H: replicated halfword.  */
-  if (riscv_replicated_const_p (val, HImode))
+  /* For 32-bit values, check 32-bit replicated patterns.
+     On RV64, we must also verify that the 64-bit broadcast result matches
+     the original value, otherwise PLI would produce incorrect results.
+     For example, 0x00000000ffffffff fits 32 bits and has a 32-bit replicated
+     byte pattern, but pli.b would produce 0xffffffffffffffff.  */
+  if (fits_32bit)
     {
-      HOST_WIDE_INT hw = sext_hwi (val, 16);
-      /* PLI.H: 10-bit signed immediate [-512, 511].  */
-      if (IN_RANGE (hw, -512, 511))
-	return true;
-      /* PLUI.H: (imm10 << 6) where imm10 in [-512, 511].  */
-      if ((hw & 0x3f) == 0 && IN_RANGE (hw >> 6, -512, 511))
-	return true;
+      /* PLI.B: replicated byte (any 8-bit value) in 32-bit container.  */
+      if (riscv_replicated_const_32bit_p (val, QImode))
+	{
+	  /* On RV64, also require that the 64-bit broadcast matches VAL.  */
+	  if (!TARGET_64BIT || riscv_replicated_const_p (val, QImode))
+	    return true;
+	}
+
+      /* PLI.H / PLUI.H: replicated halfword in 32-bit container.  */
+      if (riscv_replicated_const_32bit_p (val, HImode))
+	{
+	  HOST_WIDE_INT hw = sext_hwi (val, 16);
+	  if (IN_RANGE (hw, -512, 511)
+	      && (!TARGET_64BIT || riscv_replicated_const_p (val, HImode)))
+	    return true;
+	  if ((hw & 0x3f) == 0 && IN_RANGE (hw >> 6, -512, 511)
+	      && (!TARGET_64BIT || riscv_replicated_const_p (val, HImode)))
+	    return true;
+	}
     }
 
-  /* PLI.W / PLUI.W: replicated word (RV64 only).  */
-  if (TARGET_64BIT && riscv_replicated_const_p (val, SImode))
+  /* For 64-bit values on RV64, check 64-bit replicated patterns.  */
+  if (TARGET_64BIT && !fits_32bit)
     {
-      HOST_WIDE_INT word = sext_hwi (val, 32);
-      /* PLI.W: 10-bit signed immediate [-512, 511].  */
-      if (IN_RANGE (word, -512, 511))
+      /* PLI.B: replicated byte (any 8-bit value) in 64-bit container.  */
+      if (riscv_replicated_const_p (val, QImode))
 	return true;
-      /* PLUI.W: (imm10 << 22) where imm10 in [-512, 511].  */
-      if ((word & 0x3fffff) == 0 && IN_RANGE (word >> 22, -512, 511))
-	return true;
+
+      /* PLI.H / PLUI.H: replicated halfword in 64-bit container.  */
+      if (riscv_replicated_const_p (val, HImode))
+	{
+	  HOST_WIDE_INT hw = sext_hwi (val, 16);
+	  if (IN_RANGE (hw, -512, 511))
+	    return true;
+	  if ((hw & 0x3f) == 0 && IN_RANGE (hw >> 6, -512, 511))
+	    return true;
+	}
+
+      /* PLI.W / PLUI.W: replicated word in 64-bit container.  */
+      if (riscv_replicated_const_p (val, SImode))
+	{
+	  HOST_WIDE_INT word = sext_hwi (val, 32);
+	  /* PLI.W: 10-bit signed immediate [-512, 511].  */
+	  if (IN_RANGE (word, -512, 511))
+	    return true;
+	  /* PLUI.W: (imm10 << 22) where imm10 in [-512, 511].  */
+	  if ((word & 0x3fffff) == 0 && IN_RANGE (word >> 22, -512, 511))
+	    return true;
+	}
     }
 
   return false;
 }
 
+/* Return true if OP is a P-extension const_vector that can be loaded with
+   PLI/PLUI instructions.  */
+
+bool
+riscv_rvp_const_vector_p (rtx op)
+{
+  if (!CONST_VECTOR_P (op))
+    return false;
+
+  machine_mode mode = GET_MODE (op);
+
+  /* Only handle P-SIMD modes.  */
+  if (!riscv_pext_mode_supported_p (mode))
+    return false;
+
+  /* Check if it's a duplicated constant.  */
+  rtx elt;
+  if (!const_vec_duplicate_p (op, &elt))
+    return false;
+
+  HOST_WIDE_INT val = INTVAL (elt);
+  machine_mode inner_mode = GET_MODE_INNER (mode);
+  unsigned int elem_bits = GET_MODE_BITSIZE (inner_mode).to_constant ();
+
+  /* Build the replicated value and check if PLI/PLUI can handle it.
+     We also accept SMALL_OPERAND values here because riscv_output_move
+     will use li instead of pli for those cases.  */
+  HOST_WIDE_INT replicated = 0;
+  unsigned HOST_WIDE_INT elem = val & GET_MODE_MASK (inner_mode);
+  unsigned int word_bits = GET_MODE_BITSIZE (word_mode);
+
+  for (unsigned int i = 0; i < word_bits; i += elem_bits)
+    replicated |= (HOST_WIDE_INT) elem << i;
+
+  /* Sign-extend for proper SMALL_OPERAND check on 32-bit values.  */
+  if (word_bits == 32)
+    replicated = sext_hwi (replicated, 32);
+
+  /* Accept SMALL_OPERAND values (will use li) or PLI patterns.  */
+  return SMALL_OPERAND (replicated) || riscv_pli_operand_p (replicated);
+}
+
 /* Output a P-extension PLI/PLUI instruction for constant VAL to DEST.
+   CONTAINER_BITS specifies the preferred container size (32 or 64 bits).
+   For 64-bit container, also tries 32-bit patterns if 64-bit doesn't match.
    Returns "" if instruction was output, NULL if not applicable.  */
 
 static const char *
-riscv_output_pli (rtx dest, HOST_WIDE_INT val)
+riscv_output_pli (rtx dest, HOST_WIDE_INT val, int container_bits)
 {
   rtx operands[2];
 
   operands[0] = dest;
 
-  /* PLI.B: replicated byte (any 8-bit value).  */
-  if (riscv_replicated_const_p (val, QImode))
+  /* For 64-bit container, first try 64-bit patterns.  */
+  if (container_bits == 64)
+    {
+      /* PLI.B: replicated byte in 64-bit container.  */
+      if (riscv_replicated_const_p (val, QImode))
+	{
+	  operands[1] = GEN_INT (sext_hwi (val, 8));
+	  output_asm_insn ("pli.b\t%0,%1", operands);
+	  return "";
+	}
+
+      /* PLI.H / PLUI.H: replicated halfword in 64-bit container.  */
+      if (riscv_replicated_const_p (val, HImode))
+	{
+	  HOST_WIDE_INT hw = sext_hwi (val, 16);
+	  if (IN_RANGE (hw, -512, 511))
+	    {
+	      operands[1] = GEN_INT (hw);
+	      output_asm_insn ("pli.h\t%0,%1", operands);
+	      return "";
+	    }
+	  if ((hw & 0x3f) == 0 && IN_RANGE (hw >> 6, -512, 511))
+	    {
+	      operands[1] = GEN_INT (hw >> 6);
+	      output_asm_insn ("plui.h\t%0,%1", operands);
+	      return "";
+	    }
+	}
+
+      /* PLI.W / PLUI.W: replicated word in 64-bit container.  */
+      if (riscv_replicated_const_p (val, SImode))
+	{
+	  HOST_WIDE_INT word = sext_hwi (val, 32);
+	  if (IN_RANGE (word, -512, 511))
+	    {
+	      operands[1] = GEN_INT (word);
+	      output_asm_insn ("pli.w\t%0,%1", operands);
+	      return "";
+	    }
+	  if ((word & 0x3fffff) == 0 && IN_RANGE (word >> 22, -512, 511))
+	    {
+	      operands[1] = GEN_INT (word >> 22);
+	      output_asm_insn ("plui.w\t%0,%1", operands);
+	      return "";
+	    }
+	}
+
+      /* For 64-bit container, also try 32-bit patterns if value fits
+	 AND the 64-bit broadcast result matches VAL.  Without this check,
+	 we could emit PLI for values like 0x00000000ffffffff which would
+	 incorrectly produce 0xffffffffffffffff.  */
+      bool fits_32bit = IN_RANGE (val, HOST_WIDE_INT_M1U << 31,
+				  (HOST_WIDE_INT_1U << 32) - 1);
+      if (fits_32bit)
+	{
+	  HOST_WIDE_INT val32 = sext_hwi (val, 32);
+
+	  /* PLI.B: replicated byte in 32-bit container.
+	     Only use if 64-bit broadcast also matches.  */
+	  if (riscv_replicated_const_32bit_p (val32, QImode)
+	      && riscv_replicated_const_p (val, QImode))
+	    {
+	      operands[1] = GEN_INT (sext_hwi (val32, 8));
+	      output_asm_insn ("pli.b\t%0,%1", operands);
+	      return "";
+	    }
+
+	  /* PLI.H / PLUI.H: replicated halfword in 32-bit container.
+	     Only use if 64-bit broadcast also matches.  */
+	  if (riscv_replicated_const_32bit_p (val32, HImode)
+	      && riscv_replicated_const_p (val, HImode))
+	    {
+	      HOST_WIDE_INT hw = sext_hwi (val32, 16);
+	      if (IN_RANGE (hw, -512, 511))
+		{
+		  operands[1] = GEN_INT (hw);
+		  output_asm_insn ("pli.h\t%0,%1", operands);
+		  return "";
+		}
+	      if ((hw & 0x3f) == 0 && IN_RANGE (hw >> 6, -512, 511))
+		{
+		  operands[1] = GEN_INT (hw >> 6);
+		  output_asm_insn ("plui.h\t%0,%1", operands);
+		  return "";
+		}
+	    }
+	}
+
+      return NULL;
+    }
+
+  /* For 32-bit container, truncate the value to 32 bits.  */
+  val = sext_hwi (val, 32);
+
+  /* PLI.B: replicated byte in 32-bit container.  */
+  if (riscv_replicated_const_32bit_p (val, QImode))
     {
       operands[1] = GEN_INT (sext_hwi (val, 8));
       output_asm_insn ("pli.b\t%0,%1", operands);
       return "";
     }
 
-  /* PLI.H / PLUI.H: replicated halfword.  */
-  if (riscv_replicated_const_p (val, HImode))
+  /* PLI.H / PLUI.H: replicated halfword in 32-bit container.  */
+  if (riscv_replicated_const_32bit_p (val, HImode))
     {
       HOST_WIDE_INT hw = sext_hwi (val, 16);
       if (IN_RANGE (hw, -512, 511))
@@ -16795,24 +17071,6 @@ riscv_output_pli (rtx dest, HOST_WIDE_INT val)
 	{
 	  operands[1] = GEN_INT (hw >> 6);
 	  output_asm_insn ("plui.h\t%0,%1", operands);
-	  return "";
-	}
-    }
-
-  /* PLI.W / PLUI.W: replicated word (RV64 only).  */
-  if (TARGET_64BIT && riscv_replicated_const_p (val, SImode))
-    {
-      HOST_WIDE_INT word = sext_hwi (val, 32);
-      if (IN_RANGE (word, -512, 511))
-	{
-	  operands[1] = GEN_INT (word);
-	  output_asm_insn ("pli.w\t%0,%1", operands);
-	  return "";
-	}
-      if ((word & 0x3fffff) == 0 && IN_RANGE (word >> 22, -512, 511))
-	{
-	  operands[1] = GEN_INT (word >> 22);
-	  output_asm_insn ("plui.w\t%0,%1", operands);
 	  return "";
 	}
     }

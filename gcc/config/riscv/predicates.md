@@ -345,6 +345,10 @@
     case SUBREG:
       return REG_P (SUBREG_REG (op));
 
+    case CONST_VECTOR:
+      /* P-extension const_vector that can be loaded with PLI/PLUI.  */
+      return riscv_rvp_const_vector_p (op);
+
     default:
       return true;
     }
@@ -792,8 +796,3 @@
 	   (match_test "IN_RANGE (INTVAL (op), 1, 64)")))
 
 ;; P-extension predicates
-
-;; Predicate for constants that can be loaded with PLI/PLUI instructions
-(define_predicate "pli_const_operand"
-  (and (match_code "const_int")
-       (match_test "riscv_pli_operand_p (INTVAL (op))")))

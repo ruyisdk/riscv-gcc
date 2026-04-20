@@ -19,8 +19,9 @@ uint32_t plui_h_neg16 (void) { return 0xFC00FC00U; }
 
 uint32_t plui_h_510 (void) { return 0x7F807F80U; }
 
-/* 0x80008000 = (-512 << 6) but lui is more efficient.  */
-uint32_t plui_h_neg512 (void) { return 0x80008000U; }
+/* 0x80008000 = (-512 << 6), could use plui.h but lui also works
+   since lower 12 bits are 0.  LUI takes priority.  */
+uint32_t lui_neg512 (void) { return 0x80008000U; }
 
 /* Lower 6 bits not zero: should NOT use plui.h.  */
 uint32_t not_plui_h_1 (void) { return 0x7FC17FC1U; }

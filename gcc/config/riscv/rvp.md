@@ -31,14 +31,14 @@
 
 ;; Internal move pattern for PVQIHI modes
 (define_insn "*mov<mode>_internal"
-  [(set (match_operand:PVQIHI 0 "nonimmediate_operand" "=r,r,r, m,  *f,*f,*r,*m")
-	(match_operand:PVQIHI 1 "move_operand"         " r,T,m,rJ,*r*J,*m,*f,*f"))]
+  [(set (match_operand:PVQIHI 0 "nonimmediate_operand" "=r,r,r,r, m,  *f,*f,*r,*m")
+	(match_operand:PVQIHI 1 "move_operand"         " r,T,vc,m,rJ,*r*J,*m,*f,*f"))]
   "(register_operand (operands[0], <MODE>mode)
     || reg_or_0_operand (operands[1], <MODE>mode))
    && TARGET_RVP"
   { return riscv_output_move (operands[0], operands[1]); }
-  [(set_attr "move_type" "move,const,load,store,mtc,fpload,mfc,fpstore")
-   (set_attr "type" "move,move,load,store,mtc,fpload,mfc,fpstore")
+  [(set_attr "move_type" "move,const,const,load,store,mtc,fpload,mfc,fpstore")
+   (set_attr "type" "move,move,move,load,store,mtc,fpload,mfc,fpstore")
    (set_attr "mode" "<MODE>")])
 
 ;; Move pattern for PV2SI mode (2×32-bit packed vector, RV64 only)
@@ -53,14 +53,14 @@
 
 ;; Internal move pattern for PV2SI mode
 (define_insn "*movpv2si_64bit"
-  [(set (match_operand:PV2SI 0 "nonimmediate_operand" "=r,r,r, m,  *f,*f,*r,*f,*m")
-	(match_operand:PV2SI 1 "move_operand"         " r,T,m,rJ,*r*J,*m,*f,*f,*f"))]
+  [(set (match_operand:PV2SI 0 "nonimmediate_operand" "=r,r,r,r, m,  *f,*f,*r,*f,*m")
+	(match_operand:PV2SI 1 "move_operand"         " r,T,vc,m,rJ,*r*J,*m,*f,*f,*f"))]
   "TARGET_64BIT && TARGET_RVP
    && (register_operand (operands[0], PV2SImode)
        || reg_or_0_operand (operands[1], PV2SImode))"
   { return riscv_output_move (operands[0], operands[1]); }
-  [(set_attr "move_type" "move,const,load,store,mtc,fpload,mfc,fmove,fpstore")
-   (set_attr "type" "move,move,load,store,mtc,fpload,mfc,fmove,fpstore")
+  [(set_attr "move_type" "move,const,const,load,store,mtc,fpload,mfc,fmove,fpstore")
+   (set_attr "type" "move,move,move,load,store,mtc,fpload,mfc,fmove,fpstore")
    (set_attr "mode" "PV2SI")])
 
 ;; Binary Arithmetic Operations
@@ -232,15 +232,6 @@
     operands[2] = GEN_INT (INTVAL (operands[1]) >> <plui_shift>);
     return "plui.<rvp_width>\t%0,%2";
   }
-  [(set_attr "type" "arith")
-   (set_attr "mode" "<MODE>")])
-
-;; Scalar constant patterns - handled by riscv_output_move
-(define_insn "*riscv_pli_const"
-  [(set (match_operand:GPR 0 "register_operand" "=r")
-	(match_operand:GPR 1 "pli_const_operand" "i"))]
-  "TARGET_RVP"
-  { return riscv_output_move (operands[0], operands[1]); }
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 

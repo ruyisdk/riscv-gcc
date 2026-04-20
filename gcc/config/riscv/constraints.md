@@ -219,6 +219,11 @@
        (ior (match_test "!TARGET_XTHEADVECTOR && satisfies_constraint_K (op)")
 	    (match_test "TARGET_XTHEADVECTOR && satisfies_constraint_J (op)"))))
 
+;; P-extension const_vector constraint
+(define_constraint "vc"
+  "A P-extension const_vector that can be loaded with PLI/PLUI."
+  (match_test "riscv_rvp_const_vector_p (op)"))
+
 (define_constraint "Wc0"
   "@internal
  A constraint that matches a vector of immediate all zeros."

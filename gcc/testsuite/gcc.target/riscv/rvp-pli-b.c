@@ -17,12 +17,13 @@ uint32_t pli_b_7f (void) { return 0x7F7F7F7FU; }  /* 127 (max signed) */
 uint32_t pli_b_80 (void) { return 0x80808080U; }  /* -128 (min signed) */
 /* { dg-final { scan-assembler {pli\.b\t[a-x0-9]+,-128} } } */
 
-/* These use li (more efficient for 0, -1).  */
-uint32_t pli_b_00 (void) { return 0x00000000U; }
-uint32_t pli_b_ff (void) { return 0xFFFFFFFFU; }
+/* 0 and -1 are SMALL_OPERAND, prefer li over pli.b.  */
+uint32_t li_00 (void) { return 0x00000000U; }
+uint32_t li_ff (void) { return 0xFFFFFFFFU; }
 
 /* Negative tests: not replicated bytes.  */
 uint32_t not_pli_b_1 (void) { return 0x01020304U; }
 uint32_t not_pli_b_2 (void) { return 0x42424200U; }
 
+/* Only 3 replicated patterns (not 0/-1) should use pli.b.  */
 /* { dg-final { scan-assembler-times {pli\.b} 3 } } */
