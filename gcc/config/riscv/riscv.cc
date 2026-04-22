@@ -2074,6 +2074,10 @@ riscv_cannot_force_const_mem (machine_mode mode ATTRIBUTE_UNUSED, rtx x)
   if (satisfies_constraint_zfli (x))
    return true;
 
+  /* P-extension PLI/PLUI can load replicated constants efficiently.  */
+  if (TARGET_RVP && CONST_INT_P (x) && riscv_pli_operand_p (INTVAL (x)))
+    return true;
+
   split_const (x, &base, &offset);
   if (riscv_symbolic_constant_p (base, &type))
     {
@@ -16844,7 +16848,10 @@ riscv_pli_operand_p (HOST_WIDE_INT val)
      On RV64, we must also verify that the 64-bit broadcast result matches
      the original value, otherwise PLI would produce incorrect results.
      For example, 0x00000000ffffffff fits 32 bits and has a 32-bit replicated
-     byte pattern, but pli.b would produce 0xffffffffffffffff.  */
+     byte pattern, but pli.b would produce 0xffffffffffffffff.
+
+     In other words, a 32-bit replicated pattern is only acceptable on RV64
+     if broadcasting it to 64 bits yields exactly the original VAL.  */
   if (fits_32bit)
     {
       /* PLI.B: replicated byte (any 8-bit value) in 32-bit container.  */
