@@ -1397,3 +1397,44 @@
   "wmacc<u>\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; ABS - Absolute Value for SI/DI modes
+;; abs rd, rs1: rd = (rs1 < 0) ? -rs1 : rs1
+;;
+;; Note: for the most negative representable value, ABS leaves the
+;; operand unchanged, matching the usual two's complement expansion
+;; (shift + xor + sub) and C's undefined behavior for abs(INT_MIN)
+;; and llabs(LLONG_MIN).
+
+(define_insn "abs<GPR:mode>2"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	(abs:GPR (match_operand:GPR 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "abs\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<GPR:MODE>")])
+
+;; ABSW - Absolute Value Word (RV64 only)
+;; absw rd, rs1: rd = sext.w(abs(rs1[31:0]))
+;;
+;; For the most negative 32-bit value (0x80000000), the result is
+;; also 0x80000000 after abs and sign-extension, as defined by the
+;; base P-extension specification.
+(define_insn "*absw"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI (abs:SI (match_operand:SI 1 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "absw\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; Match sign_extend(subreg(abs(di))) pattern from GCC RTL expansion,
+;; e.g. an ABS followed by SEXT.W on RV64.
+(define_insn "*absw_di_subreg"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (subreg:SI (abs:DI (match_operand:DI 1 "register_operand" "r")) 0)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "absw\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
