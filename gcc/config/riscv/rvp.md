@@ -991,3 +991,29 @@
   "wmulsu\t%0, %2, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; -------------------------------------------------------------------------
+;; USATI - Unsigned Saturation Immediate
+;; -------------------------------------------------------------------------
+;; Saturates a signed value to an unsigned n-bit range [0, 2^n - 1].
+;; If rs1 < 0, result is 0.
+;; If rs1 > (2^n - 1), result is (2^n - 1).
+;; Otherwise, result is rs1.
+;;
+;; Recognize smin(smax(x, 0), (1 << N) - 1) pattern for USATI.
+;; Requires Zbb extension for smax/smin RTL operations.
+
+(define_insn "*usati<X:mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(smin:X (smax:X (match_operand:X 1 "register_operand" "r")
+			(const_int 0))
+		(match_operand:X 2 "const_int_operand" "n")))]
+  "TARGET_RVP
+   && IN_RANGE (exact_log2 (INTVAL (operands[2]) + 1), 1,
+		GET_MODE_BITSIZE (<X:MODE>mode) - 1)"
+{
+  operands[2] = GEN_INT (exact_log2 (INTVAL (operands[2]) + 1));
+  return "usati\t%0,%1,%2";
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<X:MODE>")])
