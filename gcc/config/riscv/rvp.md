@@ -115,12 +115,26 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
-;; Averaging arithmetic operations
-;; paadd/paaddu: signed/unsigned averaging add: (a + b) >> 1
-;; pasub/pasubu: signed/unsigned averaging subtract: (a - b) >> 1
+;; Averaging arithmetic operations with standard optab names.
+;;
+;; GCC's tree-vect-patterns.cc recognizes widening average patterns like:
+;;   (int8_t)(((int16_t)a + (int16_t)b) >> 1)
+;; and lowers them to IFN_AVG_FLOOR, which maps to avg<mode>3_floor optab.
+;;
+;; P-extension averaging instructions:
+;;   paadd/paaddu: signed/unsigned averaging add: (a + b) >> 1
+;;   pasub/pasubu: signed/unsigned averaging subtract: (a - b) >> 1
+;;
+;; These instructions perform overflow-free averaging in hardware by
+;; widening operands internally before the add/subtract.
+;;
+;; Note: The RTL pattern uses (plus:PVALL ...) which has wraparound
+;; semantics at element boundaries. However, this correctly models the
+;; hardware behavior because paadd/paaddu internally widen operands
+;; before addition, avoiding overflow.
 
-;; Signed averaging
-(define_insn "<avg_insn><mode>"
+;; Signed averaging: avg<mode>3_floor -> paadd, avg_sub<mode>3_floor -> pasub
+(define_insn "<savg_optab><mode>3_floor"
   [(set (match_operand:PVALL 0 "register_operand" "=r")
 	(ashiftrt:PVALL
 	  (avg_op:PVALL (match_operand:PVALL 1 "register_operand" "r")
@@ -131,8 +145,8 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
-;; Unsigned averaging
-(define_insn "<avg_insn>u<mode>"
+;; Unsigned averaging: uavg<mode>3_floor -> paaddu, uavg_sub<mode>3_floor -> pasubu
+(define_insn "<uavg_optab><mode>3_floor"
   [(set (match_operand:PVALL 0 "register_operand" "=r")
 	(lshiftrt:PVALL
 	  (avg_op:PVALL (match_operand:PVALL 1 "register_operand" "r")

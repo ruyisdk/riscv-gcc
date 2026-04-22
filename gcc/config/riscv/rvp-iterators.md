@@ -100,6 +100,18 @@
   [(plus "paadd")
    (minus "pasub")])
 
+;; Optab name prefixes for averaging instructions.
+;; avg<mode>3_floor and uavg<mode>3_floor are standard GCC optabs.
+;; avg_sub<mode>3_floor and uavg_sub<mode>3_floor are P-extension specific
+;; patterns for averaging subtract (not standard GCC optabs).
+(define_code_attr savg_optab
+  [(plus "avg")
+   (minus "avg_sub")])
+
+(define_code_attr uavg_optab
+  [(plus "uavg")
+   (minus "uavg_sub")])
+
 (define_code_attr rvp_shift_optab
   [(ashift   "ashl")
    (lshiftrt "lshr")
