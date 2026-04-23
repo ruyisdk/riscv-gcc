@@ -1226,3 +1226,66 @@
   "psabs.<rvp_width>\t%0,%1"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
+
+;; PAS/PSA - Packed Add-Subtract (alternating operations)
+;; pas.hx: rd[even] = rs1[even] + rs2[even], rd[odd] = rs1[odd] - rs2[odd]
+;; psa.hx: rd[even] = rs1[even] - rs2[even], rd[odd] = rs1[odd] + rs2[odd]
+;;
+;; GCC vectorizes and combines this as:
+;;   (vec_merge (vec_select (op1 a b) [even indices])
+;;              (vec_select (op2 a b) [odd indices]) mask)
+;; Uses iterators: pas_even_op, pas_odd_op, pas_insn
+
+;; pas/psa.hx for PV2HI (RV32/RV64)
+(define_insn "*rvp_<pas_insn>_hx_v2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(vec_merge:PV2HI
+	  (vec_select:PV2HI
+	    (pas_even_op:PV2HI
+	      (match_operand:PV2HI 1 "register_operand" "r")
+	      (match_operand:PV2HI 2 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0)]))
+	  (vec_select:PV2HI
+	    (<pas_odd_op>:PV2HI (match_dup 1) (match_dup 2))
+	    (parallel [(const_int 1) (const_int 1)]))
+	  (const_int 1)))]
+  "TARGET_RVP"
+  "<pas_insn>.hx\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV2HI")])
+
+;; pas/psa.hx for PV4HI (RV64 only)
+(define_insn "*rvp_<pas_insn>_hx_v4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI
+	    (pas_even_op:PV4HI
+	      (match_operand:PV4HI 1 "register_operand" "r")
+	      (match_operand:PV4HI 2 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0) (const_int 2) (const_int 2)]))
+	  (vec_select:PV4HI
+	    (<pas_odd_op>:PV4HI (match_dup 1) (match_dup 2))
+	    (parallel [(const_int 1) (const_int 1) (const_int 3) (const_int 3)]))
+	  (const_int 5)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "<pas_insn>.hx\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV4HI")])
+
+;; pas/psa.wx for PV2SI (RV64 only)
+(define_insn "*rvp_<pas_insn>_wx_v2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(vec_merge:PV2SI
+	  (vec_select:PV2SI
+	    (pas_even_op:PV2SI
+	      (match_operand:PV2SI 1 "register_operand" "r")
+	      (match_operand:PV2SI 2 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0)]))
+	  (vec_select:PV2SI
+	    (<pas_odd_op>:PV2SI (match_dup 1) (match_dup 2))
+	    (parallel [(const_int 1) (const_int 1)]))
+	  (const_int 1)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "<pas_insn>.wx\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV2SI")])
