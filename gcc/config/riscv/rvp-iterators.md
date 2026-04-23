@@ -137,3 +137,15 @@
 
 (define_code_attr pas_insn
   [(plus "pas") (minus "psa")])
+
+;; Absolute difference operations
+(define_code_iterator abd_maxop [smax umax])
+
+(define_code_attr abd_minop
+  [(smax "smin") (umax "umin")])
+
+(define_code_attr abd_optab
+  [(smax "sabd") (umax "uabd")])
+
+(define_code_attr abd_insn
+  [(smax "pabd") (umax "pabdu")])

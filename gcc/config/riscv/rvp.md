@@ -1323,3 +1323,21 @@
   "srari\t%0,%1,%3"
   [(set_attr "type" "shift")
    (set_attr "mode" "SI")])
+
+;; PABD - Packed Absolute Difference
+;; pabd.b/h rd, rs1, rs2: rd[i] = |rs1[i] - rs2[i]| (signed)
+;; pabdu.b/h rd, rs1, rs2: rd[i] = |rs1[i] - rs2[i]| (unsigned)
+;;
+;; RTL: (minus (smax a b) (smin a b)) for signed
+;;      (minus (umax a b) (umin a b)) for unsigned
+
+(define_insn "<abd_optab><mode>3"
+  [(set (match_operand:PVQIHI 0 "register_operand" "=r")
+	(minus:PVQIHI
+	  (abd_maxop:PVQIHI (match_operand:PVQIHI 1 "register_operand" "r")
+			    (match_operand:PVQIHI 2 "register_operand" "r"))
+	  (<abd_minop>:PVQIHI (match_dup 1) (match_dup 2))))]
+  "TARGET_RVP"
+  "<abd_insn>.<rvp_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
