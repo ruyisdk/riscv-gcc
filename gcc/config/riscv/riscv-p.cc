@@ -290,6 +290,14 @@ riscv_emit_unzip_4_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
   emit_vec_concat_with_select<4> (target, vmode, sel_mode, op0, op1, indices);
 }
 
+static void
+riscv_emit_rev_4_elem (rtx target, machine_mode vmode, rtx op, const int *indices)
+{
+  rtx sel = build_sel_parallel (4, indices);
+  rtx result = gen_rtx_VEC_SELECT (vmode, op, sel);
+  emit_insn (gen_rtx_SET (target, result));
+}
+
 /* Helper function to emit ppairxx.b in PV8QImode which has 8 elements.
  
  ppaire.b RTL pattern for PV8QI mode using vec_merge/vec_select.
@@ -411,7 +419,9 @@ typedef enum {
   /* permutation for zip.* instructions */
   ZIP_PERM_TYPE = 1,
   /* permutation for unzip.* instructions */
-  UNZIP_PERM_TYPE = 2
+  UNZIP_PERM_TYPE = 2,
+  /* permutation for rev16 instructions */
+  REV_PERM_TYPE = 3
 } perm_type_t;
 
 /* Pattern table entry for N-element vector permutations.  */
@@ -456,7 +466,9 @@ static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
   /* unzip16p: don't care the even-odd */
   {{0, 2, 4, 6}, false, false, UNZIP_PERM_TYPE},
   /* unzip16hp: don't care the even-odd */
-  {{1, 3, 5, 7}, false, false, UNZIP_PERM_TYPE}
+  {{1, 3, 5, 7}, false, false, UNZIP_PERM_TYPE},
+  /* rev16: don't care the even-odd */
+  {{3, 2, 1, 0}, false, false, REV_PERM_TYPE}
 };
 
 /* Supported 8-element vector permutation patterns.
@@ -534,6 +546,14 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
                       riscv_emit_unzip_4_elem (target, vmode, PV2HImode, op1, op0, idx);
                     else
                       riscv_emit_unzip_4_elem (target, vmode, PV2HImode, op0, op1, idx); 
+                  }
+                  break;
+
+                case REV_PERM_TYPE:
+                  {
+                    const int idx[4] = {pattern.indices[0], pattern.indices[1],
+                                        pattern.indices[2], pattern.indices[3]};
+                    riscv_emit_rev_4_elem (target, vmode, op0, idx);
                   }
                   break;
               }

@@ -1001,6 +1001,19 @@
    (set_attr "mode" "DI")])
 
 ;; =========================================================================
+;; rev16 
+;; =========================================================================
+(define_insn "*rev16_pv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_select: PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                           (parallel [(const_int 3) (const_int 2)
+                                      (const_int 1) (const_int 0)])))]
+  "TARGET_RVP && TARGET_64BIT"
+  "rev16\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; =========================================================================
 ;; Sign/Zero Extension for RV32 with RVP
 ;; =========================================================================
 ;; On RV32 with RVP, we want to keep sign_extend and zero_extend as single
