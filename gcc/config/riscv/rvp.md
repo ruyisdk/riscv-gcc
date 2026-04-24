@@ -1289,3 +1289,37 @@
   "<pas_insn>.wx\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV2SI")])
+
+;; Rounding arithmetic shift right immediate - scalar
+;; SRARI: rd = (rs1 + (1 << (shamt-1))) >> shamt (with rounding)
+;; Pattern matches: (a + (1 << (n-1))) >> n
+;; Shift amount must be in range [1, mode_bitsize-1] to avoid UB.
+(define_insn "*srari<X:mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(ashiftrt:X
+	  (plus:X (match_operand:X 1 "register_operand" "r")
+		  (match_operand:X 2 "const_int_operand" "n"))
+	  (match_operand:X 3 "const_int_operand" "n")))]
+  "TARGET_RVP
+   && IN_RANGE (INTVAL (operands[3]), 1, GET_MODE_BITSIZE (<X:MODE>mode) - 1)
+   && INTVAL (operands[2]) == ((HOST_WIDE_INT)1 << (INTVAL (operands[3]) - 1))"
+  "srari\t%0,%1,%3"
+  [(set_attr "type" "shift")
+   (set_attr "mode" "<X:MODE>")])
+
+;; SRARI for SI mode on RV64: matches (ashiftrt:DI (sign_extend:DI (plus:SI ...)) shamt)
+;; This is the RTL form GCC generates when combining: addiw + srai -> srari
+;; Shift amount must be in range [1, 31] for SI mode.
+(define_insn "*srari_sidi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ashiftrt:DI
+	  (sign_extend:DI
+	    (plus:SI (match_operand:SI 1 "register_operand" "r")
+		     (match_operand:SI 2 "const_int_operand" "n")))
+	  (match_operand:DI 3 "const_int_operand" "n")))]
+  "TARGET_64BIT && TARGET_RVP
+   && IN_RANGE (INTVAL (operands[3]), 1, 31)
+   && INTVAL (operands[2]) == ((HOST_WIDE_INT)1 << (INTVAL (operands[3]) - 1))"
+  "srari\t%0,%1,%3"
+  [(set_attr "type" "shift")
+   (set_attr "mode" "SI")])
