@@ -1381,3 +1381,19 @@
   "<abd_insn>.<rvp_width>\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
+
+;;==========================================================================
+;; WMACC(U) - Widening signed(unsigned) multuply-addition
+;;==========================================================================
+;; rd = rd + <u>signed(X[rs1]) * <u>signed(X[rs2])
+
+(define_insn "<u>maddsidi4"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI
+          (mult:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                   (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
+          (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "wmacc<u>\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
