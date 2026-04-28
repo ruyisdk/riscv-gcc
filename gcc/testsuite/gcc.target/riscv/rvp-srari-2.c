@@ -1,5 +1,7 @@
 /* { dg-do compile } */
+/* { dg-require-effective-target rv32 } */
 /* { dg-options "-march=rv32gcp0p19 -mabi=ilp32 -O2" } */
+/* { dg-skip-if "" { *-*-* } { "-O0" "-O1" "-Os" "-Oz" "-Og" "-flto" } } */
 
 typedef int int32_t;
 

@@ -1,5 +1,7 @@
 /* { dg-do compile } */
+/* { dg-require-effective-target rv64 } */
 /* { dg-options "-march=rv64gcp0p19 -mabi=lp64 -O2" } */
+/* { dg-skip-if "" { *-*-* } { "-O0" "-O1" "-Os" "-Oz" "-Og" "-flto" } } */
 
 typedef long long int64_t;
 typedef int int32_t;
