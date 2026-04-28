@@ -1177,3 +1177,35 @@
 }
   [(set_attr "type" "arith")
    (set_attr "mode" "<X:MODE>")])
+
+;; MVM/MVMN: Move under Mask / Move under Mask Negated
+;; MVM:  rd = (~rs2 & rd) | (rs2 & rs1) - select rs1 where mask=1
+;; MVMN: rd = (~rs2 & rs1) | (rs2 & rd) - select rs1 where mask=0
+(define_insn "*mvm<X:mode>"
+  [(set (match_operand:X 0 "register_operand" "=r,r")
+	(ior:X (and:X (not:X (match_operand:X 2 "register_operand" "r,r"))
+		      (match_operand:X 1 "register_operand" "0,r"))
+	       (and:X (match_dup 2)
+		      (match_operand:X 3 "register_operand" "r,0"))))]
+  "TARGET_RVP"
+  "@
+   mvm\t%0,%3,%2
+   mvmn\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<X:MODE>")])
+
+;; MVM/MVMN XOR forms: ((a ^ b) & mask) ^ a  or  ((a ^ b) & mask) ^ b
+(define_insn "*mvm<X:mode>_xor"
+  [(set (match_operand:X 0 "register_operand" "=r,r,r,r")
+	(xor:X (and:X (xor:X (match_operand:X 1 "register_operand" "0,r,r,0")
+			     (match_operand:X 3 "register_operand" "r,0,0,r"))
+		      (match_operand:X 2 "register_operand" "r,r,r,r"))
+	       (match_operand:X 4 "register_operand" "1,1,3,3")))]
+  "TARGET_RVP"
+  "@
+   mvm\t%0,%3,%2
+   mvmn\t%0,%1,%2
+   mvm\t%0,%1,%2
+   mvmn\t%0,%3,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<X:MODE>")])
