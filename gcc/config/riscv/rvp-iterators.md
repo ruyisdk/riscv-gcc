@@ -51,6 +51,11 @@
 (define_mode_iterator PVQIHI [PV4QI PV2HI
 			      (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")])
 
+;; QIHI: Scalar and packed modes for byte and halfword elements
+;; Used for instructions like PSABS that work on both scalar and packed modes
+(define_mode_iterator QIHI [QI HI PV4QI PV2HI
+			    (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")])
+
 ;; PVALL: All packed vector modes for basic arithmetic operations
 ;; On RV64, we support both 4-byte (PV4QI, PV2HI) and 8-byte (PV8QI, PV4HI, PV2SI) vectors
 (define_mode_iterator PVALL [PV4QI PV2HI

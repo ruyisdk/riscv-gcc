@@ -1209,3 +1209,20 @@
    mvmn\t%0,%3,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<X:MODE>")])
+
+;; PSABS: Saturating absolute value for scalar and packed QI/HI modes
+(define_insn "ssabs<mode>2"
+  [(set (match_operand:QIHI 0 "register_operand" "=r")
+	(ss_abs:QIHI (match_operand:QIHI 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "psabs.<rvp_width>\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "abs<mode>2"
+  [(set (match_operand:QIHI 0 "register_operand" "=r")
+	(abs:QIHI (match_operand:QIHI 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "psabs.<rvp_width>\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
