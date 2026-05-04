@@ -77,6 +77,9 @@
 			     (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")
 			     (PV2SI "TARGET_64BIT")])
 
+;; Packed extension mode for RV32 register-pair instructions
+(define_mode_iterator RVP_DWIDTH_EXT [PV4HI PV2SI])
+
 ;; Mode Attributes
 
 ;; PVALL_EXT: Widened result mode for each packed mode
@@ -90,6 +93,15 @@
 
 ;; Element width suffix for RV32 register-pair instructions (PMV.DxS)
 (define_mode_attr rvp_dwidth [(PV8QI "db") (PV4HI "dh") (PV2SI "dw")])
+
+;; Element width suffix for RV32 register-pari instruction to extend
+(define_mode_attr rvp_extend_width [(PV4HI "b") (PV2SI "h")])
+
+;; Packed extension mode to extend suffix for pattern name
+(define_mode_attr rvp_narrow [(PV4HI "pv4qi") (PV2SI "pv2hi")])
+
+;; Packed extension mode extend to suffix for pattern name
+(define_mode_attr rvp_ext_mode [(PV4HI "pv4hi") (PV2SI "pv2si")])
 
 ;; Code Iterators
 
@@ -177,3 +189,9 @@
 
 ;; Instruction name suffix for shift-based patterns (H11)
 (define_code_attr shiftrt_su [(ashiftrt "") (lshiftrt "u")])
+
+;; Corresponding extension pattern name for each extension type
+(define_code_attr extension [(sign_extend "extend") (zero_extend "zero_extend")])
+
+;; Corresponding instruction name for packed extension
+(define_code_attr rvp_extend_insn [(sign_extend "psext") (zero_extend "pzext")])

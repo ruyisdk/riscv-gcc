@@ -1735,3 +1735,99 @@
   "absw\t%0,%1"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
+
+;; Packed sign-extension
+
+;; Pattern for RV32 register-pair sign extendtions (ps/zext.dh/dw.b/h)
+(define_insn "<extension><rvp_narrow><rvp_ext_mode>2"
+  [(set (match_operand:RVP_DWIDTH_EXT 0 "register_operand" "=R")
+        (any_extend:RVP_DWIDTH_EXT (match_operand:<HALFMODE> 1 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "<rvp_extend_insn>.<rvp_dwidth>.<rvp_extend_width>\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; Intermediate rtl pattern for psext.h.b
+(define_insn "*psextqihi_1"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+     (vec_concat:PV2HI
+       (sign_extend:HI (subreg:QI (match_operand:PV4QI 1 "register_operand" "r") 0))
+       (subreg:HI (ashiftrt:SI (match_operand:SI 2 "register_operand" "r")
+                               (const_int 24)) 0)))]
+  "TARGET_RVP"
+  "psext.h.b\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*psextqihi_2"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+     (vec_concat:PV2HI
+       (sign_extend:HI (subreg:QI (match_operand:PV4QI 1 "register_operand" "r") 0))
+       (subreg:HI (sign_extract:SI (subreg:SI (match_dup 1) 0)
+                                   (const_int 8)
+                                   (const_int 16)) 0)))]
+  "TARGET_RVP"
+  "psext.h.b\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])      
+
+;; Intermediate rtl pattern for psext.w.h
+(define_insn "*psexthisi_1"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+     (vec_concat:PV2SI
+       (sign_extend:SI (subreg:HI (match_operand:PV4HI 1 "register_operand" "r") 0))
+       (subreg:SI (ashiftrt:DI (match_operand:DI 2 "register_operand" "r")
+                               (const_int 48)) 0)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "psext.w.h\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*psexthisi_2"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+     (vec_concat:PV2SI
+       (sign_extend:SI (subreg:HI (match_operand:PV4HI 1 "register_operand" "r") 0))
+       (subreg:SI (sign_extract:DI (subreg:DI (match_dup 1) 0)
+                                   (const_int 16)
+                                   (const_int 32)) 0)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "psext.w.h\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; Intermediate rtl pattern for psext.w.b
+;; Currently can't combine due to cost model
+ (define_insn "*psextqisi_1"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+     (vec_concat:PV2SI
+       (sign_extend:SI (subreg:QI (match_operand:PV8QI 1 "register_operand" "r") 0))
+       (subreg:SI (ashiftrt:DI (match_operand:DI 2 "register_operand" "r")
+                               (const_int 48)) 0)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "psext.w.b\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*psextqisi_2"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+     (vec_concat:PV2SI
+       (match_operand:SI 1 "register_operand" "r")
+       (subreg:SI (sign_extract:DI (subreg:DI (match_operand:PV8QI 2 "register_operand" "r") 0)
+                                   (const_int 8)
+                                   (const_int 32)) 0)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "psext.w.b\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*psextqisi_3"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+     (vec_concat:PV2SI
+       (sign_extend:SI (subreg:QI (match_operand:PV8QI 1 "register_operand" "r") 0))
+       (subreg:SI (sign_extract:DI (subreg:DI (match_operand:PV8QI 2 "register_operand" "r") 0)
+                                   (const_int 8)
+                                   (const_int 32)) 0)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "psext.w.b\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
