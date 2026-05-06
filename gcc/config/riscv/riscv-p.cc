@@ -360,6 +360,14 @@ riscv_emit_unzip_8_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
   emit_vec_concat_with_select<8> (target, vmode, sel_mode, op0, op1, indices);
 }
 
+static void
+riscv_emit_rev_8_elem (rtx target, machine_mode vmode, rtx op, const int *indices)
+{
+  rtx sel = build_sel_parallel (8, indices);
+  rtx result = gen_rtx_VEC_SELECT (vmode, op, sel);
+  emit_insn (gen_rtx_SET (target, result));
+}
+
 typedef enum {
   /* No match pattern found */
   ERROR_MATCH = 0,
@@ -490,7 +498,9 @@ static const vec_perm_pattern<8> vec_perm_patterns_8elem[] = {
   /* unzip8p: don't care the even-odd */
   {{0, 2, 4, 6, 8, 10, 12, 14}, false, false, UNZIP_PERM_TYPE},
   /* unzip8hp: don't care the even-odd */
-  {{1, 3, 5, 7, 9, 11, 13, 15}, false, false, UNZIP_PERM_TYPE}
+  {{1, 3, 5, 7, 9, 11, 13, 15}, false, false, UNZIP_PERM_TYPE},
+  /* rev8: don't care the even-odd */
+  {{7, 6, 5, 4, 3, 2, 1, 0}, false, false, REV_PERM_TYPE}
 };
 
 /* Implement P extension vec_perm_const pattern matching.
@@ -613,6 +623,16 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
                       riscv_emit_unzip_8_elem (target, vmode, PV4QImode, op1, op0, idx);
                     else
                       riscv_emit_unzip_8_elem (target, vmode, PV4QImode, op0, op1, idx);
+                  }
+                  break;
+
+                case REV_PERM_TYPE:
+                  {
+                     const int idx[8] = {pattern.indices[0], pattern.indices[1],
+                                         pattern.indices[2], pattern.indices[3],
+                                         pattern.indices[4], pattern.indices[5],
+                                         pattern.indices[6], pattern.indices[7]};
+                    riscv_emit_rev_8_elem (target, vmode, op0, idx);                   
                   }
                   break;
               }

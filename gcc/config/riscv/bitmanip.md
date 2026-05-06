@@ -499,6 +499,28 @@
   "rev8\t%0,%1"
   [(set_attr "type" "bitmanip")])
 
+(define_insn "*bswap_pv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                          (parallel [(const_int 7) (const_int 6)
+                                     (const_int 5) (const_int 4)
+                                     (const_int 3) (const_int 2)
+                                     (const_int 1) (const_int 0)])))]
+  "TARGET_64BIT && (TARGET_ZBB || TARGET_ZBKB)"
+  "rev8\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*bswap_pv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_select:PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                          (parallel [(const_int 3) (const_int 2)
+                                     (const_int 1) (const_int 0)])))]
+  "!TARGET_64BIT && (TARGET_ZBB || TARGET_ZBKB)"
+  "rev8\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
 ;; HI bswap can be emulated using SI/DI bswap followed
 ;; by a logical shift right
 ;; SI bswap for TARGET_64BIT is already similarly in
