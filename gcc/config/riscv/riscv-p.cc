@@ -514,6 +514,9 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
 	      if (testing_p)
 		return true;
 
+              op0 = force_reg (vmode, op0);
+              op1 = force_reg (vmode, op1);
+
 	      /* match_result: 1 = normal match, 2 = swapped match.  */
               bool swap_operands = (match_result == SWAPPED_MATCH);
 
@@ -571,6 +574,9 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
 	    {
 	      if (testing_p)
 		return true;
+ 
+              op0 = force_reg (vmode, op0);
+              op1 = force_reg (vmode, op1);
 
               /* match_result: 1 = normal match, 2 = swapped match.  */
               bool swap_operands = (match_result == SWAPPED_MATCH);
@@ -624,6 +630,9 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
             {
               if (testing_p)
                 return true;
+
+              op0 = force_reg (vmode, op0);
+              op1 = force_reg (vmode, op1);
 
               /* match_result: 1 = normal match, 2 = swapped match.  */
               bool swap_operands = (match_result == SWAPPED_MATCH);
