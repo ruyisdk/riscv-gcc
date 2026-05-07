@@ -14355,15 +14355,16 @@ riscv_autovectorize_vector_modes (vector_modes *modes, bool all)
     {
       if (TARGET_64BIT)
 	{
+	  /* Prefer 8-byte modes first for RV64.  */
 	  modes->safe_push (PV8QImode);
 	  modes->safe_push (PV4HImode);
 	  modes->safe_push (PV2SImode);
 	}
-      else
-	{
-	  modes->safe_push (PV4QImode);
-	  modes->safe_push (PV2HImode);
-	}
+
+      /* Support 4-byte modes for smaller vectors for both RV32 and RV64.  */
+      modes->safe_push (PV4QImode);
+      modes->safe_push (PV2HImode);
+
       return 0;
     }
 
