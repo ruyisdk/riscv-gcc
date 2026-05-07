@@ -295,12 +295,52 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
+(define_insn "*ppaireo_h_2"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+    (ior:SI (and:SI (match_operand:SI 1 "register_operand" "r")
+                    (const_int -65536))
+            (zero_extend:SI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP"
+  "ppaireo.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*ppaireo_h_3"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+    (ior:SI (zero_extend:SI (match_operand:HI 2 "register_operand" "r"))
+            (and:SI (match_operand:SI 1 "register_operand" "r")
+                    (const_int -65536))))]
+  "TARGET_RVP"
+  "ppaireo.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
 (define_insn "*ppaireo_w_1"
   [(set (match_operand:DI 0 "register_operand" "=r")
     (ior:DI (and:DI (match_operand:DI 1 "register_operand" "r")
                     (const_int -4294967296))
             (and:DI (match_operand:DI 2 "register_operand" "r")
                     (const_int 4294967295))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.w\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ppaireo_w_2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+    (ior:DI (and:DI (match_operand:DI 1 "register_operand" "r")
+                    (const_int -4294967296))
+            (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.w\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*ppaireo_w_3"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+    (ior:DI (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))
+            (and:DI (match_operand:DI 1 "register_operand" "r")
+                    (const_int -4294967296))))]
   "TARGET_RVP && TARGET_64BIT"
   "ppaireo.w\t%0, %2, %1"
   [(set_attr "type" "arith")
