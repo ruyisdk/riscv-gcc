@@ -149,3 +149,13 @@
 
 (define_code_attr abd_insn
   [(smax "pabd") (umax "pabdu")])
+
+;; Code attributes for macc instructions.
+;; Use any_extend and any_shiftrt iterators from iterators.md.
+;; Use 'u' attribute from iterators.md for signed/unsigned suffix.
+
+;; Corresponding shift for each extend type (for H01 pattern: extend x shift)
+(define_code_attr su_shiftrt [(sign_extend "ashiftrt") (zero_extend "lshiftrt")])
+
+;; Instruction name suffix for shift-based patterns (H11)
+(define_code_attr shiftrt_su [(ashiftrt "") (lshiftrt "u")])

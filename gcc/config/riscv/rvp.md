@@ -115,6 +115,171 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+;; MACC.H00/MACCU.H00: Widening multiply-accumulate (bottom x bottom)
+;; MACC.H00:  rd = rd + sext(rs1[15:0]) * sext(rs2[15:0])
+;; MACCU.H00: rd = rd + zext(rs1[15:0]) * zext(rs2[15:0])
+;; Pattern name with * to work alongside the [u]maddhisi4 expander in riscv.md
+(define_insn "*rvp_<u>maddhisi4"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (any_extend:SI
+			    (match_operand:HI 1 "register_operand" "r"))
+			  (any_extend:SI
+			    (match_operand:HI 2 "register_operand" "r")))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "macc<u>.h00\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; MACC.H01/MACCU.H01: Multiply-accumulate (bottom x top)
+;; MACC.H01:  rd = rd + sext(rs1[15:0]) * sext(rs2[31:16])
+;; MACCU.H01: rd = rd + zext(rs1[15:0]) * zext(rs2[31:16])
+;; Note: H10 (top x bottom) can be achieved by swapping operands.
+;; GCC canonicalizes to [u]maddhisi4tb (top x bottom in RTL order).
+(define_insn "<u>maddhisi4tb"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (<su_shiftrt>:SI
+			    (match_operand:SI 1 "register_operand" "r")
+			    (const_int 16))
+			  (any_extend:SI
+			    (match_operand:HI 2 "register_operand" "r")))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "macc<u>.h01\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; MACC.H11/MACCU.H11: Multiply-accumulate (top x top)
+;; MACC.H11:  rd = rd + sext(rs1[31:16]) * sext(rs2[31:16])
+;; MACCU.H11: rd = rd + zext(rs1[31:16]) * zext(rs2[31:16])
+(define_insn "<shiftrt_su>maddhisi4tt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (any_shiftrt:SI
+			    (match_operand:SI 1 "register_operand" "r")
+			    (const_int 16))
+			  (any_shiftrt:SI
+			    (match_operand:SI 2 "register_operand" "r")
+			    (const_int 16)))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "macc<shiftrt_su>.h11\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; usmulhisi3: Unsigned x Signed widening multiply (halfword -> word)
+;; Standard pattern name from GCC internals.
+;; GCC's convention: operand 1 is unsigned, operand 2 is signed.
+;; MULSU.H00: rd = sext(rs1[15:0]) * zext(rs2[15:0])
+;; Two patterns for different operand orderings from GCC.
+(define_insn "usmulhisi3"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (zero_extend:SI
+		   (match_operand:HI 1 "register_operand" "r"))
+		 (sign_extend:SI
+		   (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulsu.h00\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*usmulhisi3_alt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (sign_extend:SI
+		   (match_operand:HI 1 "register_operand" "r"))
+		 (zero_extend:SI
+		   (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulsu.h00\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; MULSU.H11: Signed x Unsigned widening multiply (top halfword -> word)
+;; rd = sext(rs1[31:16]) * zext(rs2[31:16])
+;; Two patterns for different operand orderings from GCC.
+(define_insn "*usmulhisi3tt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (lshiftrt:SI
+		   (match_operand:SI 1 "register_operand" "r")
+		   (const_int 16))
+		 (ashiftrt:SI
+		   (match_operand:SI 2 "register_operand" "r")
+		   (const_int 16))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulsu.h11\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*usmulhisi3tt_alt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (ashiftrt:SI
+		   (match_operand:SI 1 "register_operand" "r")
+		   (const_int 16))
+		 (lshiftrt:SI
+		   (match_operand:SI 2 "register_operand" "r")
+		   (const_int 16))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulsu.h11\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; MACCSU.H00: Signed-unsigned multiply-accumulate (bottom x bottom)
+;; rd = rd + sext(rs1[15:0]) * zext(rs2[15:0])
+;; Two patterns for different operand orderings from GCC.
+(define_insn "*rvp_usmaddhisi4"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (zero_extend:SI
+			    (match_operand:HI 1 "register_operand" "r"))
+			  (sign_extend:SI
+			    (match_operand:HI 2 "register_operand" "r")))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "maccsu.h00\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_usmaddhisi4_alt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (sign_extend:SI
+			    (match_operand:HI 1 "register_operand" "r"))
+			  (zero_extend:SI
+			    (match_operand:HI 2 "register_operand" "r")))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "maccsu.h00\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; MACCSU.H11: Signed-unsigned multiply-accumulate (top x top)
+;; rd = rd + sext(rs1[31:16]) * zext(rs2[31:16])
+;; Two patterns for different operand orderings from GCC.
+(define_insn "*rvp_usmaddhisi4tt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (lshiftrt:SI
+			    (match_operand:SI 1 "register_operand" "r")
+			    (const_int 16))
+			  (ashiftrt:SI
+			    (match_operand:SI 2 "register_operand" "r")
+			    (const_int 16)))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "maccsu.h11\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_usmaddhisi4tt_alt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (mult:SI (ashiftrt:SI
+			    (match_operand:SI 1 "register_operand" "r")
+			    (const_int 16))
+			  (lshiftrt:SI
+			    (match_operand:SI 2 "register_operand" "r")
+			    (const_int 16)))
+		 (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "maccsu.h11\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
 ;; Averaging arithmetic operations with standard optab names.
 ;;
 ;; GCC's tree-vect-patterns.cc recognizes widening average patterns like:

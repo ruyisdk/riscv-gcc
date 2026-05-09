@@ -4569,7 +4569,16 @@
 	  (mult:SI (sign_extend:SI (match_operand:HI 1 "register_operand"))
 		   (sign_extend:SI (match_operand:HI 2 "register_operand")))
 	  (match_operand:SI 3 "register_operand")))]
-  "TARGET_XTHEADMAC"
+  "TARGET_XTHEADMAC || (TARGET_RVP && !TARGET_64BIT)"
+)
+
+(define_expand "umaddhisi4"
+  [(set (match_operand:SI 0 "register_operand")
+	(plus:SI
+	  (mult:SI (zero_extend:SI (match_operand:HI 1 "register_operand"))
+		   (zero_extend:SI (match_operand:HI 2 "register_operand")))
+	  (match_operand:SI 3 "register_operand")))]
+  "TARGET_RVP && !TARGET_64BIT"
 )
 
 (define_expand "msubhisi4"
