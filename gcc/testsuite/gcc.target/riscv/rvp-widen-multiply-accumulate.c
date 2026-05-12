@@ -16,5 +16,13 @@ unsigned long long widen_mult_accumulate_unsigned(unsigned long long a, unsigned
     return (a + (unsigned long long)b * (unsigned long long)c);
 }
 
+/* Test WMACCSU (widening signed-unsigned multiply-accumulate) instruction */
+
+unsigned long long widen_mult_accumulate_signed_unsigned(unsigned long long a, int b, unsigned int c)
+{
+    return (a + (long long)b * (unsigned long long)c);
+}
+
 /* { dg-final { scan-assembler-times {\mwmacc\M} 1 } } */
 /* { dg-final { scan-assembler-times {\mwmaccu\M} 1 } } */
+/* { dg-final { scan-assembler-times {\mwmaccsu\M} 1 } } */

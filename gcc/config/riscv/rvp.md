@@ -1588,6 +1588,17 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+(define_insn "*sumaddsidi4"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI
+          (mult:DI (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))
+                   (sign_extend:DI (match_operand:SI 1 "register_operand" "r")))
+          (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "wmaccsu\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; ABS - Absolute Value for SI/DI modes
 ;; abs rd, rs1: rd = (rs1 < 0) ? -rs1 : rs1
 ;;
