@@ -1,6 +1,6 @@
 /* { dg-do compile } */
 /* { dg-require-effective-target rv64 } */
-/* { dg-options "-march=rv64gcp0p19 -mabi=lp64 -O2" } */
+/* { dg-options "-march=rv64gcp0p21 -mabi=lp64 -O2" } */
 
 /* Test match.pd optimizations that transform absolute difference idioms
    into the canonical max - min form, enabling pabd/pabdu instructions.

@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-march=rv32gcp0p19 -mabi=ilp32" } */
+/* { dg-options "-march=rv32gcp0p21 -mabi=ilp32" } */
 /* { dg-skip-if "" { *-*-* } { "-flto" "-O0" "-O1"} } */
 
 /* Test WMACC (widening signed multiply-accumulate) instruction */
