@@ -1332,6 +1332,22 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Widening subtract accumulate (WSUBA/WSUBAU)
+;; rd = acc + <su>_extend(rs1) - <su>_extend(rs2)
+;;   - rd is a DI register pair (R constraint)
+;;   - rs1, rs2 are 32-bit registers sign-extended to DI accroding
+;;     to <su> (sign-extended for WSUBA, zero-extended for WSUBAU)
+;;   - "acc" is a DI accumulator tied to rd by the "0" constraint
+(define_insn "*wsuba<su>si3"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (minus:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                          (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
+                       (match_operand:DI 3 "register_operand" "0")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "wsuba<u>\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; DI-mode addition for RV32 with RVP
 ;; Uses ADDD instruction; operands must be register pairs (R constraint)
 (define_insn "*adddi3_rvp32"
