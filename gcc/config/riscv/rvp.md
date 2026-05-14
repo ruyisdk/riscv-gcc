@@ -1424,19 +1424,40 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<X:MODE>")])
 
-;; MVM/MVMN XOR forms: ((a ^ b) & mask) ^ a  or  ((a ^ b) & mask) ^ b
+;; MVM/MVMN XOR forms: ((a ^ b) & mask) ^ c
+;; This pattern is similar to AArch64's BSL (Bitwise Select) pattern.
+;; We can use MVM or MVMN depending on register allocation:
+;;   if (op0 == op1) mvm  op0, op3, op2  (selects op3 where mask=1)
+;;   if (op0 == op3) mvmn op0, op1, op2  (selects op1 where mask=0)
+;;
+;; The pattern ((a ^ b) & mask) ^ a is equivalent to (~mask & a) | (mask & b)
+;; The pattern ((a ^ b) & mask) ^ b is equivalent to (~mask & b) | (mask & a)
 (define_insn "*mvm<X:mode>_xor"
-  [(set (match_operand:X 0 "register_operand" "=r,r,r,r")
-	(xor:X (and:X (xor:X (match_operand:X 1 "register_operand" "0,r,r,0")
-			     (match_operand:X 3 "register_operand" "r,0,0,r"))
-		      (match_operand:X 2 "register_operand" "r,r,r,r"))
-	       (match_operand:X 4 "register_operand" "1,1,3,3")))]
+  [(set (match_operand:X 0 "register_operand" "=r,r")
+	(xor:X (and:X (xor:X (match_operand:X 1 "register_operand" "0,r")
+			     (match_operand:X 3 "register_operand" "r,0"))
+		      (match_operand:X 2 "register_operand" "r,r"))
+	       (match_dup 1)))]
   "TARGET_RVP"
   "@
    mvm\t%0,%3,%2
+   mvmn\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<X:MODE>")])
+
+;; Alternative form where the outer XOR operand is operands[3] instead
+;; of operands[1].  This is needed because combine may produce either form
+;; depending on which operand of the inner XOR it chooses to commute.
+(define_insn "*mvm<X:mode>_xor_alt"
+  [(set (match_operand:X 0 "register_operand" "=r,r")
+	(xor:X (and:X (xor:X (match_operand:X 1 "register_operand" "r,0")
+			     (match_operand:X 3 "register_operand" "0,r"))
+		      (match_operand:X 2 "register_operand" "r,r"))
+	       (match_dup 3)))]
+  "TARGET_RVP"
+  "@
    mvmn\t%0,%1,%2
-   mvm\t%0,%1,%2
-   mvmn\t%0,%3,%2"
+   mvm\t%0,%3,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<X:MODE>")])
 
