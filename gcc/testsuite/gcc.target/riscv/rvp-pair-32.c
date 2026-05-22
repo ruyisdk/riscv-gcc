@@ -81,7 +81,8 @@ pv4qi vecshuffle_pair_o_b(pv4qi a, pv4qi b) {
     return rd;
 }
 
-/* { dg-final { scan-assembler-times {\mpack\M} 2 } } */
+/* { dg-final { scan-assembler-times {\mpack\M} 1 } } */
+/* { dg-final { scan-assembler-times {\mppaire\.h\M} 1 } } */
 /* { dg-final { scan-assembler-times {\mppaireo\.h\M} 3 } } */
 /* { dg-final { scan-assembler-times {\mppairoe\.h\M} 2 } } */
 /* { dg-final { scan-assembler-times {\mppairo\.h\M} 2 } } */

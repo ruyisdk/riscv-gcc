@@ -560,7 +560,7 @@
   "TARGET_RVP"
   "@
    ppaireo.h\t%0, %1, %2
-   pack\t%0, %2, %1"
+   ppaire.h\t%0, %2, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -593,13 +593,18 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
-(define_insn "*pack_concatpv2hi"
+;; Concatenate two halfwords into a PV2HI vector.  PPAIRE.H packs the low
+;; halfword of each operand into a 32-bit word, which is what is needed for
+;; both RV32 and RV64; on RV64 a plain PACK would instead concatenate the
+;; full 32-bit halves and produce a wrong result.  On RV32 PPAIRE.H is an
+;; alias of PACK, so this is also correct there.
+(define_insn "*ppaire_concatpv2hi"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (vec_concat:PV2HI
           (match_operand:HI 1 "register_operand" "r") 
           (match_operand:HI 2 "register_operand" "r")))]
   "TARGET_RVP"
-  "pack\t%0, %1, %2"
+  "ppaire.h\t%0, %1, %2"
   [(set_attr "type"  "arith")
    (set_attr "mode"  "SI")])
 
@@ -719,7 +724,7 @@
                             (parallel [(const_int 0) (const_int 0)]))
           (const_int 2)))]
   "TARGET_RVP"
-  "pack\t%0, %1, %2"
+  "ppaire.h\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
