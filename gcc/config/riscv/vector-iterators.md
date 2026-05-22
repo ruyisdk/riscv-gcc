@@ -143,6 +143,13 @@
   ;; Vector conditional branch optabs
   UNSPEC_COND_LEN_CMP_ALL
   UNSPEC_COND_LEN_CMP_ANY
+
+  ;; abd
+  UNSPEC_VSABD
+  UNSPEC_VUABD
+  ;; abdacc
+  UNSPEC_VSABDACC
+  UNSPEC_VUABDACC
 ])
 
 (define_c_enum "unspecv" [
@@ -6805,4 +6812,22 @@
 (define_int_attr cbranch_optab [
   (UNSPEC_COND_LEN_CMP_ALL "cond_len_vec_cbranch_all")
   (UNSPEC_COND_LEN_CMP_ANY "cond_len_vec_cbranch_any")
+])
+
+(define_int_iterator UNSPEC_VABD[
+  UNSPEC_VSABD UNSPEC_VUABD
+])
+
+(define_int_iterator UNSPEC_VABDACC[
+  UNSPEC_VSABDACC UNSPEC_VUABDACC
+])
+
+(define_int_attr su[
+  (UNSPEC_VSABD "s") (UNSPEC_VUABD "u")
+  (UNSPEC_VSABDACC "s") (UNSPEC_VUABDACC "u")
+])
+
+(define_int_attr u[
+  (UNSPEC_VSABD "") (UNSPEC_VUABD "u")
+  (UNSPEC_VSABDACC "") (UNSPEC_VUABDACC "u")
 ])
