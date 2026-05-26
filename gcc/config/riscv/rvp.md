@@ -1485,8 +1485,8 @@
 	       (match_dup 3)))]
   "TARGET_RVP"
   "@
-   mvmn\t%0,%1,%2
-   mvm\t%0,%3,%2"
+   mvm\t%0,%1,%2
+   mvmn\t%0,%3,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<X:MODE>")])
 
