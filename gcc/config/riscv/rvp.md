@@ -1363,10 +1363,18 @@
 ;; Uses SUBD instruction; operands must be register pairs (R constraint)
 (define_insn "*subdi3_rvp32"
   [(set (match_operand:DI 0 "register_operand" "=R")
-        (minus:DI (match_operand:DI 1 "register_operand" "R")
+        (minus:DI (match_operand:DI 1 "register_operand" "jR")
                   (match_operand:DI 2 "register_operand" "R")))]
   "!TARGET_64BIT && TARGET_RVP"
-  "subd\t%0, %1, %2"
+  "subd\t%0, %z1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*negdi2_rvp32_neg"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (neg:DI (match_operand:DI 1 "register_operand" "R")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "negd\t%0, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
