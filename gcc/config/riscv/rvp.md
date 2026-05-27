@@ -1252,6 +1252,28 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+(define_insn "*rev16_pv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (vec_select: PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+                           (parallel [(const_int 6) (const_int 7)
+                                      (const_int 4) (const_int 5)
+                                      (const_int 2) (const_int 3)
+                                      (const_int 0) (const_int 1)])))]
+  "TARGET_RVP && TARGET_64BIT"
+  "rev16\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*rev16_pv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_select: PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                           (parallel [(const_int 2) (const_int 3)
+                                      (const_int 0) (const_int 1)])))]
+  "TARGET_RVP"
+  "rev16\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; =========================================================================
 ;; Sign/Zero Extension for RV32 with RVP
 ;; =========================================================================

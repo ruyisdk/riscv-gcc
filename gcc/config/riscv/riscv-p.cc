@@ -475,8 +475,11 @@ static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
   {{0, 2, 4, 6}, false, false, UNZIP_PERM_TYPE},
   /* unzip16hp: don't care the even-odd */
   {{1, 3, 5, 7}, false, false, UNZIP_PERM_TYPE},
-  /* rev16: don't care the even-odd */
-  {{3, 2, 1, 0}, false, false, REV_PERM_TYPE}
+  /* PV4HImode rev16: don't care the even-odd *
+   * PV4QImode rev8 : don't care the even-odd */
+  {{3, 2, 1, 0}, false, false, REV_PERM_TYPE},
+  /* PV4QImode rev16: don't care the even-odd */
+  {{2, 3, 0, 1}, false, false, REV_PERM_TYPE}
 };
 
 /* Supported 8-element vector permutation patterns.
@@ -500,7 +503,9 @@ static const vec_perm_pattern<8> vec_perm_patterns_8elem[] = {
   /* unzip8hp: don't care the even-odd */
   {{1, 3, 5, 7, 9, 11, 13, 15}, false, false, UNZIP_PERM_TYPE},
   /* rev8: don't care the even-odd */
-  {{7, 6, 5, 4, 3, 2, 1, 0}, false, false, REV_PERM_TYPE}
+  {{7, 6, 5, 4, 3, 2, 1, 0}, false, false, REV_PERM_TYPE},
+  /* rev16: don't care the even-odd */
+  {{6, 7, 4, 5, 2, 3, 0, 1}, false, false, REV_PERM_TYPE}
 };
 
 /* Implement P extension vec_perm_const pattern matching.
