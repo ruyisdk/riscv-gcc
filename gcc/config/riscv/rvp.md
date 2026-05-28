@@ -1283,29 +1283,21 @@
 
 ;; Sign extend SI to DI on RV32
 ;; This pattern is matched by the extendsidi2 expander in riscv.md
-(define_insn_and_split "*extendsidi2_rvp"
+(define_insn "*extendsidi2_rvp"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (sign_extend:DI (match_operand:SI 1 "register_operand" "r")))]
   "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
-  "#"
-  "&& reload_completed"
-  [(set (subreg:SI (match_dup 0) 0) (match_dup 1))
-   (set (subreg:SI (match_dup 0) 4) (ashiftrt:SI (match_dup 1) (const_int 31)))]
-  ""
+  "wadd\t%0, %1, zero"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
 ;; Zero extend SI to DI on RV32
 ;; This pattern is matched by the zero_extendsidi2 expander in riscv.md
-(define_insn_and_split "*zero_extendsidi2_rvp"
+(define_insn "*zero_extendsidi2_rvp"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (zero_extend:DI (match_operand:SI 1 "register_operand" "r")))]
   "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
-  "#"
-  "&& reload_completed"
-  [(set (subreg:SI (match_dup 0) 0) (match_dup 1))
-   (set (subreg:SI (match_dup 0) 4) (const_int 0))]
-  ""
+  "waddu\t%0, %1, zero"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
