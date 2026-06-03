@@ -521,6 +521,22 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
+;; On RV64 rev8 reverses all 8 bytes of the register, so a 4-byte (PV4QI)
+;; reverse leaves the reversed bytes in bits [63:32]; an extra "srli rd,rd,32"
+;; brings them back into [31:0].  Without this pattern the PV4QI reverse that
+;; riscv_expand_pext_vec_perm_const emits has no recognizer on RV64 and ICEs
+;; at vregs.
+(define_insn "*bswap_pv4qi_rv64"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (vec_select:PV4QI (match_operand:PV4QI 1 "register_operand" "r")
+                          (parallel [(const_int 3) (const_int 2)
+                                     (const_int 1) (const_int 0)])))]
+  "TARGET_64BIT && (TARGET_ZBB || TARGET_ZBKB)"
+  "rev8\t%0, %1\;srli\t%0, %0, 32"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")
+   (set_attr "length" "8")])
+
 ;; HI bswap can be emulated using SI/DI bswap followed
 ;; by a logical shift right
 ;; SI bswap for TARGET_64BIT is already similarly in
