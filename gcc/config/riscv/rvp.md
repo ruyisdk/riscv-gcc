@@ -19,49 +19,54 @@
 
 (include "rvp-iterators.md")
 
-;; Move pattern for PVQIHI modes (byte and halfword packed vectors)
+;; Move patterns for all packed vector modes
+;; 4-byte vectors (PV4QI/PV2HI): supported on both RV32 and RV64
+;; 8-byte vectors (PV8QI/PV4HI/PV2SI): RV64 uses single register, RV32 uses register pairs
 (define_expand "mov<mode>"
-  [(set (match_operand:PVQIHI 0 "")
-	(match_operand:PVQIHI 1 ""))]
+  [(set (match_operand:PVMOVE 0 "")
+	(match_operand:PVMOVE 1 ""))]
   "TARGET_RVP"
 {
   if (riscv_legitimize_move (<MODE>mode, operands[0], operands[1]))
     DONE;
 })
 
-;; Internal move pattern for PVQIHI modes
+;; Single-register move for packed vectors
+;; - 4-byte vectors (PV4QI, PV2HI): always use single register on both RV32 and RV64
+;; - 8-byte vectors (PV8QI, PV4HI, PV2SI): use single register on RV64 only
+;; Note: PVALL iterator already has the correct TARGET_64BIT conditions for 8-byte modes
 (define_insn "*mov<mode>_internal"
-  [(set (match_operand:PVQIHI 0 "nonimmediate_operand" "=r,r,r,r, m,  *f,*f,*r,*m")
-	(match_operand:PVQIHI 1 "move_operand"         " r,T,vc,m,rJ,*r*J,*m,*f,*f"))]
-  "(register_operand (operands[0], <MODE>mode)
-    || reg_or_0_operand (operands[1], <MODE>mode))
-   && TARGET_RVP"
-  { return riscv_output_move (operands[0], operands[1]); }
-  [(set_attr "move_type" "move,const,const,load,store,mtc,fpload,mfc,fpstore")
-   (set_attr "type" "move,move,move,load,store,mtc,fpload,mfc,fpstore")
-   (set_attr "mode" "<MODE>")])
-
-;; Move pattern for PV2SI mode (2×32-bit packed vector, RV64 only)
-(define_expand "movpv2si"
-  [(set (match_operand:PV2SI 0 "")
-	(match_operand:PV2SI 1 ""))]
-  "TARGET_64BIT && TARGET_RVP"
-{
-  if (riscv_legitimize_move (PV2SImode, operands[0], operands[1]))
-    DONE;
-})
-
-;; Internal move pattern for PV2SI mode
-(define_insn "*movpv2si_64bit"
-  [(set (match_operand:PV2SI 0 "nonimmediate_operand" "=r,r,r,r, m,  *f,*f,*r,*f,*m")
-	(match_operand:PV2SI 1 "move_operand"         " r,T,vc,m,rJ,*r*J,*m,*f,*f,*f"))]
-  "TARGET_64BIT && TARGET_RVP
-   && (register_operand (operands[0], PV2SImode)
-       || reg_or_0_operand (operands[1], PV2SImode))"
+  [(set (match_operand:PVALL 0 "nonimmediate_operand" "=r,r,r,r, m,  *f,*f,*r,*f,*m")
+	(match_operand:PVALL 1 "move_operand"         " r,T,vc,m,rJ,*r*J,*m,*f,*f,*f"))]
+  "TARGET_RVP
+   && (register_operand (operands[0], <MODE>mode)
+       || reg_or_0_operand (operands[1], <MODE>mode))"
   { return riscv_output_move (operands[0], operands[1]); }
   [(set_attr "move_type" "move,const,const,load,store,mtc,fpload,mfc,fmove,fpstore")
    (set_attr "type" "move,move,move,load,store,mtc,fpload,mfc,fmove,fpstore")
-   (set_attr "mode" "PV2SI")])
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte vectors on RV32: register pairs
+;; Even register pairs use PMV.DBS/DHS/DWS (handled by riscv_output_move).
+;; Other register pairs and memory/FP alternatives split after reload.
+;; Const vectors: PV8QI/PV4HI use PLI.DB/DH patterns; PV2SI with small
+;; duplicate values split into two li, large values load from memory.
+(define_insn_and_split "*mov<mode>_32bit"
+  [(set (match_operand:PV64 0 "nonimmediate_operand" "=R,r,r,r,m,  *f,*f,*r,*f,*m")
+	(match_operand:PV64 1 "move_operand"         " R,r,vc,m,r,*J*r,*m,*f,*f,*f"))]
+  "!TARGET_64BIT && TARGET_RVP
+   && (register_operand (operands[0], <MODE>mode)
+       || reg_or_0_operand (operands[1], <MODE>mode))"
+  { return riscv_output_move (operands[0], operands[1]); }
+  "&& reload_completed && riscv_split_64bit_move_p (operands[0], operands[1])"
+  [(const_int 0)]
+  {
+    riscv_split_doubleword_move (operands[0], operands[1]);
+    DONE;
+  }
+  [(set_attr "move_type" "move,move,const,load,store,mtc,fpload,mfc,fmove,fpstore")
+   (set_attr "type" "move,move,move,load,store,mtc,fpload,mfc,fmove,fpstore")
+   (set_attr "mode" "<MODE>")])
 
 ;; Binary Arithmetic Operations
 
@@ -414,6 +419,30 @@
   }
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
+
+;; PLI.DB/DH: RV32 register-pair variants for 8-byte vectors.
+;; Same immediate constraints as PLI.B/H, but use register pairs.
+(define_insn "*riscv_pli_d_vec"
+  [(set (match_operand:PV64QH 0 "register_operand" "=R")
+	(vec_duplicate:PV64QH
+	  (match_operand:<PVALL_ELT> 1 "const_int_operand" "<dpli>")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  "pli.<rvp_dwidth>\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; PLUI.DH: RV32 register-pair variant for PV4HI.
+(define_insn "*riscv_plui_dh"
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+	(vec_duplicate:PV4HI
+	  (match_operand:HI 1 "const_int_operand" "Yph06")))]
+  "!TARGET_64BIT && TARGET_RVP"
+  {
+    operands[2] = GEN_INT (INTVAL (operands[1]) >> 6);
+    return "plui.dh\t%0,%2";
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV4HI")])
 
 ;; Pack operations for scalar mode
 (define_insn "*ppairoe_h_1"

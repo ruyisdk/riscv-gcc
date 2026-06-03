@@ -51,6 +51,21 @@
 (define_mode_iterator PVQIHI [PV4QI PV2HI
 			      (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")])
 
+;; PV32: 4-byte packed vector modes (always supported)
+(define_mode_iterator PV32 [PV4QI PV2HI])
+
+;; PV64: All 8-byte packed vectors
+;; Supported on RV64 (single register) and RV32 (register pairs)
+(define_mode_iterator PV64 [PV8QI PV4HI PV2SI])
+
+;; PV64QH: 8-byte packed vectors with byte/halfword elements only
+;; Used for RV32 patterns that have PMV.DBS/DHS and PLI.DB/DH
+(define_mode_iterator PV64QH [PV8QI PV4HI])
+
+;; PVMOVE: All packed vector modes for move patterns
+;; Includes PV2SI which is now supported on both RV32 and RV64
+(define_mode_iterator PVMOVE [PV4QI PV2HI PV8QI PV4HI PV2SI])
+
 ;; QIHI: Scalar and packed modes for byte and halfword elements
 ;; Used for instructions like PSABS that work on both scalar and packed modes
 (define_mode_iterator QIHI [QI HI PV4QI PV2HI
@@ -72,6 +87,9 @@
 ;; Element width suffix for RVP instructions
 (define_mode_attr rvp_width [(PV8QI "b") (PV4QI "b") (QI "b") (PV4HI "h") (PV2HI "h")
 			     (HI "h") (PV2SI "w")])
+
+;; Element width suffix for RV32 register-pair instructions (PMV.DxS)
+(define_mode_attr rvp_dwidth [(PV8QI "db") (PV4HI "dh") (PV2SI "dw")])
 
 ;; Code Iterators
 

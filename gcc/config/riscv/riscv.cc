@@ -2642,14 +2642,12 @@ riscv_const_insns (rtx x, bool allow_new_pseudos)
 	  {
 	    if (riscv_rvp_const_vector_p (x))
 	      {
-		/* For vectors larger than word_mode, we need multiple
-		   PLI instructions (one per word).  */
-		unsigned int total_bits
-		  = GET_MODE_BITSIZE (GET_MODE (x)).to_constant ();
-		unsigned int word_bits = GET_MODE_BITSIZE (word_mode);
-		unsigned int num_words
-		  = (total_bits + word_bits - 1) / word_bits;
-		return num_words;
+		/* PLI.B/H/W or PLI.DB/DH uses single instruction.
+		   Exception: RV32 PV2SI uses two li instructions since
+		   there is no PLI.DW instruction.  */
+		if (!TARGET_64BIT && GET_MODE (x) == PV2SImode)
+		  return 2;
+		return 1;
 	      }
 	    /* Not a valid P-extension const_vector.  */
 	    return 0;
@@ -5076,6 +5074,44 @@ riscv_split_64bit_move_p (rtx dest, rtx src)
 	  || (FP_REG_RTX_P (dest) && src == CONST0_RTX (GET_MODE (src)))))
     return false;
 
+  /* P-extension: don't split 8-byte CONST_VECTOR that can use PLI.DB/DH.
+     Note: PV2SI has no PLI.DW, so we must split it into two li instructions.
+     Exception: PV2SI zero const can use addd dst, x0, x0.  */
+  if (TARGET_RVP && CONST_VECTOR_P (src) && riscv_rvp_const_vector_p (src))
+    {
+      machine_mode mode = GET_MODE (src);
+      /* PV8QI/PV4HI can use PLI.DB/DH, but require an even-odd hard
+	 register pair.  Only suppress split when dest satisfies this.  */
+      if (mode != PV2SImode)
+	return !(REG_P (dest) && GP_REG_P (REGNO (dest))
+		 && REGNO (dest) < FIRST_PSEUDO_REGISTER
+		 && (REGNO (dest) % 2) == 0);
+      /* PV2SI zero const can use addd with even register pair.  */
+      if (REG_P (dest) && GP_REG_P (REGNO (dest))
+	  && REGNO (dest) < FIRST_PSEUDO_REGISTER
+	  && (REGNO (dest) % 2) == 0
+	  && src == CONST0_RTX (mode))
+	return false;
+    }
+
+  /* P-extension: (const_int 0) for PV2SI with even register pair uses addd.  */
+  if (TARGET_RVP && src == const0_rtx && GET_MODE (dest) == PV2SImode
+      && REG_P (dest) && GP_REG_P (REGNO (dest))
+      && REGNO (dest) < FIRST_PSEUDO_REGISTER
+      && (REGNO (dest) % 2) == 0)
+    return false;
+
+  /* P-extension: don't split GPR-to-GPR move with even register pairs.
+     P-ext modes use PMV.DBS/DHS/DWS; DI uses ADDD rd, rs, x0.  */
+  if (TARGET_RVP && REG_P (dest) && REG_P (src))
+    {
+      if (GP_REG_P (REGNO (dest)) && GP_REG_P (REGNO (src))
+	  && REGNO (dest) < FIRST_PSEUDO_REGISTER
+	  && REGNO (src) < FIRST_PSEUDO_REGISTER
+	  && (REGNO (dest) % 2) == 0 && (REGNO (src) % 2) == 0)
+	return false;
+    }
+
   return true;
 }
 
@@ -5238,6 +5274,16 @@ riscv_output_move (rtx dest, rtx src)
       /* P-extension const_vector handling for PLI/PLUI.  */
       if (src_code == CONST_VECTOR && TARGET_RVP)
 	{
+	  /* RV32 8-byte P-ext zero const_vector with even pair: addd rd,x0,x0.
+	     This covers PV8QI, PV4HI, and PV2SI since none have a PLI zero
+	     that initializes the full register pair via the li fast-path.  */
+	  if (!TARGET_64BIT
+	      && (mode == PV2SImode || mode == PV8QImode || mode == PV4HImode)
+	      && src == CONST0_RTX (mode)
+	      && REGNO (dest) < FIRST_PSEUDO_REGISTER
+	      && (REGNO (dest) % 2) == 0)
+	    return "addd\t%0,x0,x0";
+
 	  rtx elt;
 	  if (const_vec_duplicate_p (src, &elt) && CONST_INT_P (elt))
 	    {
@@ -5259,8 +5305,11 @@ riscv_output_move (rtx dest, rtx src)
 	      if (container_bits == 32)
 		replicated = sext_hwi (replicated, 32);
 
-	      /* Prefer li for SMALL_OPERAND values like 0 and -1.  */
-	      if (SMALL_OPERAND (replicated))
+	      /* Prefer li for SMALL_OPERAND values like 0 and -1, but skip
+		 for RV32 8-byte modes where li only sets the low 32 bits.
+		 Those cases are handled above (addd for zero) or fall through
+		 to riscv_output_pli for the full register-pair PLI.DB/DH.  */
+	      if (SMALL_OPERAND (replicated) && (TARGET_64BIT || width != 8))
 		{
 		  rtx ops[2] = { dest, GEN_INT (replicated) };
 		  output_asm_insn ("li\t%0,%1", ops);
@@ -5293,7 +5342,32 @@ riscv_output_move (rtx dest, rtx src)
       if (dest_code == REG)
 	{
 	  if (GP_REG_P (REGNO (dest)))
-	    return "mv\t%0,%z1";
+	    {
+	      /* RV32 P-ext: use PMV.DxS for even register pair moves.  */
+	      if (!TARGET_64BIT && TARGET_RVP && width == 8
+		  && src_code == REG && GP_REG_P (REGNO (src))
+		  && (REGNO (dest) % 2) == 0 && (REGNO (src) % 2) == 0
+		  && REGNO (dest) < FIRST_PSEUDO_REGISTER
+		  && REGNO (src) < FIRST_PSEUDO_REGISTER)
+		{
+		  if (mode == PV8QImode)
+		    return "pmv.dbs\t%0,%1";
+		  if (mode == PV4HImode)
+		    return "pmv.dhs\t%0,%1";
+		  if (mode == PV2SImode)
+		    return "pmv.dws\t%0,%1";
+		  if (mode == DImode)
+		    return "addd\t%0,%1,x0";
+		}
+	      /* RV32 P-ext: PV2SI/DI zero with even pair uses addd rd, x0, x0.  */
+	      if (!TARGET_64BIT && TARGET_RVP && width == 8
+		  && (mode == PV2SImode || mode == DImode)
+		  && (src == CONST0_RTX (mode) || src == const0_rtx)
+		  && (REGNO (dest) % 2) == 0
+		  && REGNO (dest) < FIRST_PSEUDO_REGISTER)
+		return "addd\t%0,x0,x0";
+	      return "mv\t%0,%z1";
+	    }
 
 	  if (FP_REG_P (REGNO (dest)))
 	    switch (width)
@@ -16771,16 +16845,18 @@ bool riscv_pext_mode_supported_p (machine_mode mode)
 
   switch (mode)
     {
-    /* 4-byte packed vectors are supported on both RV32 and RV64.  */
+    /* 4-byte packed vectors: supported on both RV32 and RV64.  */
     case PV4QImode:
     case PV2HImode:
       return true;
 
-    /* 8-byte packed vectors are only supported on RV64.  */
+    /* 8-byte packed vectors:
+       On RV64: single 64-bit register with PADD.B/H/W instructions.
+       On RV32: register pair with PADD.DB/DH/DW instructions.  */
     case PV8QImode:
     case PV4HImode:
     case PV2SImode:
-      return TARGET_64BIT;
+      return true;
 
     default:
       return false;
@@ -16932,20 +17008,45 @@ riscv_rvp_const_vector_p (rtx op)
   HOST_WIDE_INT val = INTVAL (elt);
   machine_mode inner_mode = GET_MODE_INNER (mode);
   unsigned int elem_bits = GET_MODE_BITSIZE (inner_mode).to_constant ();
+  unsigned int mode_size = GET_MODE_SIZE (mode).to_constant ();
 
-  /* Build the replicated value and check if PLI/PLUI can handle it.
-     We also accept SMALL_OPERAND values here because riscv_output_move
-     will use li instead of pli for those cases.  */
+  /* Build the replicated value.
+     - On RV64: always use 64-bit container (word_mode) for riscv_pli_operand_p
+     - On RV32 with 8-byte vectors: use 32-bit container since PLI.DB/DH
+       have the same immediate constraints as PLI.B/H  */
+  unsigned int container_bits;
+  if (!TARGET_64BIT && mode_size > 4)
+    container_bits = 32;  /* RV32 8-byte: PLI.DB/DH */
+  else
+    container_bits = GET_MODE_BITSIZE (word_mode);
+
   HOST_WIDE_INT replicated = 0;
   unsigned HOST_WIDE_INT elem = val & GET_MODE_MASK (inner_mode);
-  unsigned int word_bits = GET_MODE_BITSIZE (word_mode);
 
-  for (unsigned int i = 0; i < word_bits; i += elem_bits)
+  for (unsigned int i = 0; i < container_bits; i += elem_bits)
     replicated |= (HOST_WIDE_INT) elem << i;
 
-  /* Sign-extend for proper SMALL_OPERAND check on 32-bit values.  */
-  if (word_bits == 32)
+  /* Sign-extend 32-bit values for proper SMALL_OPERAND check.  */
+  if (container_bits == 32)
     replicated = sext_hwi (replicated, 32);
+
+  /* For 8-byte vectors on RV32:
+     - PV8QI/PV4HI: check PLI.DB/DH/PLUI.DH patterns
+     - PV2SI: no PLI.DW exists, but we accept duplicate const_vectors
+       that can be loaded with a single li instruction per word.
+       This matches DImode behavior where large constants load from memory.  */
+  if (mode_size > 4 && !TARGET_64BIT)
+    {
+      if (inner_mode == SImode)
+	{
+	  /* PV2SI: accept if element fits in single li instruction.
+	     Large values will load from memory like DImode.  */
+	  HOST_WIDE_INT word_val = sext_hwi (val, 32);
+	  return riscv_integer_cost (word_val, false) == 1;
+	}
+      /* PV8QI/PV4HI: check PLI.DB/DH/PLUI.DH patterns.  */
+      return riscv_pli_operand_p (replicated);
+    }
 
   /* Accept SMALL_OPERAND values (will use li) or PLI patterns.  */
   return SMALL_OPERAND (replicated) || riscv_pli_operand_p (replicated);
@@ -16966,34 +17067,47 @@ riscv_output_pli (rtx dest, HOST_WIDE_INT val, int container_bits)
   /* For 64-bit container, first try 64-bit patterns.  */
   if (container_bits == 64)
     {
-      /* PLI.B: replicated byte in 64-bit container.  */
-      if (riscv_replicated_const_p (val, QImode))
+      /* PLI.B (RV64) / PLI.DB (RV32): replicated byte in 64-bit container.
+         On RV32, checking low 32 bits is sufficient since we built a 64-bit
+	 replicated value.  */
+      if ((TARGET_64BIT && riscv_replicated_const_p (val, QImode))
+	  || (!TARGET_64BIT && riscv_replicated_const_32bit_p (val, QImode)))
 	{
 	  operands[1] = GEN_INT (sext_hwi (val, 8));
-	  output_asm_insn ("pli.b\t%0,%1", operands);
+	  if (TARGET_64BIT)
+	    output_asm_insn ("pli.b\t%0,%1", operands);
+	  else
+	    output_asm_insn ("pli.db\t%0,%1", operands);
 	  return "";
 	}
 
-      /* PLI.H / PLUI.H: replicated halfword in 64-bit container.  */
-      if (riscv_replicated_const_p (val, HImode))
+      /* PLI.H / PLI.DH / PLUI.H / PLUI.DH: replicated halfword in 64-bit.  */
+      if ((TARGET_64BIT && riscv_replicated_const_p (val, HImode))
+	  || (!TARGET_64BIT && riscv_replicated_const_32bit_p (val, HImode)))
 	{
 	  HOST_WIDE_INT hw = sext_hwi (val, 16);
 	  if (IN_RANGE (hw, -512, 511))
 	    {
 	      operands[1] = GEN_INT (hw);
-	      output_asm_insn ("pli.h\t%0,%1", operands);
+	      if (TARGET_64BIT)
+		output_asm_insn ("pli.h\t%0,%1", operands);
+	      else
+		output_asm_insn ("pli.dh\t%0,%1", operands);
 	      return "";
 	    }
 	  if ((hw & 0x3f) == 0 && IN_RANGE (hw >> 6, -512, 511))
 	    {
 	      operands[1] = GEN_INT (hw >> 6);
-	      output_asm_insn ("plui.h\t%0,%1", operands);
+	      if (TARGET_64BIT)
+		output_asm_insn ("plui.h\t%0,%1", operands);
+	      else
+		output_asm_insn ("plui.dh\t%0,%1", operands);
 	      return "";
 	    }
 	}
 
-      /* PLI.W / PLUI.W: replicated word in 64-bit container.  */
-      if (riscv_replicated_const_p (val, SImode))
+      /* PLI.W / PLUI.W: replicated word in 64-bit container (RV64 only).  */
+      if (TARGET_64BIT && riscv_replicated_const_p (val, SImode))
 	{
 	  HOST_WIDE_INT word = sext_hwi (val, 32);
 	  if (IN_RANGE (word, -512, 511))
