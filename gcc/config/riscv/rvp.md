@@ -1394,10 +1394,13 @@
    (set_attr "mode" "DI")])
 
 ;; DI-mode subtraction for RV32 with RVP
-;; Uses SUBD instruction; operands must be register pairs (R constraint)
+;; Uses SUBD instruction; op2 must be a register pair (R), op1 may also be the
+;; zero literal (reg_or_0_operand + j constraint) so that the canonical
+;; (minus:DI (const_int 0) reg) negation form emits "subd rd, x0, rs2" (= negd)
+;; instead of failing recog at vregs.
 (define_insn "*subdi3_rvp32"
   [(set (match_operand:DI 0 "register_operand" "=R")
-        (minus:DI (match_operand:DI 1 "register_operand" "jR")
+        (minus:DI (match_operand:DI 1 "reg_or_0_operand" "jR")
                   (match_operand:DI 2 "register_operand" "R")))]
   "!TARGET_64BIT && TARGET_RVP"
   "subd\t%0, %z1, %2"
