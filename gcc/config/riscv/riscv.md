@@ -3298,6 +3298,32 @@
   [(set_attr "type" "branch")
    (set_attr "mode" "none")])
 
+(define_insn "*branch_zibi<mode>"
+  [(set (pc)
+	(if_then_else
+	 (match_operator 1 "equality_operator"
+			 [(match_operand:X 2 "register_operand" "r")
+			  (match_operand:X 3 "zibi_cimm_operand" "zibi")])
+	 (label_ref (match_operand 0 "" ""))
+	 (pc)))]
+  "TARGET_ZIBI"
+{
+  if (get_attr_length (insn) == 12)
+    {
+      if (GET_CODE (operands[1]) == EQ)
+	return "bnei\t%2,%3,1f; jump\t%l0,ra; 1:";
+      else
+	return "beqi\t%2,%3,1f; jump\t%l0,ra; 1:";
+    }
+
+  if (GET_CODE (operands[1]) == EQ)
+    return "beqi\t%2,%3,%l0";
+  else
+    return "bnei\t%2,%3,%l0";
+}
+  [(set_attr "type" "branch")
+   (set_attr "mode" "none")])
+
 ;; Conditional move and add patterns.
 
 (define_expand "mov<mode>cc"

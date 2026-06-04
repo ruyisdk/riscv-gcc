@@ -786,3 +786,7 @@
 (define_predicate "ads_extract_size_imm_di"
   (and (match_code "const_int")
 	   (match_test "IN_RANGE (INTVAL (op), 1, 64)")))
+
+(define_predicate "zibi_cimm_operand"
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == -1 || IN_RANGE (INTVAL (op), 1, 31)")))

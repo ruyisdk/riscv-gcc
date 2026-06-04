@@ -133,6 +133,11 @@
   (and (match_code "const_int")
        (match_test "SINGLE_BIT_MASK_OPERAND (~ival)")))
 
+(define_constraint "zibi"
+  "A constant suitable for Zibi branch-immediate instructions."
+  (and (match_code "const_int")
+       (match_test "INTVAL (op) == -1 || IN_RANGE (INTVAL (op), 1, 31)")))
+
 ;; Floating-point constant +0.0, used for FCVT-based moves when FMV is
 ;; not available in RV32.
 (define_constraint "G"

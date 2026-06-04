@@ -5421,6 +5421,21 @@ riscv_extend_comparands (rtx_code code, rtx *op0, rtx *op1)
     }
 }
 
+/* Return true if X is a constant that can be used as a Zibi branch
+   immediate.  Zibi encodes cimm == 0 as -1, and cimm != 0 as a
+   zero-extended positive 5-bit value.  Comparisons against zero should
+   continue to use beq/bne against x0.  */
+
+static bool
+riscv_zibi_cimm_operand_p (rtx x)
+{
+  if (!CONST_INT_P (x))
+    return false;
+
+  HOST_WIDE_INT value = INTVAL (x);
+  return value == -1 || (value >= 1 && value <= 31);
+}
+
 /* Convert a comparison into something that can be used in a branch or
    conditional move.  On entry, *OP0 and *OP1 are the values being
    compared and *CODE is the code used to compare them.
@@ -5431,7 +5446,8 @@ riscv_extend_comparands (rtx_code code, rtx *op0, rtx *op1)
 
 static void
 riscv_emit_int_compare (enum rtx_code *code, rtx *op0, rtx *op1,
-			bool need_eq_ne_p = false)
+			bool need_eq_ne_p = false,
+			bool allow_zibi_branch_imm_p = false)
 {
   if (need_eq_ne_p)
     {
@@ -5446,7 +5462,14 @@ riscv_emit_int_compare (enum rtx_code *code, rtx *op0, rtx *op1,
       gcc_unreachable ();
     }
 
-  if (splittable_const_int_operand (*op1, VOIDmode))
+  bool zibi_branch_imm_p
+    = (allow_zibi_branch_imm_p
+       && TARGET_ZIBI
+       && (*code == EQ || *code == NE)
+       && riscv_zibi_cimm_operand_p (*op1));
+
+  if (!zibi_branch_imm_p
+      && splittable_const_int_operand (*op1, VOIDmode))
     {
       HOST_WIDE_INT rhs = INTVAL (*op1);
 
@@ -5491,7 +5514,7 @@ riscv_emit_int_compare (enum rtx_code *code, rtx *op0, rtx *op1,
   riscv_extend_comparands (*code, op0, op1);
 
   *op0 = force_reg (word_mode, *op0);
-  if (*op1 != const0_rtx)
+  if (*op1 != const0_rtx && !zibi_branch_imm_p)
     *op1 = force_reg (word_mode, *op1);
 }
 
@@ -5658,7 +5681,7 @@ riscv_expand_conditional_branch (rtx label, rtx_code code, rtx op0, rtx op1)
   if (FLOAT_MODE_P (GET_MODE (op1)))
     riscv_emit_float_compare (&code, &op0, &op1);
   else
-    riscv_emit_int_compare (&code, &op0, &op1);
+    riscv_emit_int_compare (&code, &op0, &op1, false, true);
 
   if (FLOAT_MODE_P (GET_MODE (op0)))
     {

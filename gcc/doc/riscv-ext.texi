@@ -58,6 +58,10 @@
 @tab 1.0
 @tab Hypervisor extension
 
+@item @samp{zibi}
+@tab 1.0
+@tab Branch with immediate
+
 @item @samp{zic64b}
 @tab 1.0
 @tab Cache block size is 64 bytes
