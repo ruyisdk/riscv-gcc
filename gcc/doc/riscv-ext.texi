@@ -314,6 +314,10 @@
 @tab 1.0
 @tab Vector carry-less multiplication extension
 
+@item @samp{zvbc32e}
+@tab 0.7
+@tab Vector carry-less multiplication extension for SEW 8, 16 and 32
+
 @item @samp{zve32f}
 @tab 1.0
 @tab Vector extensions for embedded processors
@@ -361,6 +365,10 @@
 @item @samp{zvkg}
 @tab 1.0
 @tab Vector GCM/GMAC extension
+
+@item @samp{zvkgs}
+@tab 0.7
+@tab Vector GCM/GMAC scalar element extension
 
 @item @samp{zvkn}
 @tab 1.0

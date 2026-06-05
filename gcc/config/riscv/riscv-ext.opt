@@ -254,6 +254,8 @@ Mask(ZVBB) Var(riscv_zvb_subext)
 
 Mask(ZVBC) Var(riscv_zvb_subext)
 
+Mask(ZVBC32E) Var(riscv_zvb_subext)
+
 Mask(ZVE32F) Var(riscv_zve_subext)
 
 Mask(ZVE32X) Var(riscv_zve_subext)
@@ -277,6 +279,8 @@ Mask(ZVFHMIN) Var(riscv_zvf_subext)
 Mask(ZVKB) Var(riscv_zvk_subext)
 
 Mask(ZVKG) Var(riscv_zvk_subext)
+
+Mask(ZVKGS) Var(riscv_zvk_subext)
 
 Mask(ZVKN) Var(riscv_zvk_subext)
 
