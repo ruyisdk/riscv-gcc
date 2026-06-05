@@ -687,6 +687,13 @@ DEF_RVV_FUNCTION (vror,   alu, full_preds, u_vvv_ops)
 DEF_RVV_FUNCTION (vror,   alu, full_preds, u_shift_vvx_ops)
 DEF_RVV_FUNCTION (vrol,   alu, full_preds, u_shift_vvx_ops)
 #undef REQUIRED_EXTENSIONS
+//ZVBC32E
+#define REQUIRED_EXTENSIONS ZVBC32E_EXT
+DEF_RVV_FUNCTION (vclmul,  alu, full_preds, u_vvv_crypto_sew8_16_32_ops)
+DEF_RVV_FUNCTION (vclmul,  alu, full_preds, u_vvx_crypto_sew8_16_32_ops)
+DEF_RVV_FUNCTION (vclmulh, alu, full_preds, u_vvv_crypto_sew8_16_32_ops)
+DEF_RVV_FUNCTION (vclmulh, alu, full_preds, u_vvx_crypto_sew8_16_32_ops)
+#undef REQUIRED_EXTENSIONS
 //ZVBC
 #define REQUIRED_EXTENSIONS ZVBC_EXT
 DEF_RVV_FUNCTION (vclmul,  alu, full_preds, u_vvv_crypto_sew64_ops)

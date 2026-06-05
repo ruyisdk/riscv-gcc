@@ -365,8 +365,8 @@
 ;; vclmul.vv vclmul.vx
 ;; vclmulh.vv vclmulh.vx
 (define_insn "@pred_vclmul<h><mode>"
-  [(set (match_operand:V_VLSI_D 0  "register_operand"     "=vd,vr,vd, vr")
-     (if_then_else:V_VLSI_D
+  [(set (match_operand:V_VLSI 0  "register_operand"     "=vd,vr,vd, vr")
+     (if_then_else:V_VLSI
        (unspec:<VM>
          [(match_operand:<VM> 1 "vector_mask_operand" "vm,Wc1,vm,Wc1")
           (match_operand 5 "vector_length_operand"    "rK, rK,rK, rK")
@@ -375,19 +375,20 @@
           (match_operand 8 "const_int_operand"        " i,  i, i,  i")
           (reg:SI VL_REGNUM)
           (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
-       (unspec:V_VLSI_D
-         [(match_operand:V_VLSI_D 3 "register_operand"     "vr, vr,vr, vr")
-          (match_operand:V_VLSI_D 4 "register_operand"     "vr, vr,vr, vr")] UNSPEC_CLMUL_VC)
-       (match_operand:V_VLSI_D 2 "vector_merge_operand"    "vu, vu, 0,  0")))]
-  "TARGET_ZVBC"
+       (unspec:V_VLSI
+         [(match_operand:V_VLSI 3 "register_operand"     "vr, vr,vr, vr")
+          (match_operand:V_VLSI 4 "register_operand"     "vr, vr,vr, vr")] UNSPEC_CLMUL_VC)
+       (match_operand:V_VLSI 2 "vector_merge_operand"    "vu, vu, 0,  0")))]
+  "(TARGET_ZVBC && GET_MODE_INNER (<MODE>mode) == DImode)
+   || (TARGET_ZVBC32E && GET_MODE_INNER (<MODE>mode) != DImode)"
   "vclmul<h>.vv\t%0,%3,%4%p1"
   [(set_attr "type" "vclmul<h>")
    (set_attr "mode" "<MODE>")])
 
 ;; Deal with SEW = 64 in RV32 system.
 (define_expand "@pred_vclmul<h><mode>_scalar"
-  [(set (match_operand:V_VLSI_D 0 "register_operand")
-     (if_then_else:V_VLSI_D
+  [(set (match_operand:V_VLSI 0 "register_operand")
+     (if_then_else:V_VLSI
        (unspec:<VM>
          [(match_operand:<VM> 1 "vector_mask_operand")
           (match_operand 5 "vector_length_operand")
@@ -396,14 +397,20 @@
           (match_operand 8 "const_int_operand")
           (reg:SI VL_REGNUM)
           (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
-       (unspec:V_VLSI_D
-         [(vec_duplicate:V_VLSI_D
+       (unspec:V_VLSI
+         [(vec_duplicate:V_VLSI
             (match_operand:<VEL> 4 "register_operand"))
-          (match_operand:V_VLSI_D 3 "register_operand")] UNSPEC_CLMUL_VC)
-       (match_operand:V_VLSI_D 2 "vector_merge_operand")))]
-  "TARGET_ZVBC"
+          (match_operand:V_VLSI 3 "register_operand")] UNSPEC_CLMUL_VC)
+       (match_operand:V_VLSI 2 "vector_merge_operand")))]
+  "(TARGET_ZVBC && GET_MODE_INNER (<MODE>mode) == DImode)
+   || (TARGET_ZVBC32E && GET_MODE_INNER (<MODE>mode) != DImode)"
 {
-  if (riscv_vector::sew64_scalar_helper (
+  if (GET_MODE_INNER (<MODE>mode) != DImode)
+    {
+      if (!rtx_equal_p (operands[4], const0_rtx))
+	operands[4] = force_reg (<VEL>mode, operands[4]);
+    }
+  else if (riscv_vector::sew64_scalar_helper (
 	operands,
 	/* scalar op */&operands[4],
 	/* vl */operands[5],
@@ -419,8 +426,8 @@
 })
 
 (define_insn "*pred_vclmul<h><mode>_scalar"
-  [(set (match_operand:V_VLSI_D 0 "register_operand"       "=vd,vr,vd, vr")
-    (if_then_else:V_VLSI_D
+  [(set (match_operand:V_VLSI 0 "register_operand"       "=vd,vr,vd, vr")
+    (if_then_else:V_VLSI
       (unspec:<VM>
         [(match_operand:<VM> 1 "vector_mask_operand"  "vm,Wc1,vm,Wc1")
         (match_operand 5 "vector_length_operand"      "rK, rK,rK, rK")
@@ -429,12 +436,13 @@
         (match_operand 8 "const_int_operand"          " i,  i, i,  i")
         (reg:SI VL_REGNUM)
         (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
-      (unspec:V_VLSI_D
-        [(vec_duplicate:V_VLSI_D
+      (unspec:V_VLSI
+        [(vec_duplicate:V_VLSI
            (match_operand:<VEL> 4 "reg_or_0_operand"   "rJ, rJ,rJ, rJ"))
-         (match_operand:V_VLSI_D 3 "register_operand"      "vr, vr,vr, vr")] UNSPEC_CLMUL_VC)
-      (match_operand:V_VLSI_D 2 "vector_merge_operand"     "vu, vu, 0,  0")))]
-  "TARGET_ZVBC"
+         (match_operand:V_VLSI 3 "register_operand"      "vr, vr,vr, vr")] UNSPEC_CLMUL_VC)
+      (match_operand:V_VLSI 2 "vector_merge_operand"     "vu, vu, 0,  0")))]
+  "(TARGET_ZVBC && GET_MODE_INNER (<MODE>mode) == DImode)
+   || (TARGET_ZVBC32E && GET_MODE_INNER (<MODE>mode) != DImode)"
   "vclmul<h>.vx\t%0,%3,%4%p1"
   [(set_attr "type" "vclmul<h>")
    (set_attr "mode" "<MODE>")])

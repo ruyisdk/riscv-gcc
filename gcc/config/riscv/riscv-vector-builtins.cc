@@ -539,6 +539,14 @@ static const rvv_type_info crypto_sew32_ops[] = {
 #include "riscv-vector-builtins-types.def"
   {NUM_VECTOR_TYPES, 0}};
 
+/* A list of unsigned SEW=8, SEW=16 and SEW=32 types will be registered
+   for vector-crypto intrinsic functions.  */
+static const rvv_type_info crypto_sew8_16_32_ops[] = {
+#define DEF_RVV_CRYPTO_SEW8_16_32_OPS(TYPE, REQUIRE) \
+  {VECTOR_TYPE_##TYPE, REQUIRE},
+#include "riscv-vector-builtins-types.def"
+  {NUM_VECTOR_TYPES, 0}};
+
 /* A list of sew64 will be registered for vector-crypto intrinsic functions.  */
 static const rvv_type_info crypto_sew64_ops[] = {
 #define DEF_RVV_CRYPTO_SEW64_OPS(TYPE, REQUIRE) {VECTOR_TYPE_##TYPE, REQUIRE},
@@ -3255,6 +3263,18 @@ static CONSTEXPR const rvv_op_info u_vvs_crypto_sew32_lmul_x16_ops
    Some insns just supports SEW=64, such as the crypto vector Zvbc extension
    vclmul.vv, vclmul.vx.
  * function registration.  */
+static CONSTEXPR const rvv_op_info u_vvv_crypto_sew8_16_32_ops
+  = {crypto_sew8_16_32_ops,		   /* Types */
+     OP_TYPE_vv,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vector), /* Return type */
+     vv_args /* Args */};
+
+static CONSTEXPR const rvv_op_info u_vvx_crypto_sew8_16_32_ops
+  = {crypto_sew8_16_32_ops,		   /* Types */
+     OP_TYPE_vx,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vector), /* Return type */
+     vx_args /* Args */};
+
 static CONSTEXPR const rvv_op_info u_vvv_crypto_sew64_ops
   = {crypto_sew64_ops,			   /* Types */
      OP_TYPE_vv,					   /* Suffix */
@@ -3638,6 +3658,8 @@ get_builtin_partition (required_ext ext, const function_instance &instance)
       return RVV_PARTITION_ZVBB_OR_ZVKB;
     case ZVBC_EXT:
       return RVV_PARTITION_ZVBC;
+    case ZVBC32E_EXT:
+      return RVV_PARTITION_ZVBC32E;
     case ZVKG_EXT:
       return RVV_PARTITION_ZVKG;
     case ZVKNED_EXT:
