@@ -122,6 +122,7 @@ enum required_ext
   ZVBB_EXT,		/* Crypto vector Zvbb sub-ext */
   ZVBB_OR_ZVKB_EXT,	/* Crypto vector Zvbb or zvkb sub-ext */
   ZVBC_EXT,		/* Crypto vector Zvbc sub-ext */
+  ZVBC32E_EXT,		/* Crypto vector Zvbc32e sub-ext */
   ZVKG_EXT,		/* Crypto vector Zvkg sub-ext */
   ZVKNED_EXT,		/* Crypto vector Zvkned sub-ext */
   ZVKNHA_OR_ZVKNHB_EXT, /* Crypto vector Zvknh[ab] sub-ext */
@@ -151,6 +152,7 @@ enum rvv_builtin_partition
   RVV_PARTITION_ZVBB,
   RVV_PARTITION_ZVBB_OR_ZVKB,
   RVV_PARTITION_ZVBC,
+  RVV_PARTITION_ZVBC32E,
   RVV_PARTITION_ZVKG,
   RVV_PARTITION_ZVKNED,
   RVV_PARTITION_ZVKNHA_OR_ZVKNHB,
@@ -196,6 +198,8 @@ static inline const char * required_ext_to_isa_name (enum required_ext required)
       return "zvbb or zvkb";
     case ZVBC_EXT:
       return "zvbc";
+    case ZVBC32E_EXT:
+      return "zvbc32e";
     case ZVKG_EXT:
       return "zvkg";
     case ZVKNED_EXT:
@@ -253,6 +257,8 @@ static inline bool required_extensions_specified (enum required_ext required)
       return TARGET_ZVBB || TARGET_ZVKB;
     case ZVBC_EXT:
       return TARGET_ZVBC;
+    case ZVBC32E_EXT:
+      return TARGET_ZVBC32E;
     case ZVKG_EXT:
       return TARGET_ZVKG;
     case ZVKNED_EXT:
