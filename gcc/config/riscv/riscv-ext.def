@@ -1092,6 +1092,19 @@ DEFINE_RISCV_EXT(
   /* EXTRA_EXTENSION_FLAGS */ 0)
 
 DEFINE_RISCV_EXT(
+  /* NAME */ zvbc32e,
+  /* UPPERCASE_NAME */ ZVBC32E,
+  /* FULL_NAME */ "Vector carry-less multiplication extension for SEW 8, 16 and 32",
+  /* DESC */ "",
+  /* URL */ ,
+  /* DEP_EXTS */ ({"zve32x"}),
+  /* SUPPORTED_VERSIONS */ ({{0, 7}}),
+  /* FLAG_GROUP */ zvb,
+  /* BITMASK_GROUP_ID */ BITMASK_NOT_YET_ALLOCATED,
+  /* BITMASK_BIT_POSITION*/ BITMASK_NOT_YET_ALLOCATED,
+  /* EXTRA_EXTENSION_FLAGS */ 0)
+
+DEFINE_RISCV_EXT(
   /* NAME */ zve32f,
   /* UPPERCASE_NAME */ ZVE32F,
   /* FULL_NAME */ "Vector extensions for embedded processors",
@@ -1232,6 +1245,19 @@ DEFINE_RISCV_EXT(
   /* FLAG_GROUP */ zvk,
   /* BITMASK_GROUP_ID */ 0,
   /* BITMASK_BIT_POSITION*/ 53,
+  /* EXTRA_EXTENSION_FLAGS */ 0)
+
+DEFINE_RISCV_EXT(
+  /* NAME */ zvkgs,
+  /* UPPERCASE_NAME */ ZVKGS,
+  /* FULL_NAME */ "Vector GCM/GMAC scalar element extension",
+  /* DESC */ "",
+  /* URL */ ,
+  /* DEP_EXTS */ ({"zvkg"}),
+  /* SUPPORTED_VERSIONS */ ({{0, 7}}),
+  /* FLAG_GROUP */ zvk,
+  /* BITMASK_GROUP_ID */ BITMASK_NOT_YET_ALLOCATED,
+  /* BITMASK_BIT_POSITION*/ BITMASK_NOT_YET_ALLOCATED,
   /* EXTRA_EXTENSION_FLAGS */ 0)
 
 DEFINE_RISCV_EXT(
