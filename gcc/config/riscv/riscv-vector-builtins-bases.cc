@@ -2309,7 +2309,36 @@ public:
 
   rtx expand (function_expander &e) const override
   {
-    return e.use_exact_insn (code_for_pred_v (UNSPEC, e.vector_mode ()));
+    switch (e.op_info->op)
+    {
+      case OP_TYPE_vv:
+	return e.use_exact_insn (code_for_pred_v (UNSPEC, e.vector_mode ()));
+      case OP_TYPE_vs:
+	{
+	  gcc_assert (UNSPEC == UNSPEC_VGHSH);
+	  poly_uint64 nunits = 0U;
+	  gcc_assert (multiple_p (GET_MODE_BITSIZE (e.arg_mode (0)),
+				  GET_MODE_BITSIZE (e.arg_mode (2)),
+				  &nunits));
+	  if (maybe_eq (nunits, 1U))
+	    return e.use_exact_insn
+		     (code_for_pred_vghsh_vsx1_scalar (e.vector_mode ()));
+	  else if (maybe_eq (nunits, 2U))
+	    return e.use_exact_insn
+		     (code_for_pred_vghsh_vsx2_scalar (e.vector_mode ()));
+	  else if (maybe_eq (nunits, 4U))
+	    return e.use_exact_insn
+		     (code_for_pred_vghsh_vsx4_scalar (e.vector_mode ()));
+	  else if (maybe_eq (nunits, 8U))
+	    return e.use_exact_insn
+		     (code_for_pred_vghsh_vsx8_scalar (e.vector_mode ()));
+	  else
+	    return e.use_exact_insn
+		     (code_for_pred_vghsh_vsx16_scalar (e.vector_mode ()));
+	}
+      default:
+	gcc_unreachable ();
+    }
   }
 };
 
@@ -2338,21 +2367,39 @@ public:
         /* Calculate the ratio between arg0 and arg1*/
         gcc_assert (multiple_p (GET_MODE_BITSIZE (e.arg_mode (0)),
                                 GET_MODE_BITSIZE (e.arg_mode (1)), &nunits));
-        if (maybe_eq (nunits, 1U))
-          return e.use_exact_insn (code_for_pred_crypto_vvx1_scalar
-                                   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
-        else if (maybe_eq (nunits, 2U))
-          return e.use_exact_insn (code_for_pred_crypto_vvx2_scalar
-                                   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
-        else if (maybe_eq (nunits, 4U))
-          return e.use_exact_insn (code_for_pred_crypto_vvx4_scalar
-                                   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
-        else if (maybe_eq (nunits, 8U))
-          return e.use_exact_insn (code_for_pred_crypto_vvx8_scalar
-                                   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
-        else
-          return e.use_exact_insn (code_for_pred_crypto_vvx16_scalar
-                                   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
+	if (UNSPEC == UNSPEC_VGMUL)
+	  {
+	    if (maybe_eq (nunits, 1U))
+	      return e.use_exact_insn
+		       (code_for_pred_vgmul_vsx1_scalar (e.vector_mode ()));
+	    else if (maybe_eq (nunits, 2U))
+	      return e.use_exact_insn
+		       (code_for_pred_vgmul_vsx2_scalar (e.vector_mode ()));
+	    else if (maybe_eq (nunits, 4U))
+	      return e.use_exact_insn
+		       (code_for_pred_vgmul_vsx4_scalar (e.vector_mode ()));
+	    else if (maybe_eq (nunits, 8U))
+	      return e.use_exact_insn
+		       (code_for_pred_vgmul_vsx8_scalar (e.vector_mode ()));
+	    else
+	      return e.use_exact_insn
+		       (code_for_pred_vgmul_vsx16_scalar (e.vector_mode ()));
+	  }
+	if (maybe_eq (nunits, 1U))
+	  return e.use_exact_insn (code_for_pred_crypto_vvx1_scalar
+				   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
+	else if (maybe_eq (nunits, 2U))
+	  return e.use_exact_insn (code_for_pred_crypto_vvx2_scalar
+				   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
+	else if (maybe_eq (nunits, 4U))
+	  return e.use_exact_insn (code_for_pred_crypto_vvx4_scalar
+				   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
+	else if (maybe_eq (nunits, 8U))
+	  return e.use_exact_insn (code_for_pred_crypto_vvx8_scalar
+				   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
+	else
+	  return e.use_exact_insn (code_for_pred_crypto_vvx16_scalar
+				   (UNSPEC + 2, UNSPEC + 2, e.vector_mode ()));
       default:
         gcc_unreachable ();
     }
