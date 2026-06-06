@@ -25,7 +25,9 @@
     UNSPEC_VCLMUL
     UNSPEC_VCLMULH
     UNSPEC_VGHSH
+    UNSPEC_VGHSH_VS
     UNSPEC_VGMUL
+    UNSPEC_VGMUL_VS
     UNSPEC_VAESEF
     UNSPEC_VAESEFVV
     UNSPEC_VAESEFVS
@@ -490,6 +492,103 @@
   [(set_attr "type" "v<vv_ins1_name>")
    (set_attr "mode" "<MODE>")])
 
+;; zvkgs instruction patterns.
+;; vghsh.vs
+(define_insn "@pred_vghsh_vsx1<mode>_scalar"
+  [(set (match_operand:V_VLSI_S 0 "register_operand"    "=&vr")
+     (if_then_else:V_VLSI_S
+       (unspec:<VM>
+         [(match_operand 4 "vector_length_operand" "  rK")
+          (match_operand 5 "const_int_operand"     "   i")
+          (match_operand 6 "const_int_operand"     "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:V_VLSI_S
+          [(match_operand:V_VLSI_S 1 "register_operand" "  0")
+           (match_operand:V_VLSI_S 2 "register_operand" " vr")
+           (match_operand:V_VLSI_S 3 "register_operand" " vr")] UNSPEC_VGHSH_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vghsh.vs\t%0,%2,%3"
+  [(set_attr "type" "vghsh")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "@pred_vghsh_vsx2<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X2> 0 "register_operand"    "=&vr")
+     (if_then_else:<V_VLSI_S_X2>
+       (unspec:<VM>
+         [(match_operand 4 "vector_length_operand" "  rK")
+          (match_operand 5 "const_int_operand"     "   i")
+          (match_operand 6 "const_int_operand"     "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X2>
+          [(match_operand:<V_VLSI_S_X2> 1 "register_operand" "  0")
+           (match_operand:<V_VLSI_S_X2> 2 "register_operand" " vr")
+           (match_operand:V_VLSI_S_LMULX2 3 "register_operand" "vr")] UNSPEC_VGHSH_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vghsh.vs\t%0,%2,%3"
+  [(set_attr "type" "vghsh")
+   (set_attr "mode" "<V_VLSI_S_X2>")])
+
+(define_insn "@pred_vghsh_vsx4<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X4> 0 "register_operand"    "=&vr")
+     (if_then_else:<V_VLSI_S_X4>
+       (unspec:<VM>
+         [(match_operand 4 "vector_length_operand" "  rK")
+          (match_operand 5 "const_int_operand"     "   i")
+          (match_operand 6 "const_int_operand"     "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X4>
+          [(match_operand:<V_VLSI_S_X4> 1 "register_operand" "  0")
+           (match_operand:<V_VLSI_S_X4> 2 "register_operand" " vr")
+           (match_operand:V_VLSI_S_LMULX4 3 "register_operand" "vr")] UNSPEC_VGHSH_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vghsh.vs\t%0,%2,%3"
+  [(set_attr "type" "vghsh")
+   (set_attr "mode" "<V_VLSI_S_X4>")])
+
+(define_insn "@pred_vghsh_vsx8<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X8> 0 "register_operand"    "=&vr")
+     (if_then_else:<V_VLSI_S_X8>
+       (unspec:<VM>
+         [(match_operand 4 "vector_length_operand" "  rK")
+          (match_operand 5 "const_int_operand"     "   i")
+          (match_operand 6 "const_int_operand"     "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X8>
+          [(match_operand:<V_VLSI_S_X8> 1 "register_operand" "  0")
+           (match_operand:<V_VLSI_S_X8> 2 "register_operand" " vr")
+           (match_operand:V_VLSI_S_LMULX8 3 "register_operand" "vr")] UNSPEC_VGHSH_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vghsh.vs\t%0,%2,%3"
+  [(set_attr "type" "vghsh")
+   (set_attr "mode" "<V_VLSI_S_X8>")])
+
+(define_insn "@pred_vghsh_vsx16<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X16> 0 "register_operand"    "=&vr")
+     (if_then_else:<V_VLSI_S_X16>
+       (unspec:<VM>
+         [(match_operand 4 "vector_length_operand" "  rK")
+          (match_operand 5 "const_int_operand"     "   i")
+          (match_operand 6 "const_int_operand"     "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X16>
+          [(match_operand:<V_VLSI_S_X16> 1 "register_operand" "  0")
+           (match_operand:<V_VLSI_S_X16> 2 "register_operand" " vr")
+           (match_operand:V_VLSI_S_LMULX16 3 "register_operand" "vr")] UNSPEC_VGHSH_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vghsh.vs\t%0,%2,%3"
+  [(set_attr "type" "vghsh")
+   (set_attr "mode" "<V_VLSI_S_X16>")])
+
 ;; zvkned and zvksed amd zvkg instructions patterns.
 ;; vgmul.vv       vaesz.vs
 ;; vaesef.[vv,vs] vaesem.[vv,vs] vaesdf.[vv,vs] vaesdm.[vv,vs]
@@ -511,6 +610,98 @@
   "v<vv_ins_name>.<ins_type>\t%0,%2"
   [(set_attr "type" "v<vv_ins_name>")
    (set_attr "mode" "<MODE>")])
+
+;; zvkgs instruction patterns.
+;; vgmul.vs
+(define_insn "@pred_vgmul_vsx1<mode>_scalar"
+  [(set (match_operand:V_VLSI_S 0 "register_operand"    "=&vr")
+     (if_then_else:V_VLSI_S
+       (unspec:<VM>
+         [(match_operand 3 "vector_length_operand" "  rK")
+          (match_operand 4 "const_int_operand"     "   i")
+          (match_operand 5 "const_int_operand"     "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:V_VLSI_S
+         [(match_operand:V_VLSI_S 1 "register_operand" "  0")
+          (match_operand:V_VLSI_S 2 "register_operand" " vr")] UNSPEC_VGMUL_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vgmul.vs\t%0,%2"
+  [(set_attr "type" "vgmul")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "@pred_vgmul_vsx2<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X2> 0 "register_operand" "=&vr")
+     (if_then_else:<V_VLSI_S_X2>
+       (unspec:<VM>
+         [(match_operand 3 "vector_length_operand"  "rK")
+          (match_operand 4 "const_int_operand"      " i")
+          (match_operand 5 "const_int_operand"      " i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X2>
+         [(match_operand:<V_VLSI_S_X2> 1  "register_operand"   " 0")
+          (match_operand:V_VLSI_S_LMULX2 2 "register_operand" "vr")] UNSPEC_VGMUL_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vgmul.vs\t%0,%2"
+  [(set_attr "type" "vgmul")
+   (set_attr "mode" "<V_VLSI_S_X2>")])
+
+(define_insn "@pred_vgmul_vsx4<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X4> 0 "register_operand"      "=&vr")
+     (if_then_else:<V_VLSI_S_X4>
+       (unspec:<VM>
+         [(match_operand 3 "vector_length_operand"       " rK")
+          (match_operand 4 "const_int_operand"           "  i")
+          (match_operand 5 "const_int_operand"           "  i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X4>
+         [(match_operand:<V_VLSI_S_X4> 1 "register_operand"    " 0")
+          (match_operand:V_VLSI_S_LMULX4 2 "register_operand" "vr")] UNSPEC_VGMUL_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vgmul.vs\t%0,%2"
+  [(set_attr "type" "vgmul")
+   (set_attr "mode" "<V_VLSI_S_X4>")])
+
+(define_insn "@pred_vgmul_vsx8<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X8> 0 "register_operand"      "=&vr")
+     (if_then_else:<V_VLSI_S_X8>
+       (unspec:<VM>
+         [(match_operand 3 "vector_length_operand"       " rK")
+          (match_operand 4 "const_int_operand"           "  i")
+          (match_operand 5 "const_int_operand"           "  i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X8>
+         [(match_operand:<V_VLSI_S_X8> 1 "register_operand"    "  0")
+          (match_operand:V_VLSI_S_LMULX8 2 "register_operand" " vr")] UNSPEC_VGMUL_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vgmul.vs\t%0,%2"
+  [(set_attr "type" "vgmul")
+   (set_attr "mode" "<V_VLSI_S_X8>")])
+
+(define_insn "@pred_vgmul_vsx16<mode>_scalar"
+  [(set (match_operand:<V_VLSI_S_X16> 0 "register_operand"      "=&vr")
+     (if_then_else:<V_VLSI_S_X16>
+       (unspec:<VM>
+         [(match_operand 3 "vector_length_operand"        "  rK")
+          (match_operand 4 "const_int_operand"            "   i")
+          (match_operand 5 "const_int_operand"            "   i")
+          (reg:SI VL_REGNUM)
+          (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+       (unspec:<V_VLSI_S_X16>
+         [(match_operand:<V_VLSI_S_X16> 1 "register_operand"    "   0")
+          (match_operand:V_VLSI_S_LMULX16 2 "register_operand" "  vr")] UNSPEC_VGMUL_VS)
+       (match_dup 1)))]
+  "TARGET_ZVKGS"
+  "vgmul.vs\t%0,%2"
+  [(set_attr "type" "vgmul")
+   (set_attr "mode" "<V_VLSI_S_X16>")])
 
 (define_insn "@pred_crypto_vv<vv_ins_name><ins_type>x1<mode>_scalar"
   [(set (match_operand:V_VLSI_S 0 "register_operand"    "=&vr")

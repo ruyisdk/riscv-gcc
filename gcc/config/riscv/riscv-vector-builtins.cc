@@ -3205,6 +3205,26 @@ static CONSTEXPR const rvv_arg_type_info vs_lmul_x16_args[]
   = {rvv_arg_type_info (RVV_BASE_vlmul_ext_x16),
      rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info_end};
 
+static CONSTEXPR const rvv_arg_type_info vvs_lmul_x2_args[]
+  = {rvv_arg_type_info (RVV_BASE_vlmul_ext_x2),
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x2),
+     rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info vvs_lmul_x4_args[]
+  = {rvv_arg_type_info (RVV_BASE_vlmul_ext_x4),
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x4),
+     rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info vvs_lmul_x8_args[]
+  = {rvv_arg_type_info (RVV_BASE_vlmul_ext_x8),
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x8),
+     rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info vvs_lmul_x16_args[]
+  = {rvv_arg_type_info (RVV_BASE_vlmul_ext_x16),
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x16),
+     rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info_end};
+
 static CONSTEXPR const rvv_op_info u_vvv_crypto_sew32_ops
   = {crypto_sew32_ops,			   /* Types */
      OP_TYPE_vv,					   /* Suffix */
@@ -3216,6 +3236,36 @@ static CONSTEXPR const rvv_op_info u_vvvv_crypto_sew32_ops
      OP_TYPE_vv,					   /* Suffix */
      rvv_arg_type_info (RVV_BASE_vector), /* Return type */
      vvv_args /* Args */};
+
+static CONSTEXPR const rvv_op_info u_vvvs_crypto_sew32_ops
+  = {crypto_sew32_ops,			   /* Types */
+     OP_TYPE_vs,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vector), /* Return type */
+     vvv_args /* Args */};
+
+static CONSTEXPR const rvv_op_info u_vvvs_crypto_sew32_lmul_x2_ops
+  = {crypto_sew32_ops,			   /* Types */
+     OP_TYPE_vs,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x2), /* Return type */
+     vvs_lmul_x2_args /* Args */};
+
+static CONSTEXPR const rvv_op_info u_vvvs_crypto_sew32_lmul_x4_ops
+  = {crypto_sew32_ops,			   /* Types */
+     OP_TYPE_vs,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x4), /* Return type */
+     vvs_lmul_x4_args /* Args */};
+
+static CONSTEXPR const rvv_op_info u_vvvs_crypto_sew32_lmul_x8_ops
+  = {crypto_sew32_ops,			   /* Types */
+     OP_TYPE_vs,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x8), /* Return type */
+     vvs_lmul_x8_args /* Args */};
+
+static CONSTEXPR const rvv_op_info u_vvvs_crypto_sew32_lmul_x16_ops
+  = {crypto_sew32_ops,			   /* Types */
+     OP_TYPE_vs,					   /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x16), /* Return type */
+     vvs_lmul_x16_args /* Args */};
 
 static CONSTEXPR const rvv_op_info u_vvv_size_crypto_sew32_ops
   = {crypto_sew32_ops,			   /* Types */
@@ -3662,6 +3712,8 @@ get_builtin_partition (required_ext ext, const function_instance &instance)
       return RVV_PARTITION_ZVBC32E;
     case ZVKG_EXT:
       return RVV_PARTITION_ZVKG;
+    case ZVKGS_EXT:
+      return RVV_PARTITION_ZVKGS;
     case ZVKNED_EXT:
       return RVV_PARTITION_ZVKNED;
     case ZVKNHA_OR_ZVKNHB_EXT:
