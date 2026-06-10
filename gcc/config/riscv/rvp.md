@@ -182,6 +182,22 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+;; MACC.W00/MACCU.W00: Widening multiply-accumulate (bottom x bottom)
+;; MACC.W00:  rd = rd + sext(rs1[31:0]) * sext(rs2[31:0])
+;; MACCU.W00: rd = rd + zext(rs1[31:0]) * zext(rs2[31:0])
+;; Pattern name with * to work alongside the [u]maddsidi4 expander below
+(define_insn "*rvp_<u>macc_w00"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (any_extend:DI
+			    (match_operand:SI 1 "register_operand" "r"))
+			  (any_extend:DI
+			    (match_operand:SI 2 "register_operand" "r")))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "macc<u>.w00\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
+
 ;; MACC.H01/MACCU.H01: Multiply-accumulate (bottom x top)
 ;; MACC.H01:  rd = rd + sext(rs1[15:0]) * sext(rs2[31:16])
 ;; MACCU.H01: rd = rd + zext(rs1[15:0]) * zext(rs2[31:16])
@@ -200,6 +216,24 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+;; MACC.W01/MACCU.W01: Multiply-accumulate (bottom x top)
+;; MACC.W01:  rd = rd + sext(rs1[31:0]) * sext(rs2[63:32])
+;; MACCU.W01: rd = rd + zext(rs1[31:0]) * zext(rs2[63:32])
+;; Note: W10 (top x bottom) can be achieved by swapping operands.
+;; GCC canonicalizes to [u]maddsidi4tb (top x bottom in RTL order).
+(define_insn "<u>macc_w01"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (<su_shiftrt>:DI
+			    (match_operand:DI 1 "register_operand" "r")
+			    (const_int 32))
+			  (any_extend:DI
+			    (match_operand:SI 2 "register_operand" "r")))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "macc<u>.w01\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
+
 ;; MACC.H11/MACCU.H11: Multiply-accumulate (top x top)
 ;; MACC.H11:  rd = rd + sext(rs1[31:16]) * sext(rs2[31:16])
 ;; MACCU.H11: rd = rd + zext(rs1[31:16]) * zext(rs2[31:16])
@@ -216,6 +250,23 @@
   "macc<shiftrt_su>.h11\t%0,%1,%2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
+
+;; MACC.W11/MACCU.W11: Multiply-accumulate (top x top)
+;; MACC.W11:  rd = rd + sext(rs1[63:32]) * sext(rs2[63:32])
+;; MACCU.W11: rd = rd + zext(rs1[63:32]) * zext(rs2[63:32])
+(define_insn "<shiftrt_su>macc_w11"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (any_shiftrt:DI
+			    (match_operand:DI 1 "register_operand" "r")
+			    (const_int 32))
+			  (any_shiftrt:DI
+			    (match_operand:DI 2 "register_operand" "r")
+			    (const_int 32)))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "macc<shiftrt_su>.w11\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
 
 ;; usmulhisi3: Unsigned x Signed widening multiply (halfword -> word)
 ;; Standard pattern name from GCC internals.
@@ -1719,7 +1770,16 @@
 ;;==========================================================================
 ;; rd = rd + <u>signed(X[rs1]) * <u>signed(X[rs2])
 
-(define_insn "<u>maddsidi4"
+(define_expand "<u>maddsidi4"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+         (plus:DI
+          (mult:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                   (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
+          (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP"
+)
+
+(define_insn "*rvp_widen_<u>maddsidi4"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (plus:DI
           (mult:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
