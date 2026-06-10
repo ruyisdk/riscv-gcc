@@ -76,12 +76,32 @@
 ;;   - Saturating unsigned: psaddu.b/h/w, pssubu.b/h/w
 ;;   - Min/max signed: pmin.b/h/w, pmax.b/h/w
 ;;   - Min/max unsigned: pminu.b/h/w, pmaxu.b/h/w
+
+;; Single-register pattern for 4-byte vectors (RV32/RV64)
+;; Standard pattern name for optab lookup
 (define_insn "<rvp_optab><mode>3"
-  [(set (match_operand:PVALL 0 "register_operand" "=r")
-	(rvp_binop:PVALL (match_operand:PVALL 1 "register_operand" "r")
-			 (match_operand:PVALL 2 "register_operand" "r")))]
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(rvp_binop:PV32 (match_operand:PV32 1 "register_operand" "r")
+			(match_operand:PV32 2 "register_operand" "r")))]
   "TARGET_RVP"
   "<rvp_insn>.<rvp_width>\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte vectors: RV64 single register, RV32 register pair
+;; riscv_hard_regno_mode_ok rejects odd base registers for 8-byte modes on
+;; RVP+RV32, so "r" is sufficient; no separate register-pair constraint needed.
+(define_insn "<rvp_optab><mode>3"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(rvp_binop:PV64 (match_operand:PV64 1 "register_operand" " r")
+			(match_operand:PV64 2 "register_operand" " r")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "<rvp_insn>.<rvp_width>\t%0, %1, %2";
+    else
+      return "<rvp_insn>.<rvp_dwidth>\t%0, %1, %2";
+  }
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -1001,6 +1021,195 @@
           (const_int 10)))]
   "TARGET_RVP && TARGET_64BIT"
   "ppairo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; ============================================================================
+;; RV32 Register-Pair Shuffle Instructions (PV4HI/PV8QI modes)
+;; ============================================================================
+;; These patterns match shuffles on 8-byte vectors in RV32, where vectors are
+;; held in register pairs.  The "r" constraint is sufficient here because
+;; riscv_hard_regno_mode_ok already rejects odd base registers for 8-byte
+;; modes when TARGET_RVP && !TARGET_64BIT.
+;;
+;; The P-extension spec (v0.19) defines double-wide suffixes for RV32:
+;;   - PPAIRE.DH / PPAIREO.DH / PPAIROE.DH / PPAIRO.DH for PV4HI (halfwords)
+;;   - PPAIRE.DB / PPAIREO.DB / PPAIROE.DB / PPAIRO.DB for PV8QI (bytes)
+;;
+;; Note: .DW (word) shuffle instructions are NOT defined in the spec for RV32,
+;;       as PV2SI shuffles fall back to basic move/pack instructions.
+;;
+;; The .DH/.DB suffixes differentiate from RV64 single-register instructions
+;; which use .H/.B suffixes without the "D" (double-wide) prefix.
+;;
+;; Implementation note: We cannot use mode iterators to combine PV4HI and PV8QI
+;; patterns because the parallel expressions have different lengths (4 vs 8 elements).
+
+;; PPAIRE.DH (RV32): pair even halfwords from register pairs
+;; Result: rd[0]=rs1[0], rd[1]=rs2[0], rd[2]=rs1[2], rd[3]=rs2[2]
+;; vec_select on rs1: {0, 0, 2, 2}, on rs2: {0, 0, 2, 2}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppaireh_mergepv4hi_rv32"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)]))
+	  (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)]))
+	  (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppaire.dh\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIREO.DH (RV32): pair even from rs1, odd from rs2 (register pairs)
+;; Result: rd[0]=rs1[0], rd[1]=rs2[1], rd[2]=rs1[2], rd[3]=rs2[3]
+;; vec_select on rs1: {0, 0, 2, 2}, on rs2: {1, 1, 3, 3}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppaireoh_mergepv4hi_rv32"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)]))
+	  (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)]))
+	  (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppaireo.dh\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIROE.DH (RV32): pair odd from rs1, even from rs2 (register pairs)
+;; Result: rd[0]=rs1[1], rd[1]=rs2[0], rd[2]=rs1[3], rd[3]=rs2[2]
+;; vec_select on rs1: {1, 1, 3, 3}, on rs2: {0, 0, 2, 2}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppairoeh_mergepv4hi_rv32"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)]))
+	  (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)]))
+	  (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppairoe.dh\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIRO.DH (RV32): pair odd halfwords from register pairs
+;; Result: rd[0]=rs1[1], rd[1]=rs2[1], rd[2]=rs1[3], rd[3]=rs2[3]
+;; vec_select on rs1: {1, 1, 3, 3}, on rs2: {1, 1, 3, 3}
+;; vec_merge with mask 0b1010 selects alternating elements
+(define_insn "*ppairoh_mergepv4hi_rv32"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI (match_operand:PV4HI 2 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)]))
+	  (vec_select:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)]))
+	  (const_int 10)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppairo.dh\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIRE.DB (RV32): pair even bytes from register pairs
+;; Result: rd[0]=rs1[0], rd[1]=rs2[0], rd[2]=rs1[2], rd[3]=rs2[2],
+;;         rd[4]=rs1[4], rd[5]=rs2[4], rd[6]=rs1[6], rd[7]=rs2[6]
+;; vec_select on both: {0, 0, 2, 2, 4, 4, 6, 6}
+;; vec_merge with mask 0b10101010 selects alternating elements
+(define_insn "*ppaireb_mergepv8qi_rv32"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_merge:PV8QI
+	  (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)
+				       (const_int 4) (const_int 4)
+				       (const_int 6) (const_int 6)]))
+	  (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)
+				       (const_int 4) (const_int 4)
+				       (const_int 6) (const_int 6)]))
+	  (const_int 170)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppaire.db\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIREO.DB (RV32): pair even bytes from rs1, odd from rs2 (register pairs)
+;; Result: rd[0]=rs1[0], rd[1]=rs2[1], rd[2]=rs1[2], rd[3]=rs2[3],
+;;         rd[4]=rs1[4], rd[5]=rs2[5], rd[6]=rs1[6], rd[7]=rs2[7]
+(define_insn "*ppaireob_mergepv8qi_rv32"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_merge:PV8QI
+	  (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)
+				       (const_int 5) (const_int 5)
+				       (const_int 7) (const_int 7)]))
+	  (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)
+				       (const_int 4) (const_int 4)
+				       (const_int 6) (const_int 6)]))
+	  (const_int 170)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppaireo.db\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIROE.DB (RV32): pair odd bytes from rs1, even from rs2 (register pairs)
+;; Result: rd[0]=rs1[1], rd[1]=rs2[0], rd[2]=rs1[3], rd[3]=rs2[2],
+;;         rd[4]=rs1[5], rd[5]=rs2[4], rd[6]=rs1[7], rd[7]=rs2[6]
+(define_insn "*ppairoeb_mergepv8qi_rv32"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_merge:PV8QI
+	  (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+			    (parallel [(const_int 0) (const_int 0)
+				       (const_int 2) (const_int 2)
+				       (const_int 4) (const_int 4)
+				       (const_int 6) (const_int 6)]))
+	  (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)
+				       (const_int 5) (const_int 5)
+				       (const_int 7) (const_int 7)]))
+	  (const_int 170)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppairoe.db\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PPAIRO.DB (RV32): pair odd bytes from both register pairs
+;; Result: rd[0]=rs1[1], rd[1]=rs2[1], rd[2]=rs1[3], rd[3]=rs2[3],
+;;         rd[4]=rs1[5], rd[5]=rs2[5], rd[6]=rs1[7], rd[7]=rs2[7]
+;; vec_select on both: {1, 1, 3, 3, 5, 5, 7, 7}
+;; vec_merge with mask 0b10101010 selects alternating elements
+(define_insn "*ppairob_mergepv8qi_rv32"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_merge:PV8QI
+	  (vec_select:PV8QI (match_operand:PV8QI 2 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)
+				       (const_int 5) (const_int 5)
+				       (const_int 7) (const_int 7)]))
+	  (vec_select:PV8QI (match_operand:PV8QI 1 "register_operand" "r")
+			    (parallel [(const_int 1) (const_int 1)
+				       (const_int 3) (const_int 3)
+				       (const_int 5) (const_int 5)
+				       (const_int 7) (const_int 7)]))
+	  (const_int 170)))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "ppairo.db\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 

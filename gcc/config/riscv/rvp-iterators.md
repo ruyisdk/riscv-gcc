@@ -56,6 +56,7 @@
 
 ;; PV64: All 8-byte packed vectors
 ;; Supported on RV64 (single register) and RV32 (register pairs)
+;; RV32 uses PADD.DB/DH/DW and PMV.DBS/DHS/DWS instructions
 (define_mode_iterator PV64 [PV8QI PV4HI PV2SI])
 
 ;; PV64QH: 8-byte packed vectors with byte/halfword elements only
@@ -91,7 +92,7 @@
 (define_mode_attr rvp_width [(PV8QI "b") (PV4QI "b") (QI "b") (PV4HI "h") (PV2HI "h")
 			     (HI "h") (PV2SI "w")])
 
-;; Element width suffix for RV32 register-pair instructions (PMV.DxS)
+;; Element width suffix for RV32 register-pair instructions (PMV.DxS, PADD.DB/DH/DW)
 (define_mode_attr rvp_dwidth [(PV8QI "db") (PV4HI "dh") (PV2SI "dw")])
 
 ;; Element width suffix for RV32 register-pari instruction to extend
