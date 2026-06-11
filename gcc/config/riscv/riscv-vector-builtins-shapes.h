@@ -33,6 +33,8 @@ extern const function_shape *const th_indexed_loadstore_width;
 extern const function_shape *const alu;
 extern const function_shape *const alu_frm;
 extern const function_shape *const zvdota;
+extern const function_shape *const zvbdota;
+extern const function_shape *const zvbdota_frm;
 extern const function_shape *const widen_alu;
 extern const function_shape *const widen_alu_frm;
 extern const function_shape *const no_mask_policy;

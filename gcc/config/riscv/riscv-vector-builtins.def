@@ -787,6 +787,38 @@ DEF_RVV_BASE_TYPE (vlmul_ext_x64, get_vector_type (type_idx))
 DEF_RVV_BASE_TYPE (zvdota_acc, get_vector_type (type_idx))
 DEF_RVV_BASE_TYPE (zvdota_uacc, get_vector_type (type_idx))
 DEF_RVV_BASE_TYPE (zvdota_f32_acc, get_vector_type (type_idx))
+DEF_RVV_BASE_TYPE (zvbdota_i8_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_u8_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_i8_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_u8_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_i16_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_u16_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_i16_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_u16_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_bf16_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_bf16_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_f8e4m3_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_f8e4m3_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_f8e5m2_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_f8e5m2_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_f32_group,
+		   builtin_types[get_function_type_index (type_idx)].vector)
+DEF_RVV_BASE_TYPE (zvbdota_f32_src,
+		   builtin_types[get_function_type_index (type_idx)].vector)
 DEF_RVV_BASE_TYPE (fp8e4m3_vector, get_vector_type (type_idx))
 DEF_RVV_BASE_TYPE (fp8e5m2_vector, get_vector_type (type_idx))
 DEF_RVV_BASE_TYPE (size_ptr, build_pointer_type (size_type_node))
