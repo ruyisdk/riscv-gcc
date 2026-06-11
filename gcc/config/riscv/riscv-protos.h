@@ -646,6 +646,16 @@ enum mask_policy
   MASK_ANY = 2,
 };
 
+/* Values for the VTYPE altfmt field.  Instructions that do not care about
+   altfmt leave the "altfmt" insn attribute at its default (INVALID_ATTRIBUTE);
+   Some dot-product instructions select their vs1 interpretation by setting
+   the attribute via an operand.  */
+enum altfmt_type
+{
+  ALTFMT_NONE = 0,
+  ALTFMT_ALT = 1,
+};
+
 /* Return true if VALUE is agnostic or any policy.  */
 #define IS_AGNOSTIC(VALUE) (bool) (VALUE & 0x1 || (VALUE >> 1 & 0x1))
 
