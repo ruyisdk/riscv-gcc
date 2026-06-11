@@ -462,6 +462,73 @@ struct zvdota_def : public build_base
   }
 };
 
+/* zvbdota_def class.  */
+struct zvbdota_def : public build_base
+{
+  char *get_name (function_builder &b, const function_instance &instance,
+		  bool overloaded_p) const override
+  {
+    char base_name[BASE_NAME_MAX_LEN] = {};
+
+    /* Return nullptr if it can not be overloaded.  */
+    if (overloaded_p && !instance.base->can_be_overloaded_p (instance.pred))
+      return nullptr;
+
+    strncpy (base_name, instance.base_name, sizeof (base_name) - 1);
+    char *frm_suffix = strstr (base_name, "_frm");
+    if (frm_suffix)
+      *frm_suffix = '\0';
+
+    b.append_base_name (base_name);
+
+    if (!overloaded_p)
+      {
+	vector_type_index ret_type_idx
+	  = instance.op_info->ret.get_function_type_index (
+	    instance.type.index);
+
+	b.append_name (operand_suffixes[instance.op_info->op]);
+	if (strcmp (base_name, "vfbdota") != 0)
+	  {
+	    vector_type_index vs2_type_idx
+	      = instance.op_info->args[1].get_function_type_index (
+		instance.type.index);
+	    vector_type_index vs1_type_idx
+	      = instance.op_info->args[2].get_function_type_index (
+		instance.type.index);
+
+	    b.append_name (type_suffixes[vs2_type_idx].vector);
+	    b.append_name (type_suffixes[vs1_type_idx].vector);
+	  }
+	b.append_name (type_suffixes[ret_type_idx].vector);
+
+	if (frm_suffix)
+	  b.append_name ("_rm");
+      }
+
+    if (overloaded_p && instance.pred == PRED_TYPE_m)
+      return b.finish_name ();
+    b.append_name (predication_suffixes[instance.pred]);
+    return b.finish_name ();
+  }
+
+  bool check (function_checker &c) const override
+  {
+    bool ok = true;
+    unsigned int ci_argno
+      = c.arg_num () - (c.base->has_rounding_mode_operand_p () ? 3 : 2);
+
+    if (ci_argno < c.arg_num ())
+      ok &= c.require_zvbdota_ci (ci_argno);
+
+    if (c.base->has_rounding_mode_operand_p () && c.arg_num () >= 2)
+      ok &= c.require_immediate (c.arg_num () - 2, FRM_STATIC_MIN,
+				 FRM_STATIC_MAX);
+
+    return ok;
+  }
+};
+
 /* The base class for frm build.  */
 struct build_frm_base : public build_base
 {
@@ -1495,6 +1562,8 @@ SHAPE(crypto_vvv, crypto_vvv)
 SHAPE(crypto_vi, crypto_vi)
 SHAPE(crypto_vv_no_op_type, crypto_vv_no_op_type)
 SHAPE(zvdota, zvdota)
+SHAPE(zvbdota, zvbdota)
+SHAPE(zvbdota, zvbdota_frm)
 SHAPE (sf_vqmacc, sf_vqmacc)
 SHAPE (sf_vfnrclip, sf_vfnrclip)
 SHAPE(sf_vcix_se, sf_vcix_se)
