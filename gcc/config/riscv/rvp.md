@@ -105,16 +105,42 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
-;; Vector shift instructions by scalar amount (operand 2 is scalar SI)
+;; 4-byte packed vector shift (PV4QI/PV2HI, RV32 and RV64)
 (define_insn "<rvp_shift_optab><mode>3"
-  [(set (match_operand:PVALL 0 "register_operand" "=r, r")
-        (shift_op:PVALL
-          (match_operand:PVALL 1 "register_operand" "r, r")
-          (match_operand:SI 2 "reg_or_int_operand" "r, I")))]
+  [(set (match_operand:PV32 0 "register_operand" "=r, r")
+	(shift_op:PV32
+	  (match_operand:PV32 1 "register_operand" "r, r")
+	  (match_operand:SI 2 "reg_or_int_operand" "r, I")))]
   "TARGET_RVP"
   "@
    <rvp_shift_insn>.<rvp_width>s\t%0,%1,%2
    <rvp_shift_insn>i.<rvp_width>\t%0,%1,%2"
+  [(set_attr "type" "shift")
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte packed vector shift: RV64 single register, RV32 register pair
+(define_insn "<rvp_shift_optab><mode>3"
+  [(set (match_operand:PV64 0 "register_operand" "=r, r")
+	(shift_op:PV64
+	  (match_operand:PV64 1 "register_operand" "r, r")
+	  (match_operand:SI 2 "reg_or_int_operand" "r, I")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      {
+	if (which_alternative == 0)
+	  return "<rvp_shift_insn>.<rvp_width>s\t%0,%1,%2";
+	else
+	  return "<rvp_shift_insn>i.<rvp_width>\t%0,%1,%2";
+      }
+    else
+      {
+	if (which_alternative == 0)
+	  return "<rvp_shift_insn>.<rvp_dwidth>s\t%0,%1,%2";
+	else
+	  return "<rvp_shift_insn>i.<rvp_dwidth>\t%0,%1,%2";
+      }
+  }
   [(set_attr "type" "shift")
    (set_attr "mode" "<MODE>")])
 
