@@ -24,6 +24,15 @@
   (PV2HI "!TARGET_64BIT") (PV4HI "TARGET_64BIT")
   (PV2SI "TARGET_64BIT")])
 
+;; PVHIW: 4-byte packed halfword mode (PV2HI only, always supported).
+;; Used for instructions whose 4-byte halfword form exists on both RV32 and RV64.
+(define_mode_iterator PVHIW [PV2HI])
+
+;; PVHW: 8-byte packed halfword and word modes (PV4HI + PV2SI).
+;; Single register on RV64; register pair on RV32.
+;; Used for instructions that have distinct DB/DH/DW (RV32) and B/H/W (RV64) forms.
+(define_mode_iterator PVHW [PV4HI PV2SI])
+
 ;; Element mode for PLI/PLUI vec_duplicate
 (define_mode_attr PVALL_ELT [
   (PV4QI "QI") (PV8QI "QI")

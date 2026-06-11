@@ -1877,3 +1877,45 @@
   "psext.w.b\t%0, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
+
+;; =========================================================================
+;; PSH1ADD.H/W/DH/DW: Packed Shift-left-by-1 and Add
+;; =========================================================================
+;; psh1add.h  rd, rs1, rs2: rd[i] = (rs1[i] << 1) + rs2[i]  (16-bit, PV2HI)
+;; psh1add.h  rd, rs1, rs2: rd[i] = (rs1[i] << 1) + rs2[i]  (16-bit, PV4HI, RV64)
+;; psh1add.dh rd, rs1, rs2: rd[i] = (rs1[i] << 1) + rs2[i]  (16-bit, PV4HI, RV32)
+;; psh1add.w  rd, rs1, rs2: rd[i] = (rs1[i] << 1) + rs2[i]  (32-bit, PV2SI, RV64)
+;; psh1add.dw rd, rs1, rs2: rd[i] = (rs1[i] << 1) + rs2[i]  (32-bit, PV2SI, RV32)
+;;
+;; RTL: (plus (ashift rs1 1) rs2)
+
+;; 4-byte halfword: PV2HI, single register on both RV32 and RV64
+(define_insn "*psh1add<mode>3"
+  [(set (match_operand:PVHIW 0 "register_operand" "=r")
+	(plus:PVHIW
+	  (ashift:PVHIW (match_operand:PVHIW 1 "register_operand" "r")
+			(const_int 1))
+	  (match_operand:PVHIW 2 "register_operand" "r")))]
+  "TARGET_RVP"
+  "psh1add.<rvp_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte halfword/word: PV4HI and PV2SI
+;; RV64: single register, uses B/H/W suffix
+;; RV32: register pair, uses DH/DW suffix
+(define_insn "*psh1add<mode>3"
+  [(set (match_operand:PVHW 0 "register_operand" "=r")
+	(plus:PVHW
+	  (ashift:PVHW (match_operand:PVHW 1 "register_operand" "r")
+		       (const_int 1))
+	  (match_operand:PVHW 2 "register_operand" "r")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "psh1add.<rvp_width>\t%0,%1,%2";
+    else
+      return "psh1add.<rvp_dwidth>\t%0,%1,%2";
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
