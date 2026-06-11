@@ -2462,6 +2462,113 @@ public:
   }
 };
 
+static unsigned
+zvdota_vs2_argno (const function_expander &e)
+{
+  return e.pred == PRED_TYPE_m || e.pred == PRED_TYPE_tum ? 2 : 1;
+}
+
+static unsigned
+zvdota_int_altfmt (const function_expander &e)
+{
+  return e.op_info->args[2].base_type == RVV_BASE_unsigned_vector
+	   ? ALTFMT_NONE
+	   : ALTFMT_ALT;
+}
+
+static unsigned
+zvdota_fp8_altfmt (const function_expander &e)
+{
+  return e.op_info->args[2].base_type == RVV_BASE_fp8e5m2_vector
+	   ? ALTFMT_ALT
+	   : ALTFMT_NONE;
+}
+
+static bool
+zvdota_unsigned_vs2_p (vector_type_index type_idx)
+{
+  switch (type_idx)
+    {
+    case VECTOR_TYPE_vuint8mf8_t:
+    case VECTOR_TYPE_vuint8mf4_t:
+    case VECTOR_TYPE_vuint8mf2_t:
+    case VECTOR_TYPE_vuint8m1_t:
+    case VECTOR_TYPE_vuint8m2_t:
+    case VECTOR_TYPE_vuint8m4_t:
+    case VECTOR_TYPE_vuint8m8_t:
+    case VECTOR_TYPE_vuint16mf4_t:
+    case VECTOR_TYPE_vuint16mf2_t:
+    case VECTOR_TYPE_vuint16m1_t:
+    case VECTOR_TYPE_vuint16m2_t:
+    case VECTOR_TYPE_vuint16m4_t:
+    case VECTOR_TYPE_vuint16m8_t:
+      return true;
+    default:
+      return false;
+    }
+}
+
+static bool
+zvdota_e5m2_vs2_p (vector_type_index type_idx)
+{
+  switch (type_idx)
+    {
+    case VECTOR_TYPE_vfloat8e5m2mf8_t:
+    case VECTOR_TYPE_vfloat8e5m2mf4_t:
+    case VECTOR_TYPE_vfloat8e5m2mf2_t:
+    case VECTOR_TYPE_vfloat8e5m2m1_t:
+    case VECTOR_TYPE_vfloat8e5m2m2_t:
+    case VECTOR_TYPE_vfloat8e5m2m4_t:
+    case VECTOR_TYPE_vfloat8e5m2m8_t:
+      return true;
+    default:
+      return false;
+    }
+}
+
+class vqwdota : public function_base
+{
+public:
+  bool has_merge_operand_p () const override { return false; }
+
+  rtx expand (function_expander &e) const override
+  {
+    machine_mode mode = e.arg_mode (zvdota_vs2_argno (e));
+    int unspec = zvdota_unsigned_vs2_p (e.type.index) ? UNSPEC_VQWDOTAU
+						       : UNSPEC_VQWDOTAS;
+    return e.use_zvdota_insn (
+      code_for_pred_vv_zvdota (unspec, mode), zvdota_int_altfmt (e));
+  }
+};
+
+class vfwdota : public function_base
+{
+public:
+  bool has_merge_operand_p () const override { return false; }
+
+  rtx expand (function_expander &e) const override
+  {
+    return e.use_zvdota_insn (
+      code_for_pred_vfwdota_vv_zvdota (e.arg_mode (zvdota_vs2_argno (e))),
+      ALTFMT_ALT);
+  }
+};
+
+class vfqwdota : public function_base
+{
+public:
+  bool has_merge_operand_p () const override { return false; }
+
+  rtx expand (function_expander &e) const override
+  {
+    machine_mode mode = e.arg_mode (zvdota_vs2_argno (e));
+    int unspec = zvdota_e5m2_vs2_p (e.type.index) ? UNSPEC_VFQWDOTA_ALT
+						  : UNSPEC_VFQWDOTA;
+    return e.use_zvdota_insn (
+      code_for_pred_vv_zvdota (unspec, mode), zvdota_fp8_altfmt (e));
+  }
+};
+
 static CONSTEXPR const vsetvl<false> vsetvl_obj;
 static CONSTEXPR const vsetvl<true> vsetvlmax_obj;
 static CONSTEXPR const loadstore<false, LST_UNIT_STRIDE, false> vle_obj;
@@ -2786,6 +2893,10 @@ static CONSTEXPR const vfwcvtbf16_f vfwcvtbf16_f_obj;
 /* Zvfbfwma; */
 static CONSTEXPR const vfwmaccbf16<NO_FRM> vfwmaccbf16_obj;
 static CONSTEXPR const vfwmaccbf16<HAS_FRM> vfwmaccbf16_frm_obj;
+/* Zvdota.  */
+static CONSTEXPR const vqwdota vqwdota_obj;
+static CONSTEXPR const vfwdota vfwdota_obj;
+static CONSTEXPR const vfqwdota vfqwdota_obj;
 
 /* Declare the function base NAME, pointing it to an instance
    of class <NAME>_obj.  */
@@ -3114,4 +3225,8 @@ BASE (vfwcvtbf16_f)
 /* Zvfbfwma */
 BASE (vfwmaccbf16)
 BASE (vfwmaccbf16_frm)
+/* Zvdota */
+BASE (vqwdota)
+BASE (vfwdota)
+BASE (vfqwdota)
 } // end namespace riscv_vector
