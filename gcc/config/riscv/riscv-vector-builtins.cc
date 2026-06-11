@@ -598,6 +598,74 @@ static const rvv_type_info f16_ops[] = {
 #include "riscv-vector-builtins-types.def"
   {NUM_VECTOR_TYPES, 0}};
 
+static const rvv_type_info zvqwdota8i_i_ops[] = {
+  {VECTOR_TYPE_vint8mf8_t, RVV_REQUIRE_ELEN_64},
+  {VECTOR_TYPE_vint8mf4_t, 0},
+  {VECTOR_TYPE_vint8mf2_t, 0},
+  {VECTOR_TYPE_vint8m1_t, 0},
+  {VECTOR_TYPE_vint8m2_t, 0},
+  {VECTOR_TYPE_vint8m4_t, 0},
+  {VECTOR_TYPE_vint8m8_t, 0},
+  {NUM_VECTOR_TYPES, 0}};
+
+static const rvv_type_info zvqwdota8i_u_ops[] = {
+  {VECTOR_TYPE_vuint8mf8_t, RVV_REQUIRE_ELEN_64},
+  {VECTOR_TYPE_vuint8mf4_t, 0},
+  {VECTOR_TYPE_vuint8mf2_t, 0},
+  {VECTOR_TYPE_vuint8m1_t, 0},
+  {VECTOR_TYPE_vuint8m2_t, 0},
+  {VECTOR_TYPE_vuint8m4_t, 0},
+  {VECTOR_TYPE_vuint8m8_t, 0},
+  {NUM_VECTOR_TYPES, 0}};
+
+static const rvv_type_info zvqwdota16i_i_ops[] = {
+  {VECTOR_TYPE_vint16mf4_t, RVV_REQUIRE_ELEN_64},
+  {VECTOR_TYPE_vint16mf2_t, 0},
+  {VECTOR_TYPE_vint16m1_t, 0},
+  {VECTOR_TYPE_vint16m2_t, 0},
+  {VECTOR_TYPE_vint16m4_t, 0},
+  {VECTOR_TYPE_vint16m8_t, 0},
+  {NUM_VECTOR_TYPES, 0}};
+
+static const rvv_type_info zvqwdota16i_u_ops[] = {
+  {VECTOR_TYPE_vuint16mf4_t, RVV_REQUIRE_ELEN_64},
+  {VECTOR_TYPE_vuint16mf2_t, 0},
+  {VECTOR_TYPE_vuint16m1_t, 0},
+  {VECTOR_TYPE_vuint16m2_t, 0},
+  {VECTOR_TYPE_vuint16m4_t, 0},
+  {VECTOR_TYPE_vuint16m8_t, 0},
+  {NUM_VECTOR_TYPES, 0}};
+
+static const rvv_type_info zvfwdota16bf_ops[] = {
+  {VECTOR_TYPE_vbfloat16mf4_t,
+   RVV_REQUIRE_ELEN_BF_16 | RVV_REQUIRE_MIN_VLEN_64},
+  {VECTOR_TYPE_vbfloat16mf2_t, RVV_REQUIRE_ELEN_BF_16},
+  {VECTOR_TYPE_vbfloat16m1_t, RVV_REQUIRE_ELEN_BF_16},
+  {VECTOR_TYPE_vbfloat16m2_t, RVV_REQUIRE_ELEN_BF_16},
+  {VECTOR_TYPE_vbfloat16m4_t, RVV_REQUIRE_ELEN_BF_16},
+  {VECTOR_TYPE_vbfloat16m8_t, RVV_REQUIRE_ELEN_BF_16},
+  {NUM_VECTOR_TYPES, 0}};
+
+static const rvv_type_info zvfqwdota8f_e4m3_ops[] = {
+  {VECTOR_TYPE_vfloat8e4m3mf8_t, RVV_REQUIRE_ELEN_64},
+  {VECTOR_TYPE_vfloat8e4m3mf4_t, 0},
+  {VECTOR_TYPE_vfloat8e4m3mf2_t, 0},
+  {VECTOR_TYPE_vfloat8e4m3m1_t, 0},
+  {VECTOR_TYPE_vfloat8e4m3m2_t, 0},
+  {VECTOR_TYPE_vfloat8e4m3m4_t, 0},
+  {VECTOR_TYPE_vfloat8e4m3m8_t, 0},
+  {NUM_VECTOR_TYPES, 0}};
+
+static const rvv_type_info zvfqwdota8f_e5m2_ops[] = {
+  {VECTOR_TYPE_vfloat8e5m2mf8_t, RVV_REQUIRE_ELEN_64},
+  {VECTOR_TYPE_vfloat8e5m2mf4_t, 0},
+  {VECTOR_TYPE_vfloat8e5m2mf2_t, 0},
+  {VECTOR_TYPE_vfloat8e5m2m1_t, 0},
+  {VECTOR_TYPE_vfloat8e5m2m2_t, 0},
+  {VECTOR_TYPE_vfloat8e5m2m4_t, 0},
+  {VECTOR_TYPE_vfloat8e5m2m8_t, 0},
+  {NUM_VECTOR_TYPES, 0}};
+
 static CONSTEXPR const rvv_arg_type_info rvv_arg_type_info_end
   = rvv_arg_type_info (NUM_BASE_TYPES);
 
@@ -696,6 +764,41 @@ static CONSTEXPR const rvv_arg_type_info scalar_ptr_eew64_index_args[]
 static CONSTEXPR const rvv_arg_type_info vv_args[]
   = {rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info (RVV_BASE_vector),
      rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_ss_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_acc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_signed_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_su_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_acc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_unsigned_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_us_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_acc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_signed_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_uu_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_uacc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_unsigned_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_f_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_f32_acc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_fp8_e4m3_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_f32_acc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_fp8e4m3_vector), rvv_arg_type_info_end};
+
+static CONSTEXPR const rvv_arg_type_info zvdota_fp8_e5m2_args[]
+  = {rvv_arg_type_info (RVV_BASE_zvdota_f32_acc),
+     rvv_arg_type_info (RVV_BASE_vector),
+     rvv_arg_type_info (RVV_BASE_fp8e5m2_vector), rvv_arg_type_info_end};
 
 /* A list of args for vector_type func (vector_type, vector_type, vector_type)
  * function.  */
@@ -1537,6 +1640,84 @@ static CONSTEXPR const rvv_op_info f_vvvv_ops
      OP_TYPE_vv,			  /* Suffix */
      rvv_arg_type_info (RVV_BASE_vector), /* Return type */
      vvv_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota8i_ss_vv_ops
+  = {zvqwdota8i_i_ops,			      /* Types */
+     OP_TYPE_vv,			      /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_acc), /* Return type */
+     zvdota_ss_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota8i_su_vv_ops
+  = {zvqwdota8i_i_ops,			      /* Types */
+     OP_TYPE_vv,			      /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_acc), /* Return type */
+     zvdota_su_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota8i_us_vv_ops
+  = {zvqwdota8i_u_ops,			      /* Types */
+     OP_TYPE_vv,			      /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_acc), /* Return type */
+     zvdota_us_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota8i_uu_vv_ops
+  = {zvqwdota8i_u_ops,			       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_uacc), /* Return type */
+     zvdota_uu_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota16i_ss_vv_ops
+  = {zvqwdota16i_i_ops,		      /* Types */
+     OP_TYPE_vv,			      /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_acc), /* Return type */
+     zvdota_ss_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota16i_su_vv_ops
+  = {zvqwdota16i_i_ops,		      /* Types */
+     OP_TYPE_vv,			      /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_acc), /* Return type */
+     zvdota_su_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota16i_us_vv_ops
+  = {zvqwdota16i_u_ops,		      /* Types */
+     OP_TYPE_vv,			      /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_acc), /* Return type */
+     zvdota_us_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvqwdota16i_uu_vv_ops
+  = {zvqwdota16i_u_ops,		       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_uacc), /* Return type */
+     zvdota_uu_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvfwdota16bf_vv_ops
+  = {zvfwdota16bf_ops,			       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_f32_acc), /* Return type */
+     zvdota_f_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvfqwdota8f_e4m3_e4m3_vv_ops
+  = {zvfqwdota8f_e4m3_ops,		       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_f32_acc), /* Return type */
+     zvdota_fp8_e4m3_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvfqwdota8f_e4m3_e5m2_vv_ops
+  = {zvfqwdota8f_e4m3_ops,		       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_f32_acc), /* Return type */
+     zvdota_fp8_e5m2_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvfqwdota8f_e5m2_e4m3_vv_ops
+  = {zvfqwdota8f_e5m2_ops,		       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_f32_acc), /* Return type */
+     zvdota_fp8_e4m3_args /* Args */};
+
+static CONSTEXPR const rvv_op_info zvfqwdota8f_e5m2_e5m2_vv_ops
+  = {zvfqwdota8f_e5m2_ops,		       /* Types */
+     OP_TYPE_vv,			       /* Suffix */
+     rvv_arg_type_info (RVV_BASE_zvdota_f32_acc), /* Return type */
+     zvdota_fp8_e5m2_args /* Args */};
 
 /* A static operand information for vector_type func (vector_type, scalar_type,
  * vector_type) function registration. */
@@ -3528,7 +3709,8 @@ static CONSTEXPR const function_type_info function_types[] = {
   SIGNED_EEW64_LMUL1_INTERPRET, UNSIGNED_EEW8_LMUL1_INTERPRET,                 \
   UNSIGNED_EEW16_LMUL1_INTERPRET, UNSIGNED_EEW32_LMUL1_INTERPRET,              \
   UNSIGNED_EEW64_LMUL1_INTERPRET, X2, X2_VLMUL_EXT, X4_VLMUL_EXT, X8_VLMUL_EXT,\
-  X16_VLMUL_EXT, X32_VLMUL_EXT, X64_VLMUL_EXT, TUPLE_SUBPART)                  \
+  X16_VLMUL_EXT, X32_VLMUL_EXT, X64_VLMUL_EXT, ZVDOTA_ACC, ZVDOTA_UACC,         \
+  ZVDOTA_F32_ACC, FP8E4M3, FP8E5M2, TUPLE_SUBPART)                             \
   {                                                                            \
     VECTOR_TYPE_##VECTOR,                                                      \
     VECTOR_TYPE_INVALID,                                                       \
@@ -3600,7 +3782,11 @@ static CONSTEXPR const function_type_info function_types[] = {
     VECTOR_TYPE_##X16_VLMUL_EXT,                                               \
     VECTOR_TYPE_##X32_VLMUL_EXT,                                               \
     VECTOR_TYPE_##X64_VLMUL_EXT,                                               \
-    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_##ZVDOTA_ACC,                                                  \
+    VECTOR_TYPE_##ZVDOTA_UACC,                                                 \
+    VECTOR_TYPE_##ZVDOTA_F32_ACC,                                              \
+    VECTOR_TYPE_##FP8E4M3,                                                     \
+    VECTOR_TYPE_##FP8E5M2,                                                     \
     VECTOR_TYPE_##TUPLE_SUBPART,                                               \
   },
 #include "riscv-vector-builtins.def"
@@ -3728,6 +3914,16 @@ get_builtin_partition (required_ext ext, const function_instance &instance)
       return RVV_PARTITION_ZVFBFMIN;
     case ZVFBFWMA_EXT:
       return RVV_PARTITION_ZVFBFWMA;
+    case ZVFOFP8MIN_EXT:
+      return RVV_PARTITION_ZVFOFP8MIN;
+    case ZVQWDOTA8I_EXT:
+      return RVV_PARTITION_ZVQWDOTA8I;
+    case ZVQWDOTA16I_EXT:
+      return RVV_PARTITION_ZVQWDOTA16I;
+    case ZVFWDOTA16BF_EXT:
+      return RVV_PARTITION_ZVFWDOTA16BF;
+    case ZVFQWDOTA8F_EXT:
+      return RVV_PARTITION_ZVFQWDOTA8F;
     case XSFVQMACCQOQ_EXT:
       return RVV_PARTITION_XSFVQMACCQOQ;
     case XSFVQMACCDOD_EXT:
@@ -4072,6 +4268,8 @@ register_builtin_types_on_null ()
   tree int16_type_node = get_typenode_from_name (INT16_TYPE);
   tree int32_type_node = get_typenode_from_name (INT32_TYPE);
   tree int64_type_node = get_typenode_from_name (INT64_TYPE);
+  tree float8e4m3_type_node = build_distinct_type_copy (uint8_type_node);
+  tree float8e5m2_type_node = build_distinct_type_copy (uint8_type_node);
 
   machine_mode mode;
 #define DEF_RVV_TYPE(NAME, NCHARS, ABI_NAME, SCALAR_TYPE, VECTOR_MODE,         \
@@ -4288,9 +4486,113 @@ rvv_arg_type_info::get_scalar_float_type (vector_type_index type_idx) const
     return NULL_TREE;
 }
 
+static vector_type_index
+get_zvdota_acc_type_index (vector_type_index type_idx, bool unsigned_p)
+{
+  switch (type_idx)
+    {
+    case VECTOR_TYPE_vint8mf8_t:
+    case VECTOR_TYPE_vuint8mf8_t:
+    case VECTOR_TYPE_vint8mf4_t:
+    case VECTOR_TYPE_vuint8mf4_t:
+    case VECTOR_TYPE_vint8mf2_t:
+    case VECTOR_TYPE_vuint8mf2_t:
+    case VECTOR_TYPE_vint8m1_t:
+    case VECTOR_TYPE_vuint8m1_t:
+    case VECTOR_TYPE_vint8m2_t:
+    case VECTOR_TYPE_vuint8m2_t:
+    case VECTOR_TYPE_vint8m4_t:
+    case VECTOR_TYPE_vuint8m4_t:
+    case VECTOR_TYPE_vint8m8_t:
+    case VECTOR_TYPE_vuint8m8_t:
+      return unsigned_p ? VECTOR_TYPE_vuint32m1_t : VECTOR_TYPE_vint32m1_t;
+
+    case VECTOR_TYPE_vint16mf4_t:
+    case VECTOR_TYPE_vuint16mf4_t:
+    case VECTOR_TYPE_vint16mf2_t:
+    case VECTOR_TYPE_vuint16mf2_t:
+    case VECTOR_TYPE_vint16m1_t:
+    case VECTOR_TYPE_vuint16m1_t:
+    case VECTOR_TYPE_vint16m2_t:
+    case VECTOR_TYPE_vuint16m2_t:
+    case VECTOR_TYPE_vint16m4_t:
+    case VECTOR_TYPE_vuint16m4_t:
+    case VECTOR_TYPE_vint16m8_t:
+    case VECTOR_TYPE_vuint16m8_t:
+      return unsigned_p ? VECTOR_TYPE_vuint64m1_t : VECTOR_TYPE_vint64m1_t;
+
+    default:
+      return VECTOR_TYPE_INVALID;
+    }
+}
+
+static vector_type_index
+get_float8_type_index (vector_type_index type_idx, bool e5m2_p)
+{
+  switch (type_idx)
+    {
+    case VECTOR_TYPE_vfloat8e4m3mf8_t:
+    case VECTOR_TYPE_vfloat8e5m2mf8_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2mf8_t
+		    : VECTOR_TYPE_vfloat8e4m3mf8_t;
+    case VECTOR_TYPE_vfloat8e4m3mf4_t:
+    case VECTOR_TYPE_vfloat8e5m2mf4_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2mf4_t
+		    : VECTOR_TYPE_vfloat8e4m3mf4_t;
+    case VECTOR_TYPE_vfloat8e4m3mf2_t:
+    case VECTOR_TYPE_vfloat8e5m2mf2_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2mf2_t
+		    : VECTOR_TYPE_vfloat8e4m3mf2_t;
+    case VECTOR_TYPE_vfloat8e4m3m1_t:
+    case VECTOR_TYPE_vfloat8e5m2m1_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2m1_t
+		    : VECTOR_TYPE_vfloat8e4m3m1_t;
+    case VECTOR_TYPE_vfloat8e4m3m2_t:
+    case VECTOR_TYPE_vfloat8e5m2m2_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2m2_t
+		    : VECTOR_TYPE_vfloat8e4m3m2_t;
+    case VECTOR_TYPE_vfloat8e4m3m4_t:
+    case VECTOR_TYPE_vfloat8e5m2m4_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2m4_t
+		    : VECTOR_TYPE_vfloat8e4m3m4_t;
+    case VECTOR_TYPE_vfloat8e4m3m8_t:
+    case VECTOR_TYPE_vfloat8e5m2m8_t:
+      return e5m2_p ? VECTOR_TYPE_vfloat8e5m2m8_t
+		    : VECTOR_TYPE_vfloat8e4m3m8_t;
+    default:
+      return VECTOR_TYPE_INVALID;
+    }
+}
+
 vector_type_index
 rvv_arg_type_info::get_function_type_index (vector_type_index type_idx) const
 {
+  vector_type_index function_type_idx = VECTOR_TYPE_INVALID;
+  switch (base_type)
+    {
+    case RVV_BASE_zvdota_acc:
+      function_type_idx = get_zvdota_acc_type_index (type_idx, false);
+      break;
+    case RVV_BASE_zvdota_uacc:
+      function_type_idx = get_zvdota_acc_type_index (type_idx, true);
+      break;
+    case RVV_BASE_zvdota_f32_acc:
+      function_type_idx = VECTOR_TYPE_vfloat32m1_t;
+      break;
+    case RVV_BASE_fp8e4m3_vector:
+      function_type_idx = get_float8_type_index (type_idx, false);
+      break;
+    case RVV_BASE_fp8e5m2_vector:
+      function_type_idx = get_float8_type_index (type_idx, true);
+      break;
+    default:
+      break;
+    }
+
+  if (function_type_idx != VECTOR_TYPE_INVALID)
+    return builtin_types[function_type_idx].vector ? function_type_idx
+						   : NUM_VECTOR_TYPES;
+
   tree type
     = builtin_types[function_types[type_idx].type_indexes[base_type]].vector;
   return type ? function_types[type_idx].type_indexes[base_type]
@@ -5162,6 +5464,37 @@ function_expander::use_ternop_insn (bool vd_accum_p, insn_code icode)
   return generate_insn (icode);
 }
 
+/* Implement Zvdota destructive-accumulator calls.  The machine patterns use
+   the source vector mode to control vsetvl and tie the accumulator input to
+   the output register.  */
+rtx
+function_expander::use_zvdota_insn (insn_code icode, unsigned altfmt)
+{
+  int arg_offset = 0;
+
+  if (use_real_mask_p (pred))
+    add_input_operand (arg_offset++);
+  else
+    add_all_one_mask_operand (mask_mode ());
+
+  add_input_operand (arg_offset++);
+  add_input_operand (arg_offset++);
+  add_input_operand (arg_offset++);
+
+  for (int argno = arg_offset; argno < call_expr_nargs (exp); argno++)
+    add_input_operand (argno);
+
+  add_input_operand (Pmode, get_tail_policy_for_pred (pred));
+  add_input_operand (Pmode, get_mask_policy_for_pred (pred));
+  add_input_operand (Pmode, get_avl_type_rtx (avl_type::NONVLMAX));
+
+  if (altfmt != RVV_NO_ALTFMT
+      && opno < insn_data[icode].n_generator_args)
+    add_input_operand (Pmode, gen_int_mode (altfmt, Pmode));
+
+  return generate_insn (icode);
+}
+
 /* Implement the call using instruction ICODE, with a 1:1 mapping between
    arguments and input operands.
    There are operands that cannot be broadcast using v[f]mv.  In that case
@@ -5435,6 +5768,15 @@ registered_function::overloaded_hash () const
 					 : TYPE_UNSIGNED (type);
       mode_p = POINTER_TYPE_P (type) ? TYPE_MODE (TREE_TYPE (type))
 				     : TYPE_MODE (type);
+      if (tree rvv_type = POINTER_TYPE_P (type) ? TREE_TYPE (type) : type)
+	if (tree attr = lookup_vector_type_attribute (rvv_type))
+	  if (tree id = TREE_VALUE (chain_index (0, TREE_VALUE (attr))))
+	    {
+	      const char *mangled_name = IDENTIFIER_POINTER (id);
+	      h.add (mangled_name, strlen (mangled_name));
+	      continue;
+	    }
+
       if (POINTER_TYPE_P (type) || lookup_vector_type_attribute (type))
 	{
 	  h.add_int (unsigned_p);
