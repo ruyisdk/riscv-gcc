@@ -664,9 +664,8 @@ enum mask_policy
 
 /* Values for the VTYPE altfmt field.  Instructions that do not care about
    altfmt leave the "altfmt" insn attribute at its default (INVALID_ATTRIBUTE);
-   FP8 instructions select between standard (ALTFMT_NONE, E4M3) and the
-   alternate format (ALTFMT_ALT, E5M2) by setting the attribute via an
-   operand.  */
+   Some dot-product instructions select their vs1 interpretation by setting
+   the attribute via an operand.  */
 enum altfmt_type
 {
   ALTFMT_NONE = 0,
