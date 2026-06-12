@@ -1355,7 +1355,7 @@
 		   (match_operand:SI 1 "register_operand" " r"))
 		 (any_extend:DI
 		   (match_operand:SI 2 "register_operand" " r"))))]
-  "(TARGET_ZMMUL || TARGET_MUL || TARGET_RVP) && !TARGET_64BIT"
+  "((TARGET_ZMMUL || TARGET_MUL) && !TARGET_64BIT) || TARGET_RVP"
 {
   if (!TARGET_RVP)
     {

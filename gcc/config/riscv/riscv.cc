@@ -4254,6 +4254,78 @@ riscv_extend_cost (rtx op, bool unsigned_p)
   return COSTS_N_INSNS (2);
 }
 
+/* Util function to check if OP0 and OP1 form a widening multiply pattern with
+   extensions. Both operands must be either SIGN_EXTEND or ZERO_EXTEND,
+   their inner operands must be SUBREGs with the specified INNER_MODE.
+   This is used to detect patterns like:
+   (mult:DI (sign_extend:DI (subreg:SI ...)) (sign_extend:DI (subreg:SI ...)))
+   or
+   (mult:SI (zero_extend:SI (subreg:HI ...)) (zero_extend:SI (subreg:HI ...)))
+*/
+
+static bool
+riscv_widening_mult_with_subreg_p (rtx op0, rtx op1, machine_mode inner_mode)
+{
+  return (GET_CODE (op0) == SIGN_EXTEND || GET_CODE (op0) == ZERO_EXTEND)
+	 && (GET_CODE (op1) == SIGN_EXTEND || GET_CODE (op1) == ZERO_EXTEND)
+	 && GET_MODE (XEXP (op0, 0)) == inner_mode
+	 && GET_MODE (XEXP (op1, 0)) == inner_mode
+	 && GET_CODE (XEXP (op0, 0)) == SUBREG
+	 && GET_CODE (XEXP (op1, 0)) == SUBREG;
+}
+
+/* Check if RTX is a shift (ASHIFTRT or LSHIFTRT) by SHAMT bits.  */
+
+static bool
+riscv_is_shift_by_shamt_p (rtx x, int shamt)
+{
+  return (GET_CODE (x) == ASHIFTRT || GET_CODE (x) == LSHIFTRT)
+	 && CONST_INT_P (XEXP (x, 1))
+	 && INTVAL (XEXP (x, 1)) == shamt;
+}
+
+/* Check if RTX is a sign or zero extension.  */
+
+static bool
+riscv_is_extend_p (rtx x)
+{
+  return GET_CODE (x) == SIGN_EXTEND || GET_CODE (x) == ZERO_EXTEND;
+}
+
+/* Get the expected shift amount for MACC patterns based on MODE.
+   Returns 16 for SImode, 32 for DImode, and 0 for other modes.  */
+
+static int
+riscv_macc_shift_amount (machine_mode mode)
+{
+  if (mode == SImode)
+    return 16;
+  else if (mode == DImode)
+    return 32;
+  return 0;
+}
+
+/* Check if OP0 and OP1 match a MACC pattern where one is a shift by SHAMT
+   and the other is an extend, or both are shifts by SHAMT.
+   Returns true if the pattern matches.  */
+
+static bool
+riscv_is_macc_shift_extend_pattern_p (rtx op0, rtx op1, int shamt)
+{
+  if (shamt == 0)
+    return false;
+
+  bool op0_is_shift = riscv_is_shift_by_shamt_p (op0, shamt);
+  bool op1_is_shift = riscv_is_shift_by_shamt_p (op1, shamt);
+  bool op0_is_ext = riscv_is_extend_p (op0);
+  bool op1_is_ext = riscv_is_extend_p (op1);
+
+  /* H01 pattern: one shift, one extend.
+     H11 pattern: both operands are shifts.  */
+  return ((op0_is_shift && op1_is_ext) || (op1_is_shift && op0_is_ext)
+	  || (op0_is_shift && op1_is_shift));
+}
+
 /* Implement TARGET_RTX_COSTS.  */
 
 #define SINGLE_SHIFT_COST 1
@@ -4786,6 +4858,69 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	*total = COSTS_N_INSNS (1);
       else
 	*total = tune_param->int_mul[mode == DImode];
+
+      /* RVP widening multiply patterns: (mult:(sign_extend) (sign_extend))
+	 Make these cheaper than separate extend + multiply to prevent
+	 combine pass from breaking them apart.  */
+      if (TARGET_RVP)
+	{
+	  rtx op0 = XEXP (x, 0);
+	  rtx op1 = XEXP (x, 1);
+	  int shamt = riscv_macc_shift_amount (mode);
+
+	  /* Example MACC patterns:
+	     - MACC.H01: (mult (sign_extend a[0]) (ashiftrt b 16)) + acc
+	     - MACC.H01: (mult (ashiftrt a 16) (sign_extend b[0])) + acc
+	     - MACC.H11: (mult (ashiftrt a 16) (ashiftrt b 16)) + acc  */
+
+	  /* Check for MACC patterns when used in accumulate context (outer PLUS).
+	     H01 pattern: one shift, one extend
+	     H11 pattern: both operands are shifts  */
+	  if (outer_code == PLUS
+	      && riscv_is_macc_shift_extend_pattern_p (op0, op1, shamt))
+	    {
+	      /* Cost as a single MACC instruction.
+		 Must be less than original cost (4 + 16 = 20) to allow combining.  */
+	      *total = COSTS_N_INSNS (3);
+	      return true;
+	    }
+
+	  /* Check for widening multiply patterns with subregs.  */
+	  if (mode == SImode)
+	    {
+	      /* Pattern: (mult:SI (sign_extend:SI (subreg:HI ...))
+				   (sign_extend:SI (subreg:HI ...)))
+		 or:     (mult:SI (zero_extend:SI (subreg:HI ...))
+				   (zero_extend:SI (subreg:HI ...)))  */
+	      if (riscv_widening_mult_with_subreg_p (op0, op1, HImode))
+		{
+		  /* Cost as a single fused widening multiply (cheaper than 20).  */
+		  *total = COSTS_N_INSNS (2);
+		  return true;
+		}
+
+	      /* Also check for shift/extend patterns in non-accumulate context.  */
+	      if (riscv_is_macc_shift_extend_pattern_p (op0, op1, shamt))
+		{
+		  *total = COSTS_N_INSNS (3);
+		  return true;
+		}
+	    }
+	  else if (mode == DImode)
+	    {
+	      /* Pattern: (mult:DI (sign_extend:DI (subreg:SI ...))
+				   (sign_extend:DI (subreg:SI ...)))
+		 or:     (mult:DI (zero_extend:DI (subreg:SI ...))
+				   (zero_extend:DI (subreg:SI ...)))  */
+	      if (riscv_widening_mult_with_subreg_p (op0, op1, SImode))
+		{
+		  /* Cost as a single fused widening multiply (cheaper than 20).  */
+		  *total = COSTS_N_INSNS (2);
+		  return true;
+		}
+	    }
+	}
+
       return false;
 
     case DIV:

@@ -398,6 +398,34 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+(define_insn "*pm2suba_h_alt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (plus:SI
+          (minus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                             (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                    (mult:SI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                          (const_int 16))
+                             (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                          (const_int 16))))
+          (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2suba.h\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2subh_alt"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (minus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                          (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                 (mult:SI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                       (const_int 16))
+                          (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                       (const_int 16)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2sub.h\t%0, %2, %1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
 ;; MACCSU.H00: Signed-unsigned multiply-accumulate (bottom x bottom)
 ;; rd = rd + sext(rs1[15:0]) * zext(rs2[15:0])
 ;; Two patterns for different operand orderings from GCC.
@@ -1734,6 +1762,46 @@
         (neg:DI (match_operand:DI 1 "register_operand" "R")))]
   "!TARGET_64BIT && TARGET_RVP"
   "negd\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; MUL.H00
+(define_insn "<u>mulhisi3"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (mult:SI (any_extend:SI (match_operand:HI 1 "register_operand" "r"))
+                 (any_extend:SI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mul<u>.h00\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; MUL.W00
+(define_insn "*rvp_mul<u>_w_00"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (mult:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (any_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "mul<u>.w00\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; MULSU.H00
+(define_insn "*rvp_mulsu_h00"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (mult:SI (zero_extend:SI (match_operand:HI 1 "register_operand" "r"))
+                 (sign_extend:SI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulsu.h00\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; MULSU.W00
+(define_insn "*rvp_mulsu_w00"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "mulsu.w00\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
