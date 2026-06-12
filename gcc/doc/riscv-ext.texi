@@ -338,6 +338,10 @@
 @tab 1.0
 @tab Vector extensions for embedded processors
 
+@item @samp{zvzip}
+@tab 0.1
+@tab Vector structured data reordering extension
+
 @item @samp{zvfbdota32f}
 @tab 1.0
 @tab Vector FP32 batched dot-product extension

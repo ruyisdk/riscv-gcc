@@ -664,6 +664,17 @@ DEF_RVV_FUNCTION (vslide1down, alu, full_preds, iu_vvx_ops)
 DEF_RVV_FUNCTION (vrgather, alu, full_preds, all_gather_vvv_ops)
 DEF_RVV_FUNCTION (vrgather, alu, full_preds, all_gather_vvx_ops)
 
+/* Zvzip v0.1 draft.  */
+#undef REQUIRED_EXTENSIONS
+#define REQUIRED_EXTENSIONS ZVZIP_EXT
+DEF_RVV_FUNCTION (vzip, zvzip_zip, full_preds, all_vzip_vv_ops)
+DEF_RVV_FUNCTION (vunzipe, alu, full_preds, all_v_vlmul_trunc_x2_ops)
+DEF_RVV_FUNCTION (vunzipo, alu, full_preds, all_v_vlmul_trunc_x2_ops)
+DEF_RVV_FUNCTION (vpaire, alu, full_preds, all_vv_ops)
+DEF_RVV_FUNCTION (vpairo, alu, full_preds, all_vv_ops)
+#undef REQUIRED_EXTENSIONS
+#define REQUIRED_EXTENSIONS VECTOR_EXT
+
 // 16.5. Vector Compress Instruction
 DEF_RVV_FUNCTION (vcompress, alu, none_tu_preds, all_vvm_ops)
 

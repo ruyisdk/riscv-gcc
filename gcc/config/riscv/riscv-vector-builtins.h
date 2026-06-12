@@ -140,6 +140,7 @@ enum required_ext
   ZVFBFMIN_EXT,		/* Zvfbfmin extension */
   ZVFBFWMA_EXT,		/* Zvfbfwma extension */
   ZVFOFP8MIN_EXT,	/* Zvfofp8min extension */
+  ZVZIP_EXT,		/* Zvzip extension */
   ZVQWDOTA8I_EXT,	/* Zvqwdota8i extension */
   ZVQWDOTA16I_EXT,	/* Zvqwdota16i extension */
   ZVFWDOTA16BF_EXT,	/* Zvfwdota16bf extension */
@@ -182,6 +183,7 @@ enum rvv_builtin_partition
   RVV_PARTITION_ZVFHMIN,
   RVV_PARTITION_ZVFH,
   RVV_PARTITION_ZVFOFP8MIN,
+  RVV_PARTITION_ZVZIP,
   RVV_PARTITION_ZVQWDOTA8I,
   RVV_PARTITION_ZVQWDOTA16I,
   RVV_PARTITION_ZVFWDOTA16BF,
@@ -249,6 +251,8 @@ static inline const char * required_ext_to_isa_name (enum required_ext required)
       return "zvfbfwma";
     case ZVFOFP8MIN_EXT:
       return "zvfofp8min";
+    case ZVZIP_EXT:
+      return "zvzip";
     case ZVQWDOTA8I_EXT:
       return "zvqwdota8i";
     case ZVQWDOTA16I_EXT:
@@ -328,6 +332,8 @@ static inline bool required_extensions_specified (enum required_ext required)
       return TARGET_ZVFBFWMA;
     case ZVFOFP8MIN_EXT:
       return TARGET_ZVFOFP8MIN;
+    case ZVZIP_EXT:
+      return TARGET_ZVZIP;
     case ZVQWDOTA8I_EXT:
       return TARGET_ZVQWDOTA8I;
     case ZVQWDOTA16I_EXT:

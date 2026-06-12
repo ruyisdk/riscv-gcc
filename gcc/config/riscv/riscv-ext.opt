@@ -92,6 +92,9 @@ TargetVariable
 int riscv_zt_subext
 
 TargetVariable
+int riscv_zv_subext
+
+TargetVariable
 int riscv_zvb_subext
 
 TargetVariable
@@ -268,6 +271,8 @@ Mask(ZVE64D) Var(riscv_zve_subext)
 Mask(ZVE64F) Var(riscv_zve_subext)
 
 Mask(ZVE64X) Var(riscv_zve_subext)
+
+Mask(ZVZIP) Var(riscv_zv_subext)
 
 Mask(ZVFBDOTA32F) Var(riscv_zvf_subext)
 

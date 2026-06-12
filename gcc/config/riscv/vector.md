@@ -8502,6 +8502,113 @@
   [(set_attr "type" "vgather")
    (set_attr "mode" "<MODE>")])
 
+;; Zvzip v0.1 draft.
+(define_insn "@pred_vzip<mode>"
+  [(set (match_operand:<VLMUL_EXT2> 0 "register_operand"        "=&vr,  &vr")
+	(if_then_else:<VLMUL_EXT2>
+	  (unspec:<VM>
+	    [(match_operand:<VM> 1 "vector_mask_operand"       "vmWc1,vmWc1")
+	     (match_operand 5 "vector_length_operand"          "  rvl,  rvl")
+	     (match_operand 6 "const_int_operand"              "    i,    i")
+	     (match_operand 7 "const_int_operand"              "    i,    i")
+	     (match_operand 8 "const_int_operand"              "    i,    i")
+	     (reg:SI VL_REGNUM)
+	     (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+	  (unspec:<VLMUL_EXT2>
+	    [(match_operand:VLMULX2 3 "register_operand"       "   vr,   vr")
+	     (match_operand:VLMULX2 4 "register_operand"       "   vr,   vr")] UNSPEC_VZIP)
+	  (match_operand:<VLMUL_EXT2> 2 "vector_merge_operand" "   vu,    0")))]
+  "TARGET_ZVZIP"
+  "vzip.vv\t%0,%3,%4%p1"
+  [(set_attr "type" "vgather")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "@pred_vunzipe<mode>"
+  [(set (match_operand:VLMULX2 0 "register_operand"             "=&vr,  &vr")
+	(if_then_else:VLMULX2
+	  (unspec:<VM>
+	    [(match_operand:<VM> 1 "vector_mask_operand"       "vmWc1,vmWc1")
+	     (match_operand 4 "vector_length_operand"          "  rvl,  rvl")
+	     (match_operand 5 "const_int_operand"              "    i,    i")
+	     (match_operand 6 "const_int_operand"              "    i,    i")
+	     (match_operand 7 "const_int_operand"              "    i,    i")
+	     (reg:SI VL_REGNUM)
+	     (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+	  (unspec:VLMULX2
+	    [(match_operand:<VLMUL_EXT2> 3 "register_operand"  "   vr,   vr")] UNSPEC_VUNZIPE)
+	  (match_operand:VLMULX2 2 "vector_merge_operand"      "   vu,    0")))]
+  "TARGET_ZVZIP"
+  "vunzipe.v\t%0,%3%p1"
+  [(set_attr "type" "vgather")
+   (set_attr "mode" "<MODE>")
+   (set_attr "vl_op_idx" "4")
+   (set (attr "ta") (symbol_ref "riscv_vector::get_ta(operands[5])"))
+   (set (attr "ma") (symbol_ref "riscv_vector::get_ma(operands[6])"))
+   (set_attr "avl_type_idx" "7")])
+
+(define_insn "@pred_vunzipo<mode>"
+  [(set (match_operand:VLMULX2 0 "register_operand"             "=&vr,  &vr")
+	(if_then_else:VLMULX2
+	  (unspec:<VM>
+	    [(match_operand:<VM> 1 "vector_mask_operand"       "vmWc1,vmWc1")
+	     (match_operand 4 "vector_length_operand"          "  rvl,  rvl")
+	     (match_operand 5 "const_int_operand"              "    i,    i")
+	     (match_operand 6 "const_int_operand"              "    i,    i")
+	     (match_operand 7 "const_int_operand"              "    i,    i")
+	     (reg:SI VL_REGNUM)
+	     (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+	  (unspec:VLMULX2
+	    [(match_operand:<VLMUL_EXT2> 3 "register_operand"  "   vr,   vr")] UNSPEC_VUNZIPO)
+	  (match_operand:VLMULX2 2 "vector_merge_operand"      "   vu,    0")))]
+  "TARGET_ZVZIP"
+  "vunzipo.v\t%0,%3%p1"
+  [(set_attr "type" "vgather")
+   (set_attr "mode" "<MODE>")
+   (set_attr "vl_op_idx" "4")
+   (set (attr "ta") (symbol_ref "riscv_vector::get_ta(operands[5])"))
+   (set (attr "ma") (symbol_ref "riscv_vector::get_ma(operands[6])"))
+   (set_attr "avl_type_idx" "7")])
+
+(define_insn "@pred_vpaire<mode>"
+  [(set (match_operand:V_VLS 0 "register_operand"              "=&vr,  &vr")
+	(if_then_else:V_VLS
+	  (unspec:<VM>
+	    [(match_operand:<VM> 1 "vector_mask_operand"      "vmWc1,vmWc1")
+	     (match_operand 5 "vector_length_operand"         "  rvl,  rvl")
+	     (match_operand 6 "const_int_operand"             "    i,    i")
+	     (match_operand 7 "const_int_operand"             "    i,    i")
+	     (match_operand 8 "const_int_operand"             "    i,    i")
+	     (reg:SI VL_REGNUM)
+	     (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+	  (unspec:V_VLS
+	    [(match_operand:V_VLS 3 "register_operand"        "   vr,   vr")
+	     (match_operand:V_VLS 4 "register_operand"        "   vr,   vr")] UNSPEC_VPAIRE)
+	  (match_operand:V_VLS 2 "vector_merge_operand"       "   vu,    0")))]
+  "TARGET_ZVZIP"
+  "vpaire.vv\t%0,%3,%4%p1"
+  [(set_attr "type" "vgather")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "@pred_vpairo<mode>"
+  [(set (match_operand:V_VLS 0 "register_operand"              "=&vr,  &vr")
+	(if_then_else:V_VLS
+	  (unspec:<VM>
+	    [(match_operand:<VM> 1 "vector_mask_operand"      "vmWc1,vmWc1")
+	     (match_operand 5 "vector_length_operand"         "  rvl,  rvl")
+	     (match_operand 6 "const_int_operand"             "    i,    i")
+	     (match_operand 7 "const_int_operand"             "    i,    i")
+	     (match_operand 8 "const_int_operand"             "    i,    i")
+	     (reg:SI VL_REGNUM)
+	     (reg:SI VTYPE_REGNUM)] UNSPEC_VPREDICATE)
+	  (unspec:V_VLS
+	    [(match_operand:V_VLS 3 "register_operand"        "   vr,   vr")
+	     (match_operand:V_VLS 4 "register_operand"        "   vr,   vr")] UNSPEC_VPAIRO)
+	  (match_operand:V_VLS 2 "vector_merge_operand"       "   vu,    0")))]
+  "TARGET_ZVZIP"
+  "vpairo.vv\t%0,%3,%4%p1"
+  [(set_attr "type" "vgather")
+   (set_attr "mode" "<MODE>")])
+
 ;; vcompress
 (define_insn "@pred_compress<mode>"
   [(set (match_operand:V_VLS 0 "register_operand"            "=&vr,  &vr")

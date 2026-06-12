@@ -50,10 +50,19 @@ main ()
       printf ("int %s\n\n", var.c_str ());
     }
 
+  bool first_mask = true;
 #define DEFINE_RISCV_EXT(NAME, UPPERCASE_NAME, FULL_NAME, DESC, URL, DEP_EXTS,  \
 			 SUPPORTED_VERSIONS, FLAG_GROUP, BITMASK_GROUP_ID,     \
 			 BITMASK_BIT_POSITION, EXTRA_EXTENSION_FLAGS)          \
-  puts ("Mask(" #UPPERCASE_NAME ") Var(riscv_" #FLAG_GROUP "_subext)\n");
+  do                                                                          \
+    {                                                                         \
+      if (!first_mask)                                                        \
+	puts ("");                                                            \
+      printf ("Mask(" #UPPERCASE_NAME ") Var(riscv_" #FLAG_GROUP             \
+	      "_subext)\n");                                                 \
+      first_mask = false;                                                     \
+    }                                                                         \
+  while (false);
 #include "riscv-ext.def"
 #undef DEFINE_RISCV_EXT
 

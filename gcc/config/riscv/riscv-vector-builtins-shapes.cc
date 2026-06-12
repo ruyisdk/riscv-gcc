@@ -98,7 +98,8 @@ supports_vectype_p (const function_group_info &group, unsigned int vec_type_idx)
       || *group.shape == shapes::seg_loadstore
       || *group.shape == shapes::seg_indexed_loadstore
       || *group.shape == shapes::seg_fault_load
-      || *group.shape == shapes::zvdota)
+      || *group.shape == shapes::zvdota
+      || group.required_extensions == ZVZIP_EXT)
     return true;
   return false;
 }
@@ -526,6 +527,39 @@ struct zvbdota_def : public build_base
 				 FRM_STATIC_MAX);
 
     return ok;
+  }
+};
+
+/* zvzip_zip_def class.  Handle vzip.vv, whose API suffix names the
+   destination type while its instance type is the source type.
+
+   Masked vzip follows current rvv-intrinsic-doc PR #431;
+   the mask type is derived from the source vector type, not the 2xLMUL
+   return type.  */
+struct zvzip_zip_def : public build_base
+{
+  char *get_name (function_builder &b, const function_instance &instance,
+		  bool overloaded_p) const override
+  {
+    if (overloaded_p && !instance.base->can_be_overloaded_p (instance.pred))
+      return nullptr;
+
+    b.append_base_name (instance.base_name);
+
+    if (!overloaded_p)
+      {
+	b.append_name (operand_suffixes[instance.op_info->op]);
+	vector_type_index ret_type_idx
+	  = instance.op_info->ret.get_function_type_index (instance.type.index);
+	b.append_name (type_suffixes[ret_type_idx].vector);
+      }
+
+    /* According to rvv-intrinsic-doc, it does not add "_m" suffix
+       for vop_m C++ overloaded API.  */
+    if (overloaded_p && instance.pred == PRED_TYPE_m)
+      return b.finish_name ();
+    b.append_name (predication_suffixes[instance.pred]);
+    return b.finish_name ();
   }
 };
 
@@ -1533,6 +1567,7 @@ SHAPE(indexed_loadstore, indexed_loadstore)
 SHAPE(th_loadstore_width, th_loadstore_width)
 SHAPE(th_indexed_loadstore_width, th_indexed_loadstore_width)
 SHAPE(alu, alu)
+SHAPE(zvzip_zip, zvzip_zip)
 SHAPE(alu_frm, alu_frm)
 SHAPE(widen_alu, widen_alu)
 SHAPE(widen_alu_frm, widen_alu_frm)

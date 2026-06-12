@@ -1973,6 +1973,14 @@ static CONSTEXPR const rvv_op_info all_vvvm_ops
      rvv_arg_type_info (RVV_BASE_vector), /* Return type */
      vvm_args /* Args */};
 
+/* A static operand information for vector_type func (vector_type,
+ * vector_type) function registration. */
+static CONSTEXPR const rvv_op_info all_vv_ops
+  = {all_ops,				  /* Types */
+     OP_TYPE_vv,			  /* Suffix */
+     rvv_arg_type_info (RVV_BASE_vector), /* Return type */
+     vv_args /* Args */};
+
 /* A static operand information for vector_type func (vector_type, vector_type,
  * mask_type) function registration. */
 static CONSTEXPR const rvv_op_info all_vvm_ops
@@ -2277,6 +2285,14 @@ static CONSTEXPR const rvv_op_info all_gatherei16_vvv_ops
      OP_TYPE_vv,			  /* Suffix */
      rvv_arg_type_info (RVV_BASE_vector), /* Return type */
      gatherei16_vv_args /* Args */};
+
+/* A static operand information for x2-lmul vector_type func (vector_type,
+ * vector_type) function registration. */
+static CONSTEXPR const rvv_op_info all_vzip_vv_ops
+  = {vlmul_ext_x2_ops,				/* Types */
+     OP_TYPE_vv,				/* Suffix */
+     rvv_arg_type_info (RVV_BASE_vlmul_ext_x2), /* Return type */
+     vv_args /* Args */};
 
 /* A static operand information for vector_type func (vector_type)
  * function registration. */
@@ -4146,6 +4162,8 @@ get_builtin_partition (required_ext ext, const function_instance &instance)
       return RVV_PARTITION_ZVFBFWMA;
     case ZVFOFP8MIN_EXT:
       return RVV_PARTITION_ZVFOFP8MIN;
+    case ZVZIP_EXT:
+      return RVV_PARTITION_ZVZIP;
     case ZVQWDOTA8I_EXT:
       return RVV_PARTITION_ZVQWDOTA8I;
     case ZVQWDOTA16I_EXT:

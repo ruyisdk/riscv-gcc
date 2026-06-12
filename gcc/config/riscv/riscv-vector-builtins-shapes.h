@@ -31,6 +31,7 @@ extern const function_shape *const indexed_loadstore;
 extern const function_shape *const th_loadstore_width;
 extern const function_shape *const th_indexed_loadstore_width;
 extern const function_shape *const alu;
+extern const function_shape *const zvzip_zip;
 extern const function_shape *const alu_frm;
 extern const function_shape *const zvdota;
 extern const function_shape *const zvbdota;

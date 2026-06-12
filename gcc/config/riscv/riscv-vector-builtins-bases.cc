@@ -1698,6 +1698,51 @@ public:
   }
 };
 
+class vzip : public function_base
+{
+public:
+  rtx expand (function_expander &e) const override
+  {
+    return e.use_exact_insn (code_for_pred_vzip (e.vector_mode ()));
+  }
+};
+
+class vunzipe : public function_base
+{
+public:
+  rtx expand (function_expander &e) const override
+  {
+    return e.use_exact_insn (code_for_pred_vunzipe (e.vector_mode ()));
+  }
+};
+
+class vunzipo : public function_base
+{
+public:
+  rtx expand (function_expander &e) const override
+  {
+    return e.use_exact_insn (code_for_pred_vunzipo (e.vector_mode ()));
+  }
+};
+
+class vpaire : public function_base
+{
+public:
+  rtx expand (function_expander &e) const override
+  {
+    return e.use_exact_insn (code_for_pred_vpaire (e.vector_mode ()));
+  }
+};
+
+class vpairo : public function_base
+{
+public:
+  rtx expand (function_expander &e) const override
+  {
+    return e.use_exact_insn (code_for_pred_vpairo (e.vector_mode ()));
+  }
+};
+
 class vcompress : public function_base
 {
 public:
@@ -2926,6 +2971,11 @@ static CONSTEXPR const slideop<UNSPEC_VFSLIDE1UP> vfslide1up_obj;
 static CONSTEXPR const slideop<UNSPEC_VFSLIDE1DOWN> vfslide1down_obj;
 static CONSTEXPR const vrgather vrgather_obj;
 static CONSTEXPR const vrgatherei16 vrgatherei16_obj;
+static CONSTEXPR const vzip vzip_obj;
+static CONSTEXPR const vunzipe vunzipe_obj;
+static CONSTEXPR const vunzipo vunzipo_obj;
+static CONSTEXPR const vpaire vpaire_obj;
+static CONSTEXPR const vpairo vpairo_obj;
 static CONSTEXPR const vcompress vcompress_obj;
 static CONSTEXPR const vundefined vundefined_obj;
 static CONSTEXPR const vreinterpret vreinterpret_obj;
@@ -3266,6 +3316,11 @@ BASE (vfslide1up)
 BASE (vfslide1down)
 BASE (vrgather)
 BASE (vrgatherei16)
+BASE (vzip)
+BASE (vunzipe)
+BASE (vunzipo)
+BASE (vpaire)
+BASE (vpairo)
 BASE (vcompress)
 BASE (vundefined)
 BASE (vreinterpret)
