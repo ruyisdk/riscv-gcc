@@ -136,6 +136,8 @@ Mask(ZICBOZ) Var(riscv_zi_subext)
 
 Mask(ZICCAMOA) Var(riscv_zi_subext)
 
+Mask(ZICCID) Var(riscv_zi_subext)
+
 Mask(ZICCIF) Var(riscv_zi_subext)
 
 Mask(ZICCLSM) Var(riscv_zi_subext)

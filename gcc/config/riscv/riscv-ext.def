@@ -286,6 +286,19 @@ DEFINE_RISCV_EXT(
   /* EXTRA_EXTENSION_FLAGS */ 0)
 
 DEFINE_RISCV_EXT(
+  /* NAME */ ziccid,
+  /* UPPERCASE_NAME */ ZICCID,
+  /* FULL_NAME */ "Instruction/data coherence and consistency extension",
+  /* DESC */ "",
+  /* URL */ ,
+  /* DEP_EXTS */ ({"ziccif"}),
+  /* SUPPORTED_VERSIONS */ ({{1, 0}}),
+  /* FLAG_GROUP */ zi,
+  /* BITMASK_GROUP_ID */ BITMASK_NOT_YET_ALLOCATED,
+  /* BITMASK_BIT_POSITION*/ BITMASK_NOT_YET_ALLOCATED,
+  /* EXTRA_EXTENSION_FLAGS */ 0)
+
+DEFINE_RISCV_EXT(
   /* NAME */ ziccif,
   /* UPPERCASE_NAME */ ZICCIF,
   /* FULL_NAME */ "Main memory supports instruction fetch with atomicity requirement",

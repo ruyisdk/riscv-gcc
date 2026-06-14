@@ -78,6 +78,10 @@
 @tab 1.0
 @tab Main memory supports all atomics in A
 
+@item @samp{ziccid}
+@tab 1.0
+@tab Instruction/data coherence and consistency extension
+
 @item @samp{ziccif}
 @tab 1.0
 @tab Main memory supports instruction fetch with atomicity requirement
