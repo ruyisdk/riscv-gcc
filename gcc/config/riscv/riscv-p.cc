@@ -216,6 +216,16 @@ static void
 riscv_emit_ppair_2_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
+  /* On RV32, PV2SI is a register pair; implement as two SImode moves. */
+  if (!TARGET_64BIT && vmode == PV2SImode)
+    {
+      rtx src0 = op0_odd ? gen_highpart (SImode, op0) : gen_lowpart (SImode, op0);
+      rtx src1 = op1_odd ? gen_highpart (SImode, op1) : gen_lowpart (SImode, op1);
+      emit_move_insn (gen_lowpart (SImode, target), src0);
+      emit_move_insn (gen_highpart (SImode, target), src1);
+      return;
+    }
+
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 2;
@@ -250,6 +260,21 @@ static void
 riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
+  /* On RV32, PV4HI is a register pair; decompose into two PV2HI operations. */
+  if (!TARGET_64BIT && vmode == PV4HImode)
+    {
+      machine_mode hmode = PV2HImode;
+      rtx op0_lo = gen_lowpart (hmode, op0);
+      rtx op0_hi = gen_highpart (hmode, op0);
+      rtx op1_lo = gen_lowpart (hmode, op1);
+      rtx op1_hi = gen_highpart (hmode, op1);
+      rtx res_lo = gen_lowpart (hmode, target);
+      rtx res_hi = gen_highpart (hmode, target);
+      riscv_emit_ppair_2_elem (res_lo, hmode, op0_lo, op1_lo, op0_odd, op1_odd);
+      riscv_emit_ppair_2_elem (res_hi, hmode, op0_hi, op1_hi, op0_odd, op1_odd);
+      return;
+    }
+
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 4;
@@ -279,6 +304,20 @@ static void
 riscv_emit_zip_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                        const int *indices)
 {
+  /* On RV32, PV4HI is a register pair; zip from lower or upper halfword halves. */
+  if (!TARGET_64BIT && vmode == PV4HImode)
+    {
+      /* zip16p (indices[0]==0): from lower halves; zip16hp (indices[0]==2): upper. */
+      bool use_hi = (indices[0] >= 2);
+      machine_mode hmode = PV2HImode;
+      rtx a_half = use_hi ? gen_highpart (hmode, op0) : gen_lowpart (hmode, op0);
+      rtx b_half = use_hi ? gen_highpart (hmode, op1) : gen_lowpart (hmode, op1);
+      rtx res_lo = gen_lowpart (hmode, target);
+      rtx res_hi = gen_highpart (hmode, target);
+      riscv_emit_ppair_2_elem (res_lo, hmode, a_half, b_half, false, false);
+      riscv_emit_ppair_2_elem (res_hi, hmode, a_half, b_half, true, true);
+      return;
+    }
   const int mask = 0b1010;
   emit_vec_merge_with_select<4> (target, vmode, op0, op1, indices, mask);
 }
@@ -287,12 +326,51 @@ static void
 riscv_emit_unzip_4_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
                          rtx op0, rtx op1, const int *indices)
 {
+  /* On RV32, PV4HI is a register pair; unzip by applying ppair across halves. */
+  if (!TARGET_64BIT && vmode == PV4HImode)
+    {
+      /* unzip16p (indices[0]==0): even halfwords; unzip16hp (indices[0]==1): odd. */
+      bool use_odd = (indices[0] != 0);
+      machine_mode hmode = PV2HImode;
+      rtx a_lo = gen_lowpart (hmode, op0);
+      rtx a_hi = gen_highpart (hmode, op0);
+      rtx b_lo = gen_lowpart (hmode, op1);
+      rtx b_hi = gen_highpart (hmode, op1);
+      rtx res_lo = gen_lowpart (hmode, target);
+      rtx res_hi = gen_highpart (hmode, target);
+      riscv_emit_ppair_2_elem (res_lo, hmode, a_lo, a_hi, use_odd, use_odd);
+      riscv_emit_ppair_2_elem (res_hi, hmode, b_lo, b_hi, use_odd, use_odd);
+      return;
+    }
   emit_vec_concat_with_select<4> (target, vmode, sel_mode, op0, op1, indices);
 }
 
 static void
 riscv_emit_rev_4_elem (rtx target, machine_mode vmode, rtx op, const int *indices)
 {
+  /* On RV32, PV4HI is a register pair; decompose the reversal. */
+  if (!TARGET_64BIT && vmode == PV4HImode)
+    {
+      machine_mode hmode = PV2HImode;
+      rtx op_lo = gen_lowpart (hmode, op);
+      rtx op_hi = gen_highpart (hmode, op);
+      rtx res_lo = gen_lowpart (hmode, target);
+      rtx res_hi = gen_highpart (hmode, target);
+      if (indices[0] == 3)
+	{
+	  /* Full reverse {3,2,1,0}: swap halves and reverse within each half.
+	     ppairoe.h(x,x) = {x[1], x[0]} reverses a PV2HI.  */
+	  riscv_emit_ppair_2_elem (res_lo, hmode, op_hi, op_hi, true, false);
+	  riscv_emit_ppair_2_elem (res_hi, hmode, op_lo, op_lo, true, false);
+	}
+      else
+	{
+	  /* Halfword-pair swap {2,3,0,1}: just swap the two 32-bit halves.  */
+	  emit_move_insn (res_lo, op_hi);
+	  emit_move_insn (res_hi, op_lo);
+	}
+      return;
+    }
   rtx sel = build_sel_parallel (4, indices);
   rtx result = gen_rtx_VEC_SELECT (vmode, op, sel);
   emit_insn (gen_rtx_SET (target, result));
@@ -317,6 +395,21 @@ static void
 riscv_emit_ppair_8_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
+  /* On RV32, PV8QI is a register pair; decompose into two PV4QI operations. */
+  if (!TARGET_64BIT && vmode == PV8QImode)
+    {
+      machine_mode hmode = PV4QImode;
+      rtx op0_lo = gen_lowpart (hmode, op0);
+      rtx op0_hi = gen_highpart (hmode, op0);
+      rtx op1_lo = gen_lowpart (hmode, op1);
+      rtx op1_hi = gen_highpart (hmode, op1);
+      rtx res_lo = gen_lowpart (hmode, target);
+      rtx res_hi = gen_highpart (hmode, target);
+      riscv_emit_ppair_4_elem (res_lo, hmode, op0_lo, op1_lo, op0_odd, op1_odd);
+      riscv_emit_ppair_4_elem (res_hi, hmode, op0_hi, op1_hi, op0_odd, op1_odd);
+      return;
+    }
+
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 8;
@@ -363,6 +456,23 @@ riscv_emit_unzip_8_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
 static void
 riscv_emit_rev_8_elem (rtx target, machine_mode vmode, rtx op, const int *indices)
 {
+  /* On RV32, PV8QI is a register pair; decompose the reversal. */
+  if (!TARGET_64BIT && vmode == PV8QImode)
+    {
+      machine_mode hmode = PV4QImode;
+      rtx op_lo = gen_lowpart (hmode, op);
+      rtx op_hi = gen_highpart (hmode, op);
+      rtx res_lo = gen_lowpart (hmode, target);
+      rtx res_hi = gen_highpart (hmode, target);
+      /* rev8 {7..0}: swap halves and byte-reverse each (needs Zbb rev8).
+	 rev16 {6,7,4,5,2,3,0,1}: swap halves and halfword-swap each.  */
+      const int rev8_idx[] = {3, 2, 1, 0};
+      const int rev16_idx[] = {2, 3, 0, 1};
+      const int *half_idx = (indices[0] == 7) ? rev8_idx : rev16_idx;
+      riscv_emit_rev_4_elem (res_lo, hmode, op_hi, half_idx);
+      riscv_emit_rev_4_elem (res_hi, hmode, op_lo, half_idx);
+      return;
+    }
   rtx sel = build_sel_parallel (8, indices);
   rtx result = gen_rtx_VEC_SELECT (vmode, op, sel);
   emit_insn (gen_rtx_SET (target, result));
@@ -587,6 +697,14 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
                                                                      8, sel);
 	  if (match_result != ERROR_MATCH)
 	    {
+	      /* On RV32, PV8QI is a register pair.  ZIP and UNZIP require
+		 sequential byte selection across register boundaries, which has
+		 no efficient RV32 P-extension implementation.  Fall back to
+		 generic GCC lowering for these patterns.  */
+	      if (!TARGET_64BIT && (pattern.perm == ZIP_PERM_TYPE
+				    || pattern.perm == UNZIP_PERM_TYPE))
+		return false;
+
 	      if (testing_p)
 		return true;
  
