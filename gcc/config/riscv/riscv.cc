@@ -5102,8 +5102,8 @@ riscv_split_64bit_move_p (rtx dest, rtx src)
     return false;
 
   /* P-extension: don't split GPR-to-GPR move with even register pairs.
-     P-ext vector modes use PMV.DBS/DHS/DWS; DI and DF use ADDD rd, rs, x0
-     since x0 pair reads as 64-bit zero, making it a correct pair copy.  */
+     All 8-byte modes use ADDD rd, rs, x0 since x0 pair reads as
+     64-bit zero, making it a correct 64-bit register pair copy.  */
   if (TARGET_RVP && REG_P (dest) && REG_P (src))
     {
       if (GP_REG_P (REGNO (dest)) && GP_REG_P (REGNO (src))
@@ -5344,22 +5344,17 @@ riscv_output_move (rtx dest, rtx src)
 	{
 	  if (GP_REG_P (REGNO (dest)))
 	    {
-	      /* RV32 P-ext: use PMV.DxS for even register pair moves.  */
+	      /* RV32 P-ext: use ADDD for all 8-byte even register pair copies.
+		 PMV.DBS/DHS/DWS are scalar broadcast instructions that take a
+		 single element from rs2 and replicate it across the pair, so
+		 they cannot be used for pair copy.  ADDD with x0 pair (which
+		 reads as 64-bit zero) correctly copies both halves.  */
 	      if (!TARGET_64BIT && TARGET_RVP && width == 8
 		  && src_code == REG && GP_REG_P (REGNO (src))
 		  && (REGNO (dest) % 2) == 0 && (REGNO (src) % 2) == 0
 		  && REGNO (dest) < FIRST_PSEUDO_REGISTER
 		  && REGNO (src) < FIRST_PSEUDO_REGISTER)
-		{
-		  if (mode == PV8QImode)
-		    return "pmv.dbs\t%0,%1";
-		  if (mode == PV4HImode)
-		    return "pmv.dhs\t%0,%1";
-		  if (mode == PV2SImode)
-		    return "pmv.dws\t%0,%1";
-
-		  return "addd\t%0,%1,x0";
-		}
+		return "addd	%0,%1,x0";
 	      /* RV32 P-ext: PV2SI/DI zero with even pair uses addd rd, x0, x0.  */
 	      if (!TARGET_64BIT && TARGET_RVP && width == 8
 		  && (src == CONST0_RTX (mode) || src == const0_rtx)
