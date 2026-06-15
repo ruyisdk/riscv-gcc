@@ -49,23 +49,23 @@ move_pv4hi (pv4hi a)
   return a;
 }
 
-/* Test even register pair move using PMV.DBS/DHS.
+/* Test even register pair move using ADDD.
    When both source and destination are even-numbered register pairs,
-   we can use a single PMV.DxS instruction instead of two mv.  */
+   we use addd rd, rs, x0 (x0 pair reads as 64-bit zero) to copy the pair.
+   PMV.DBS/DHS/DWS are scalar broadcast instructions, not pair copies.  */
 pv8qi
 copy_pv8qi_even (pv8qi a, pv8qi b)
 {
   /* a is in a0,a1, b is in a2,a3 - both even starts */
-  return b;  /* Should use pmv.dbs a0,a2 */
+  return b;  /* Should use addd a0,a2,x0 */
 }
 
 pv4hi
 copy_pv4hi_even (pv4hi a, pv4hi b)
 {
-  return b;  /* Should use pmv.dhs a0,a2 */
+  return b;  /* Should use addd a0,a2,x0 */
 }
 
 /* { dg-final { scan-assembler-times {\mlw\M} 4 } } */
 /* { dg-final { scan-assembler-times {\msw\M} 4 } } */
-/* { dg-final { scan-assembler-times {\mpmv\.dbs\M} 1 } } */
-/* { dg-final { scan-assembler-times {\mpmv\.dhs\M} 1 } } */
+/* { dg-final { scan-assembler-times {\maddd\M} 2 } } */

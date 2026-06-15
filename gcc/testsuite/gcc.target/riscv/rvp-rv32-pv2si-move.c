@@ -31,14 +31,15 @@ move_pv2si (pv2si a)
   return a;
 }
 
-/* Test even register pair move using PMV.DWS.
+/* Test even register pair move using ADDD.
    When both source and destination are even-numbered register pairs,
-   we can use a single PMV.DWS instruction instead of two mv.  */
+   we use addd rd, rs, x0 (x0 pair reads as 64-bit zero) to copy the pair.
+   PMV.DWS is a scalar broadcast instruction, not a pair copy.  */
 pv2si
 copy_pv2si_even (pv2si a, pv2si b)
 {
   /* a is in a0,a1, b is in a2,a3 - both even starts */
-  return b;  /* Should use pmv.dws a0,a2 */
+  return b;  /* Should use addd a0,a2,x0 */
 }
 
 /* Test const_vector with duplicate values - should generate two li */
@@ -57,7 +58,6 @@ const_zero (void)
 
 /* { dg-final { scan-assembler-times {\mlw\M} 2 } } */
 /* { dg-final { scan-assembler-times {\msw\M} 2 } } */
-/* { dg-final { scan-assembler-times {\mpmv\.dws\M} 1 } } */
 /* { dg-final { scan-assembler-times {\mli\t} 2 } } */
-/* { dg-final { scan-assembler-times {\maddd\M} 1 } } */
+/* { dg-final { scan-assembler-times {\maddd\M} 2 } } */
 
