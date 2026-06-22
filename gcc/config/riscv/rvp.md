@@ -324,6 +324,56 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+(define_insn "*mul_h11"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (ashiftrt:SI
+		   (match_operand:SI 1 "register_operand" "r")
+		   (const_int 16))
+		 (ashiftrt:SI
+		   (match_operand:SI 2 "register_operand" "r")
+		   (const_int 16))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mul.h11\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*mul_h00"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (sign_extend:SI
+		   (match_operand:HI 1 "register_operand" "r"))
+		 (sign_extend:SI
+		   (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mul.h00\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2addh"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (plus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                          (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                 (mult:SI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                       (const_int 16))
+                          (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                       (const_int 16)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2add.h\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2subh"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (minus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                          (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                 (mult:SI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                       (const_int 16))
+                          (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                       (const_int 16)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2sub.h\t%0, %2, %1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
 ;; MACCSU.H00: Signed-unsigned multiply-accumulate (bottom x bottom)
 ;; rd = rd + sext(rs1[15:0]) * zext(rs2[15:0])
 ;; Two patterns for different operand orderings from GCC.
