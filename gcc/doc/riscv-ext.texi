@@ -654,6 +654,10 @@
 @tab 1.0
 @tab Supervisor-mode pointer masking extension
 
+@item @samp{ssqosid}
+@tab 1.0
+@tab Supervisor-mode quality-of-service ID extension
+
 @item @samp{ssstateen}
 @tab 1.0
 @tab Supervisor-mode state-enable extension

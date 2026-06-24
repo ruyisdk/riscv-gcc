@@ -433,6 +433,8 @@ Mask(SSNPM) Var(riscv_ss_subext)
 
 Mask(SSPM) Var(riscv_ss_subext)
 
+Mask(SSQOSID) Var(riscv_ss_subext)
+
 Mask(SSSTATEEN) Var(riscv_ss_subext)
 
 Mask(SSTC) Var(riscv_ss_subext)
