@@ -4953,7 +4953,8 @@ case "${target}" in
 		| lp64f,rv64*f* | lp64f,rv64g* \
 		| lp64d,rv64*d* | lp64d,rv64g* \
 		| lp64,rvi20u64* | lp64f,rvi20u64* \
-		| lp64d,rva20u64* | lp64d,rva22u64* \
+		| lp64d,rva20u64* | lp64d,rva20s64* \
+		| lp64d,rva22u64* | lp64d,rva22s64* \
 		| lp64d,rva23u64* | lp64d,rva23s64* \
 		| lp64d,rvb23u64* | lp64d,rvb23s64)
 			;;
