@@ -66,7 +66,7 @@ riscv_d_handle_target_float_abi (void)
     case ABI_LP64D:
       abi = "double";
       break;
-    
+
     case ABI_ILP32Q:
     case ABI_LP64Q:
       abi = "quad";

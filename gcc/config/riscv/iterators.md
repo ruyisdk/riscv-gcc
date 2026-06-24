@@ -145,7 +145,7 @@
 (define_mode_attr softload [(HF "lh") (SF "lw") (DF "ld")])
 
 ;; Instruction names for stores.
-(define_mode_attr store [(QI "sb") (HI "sh") (SI "sw") (DI "sd") (HF "fsh") (SF "fsw") (DF "fsd") (TF "flq")])
+(define_mode_attr store [(QI "sb") (HI "sh") (SI "sw") (DI "sd") (HF "fsh") (SF "fsw") (DF "fsd") (TF "fsq")])
 
 ;; Instruction names for FP stores from integer registers.
 (define_mode_attr softstore [(HF "sh") (SF "sw") (DF "sd")])

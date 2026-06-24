@@ -5165,13 +5165,13 @@ riscv_output_move (rtx dest, rtx src)
 		/* in RV32, we can emulate fmv.d.x %0, x0 using fcvt.d.w */
 		gcc_assert (src == CONST0_RTX (mode));
 		return "fcvt.d.w\t%0,x0";
-        case 16:
-    gcc_assert (src == CONST0_RTX (mode));
-    /* In RV64, we can emulate fmv.q.x %0, x0 using fcvt.d.x.  */
-    if(TARGET_64BIT)
-      return "fmv.d.x\t%0,x0";
-    /* in RV32, we can emulate fmv.d.x %0, x0 using fcvt.d.w */
-    return "fcvt.d.w\t%0,x0";
+	      case 16:
+		gcc_assert (src == CONST0_RTX (mode));
+		/* In RV64, we can emulate fmv.q.x %0, x0 using fcvt.d.x.  */
+		if (TARGET_64BIT)
+		  return "fmv.d.x\t%0,x0";
+		/* in RV32, we can emulate fmv.d.x %0, x0 using fcvt.d.w */
+		return "fcvt.d.w\t%0,x0";
 	      }
 	}
       if (dest_code == MEM)
@@ -5196,8 +5196,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "fmv.s\t%0,%1";
 	  case 8:
 	    return "fmv.d\t%0,%1";
-    case 16:
-      return "fmv.q\t%0,%1";
+	  case 16:
+	    return "fmv.q\t%0,%1";
 	  }
 
       if (dest_code == MEM)
@@ -5209,8 +5209,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "fsw\t%1,%0";
 	  case 8:
 	    return "fsd\t%1,%0";
-    case 16:
-      return "fsq\t%1,%0";
+	  case 16:
+	    return "fsq\t%1,%0";
 	  }
     }
   if (dest_code == REG && FP_REG_P (REGNO (dest)))
@@ -5224,8 +5224,8 @@ riscv_output_move (rtx dest, rtx src)
 	    return "flw\t%0,%1";
 	  case 8:
 	    return "fld\t%0,%1";
-    case 16:
-      return "flq\t%0,%1";
+	  case 16:
+	    return "flq\t%0,%1";
 	  }
 
       if (src_code == CONST_DOUBLE && satisfies_constraint_zfli (src))
@@ -9306,8 +9306,8 @@ riscv_for_each_saved_reg (poly_int64 sp_offset, riscv_save_restore_fn fn,
     if (BITSET_P (cfun->machine->frame.fmask, regno - FP_REG_FIRST))
       {
 	bool handle_reg = !cfun->machine->reg_is_wrapped_separately[regno];
-	machine_mode mode = TARGET_QUAD_FLOAT ? TFmode : 
-                      TARGET_DOUBLE_FLOAT ? DFmode : SFmode;
+	machine_mode mode = (TARGET_QUAD_FLOAT ? TFmode
+			     : TARGET_DOUBLE_FLOAT ? DFmode : SFmode);
 	unsigned int slot = (riscv_use_multi_push (&cfun->machine->frame))
 			      ? CALLEE_SAVED_FREG_NUMBER (regno)
 			      : num_masked_fp;
