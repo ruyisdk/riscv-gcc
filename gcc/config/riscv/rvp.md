@@ -88,6 +88,18 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+(define_insn "*<rvp_widen_optab><rvp_narrow><rvp_ext_mode>3"
+  [(set (match_operand:RVP_DWIDTH_EXT 0 "register_operand" "=r")
+        (rvp_widen_op:RVP_DWIDTH_EXT
+                    (any_extend:RVP_DWIDTH_EXT
+                      (match_operand:<HALFMODE> 1 "register_operand" "r"))
+                    (any_extend:RVP_DWIDTH_EXT
+                      (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "<rvp_widen_insn><u>.<rvp_extend_width>\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
 ;; 8-byte vectors: RV64 single register, RV32 register pair
 ;; riscv_hard_regno_mode_ok rejects odd base registers for 8-byte modes on
 ;; RVP+RV32, so "r" is sufficient; no separate register-pair constraint needed.

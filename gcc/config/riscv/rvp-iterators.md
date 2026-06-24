@@ -120,6 +120,9 @@
    minus ss_minus us_minus
    smax umax smin umin eq lt ltu])
 
+(define_code_iterator rvp_widen_op
+  [plus minus])
+
 ;; Operations for averaging instructions
 (define_code_iterator avg_op [plus minus])
 
@@ -139,6 +142,12 @@
    (minus "psub") (ss_minus "pssub") (us_minus "pssubu")
    (smax "pmax") (umax "pmaxu") (smin "pmin") (umin "pminu")
    (eq "pmseq") (lt "pmslt") (ltu "pmsltu")])
+
+(define_code_attr rvp_widen_optab
+  [(plus "pwadd") (minus "pwsub")])
+
+(define_code_attr rvp_widen_insn
+  [(plus "pwadd") (minus "pwsub")])
 
 ;; Averaging arithmetic instruction names
 (define_code_attr avg_insn
