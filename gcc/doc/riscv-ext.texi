@@ -606,6 +606,10 @@
 @tab 1.0
 @tab Resumable non-maskable interrupts
 
+@item @samp{smsdid}
+@tab 1.0
+@tab Machine-mode supervisor domain ID extension
+
 @item @samp{smstateen}
 @tab 1.0
 @tab State enable extension
