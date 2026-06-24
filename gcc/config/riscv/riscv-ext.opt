@@ -397,6 +397,8 @@ Mask(SMCDELEG) Var(riscv_sm_subext)
 
 Mask(SMCNTRPMF) Var(riscv_sm_subext)
 
+Mask(SMCTR) Var(riscv_sm_subext)
+
 Mask(SMCSRIND) Var(riscv_sm_subext)
 
 Mask(SMEPMP) Var(riscv_sm_subext)

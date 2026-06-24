@@ -582,6 +582,10 @@
 @tab 1.0
 @tab Cycle and instret privilege mode filtering
 
+@item @samp{smctr}
+@tab 1.0
+@tab Machine-mode control transfer records extension
+
 @item @samp{smcsrind}
 @tab 1.0
 @tab Machine-level indirect CSR access
