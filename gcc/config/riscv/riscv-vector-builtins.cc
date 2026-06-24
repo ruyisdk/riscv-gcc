@@ -4031,9 +4031,30 @@ static CONSTEXPR const function_type_info function_types[] = {
     VECTOR_TYPE_##ZVDOTA_ACC,                                                  \
     VECTOR_TYPE_##ZVDOTA_UACC,                                                 \
     VECTOR_TYPE_##ZVDOTA_F32_ACC,                                              \
+    /* Keep entries aligned with enum rvv_base_type.  */                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
     VECTOR_TYPE_##FP8E4M3,                                                     \
     VECTOR_TYPE_##FP8E5M2,                                                     \
+    VECTOR_TYPE_INVALID,                                                       \
     VECTOR_TYPE_##TUPLE_SUBPART,                                               \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
+    VECTOR_TYPE_INVALID,                                                       \
   },
 #include "riscv-vector-builtins.def"
 }; // namespace riscv_vector
