@@ -28,6 +28,7 @@
 ;; C -- Print the integer branch condition for comparison OP.
 ;; A -- Print the atomic operation suffix for memory model OP.
 ;; F -- Print a FENCE if the memory model requires a release.
+;; Z -- Print the VTYPE alt-format suffix.
 ;; z -- Print x0 if OP is zero, otherwise print OP normally.
 ;; i -- Print i if the operand is not a register.
 ;; S -- Print shift-index of single-bit mask OP.

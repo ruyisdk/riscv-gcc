@@ -1001,6 +1001,10 @@
 	   (const_int 4)]
 	(const_int INVALID_ATTRIBUTE)))
 
+;; The VTYPE alt-format field value.
+(define_attr "altfmt" ""
+  (const_int INVALID_ATTRIBUTE))
+
 ;; Defines rounding mode of an fixed-point operation.
 
 (define_attr "vxrm_mode" "rnu,rne,rdn,rod,clobber,none"
@@ -1760,7 +1764,8 @@
 		   (match_operand 2 "const_int_operand" "i")
 		   (match_operand 3 "const_int_operand" "i")
 		   (match_operand 4 "const_int_operand" "i")
-		   (match_operand 5 "const_int_operand" "i")] UNSPEC_VSETVL))
+		   (match_operand 5 "const_int_operand" "i")
+		   (match_operand 6 "const_int_operand" "i")] UNSPEC_VSETVL))
    (set (reg:SI VL_REGNUM)
 	(unspec:SI [(match_dup 1)
 		    (match_dup 2)
@@ -1769,15 +1774,17 @@
 	(unspec:SI [(match_dup 2)
 		    (match_dup 3)
 		    (match_dup 4)
-		    (match_dup 5)] UNSPEC_VSETVL))]
+		    (match_dup 5)
+		    (match_dup 6)] UNSPEC_VSETVL))]
   "TARGET_VECTOR"
-  "vset%i1vli\t%0,%1,e%2,%m3,t%p4,m%p5"
+  "vset%i1vli\t%0,%1,e%2%Z6,%m3,t%p4,m%p5"
   [(set_attr "type" "vsetvl")
    (set_attr "mode" "<MODE>")
    (set (attr "sew") (symbol_ref "INTVAL (operands[2])"))
    (set (attr "vlmul") (symbol_ref "INTVAL (operands[3])"))
    (set (attr "ta") (symbol_ref "INTVAL (operands[4])"))
-   (set (attr "ma") (symbol_ref "INTVAL (operands[5])"))])
+   (set (attr "ma") (symbol_ref "INTVAL (operands[5])"))
+   (set (attr "altfmt") (symbol_ref "INTVAL (operands[6])"))])
 
 ;; vsetvl zero,zero,vtype instruction.
 ;; This pattern has no side effects and does not set X0 register.
@@ -1787,15 +1794,17 @@
 	  [(match_operand 0 "const_int_operand" "i")
 	   (match_operand 1 "const_int_operand" "i")
 	   (match_operand 2 "const_int_operand" "i")
-	   (match_operand 3 "const_int_operand" "i")] UNSPEC_VSETVL))]
+	   (match_operand 3 "const_int_operand" "i")
+	   (match_operand 4 "const_int_operand" "i")] UNSPEC_VSETVL))]
   "TARGET_VECTOR"
-  "vsetvli\tzero,zero,e%0,%m1,t%p2,m%p3"
+  "vsetvli\tzero,zero,e%0%Z4,%m1,t%p2,m%p3"
   [(set_attr "type" "vsetvl")
    (set_attr "mode" "SI")
    (set (attr "sew") (symbol_ref "INTVAL (operands[0])"))
    (set (attr "vlmul") (symbol_ref "INTVAL (operands[1])"))
    (set (attr "ta") (symbol_ref "INTVAL (operands[2])"))
-   (set (attr "ma") (symbol_ref "INTVAL (operands[3])"))])
+   (set (attr "ma") (symbol_ref "INTVAL (operands[3])"))
+   (set (attr "altfmt") (symbol_ref "INTVAL (operands[4])"))])
 
 ;; vsetvl zero,rs1,vtype instruction.
 ;; The reason we need this pattern since we should avoid setting X0 register
@@ -1809,15 +1818,17 @@
 	(unspec:SI [(match_dup 1)
 		    (match_dup 2)
 		    (match_operand 3 "const_int_operand" "i")
-		    (match_operand 4 "const_int_operand" "i")] UNSPEC_VSETVL))]
+		    (match_operand 4 "const_int_operand" "i")
+		    (match_operand 5 "const_int_operand" "i")] UNSPEC_VSETVL))]
   "TARGET_VECTOR"
-  "vset%i0vli\tzero,%0,e%1,%m2,t%p3,m%p4"
+  "vset%i0vli\tzero,%0,e%1%Z5,%m2,t%p3,m%p4"
   [(set_attr "type" "vsetvl")
    (set_attr "mode" "<MODE>")
    (set (attr "sew") (symbol_ref "INTVAL (operands[1])"))
    (set (attr "vlmul") (symbol_ref "INTVAL (operands[2])"))
    (set (attr "ta") (symbol_ref "INTVAL (operands[3])"))
-   (set (attr "ma") (symbol_ref "INTVAL (operands[4])"))])
+   (set (attr "ma") (symbol_ref "INTVAL (operands[4])"))
+   (set (attr "altfmt") (symbol_ref "INTVAL (operands[5])"))])
 
 ;; It's emit by vsetvl/vsetvlmax intrinsics with no side effects.
 ;; Since we have many optimization passes from "expand" to "reload_completed",
@@ -1828,19 +1839,20 @@
 		   (match_operand 2 "const_int_operand" "i")
 		   (match_operand 3 "const_int_operand" "i")
 		   (match_operand 4 "const_int_operand" "i")
-		   (match_operand 5 "const_int_operand" "i")] UNSPEC_VSETVL))]
+		   (match_operand 5 "const_int_operand" "i")
+		   (match_operand 6 "const_int_operand" "i")] UNSPEC_VSETVL))]
   "TARGET_VECTOR"
   "#"
   "&& epilogue_completed"
   [(parallel
     [(set (match_dup 0)
 	  (unspec:P [(match_dup 1) (match_dup 2) (match_dup 3)
-		     (match_dup 4) (match_dup 5)] UNSPEC_VSETVL))
+		     (match_dup 4) (match_dup 5) (match_dup 6)] UNSPEC_VSETVL))
      (set (reg:SI VL_REGNUM)
 	  (unspec:SI [(match_dup 1) (match_dup 2) (match_dup 3)] UNSPEC_VSETVL))
      (set (reg:SI VTYPE_REGNUM)
 	  (unspec:SI [(match_dup 2) (match_dup 3) (match_dup 4)
-		      (match_dup 5)] UNSPEC_VSETVL))])]
+		      (match_dup 5) (match_dup 6)] UNSPEC_VSETVL))])]
   ""
   [(set_attr "type" "vsetvl")
    (set_attr "mode" "SI")])
@@ -1872,7 +1884,8 @@
 		        (match_operand 2 "const_int_operand")
 		        (match_operand 3 "const_int_operand")
 		        (match_operand 4 "const_int_operand")
-		        (match_operand 5 "const_int_operand")] UNSPEC_VSETVL) 0)))]
+		        (match_operand 5 "const_int_operand")
+			(match_operand 6 "const_int_operand")] UNSPEC_VSETVL) 0)))]
   "TARGET_VECTOR && TARGET_64BIT"
   "#"
   "&& 1"
@@ -1881,7 +1894,8 @@
                     (match_dup 2)
                     (match_dup 3)
                     (match_dup 4)
-                    (match_dup 5)] UNSPEC_VSETVL))]
+                    (match_dup 5)
+		    (match_dup 6)] UNSPEC_VSETVL))]
   ""
   [(set_attr "type" "vsetvl")
    (set_attr "mode" "SI")])

@@ -7953,6 +7953,7 @@ riscv_asm_output_opcode (FILE *asm_out_file, const char *p)
    'I'	Print the LR suffix for memory model OP.
    'J'	Print the SC suffix for memory model OP.
    'L'	Print a non-temporal locality hints instruction.
+   'Z'	Print the VTYPE alt-format suffix.
    'z'	Print x0 if OP is zero, otherwise print OP normally.
    'i'	Print i if the operand is not a register.
    'S'	Print shift-index of single-bit mask OP.
@@ -8093,6 +8094,16 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	  output_operand_lossage ("invalid vector constant");
 	break;
       }
+
+    case 'Z':
+      if (!CONST_INT_P (op))
+	output_operand_lossage ("invalid operand for '%%%c'", letter);
+      else if (INTVAL (op) == riscv_vector::ALTFMT_ALT)
+	fputs ("alt", file);
+      else if (INTVAL (op) != riscv_vector::ALTFMT_NONE)
+	gcc_unreachable ();
+      break;
+
     case 'h':
       if (code == HIGH)
 	op = XEXP (op, 0);
@@ -10967,6 +10978,7 @@ struct last_vconfig
   bool ma;
   uint8_t sew;
   uint8_t vlmul;
+  uint8_t altfmt;
   rtx avl;
 } last_vconfig;
 
@@ -11001,6 +11013,9 @@ compatible_with_last_vconfig (rtx_insn *insn)
     return false;
 
   if (get_vlmul (insn) != last_vconfig.vlmul)
+    return false;
+
+  if (get_altfmt (insn) != last_vconfig.altfmt)
     return false;
 
   if (tail_agnostic_p (insn) != last_vconfig.ta)
@@ -11068,6 +11083,7 @@ riscv_sched_variable_issue (FILE *, int, rtx_insn *insn, int more)
 	  last_vconfig.avl = avl;
 	  last_vconfig.sew = get_sew (insn);
 	  last_vconfig.vlmul = get_vlmul (insn);
+	  last_vconfig.altfmt = get_altfmt (insn);
 	  last_vconfig.ta = tail_agnostic_p (insn);
 	  last_vconfig.ma = mask_agnostic_p (insn);
 	}

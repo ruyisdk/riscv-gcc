@@ -501,6 +501,17 @@ mask_agnostic_p (rtx_insn *rinsn)
   return ma == INVALID_ATTRIBUTE ? get_default_ma () : IS_AGNOSTIC (ma);
 }
 
+/* Helper function to get the VTYPE alt-format field.  */
+uint8_t
+get_altfmt (rtx_insn *rinsn)
+{
+  extract_insn_cached (rinsn);
+  int altfmt = get_attr_altfmt (rinsn);
+  if (altfmt == INVALID_ATTRIBUTE)
+    return ALTFMT_NONE;
+  return altfmt;
+}
+
 /* Return true if FN has a vector instruction that use VL/VTYPE.  */
 static bool
 has_vector_insn (function *fn)
@@ -900,6 +911,7 @@ private:
   uint8_t m_max_sew;
   vlmul_type m_vlmul;
   uint8_t m_ratio;
+  uint8_t m_altfmt;
   bool m_ta;
   bool m_ma;
 
@@ -925,7 +937,7 @@ public:
   vsetvl_info ()
     : m_insn (nullptr), m_bb (nullptr), m_avl (NULL_RTX), m_vl (NULL_RTX),
       m_avl_def (nullptr), m_sew (0), m_max_sew (0), m_vlmul (LMUL_RESERVED),
-      m_ratio (0), m_ta (false), m_ma (false),
+      m_ratio (0), m_altfmt (ALTFMT_NONE), m_ta (false), m_ma (false),
       m_sew_lmul_demand (sew_lmul_demand_type::sew_lmul),
       m_policy_demand (policy_demand_type::tail_mask_policy),
       m_avl_demand (avl_demand_type::avl), m_state (state_type::UNINITIALIZED),
@@ -943,6 +955,7 @@ public:
   void set_sew (uint8_t sew) { m_sew = sew; }
   void set_vlmul (vlmul_type vlmul) { m_vlmul = vlmul; }
   void set_ratio (uint8_t ratio) { m_ratio = ratio; }
+  void set_altfmt (uint8_t altfmt) { m_altfmt = altfmt; }
   void set_ta (bool ta) { m_ta = ta; }
   void set_ma (bool ma) { m_ma = ma; }
   void set_delete () { m_delete = true; }
@@ -957,6 +970,7 @@ public:
   uint8_t get_sew () const { return m_sew; }
   vlmul_type get_vlmul () const { return m_vlmul; }
   uint8_t get_ratio () const { return m_ratio; }
+  uint8_t get_altfmt () const { return m_altfmt; }
   bool get_ta () const { return m_ta; }
   bool get_ma () const { return m_ma; }
   insn_info *get_insn () const { return m_insn; }
@@ -1107,6 +1121,7 @@ public:
       m_vl = ::get_vl (rinsn);
     m_sew = ::get_sew (rinsn);
     m_vlmul = ::get_vlmul (rinsn);
+    m_altfmt = ::get_altfmt (rinsn);
     m_ta = tail_agnostic_p (rinsn);
     m_ma = mask_agnostic_p (rinsn);
   }
@@ -1160,6 +1175,7 @@ public:
 
     m_sew = ::get_sew (insn->rtl ());
     m_vlmul = ::get_vlmul (insn->rtl ());
+    m_altfmt = ::get_altfmt (insn->rtl ());
     m_ratio = get_attr_ratio (insn->rtl ());
     /* when get_attr_ratio is invalid, this kind of instructions
        doesn't care about ratio. However, we still need this value
@@ -1290,13 +1306,15 @@ public:
     rtx vlmul = gen_int_mode (get_vlmul (), Pmode);
     rtx ta = gen_int_mode (get_ta (), Pmode);
     rtx ma = gen_int_mode (get_ma (), Pmode);
+    rtx altfmt = gen_int_mode (get_altfmt (), Pmode);
 
     if (change_vtype_only_p ())
-      return gen_vsetvl_vtype_change_only (sew, vlmul, ta, ma);
+      return gen_vsetvl_vtype_change_only (sew, vlmul, ta, ma, altfmt);
     else if (has_vl () && !ignore_vl)
-      return gen_vsetvl (Pmode, get_vl (), avl, sew, vlmul, ta, ma);
+      return gen_vsetvl (Pmode, get_vl (), avl, sew, vlmul, ta, ma, altfmt);
     else
-      return gen_vsetvl_discard_result (Pmode, avl, sew, vlmul, ta, ma);
+      return gen_vsetvl_discard_result (Pmode, avl, sew, vlmul, ta, ma,
+					altfmt);
   }
 
   /* Return true that the non-AVL operands of THIS will be modified
@@ -1334,7 +1352,9 @@ public:
 	   && get_avl () == other.get_avl () && get_vl () == other.get_vl ()
 	   && get_avl_def () == other.get_avl_def ()
 	   && get_sew () == other.get_sew ()
-	   && get_vlmul () == other.get_vlmul () && get_ta () == other.get_ta ()
+	   && get_vlmul () == other.get_vlmul ()
+	   && get_altfmt () == other.get_altfmt ()
+	   && get_ta () == other.get_ta ()
 	   && get_ma () == other.get_ma ()
 	   && get_avl_demand () == other.get_avl_demand ()
 	   && get_sew_lmul_demand () == other.get_sew_lmul_demand ()
@@ -1395,7 +1415,9 @@ public:
     fprintf (file, "MAX_SEW=%d\n", get_max_sew ());
 
     fprintf (file, "%sTAIL_POLICY=%s, ", indent, policy_to_str (get_ta ()));
-    fprintf (file, "MASK_POLICY=%s\n", policy_to_str (get_ma ()));
+    fprintf (file, "MASK_POLICY=%s, ", policy_to_str (get_ma ()));
+    fprintf (file, "ALTFMT=%s\n",
+	     get_altfmt () == ALTFMT_ALT ? "alt" : "none");
 
     fprintf (file, "%sAVL=", indent);
     print_rtl_single (file, get_avl ());
@@ -1666,6 +1688,12 @@ private:
 				     const vsetvl_info &next)
   {
     return tail_policy_eq_p (prev, next) && mask_policy_eq_p (prev, next);
+  }
+
+  inline bool altfmt_eq_p (const vsetvl_info &prev,
+			   const vsetvl_info &next)
+  {
+    return prev.get_altfmt () == next.get_altfmt ();
   }
 
   /* predictors for avl */
@@ -2225,6 +2253,7 @@ public:
   bool compatible_p (const vsetvl_info &prev, const vsetvl_info &next)
   {
     bool compatible_p = sew_lmul_compatible_p (prev, next)
+			&& altfmt_eq_p (prev, next)
 			&& policy_compatible_p (prev, next)
 			&& avl_compatible_p (prev, next)
 			&& vl_not_in_conflict_p (prev, next);
@@ -2234,6 +2263,7 @@ public:
   bool available_p (const vsetvl_info &prev, const vsetvl_info &next)
   {
     bool available_p = sew_lmul_available_p (prev, next)
+		       && altfmt_eq_p (prev, next)
 		       && policy_available_p (prev, next)
 		       && avl_available_p (prev, next)
 		       && vl_not_in_conflict_p (prev, next);

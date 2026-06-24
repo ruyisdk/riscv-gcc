@@ -116,6 +116,10 @@ public:
     /* MASK_ANY.  */
     e.add_input_operand (Pmode,
 			 gen_int_mode (get_prefer_mask_policy (), Pmode));
+
+    /* ALTFMT_NONE.  */
+    e.add_input_operand (Pmode, gen_int_mode (ALTFMT_NONE, Pmode));
+
     return e.generate_insn (code_for_vsetvl_no_side_effects (Pmode));
   }
 };
