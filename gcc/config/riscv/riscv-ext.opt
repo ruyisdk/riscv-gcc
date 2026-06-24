@@ -457,6 +457,8 @@ Mask(SVNAPOT) Var(riscv_sv_subext)
 
 Mask(SVPBMT) Var(riscv_sv_subext)
 
+Mask(SVRSW60T59B) Var(riscv_sv_subext)
+
 Mask(SVVPTC) Var(riscv_sv_subext)
 
 Mask(SVADU) Var(riscv_sv_subext)

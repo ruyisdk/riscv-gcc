@@ -702,6 +702,10 @@
 @tab 1.0
 @tab Page-based memory types extension
 
+@item @samp{svrsw60t59b}
+@tab 1.0
+@tab Page-table reserved-for-software bits 60-59 extension
+
 @item @samp{svvptc}
 @tab 1.0
 @tab Extension for obviating memory-management instructions after marking PTEs valid
