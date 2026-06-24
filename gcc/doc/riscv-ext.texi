@@ -638,6 +638,10 @@
 @tab 1.0
 @tab Support writeable enables for any supported counter
 
+@item @samp{ssctr}
+@tab 1.0
+@tab Supervisor-mode control transfer records extension
+
 @item @samp{sscsrind}
 @tab 1.0
 @tab Supervisor-mode indirect CSR access
