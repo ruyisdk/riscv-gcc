@@ -314,6 +314,19 @@ DEFINE_RISCV_EXT(
   /* EXTRA_EXTENSION_FLAGS */ 0)
 
 DEFINE_RISCV_EXT(
+  /* NAME */ ziccamoc,
+  /* UPPERCASE_NAME */ ZICCAMOC,
+  /* FULL_NAME */ "Main memory supports compare-and-swap atomics",
+  /* DESC */ "",
+  /* URL */ ,
+  /* DEP_EXTS */ ({}),
+  /* SUPPORTED_VERSIONS */ ({{1, 0}}),
+  /* FLAG_GROUP */ zi,
+  /* BITMASK_GROUP_ID */ BITMASK_NOT_YET_ALLOCATED,
+  /* BITMASK_BIT_POSITION*/ BITMASK_NOT_YET_ALLOCATED,
+  /* EXTRA_EXTENSION_FLAGS */ 0)
+
+DEFINE_RISCV_EXT(
   /* NAME */ ziccid,
   /* UPPERCASE_NAME */ ZICCID,
   /* FULL_NAME */ "Instruction/data coherence and consistency extension",

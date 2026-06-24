@@ -86,6 +86,10 @@
 @tab 1.0
 @tab Main memory supports all atomics in A
 
+@item @samp{ziccamoc}
+@tab 1.0
+@tab Main memory supports compare-and-swap atomics
+
 @item @samp{ziccid}
 @tab 1.0
 @tab Instruction/data coherence and consistency extension
