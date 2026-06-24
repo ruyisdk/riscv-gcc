@@ -1817,13 +1817,29 @@
 ;;      (minus (umax a b) (umin a b)) for unsigned
 
 (define_insn "<abd_optab><mode>3"
-  [(set (match_operand:PVQIHI 0 "register_operand" "=r")
-	(minus:PVQIHI
-	  (abd_maxop:PVQIHI (match_operand:PVQIHI 1 "register_operand" "r")
-			    (match_operand:PVQIHI 2 "register_operand" "r"))
-	  (<abd_minop>:PVQIHI (match_dup 1) (match_dup 2))))]
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(minus:PV32
+	  (abd_maxop:PV32 (match_operand:PV32 1 "register_operand" "r")
+			    (match_operand:PV32 2 "register_operand" "r"))
+	  (<abd_minop>:PV32 (match_dup 1) (match_dup 2))))]
   "TARGET_RVP"
   "<abd_insn>.<rvp_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "<abd_optab><mode>3"
+  [(set (match_operand:PV64QH 0 "register_operand" "=r")
+	(minus:PV64QH
+	  (abd_maxop:PV64QH (match_operand:PV64QH 1 "register_operand" "r")
+			    (match_operand:PV64QH 2 "register_operand" "r"))
+	  (<abd_minop>:PV64QH (match_dup 1) (match_dup 2))))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "<abd_insn>.<rvp_width>\t%0, %1, %2";
+    else
+      return "<abd_insn>.<rvp_dwidth>\t%0, %1, %2";
+  }
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
