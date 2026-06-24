@@ -1250,6 +1250,19 @@ DEFINE_RISCV_EXT(
   /* EXTRA_EXTENSION_FLAGS */ 0)
 
 DEFINE_RISCV_EXT(
+  /* NAME */ zvfofp8min,
+  /* UPPERCASE_NAME */ ZVFOFP8MIN,
+  /* FULL_NAME */ "Vector FP8 conversion extension",
+  /* DESC */ "",
+  /* URL */ ,
+  /* DEP_EXTS */ ({"zve32f"}),
+  /* SUPPORTED_VERSIONS */ ({{1, 0}}),
+  /* FLAG_GROUP */ zvf,
+  /* BITMASK_GROUP_ID */ BITMASK_NOT_YET_ALLOCATED,
+  /* BITMASK_BIT_POSITION*/ BITMASK_NOT_YET_ALLOCATED,
+  /* EXTRA_EXTENSION_FLAGS */ 0)
+
+DEFINE_RISCV_EXT(
   /* NAME */ zvfqwbdota8f,
   /* UPPERCASE_NAME */ ZVFQWBDOTA8F,
   /* FULL_NAME */ "Vector quad-widening FP8 batched dot-product extension",

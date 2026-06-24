@@ -95,6 +95,9 @@ TargetVariable
 int riscv_zv_subext
 
 TargetVariable
+int riscv_zvabd_subext
+
+TargetVariable
 int riscv_zvb_subext
 
 TargetVariable
@@ -111,9 +114,6 @@ int riscv_zvl_subext
 
 TargetVariable
 int riscv_zvq_subext
-
-TargetVariable
-int riscv_zvabd_subext
 
 Mask(RVE) Var(riscv_base_subext)
 

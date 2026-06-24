@@ -362,6 +362,10 @@
 @tab 1.0
 @tab Vector BF16 converts extension
 
+@item @samp{zvfofp8min}
+@tab 1.0
+@tab Vector FP8 conversion extension
+
 @item @samp{zvfqwbdota8f}
 @tab 1.0
 @tab Vector quad-widening FP8 batched dot-product extension
