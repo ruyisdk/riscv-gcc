@@ -87,6 +87,9 @@
 			     (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")
 			     (PV2SI "TARGET_64BIT")])
 
+;; PCMP: All packed vector modes for comparison operations (PMSEQ, PMSLT, PMSLTU)
+(define_mode_iterator PCMP [PV4QI PV2HI PV8QI PV4HI PV2SI])
+
 ;; Packed extension mode for RV32 register-pair instructions
 (define_mode_iterator RVP_DWIDTH_EXT [PV4HI PV2SI])
 

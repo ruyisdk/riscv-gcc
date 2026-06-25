@@ -489,10 +489,10 @@
 
 ;; Vector comparison expander for signed comparisons
 (define_expand "vec_cmp<mode><mode>"
-  [(set (match_operand:PVALL 0 "register_operand")
-	(match_operator:PVALL 1 "comparison_operator"
-	  [(match_operand:PVALL 2 "register_operand")
-	   (match_operand:PVALL 3 "register_operand")]))]
+  [(set (match_operand:PCMP 0 "register_operand")
+	(match_operator:PCMP 1 "comparison_operator"
+	  [(match_operand:PCMP 2 "register_operand")
+	   (match_operand:PCMP 3 "register_operand")]))]
   "TARGET_RVP"
 {
   riscv_p_expand_vec_cmp (operands);
@@ -501,10 +501,10 @@
 
 ;; Vector comparison expander for unsigned comparisons
 (define_expand "vec_cmpu<mode><mode>"
-  [(set (match_operand:PVALL 0 "register_operand")
-	(match_operator:PVALL 1 "comparison_operator"
-	  [(match_operand:PVALL 2 "register_operand")
-	   (match_operand:PVALL 3 "register_operand")]))]
+  [(set (match_operand:PCMP 0 "register_operand")
+	(match_operator:PCMP 1 "comparison_operator"
+	  [(match_operand:PCMP 2 "register_operand")
+	   (match_operand:PCMP 3 "register_operand")]))]
   "TARGET_RVP"
 {
   riscv_p_expand_vec_cmp (operands);
@@ -515,11 +515,11 @@
 ;; Implements: result = mask ? op1 : op2
 ;; For each element i: result[i] = mask[i] ? op1[i] : op2[i]
 (define_expand "vcond_mask_<mode><mode>"
-  [(set (match_operand:PVALL 0 "register_operand")
-	(if_then_else:PVALL
-	  (match_operand:PVALL 3 "register_operand")
-	  (match_operand:PVALL 1 "nonmemory_operand")
-	  (match_operand:PVALL 2 "nonmemory_operand")))]
+  [(set (match_operand:PCMP 0 "register_operand")
+	(if_then_else:PCMP
+	  (match_operand:PCMP 3 "register_operand")
+	  (match_operand:PCMP 1 "nonmemory_operand")
+	  (match_operand:PCMP 2 "nonmemory_operand")))]
   "TARGET_RVP"
 {
   riscv_p_expand_vcond_mask (operands);
