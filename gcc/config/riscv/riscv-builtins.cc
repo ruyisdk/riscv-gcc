@@ -372,10 +372,10 @@ riscv_init_builtins (void)
 	{
 	  tree type = riscv_build_function_type (d->prototype);
 	  riscv_builtin_decls[i]
-	    = add_builtin_function (d->name, type,
-				    (i << RISCV_BUILTIN_SHIFT)
-				      + RISCV_BUILTIN_GENERAL,
-				    BUILT_IN_MD, NULL, NULL);
+	    = simulate_builtin_function_decl (input_location, d->name, type,
+					      (i << RISCV_BUILTIN_SHIFT)
+						+ RISCV_BUILTIN_GENERAL,
+					      NULL, NULL_TREE);
 	  riscv_builtin_decl_index[d->icode] = i;
 	}
     }
@@ -418,6 +418,24 @@ riscv_prepare_builtin_arg (struct expand_operand *op, tree exp, unsigned argno,
 	{
 	  tmp_rtx = simplify_gen_subreg (mode, arg, GET_MODE (arg), 0);
 	  arg = tmp_rtx;
+	}
+      else if (VECTOR_MODE_P (mode)
+	       && known_lt (GET_MODE_SIZE (mode), UNITS_PER_WORD))
+	{
+	  scalar_int_mode imode
+	    = int_mode_for_size (GET_MODE_BITSIZE (mode), 0).require ();
+	  rtx int_arg;
+	  rtx tmp_int = gen_reg_rtx (imode);
+
+	  if (GET_MODE (arg) == imode)
+	    int_arg = arg;
+	  else if (MEM_P (arg))
+	    int_arg = adjust_address_nv (arg, imode, 0);
+	  else
+	    int_arg = simplify_gen_subreg (imode, arg, GET_MODE (arg), 0);
+
+	  emit_move_insn (tmp_int, int_arg);
+	  arg = simplify_gen_subreg (mode, tmp_int, imode, 0);
 	}
       else if (VECTOR_MODE_P (mode) && CONST_INT_P (arg))
 	{
@@ -488,8 +506,21 @@ riscv_expand_builtin_direct (enum insn_code icode, rtx target, tree exp,
   enum machine_mode insn_return_mode = insn_data[icode].operand[opno].mode;
   enum machine_mode mode = TYPE_MODE (TREE_TYPE (exp));
 
-    if (has_target_p)
+  if (has_target_p)
     {
+      if (VECTOR_MODE_P (insn_return_mode)
+	  && known_lt (GET_MODE_SIZE (insn_return_mode), UNITS_PER_WORD))
+	{
+	  scalar_int_mode imode
+	    = int_mode_for_size (GET_MODE_BITSIZE (insn_return_mode), 0).require ();
+
+	  if (!(target && REG_P (target) && GET_MODE (target) == imode))
+	    target = gen_reg_rtx (imode);
+
+	  target = simplify_gen_subreg (insn_return_mode, target, imode, 0);
+	  mode = insn_return_mode;
+	}
+
       if ((!target || GET_MODE (target) != insn_return_mode
 	   || !(*insn_data[icode].operand[opno].predicate) (target,
 							    insn_return_mode)))

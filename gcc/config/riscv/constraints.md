@@ -330,3 +330,55 @@
 (define_constraint "Q"
   "An address operand that is valid for a prefetch instruction"
   (match_operand 0 "prefetch_operand"))
+
+;; =================================================================
+;; RISC-V P-Extension Immediate Constraints
+;; =================================================================
+(define_constraint "Wpb"
+  "An 8-bit immediate for pli.b / pli.db (-128 to 255)."
+  (and (match_code "const_int")
+       ;; 8-bit 有符号是 -128 ~ 127，无符号是 0 ~ 255
+       ;; 编译器常常由于符号扩展的原因，传入无符号的 255
+       ;; 所以范围通常放宽到涵盖整个 8-bit 窗口
+       (match_test "IN_RANGE (ival, -128, 255)")))
+
+(define_constraint "Wpi"
+  "A 10-bit signed immediate for pli.h (-512 to 511)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -512, 511)")))
+
+(define_constraint "Wpu"
+  "A 10-bit unsigned immediate shifted left by 6 for plui.h."
+  (and (match_code "const_int")
+       (match_test "(ival & 0x3F) == 0 && IN_RANGE (ival, 0, 65472)")))
+
+(define_constraint "Wpw"
+  "A 10-bit signed immediate shifted left by 22 for plui.w (RV64 only)."
+  (and (match_code "const_int")
+       (match_test "(ival & 0x3FFFFF) == 0 && IN_RANGE (ival >> 22, -512, 511)")))
+
+(define_constraint "u3"
+  "A 3-bit unsigned immediate for P-extension instructions (0-7)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 7)")))
+
+(define_constraint "u4"
+  "A 4-bit unsigned immediate for P-extension instructions (0-15)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 15)")))
+
+(define_constraint "w4"
+  "A 4-bit unsigned immediate for P-extension instructions (-15 to -1)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -15, -1)")))
+
+(define_constraint "u5"
+  "A 5-bit unsigned immediate (0-31)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 31)")))
+
+(define_constraint "w5"
+  "A 5-bit negative immediate (-31 to -1)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -31, -1)")))
+
