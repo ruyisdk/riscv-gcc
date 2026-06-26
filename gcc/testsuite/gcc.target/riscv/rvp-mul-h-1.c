@@ -36,5 +36,16 @@ int32_t test_mul_h11_v2 (int16x2_t a, int16x2_t b) {
     return (int32_t)b[1] * (int32_t)a[1];
 }
 
+/* MUL.H01: rd = sext(rs1[15:0]) * sext(rs2[31:16]) */
+int32_t test_mul_h01 (int16x2_t a, int16x2_t b) {
+    return (int32_t)a[0] * (int32_t)b[1];
+}
+
+/* Reverse operand order - should still generate mul.h01 */
+int32_t test_mul_h01_v2 (int16x2_t a, int16x2_t b) {
+    return (int32_t)b[1] * (int32_t)a[0];
+}
+
 /* { dg-final { scan-assembler-times "\\mmul\\.h00\\M" 2 } } */
 /* { dg-final { scan-assembler-times "\\mmul\\.h11\\M" 2 } } */
+/* { dg-final { scan-assembler-times "\\mmul\\.h01\\M" 2 } } */

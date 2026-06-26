@@ -453,6 +453,156 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+(define_insn "*mul_h01"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(mult:SI (ashiftrt:SI
+		   (match_operand:SI 1 "register_operand" "r")
+		   (const_int 16))
+		 (sign_extend:SI
+		   (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mul.h01\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; Intermediate rtl pattern for pm2wadd.h/pm2wsub.h
+;; If combine does not fold this further into *pm2waddh_intermediate, split
+;; it into a real mul.h11 (16x16->32 multiply) followed by a sign-extend to
+;; DI, reusing the low word of the DI destination as the multiply's scratch.
+;; The resulting sign_extend:DI is matched by *extendsidi2_rvp (wadd).
+(define_insn_and_split "*widen_multiply_high_high_pv2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI (sign_extend:DI
+                   (ashiftrt:SI
+		     (match_operand:SI 1 "register_operand" "r")
+		     (const_int 16)))
+		 (sign_extend:DI
+                   (ashiftrt:SI
+		     (match_operand:SI 2 "register_operand" "r")
+		     (const_int 16)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 3)
+	(mult:SI (ashiftrt:SI (match_dup 1) (const_int 16))
+		 (ashiftrt:SI (match_dup 2) (const_int 16))))
+   (set (match_dup 0)
+	(sign_extend:DI (match_dup 3)))]
+  {
+    operands[3] = gen_lowpart (SImode, operands[0]);
+  }
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; Intermediate rtl pattern for pm2wadd.h/pm2wsub.h
+;; Same split strategy as above, using mul.h00 for the low-low case.
+(define_insn_and_split "*widen_multiply_low_low_pv2hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI (sign_extend:DI
+		   (match_operand:HI 1 "register_operand" "r"))
+		 (sign_extend:DI
+		   (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 3)
+	(mult:SI (sign_extend:SI (match_dup 1))
+		 (sign_extend:SI (match_dup 2))))
+   (set (match_dup 0)
+	(sign_extend:DI (match_dup 3)))]
+  {
+    operands[3] = gen_lowpart (SImode, operands[0]);
+  }
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; Intermediate rtl pattern for PM2WADD.H combine
+;; If combine does not fold this all the way into *pm2waddh, split into a
+;; widening high*high multiply (staged in operand 0, further split by
+;; *widen_multiply_high_high_pv2hi into mul.h11 + sign-extend) followed by a
+;; wmacc accumulating the low*low term. wmacc ties its accumulator input to
+;; its output via the "0" constraint, so operand 0 must be an aligned
+;; register pair ("R"), like *smulsidi3_rvp/*rvp_widen_smaddsidi4 require.
+(define_insn_and_split "*pm2waddh_intermediate"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                          (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
+                 (mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 3 "register_operand" "r") 0)
+                                                       (const_int 16)))
+                          (sign_extend:DI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 4 "register_operand" "r") 0)
+                                                       (const_int 16))))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 0)
+	(mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 3) 0) (const_int 16)))
+		 (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 4) 0) (const_int 16)))))
+   (set (match_dup 0)
+	(plus:DI (mult:DI (sign_extend:DI (match_dup 1)) (sign_extend:DI (match_dup 2)))
+		 (match_dup 0)))]
+  ""
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])                
+
+ (define_insn "*pm2waddh"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (plus:DI (mult:DI (sign_extend:DI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                          (sign_extend:DI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                 (mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                                       (const_int 16)))
+                          (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                                       (const_int 16))))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2wadd.h\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; Intermediate rtl pattern for PM2WADD.HX combine
+;; Not directly matched by a single instruction:
+;; each mixes one full-SI factor with a sign-extended halfword extracted
+;; from a PV2HI register, and there's no fused "mulw01"-style op for that.
+;; So materialize both extracted halves with srai into scratch regs, then
+;; use wmul + wmacc (both requiring an aligned "R" pair, tied to operand 0
+;; via wmacc's "0" constraint, hence operand 0 is "R" here too).
+(define_insn_and_split "*pm2waddhx_intermediate"
+  [(set (match_operand:DI 0 "register_operand" "=R")
+        (plus:DI (mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
+                          (sign_extend:DI (ashiftrt:SI
+                                            (subreg:SI (match_operand:PV2HI 2 "register_operand" "r") 0)
+                                            (const_int 16))))
+                 (mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 3 "register_operand" "r") 0)
+                                                       (const_int 16)))
+                          (sign_extend:DI (match_operand:SI 4 "register_operand" "r")))))
+   (clobber (match_scratch:SI 5 "=&r"))
+   (clobber (match_scratch:SI 6 "=&r"))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 5) (ashiftrt:SI (subreg:SI (match_dup 2) 0) (const_int 16)))
+   (set (match_dup 6) (ashiftrt:SI (subreg:SI (match_dup 3) 0) (const_int 16)))
+   (set (match_dup 0)
+	(mult:DI (sign_extend:DI (match_dup 1)) (sign_extend:DI (match_dup 5))))
+   (set (match_dup 0)
+	(plus:DI (mult:DI (sign_extend:DI (match_dup 6)) (sign_extend:DI (match_dup 4)))
+		 (match_dup 0)))]
+  ""
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2waddhx"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (plus:DI (mult:DI (sign_extend:DI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                          (sign_extend:DI (ashiftrt:SI
+                                            (subreg:SI (match_operand:PV2HI 2 "register_operand" "r") 0)
+                                            (const_int 16))))
+                 (mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                                       (const_int 16)))
+                          (sign_extend:DI (subreg:HI (match_dup 2) 0)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2wadd.hx\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
 (define_insn "*pm2add_h"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (plus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
@@ -463,6 +613,32 @@
                                        (const_int 16)))))]
   "TARGET_RVP && !TARGET_64BIT"
   "pm2add.h\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2addhx"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (plus:SI (mult:SI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                                       (const_int 16))
+                          (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                 (mult:SI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                       (const_int 16))
+                          (sign_extend:SI (subreg:HI (match_dup 1) 0)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2add.hx\t%0, %2, %1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+ (define_insn "*pm2wsubh"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (minus:DI (mult:DI (sign_extend:DI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                           (sign_extend:DI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                  (mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                                        (const_int 16)))
+                           (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                                        (const_int 16))))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2wsub.h\t%0, %1, %2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
@@ -534,6 +710,19 @@
                                        (const_int 16)))))]
   "TARGET_RVP && !TARGET_64BIT"
   "pm2sub.h\t%0, %2, %1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2subhx"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (minus:SI (mult:SI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                                       (const_int 16))
+                          (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                 (mult:SI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                       (const_int 16))
+                          (sign_extend:SI (subreg:HI (match_dup 1) 0)))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2sub.hx\t%0, %2, %1"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
