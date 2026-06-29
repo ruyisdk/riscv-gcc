@@ -100,6 +100,117 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+(define_insn "mul<rvp_ext_mode>3"
+  [(set (match_operand:PVHW 0 "register_operand" "=r")
+        (mult:PVHW (match_operand:PVHW 1 "register_operand" "r")
+                   (match_operand:PVHW 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; Split PV2SI multiplication into element-wise scalar multiplications
+;; when the pattern cannot be combined into more efficient forms (like PWMUL).
+;; On RV32, PV2SI use register pairs,
+;; so we split the 64-bit vector into two 32-bit parts and multiply element-wise.
+(define_split
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (mult:PV2SI (match_operand:PV2SI 1 "register_operand")
+                    (match_operand:PV2SI 2 "register_operand")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  [(const_int 0)]
+{
+  rtx dest_lo = riscv_subword (operands[0], false);
+  rtx dest_hi = riscv_subword (operands[0], true);
+  rtx src1_lo = riscv_subword (operands[1], false);
+  rtx src1_hi = riscv_subword (operands[1], true);
+  rtx src2_lo = riscv_subword (operands[2], false);
+  rtx src2_hi = riscv_subword (operands[2], true);
+
+  /* For PV2SI: multiply single 32-bit element in each word.
+     In both cases, we use the scalar MUL instruction on each word.  */
+  emit_insn (gen_mulsi3 (dest_lo, src1_lo, src2_lo));
+  emit_insn (gen_mulsi3 (dest_hi, src1_hi, src2_hi));
+  DONE;
+})
+
+;; Split PV4HI multiplication into element-wise multiplications using mul.h00/mul.h11
+;; when the pattern cannot be combined into more efficient forms (like PWMUL).
+;; On RV32, PV4HI uses register pairs where each 32-bit word contains TWO packed
+;; 16-bit elements. We use mul.h00 and mul.h11 to multiply individual elements,
+;; then pack the results using shift and OR.
+(define_split
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (mult:PV4HI (match_operand:PV4HI 1 "register_operand")
+                    (match_operand:PV4HI 2 "register_operand")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  [(const_int 0)]
+{
+  rtx dest_lo = riscv_subword (operands[0], false);
+  rtx dest_hi = riscv_subword (operands[0], true);
+  rtx src1_lo = riscv_subword (operands[1], false);
+  rtx src1_hi = riscv_subword (operands[1], true);
+  rtx src2_lo = riscv_subword (operands[2], false);
+  rtx src2_hi = riscv_subword (operands[2], true);
+
+  /* Each 32-bit word contains two 16-bit elements [e0, e1] or [e2, e3].
+     mul.h00 multiplies lower 16-bit elements: result in lower 16 bits
+     mul.h11 multiplies upper 16-bit elements: result in lower 16 bits
+     We pack them: (mul.h11 << 16) | (mul.h00 & 0xFFFF) */
+
+  /* Process lower word: elements [0] and [1] */
+  rtx temp_e0 = gen_reg_rtx (SImode);  /* element 0 result */
+  rtx temp_e1 = gen_reg_rtx (SImode);  /* element 1 result */
+  rtx temp_e1_shifted = gen_reg_rtx (SImode);
+  rtx temp_e0_masked = gen_reg_rtx (SImode);
+
+  /* mul_h00 expects HImode operands: extract lower 16 bits as HImode */
+  rtx src1_lo_hi = gen_lowpart (HImode, src1_lo);
+  rtx src2_lo_hi = gen_lowpart (HImode, src2_lo);
+
+  emit_insn (gen_mul_h00 (temp_e0, src1_lo_hi, src2_lo_hi));
+  emit_insn (gen_mul_h11 (temp_e1, src1_lo, src2_lo));
+  emit_insn (gen_ashlsi3 (temp_e1_shifted, temp_e1, GEN_INT (16)));
+  emit_insn (gen_andsi3 (temp_e0_masked, temp_e0, GEN_INT (0xFFFF)));
+  emit_insn (gen_iorsi3 (dest_lo, temp_e1_shifted, temp_e0_masked));
+
+  /* Process upper word: elements [2] and [3] */
+  rtx temp_e2 = gen_reg_rtx (SImode);  /* element 2 result */
+  rtx temp_e3 = gen_reg_rtx (SImode);  /* element 3 result */
+  rtx temp_e3_shifted = gen_reg_rtx (SImode);
+  rtx temp_e2_masked = gen_reg_rtx (SImode);
+
+  /* mul_h00 expects HImode operands: extract lower 16 bits as HImode */
+  rtx src1_hi_hi = gen_lowpart (HImode, src1_hi);
+  rtx src2_hi_hi = gen_lowpart (HImode, src2_hi);
+
+  emit_insn (gen_mul_h00 (temp_e2, src1_hi_hi, src2_hi_hi));
+  emit_insn (gen_mul_h11 (temp_e3, src1_hi, src2_hi));
+  emit_insn (gen_ashlsi3 (temp_e3_shifted, temp_e3, GEN_INT (16)));
+  emit_insn (gen_andsi3 (temp_e2_masked, temp_e2, GEN_INT (0xFFFF)));
+  emit_insn (gen_iorsi3 (dest_hi, temp_e3_shifted, temp_e2_masked));
+
+  DONE;
+})
+
+(define_insn "*pwmul<su><rvp_narrow>3"
+  [(set (match_operand:PVHW 0 "register_operand" "=r")
+        (mult:PVHW (any_extend:PVHW (match_operand:<HALFMODE> 1 "register_operand" "r"))
+                   (any_extend:PVHW (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pwmul<u>.<rvp_extend_width>\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*pwmulsu<rvp_narrow>3"
+  [(set (match_operand:PVHW 0 "register_operand" "=r")
+        (mult:PVHW (zero_extend:PVHW (match_operand:<HALFMODE> 1 "register_operand" "r"))
+                   (sign_extend:PVHW (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pwmulsu.<rvp_extend_width>\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; 8-byte vectors: RV64 single register, RV32 register pair
 ;; riscv_hard_regno_mode_ok rejects odd base registers for 8-byte modes on
 ;; RVP+RV32, so "r" is sufficient; no separate register-pair constraint needed.
@@ -318,7 +429,7 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
-(define_insn "*mul_h11"
+(define_insn "mul_h11"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(mult:SI (ashiftrt:SI
 		   (match_operand:SI 1 "register_operand" "r")
@@ -331,7 +442,7 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
-(define_insn "*mul_h00"
+(define_insn "mul_h00"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(mult:SI (sign_extend:SI
 		   (match_operand:HI 1 "register_operand" "r"))
