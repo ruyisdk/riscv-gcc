@@ -526,23 +526,75 @@
   DONE;
 })
 
-;; Bitwise operations for vector modes
+;; Bitwise operations for 4-byte vector modes (always single register)
 (define_insn "<optab><mode>3"
-  [(set (match_operand:PVALL 0 "register_operand" "=r")
-	(any_bitwise:PVALL (match_operand:PVALL 1 "register_operand" "r")
-			   (match_operand:PVALL 2 "register_operand" "r")))]
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(any_bitwise:PV32 (match_operand:PV32 1 "register_operand" "r")
+			  (match_operand:PV32 2 "register_operand" "r")))]
   "TARGET_RVP"
   "<insn>\t%0,%1,%2"
   [(set_attr "type" "logical")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "<MODE>")])
 
+;; Bitwise operations for 8-byte vectors.
+;; RV64: single register instruction.
+;; RV32: register pair; split into two 32-bit operations after reload.
+(define_insn_and_split "<optab><mode>3"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand" "r")
+			  (match_operand:PV64 2 "register_operand" "r")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "<insn>\t%0,%1,%2";
+    return "#";
+  }
+  "&& !TARGET_64BIT && reload_completed"
+  [(set (match_dup 3) (any_bitwise:SI (match_dup 5) (match_dup 7)))
+   (set (match_dup 4) (any_bitwise:SI (match_dup 6) (match_dup 8)))]
+  {
+    operands[3] = gen_lowpart (SImode, operands[0]);
+    operands[4] = gen_highpart (SImode, operands[0]);
+    operands[5] = gen_lowpart (SImode, operands[1]);
+    operands[6] = gen_highpart (SImode, operands[1]);
+    operands[7] = gen_lowpart (SImode, operands[2]);
+    operands[8] = gen_highpart (SImode, operands[2]);
+  }
+  [(set_attr "type" "logical")
+   (set_attr "mode" "<MODE>")])
+
+;; Bitwise NOT for 4-byte vector modes (always single register)
 (define_insn "one_cmpl<mode>2"
-  [(set (match_operand:PVALL 0 "register_operand" "=r")
-	(not:PVALL (match_operand:PVALL 1 "register_operand" "r")))]
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(not:PV32 (match_operand:PV32 1 "register_operand" "r")))]
   "TARGET_RVP"
   "not\t%0,%1"
   [(set_attr "type" "logical")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "<MODE>")])
+
+;; Bitwise NOT for 8-byte vectors.
+;; RV64: single register instruction.
+;; RV32: register pair; split into two 32-bit NOT operations after reload.
+(define_insn_and_split "one_cmpl<mode>2"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(not:PV64 (match_operand:PV64 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "not\t%0,%1";
+    return "#";
+  }
+  "&& !TARGET_64BIT && reload_completed"
+  [(set (match_dup 2) (not:SI (match_dup 4)))
+   (set (match_dup 3) (not:SI (match_dup 5)))]
+  {
+    operands[2] = gen_lowpart (SImode, operands[0]);
+    operands[3] = gen_highpart (SImode, operands[0]);
+    operands[4] = gen_lowpart (SImode, operands[1]);
+    operands[5] = gen_highpart (SImode, operands[1]);
+  }
+  [(set_attr "type" "logical")
+   (set_attr "mode" "<MODE>")])
 
 ;; ============================================================================
 ;; PLI/PLUI: Packed Load Immediate Instructions
