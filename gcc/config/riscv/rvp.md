@@ -342,7 +342,7 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
-(define_insn "*pm2addh"
+(define_insn "*pm2add_h"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (plus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
                           (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
@@ -355,7 +355,7 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
-(define_insn "*pm2subh"
+(define_insn "*pm2sub_h"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (minus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
                           (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
@@ -365,6 +365,36 @@
                                        (const_int 16)))))]
   "TARGET_RVP && !TARGET_64BIT"
   "pm2sub.h\t%0, %2, %1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2adda_h"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (plus:SI
+          (plus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                            (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                   (mult:SI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                         (const_int 16))
+                            (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                         (const_int 16))))
+          (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2adda.h\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*pm2suba_h"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (plus:SI
+          (minus:SI (mult:SI (sign_extend:SI (subreg:HI (match_operand:PV2HI 1 "register_operand" "r") 0))
+                             (sign_extend:SI (subreg:HI (match_operand:PV2HI 2 "register_operand" "r") 0)))
+                    (mult:SI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                          (const_int 16))
+                             (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                          (const_int 16))))
+          (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pm2suba.h\t%0, %2, %1"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 

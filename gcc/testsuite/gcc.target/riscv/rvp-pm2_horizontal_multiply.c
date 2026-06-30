@@ -18,15 +18,11 @@ typedef uint16_t uint16x4_t __attribute__((vector_size(8)));
 typedef int32_t int32x2_t __attribute__((vector_size(8)));
 typedef uint32_t uint32x2_t __attribute__((vector_size(8)));
 
-// --- pm2add.h: dot product of 2 halfwords -> 1 word (scalar, RV32) ---
-
 // CHECK-LABEL: test_pm2add_h_scalar:
 // CHECK: pm2add.h
 int32_t test_pm2add_h_scalar(int16x2_t a, int16x2_t b) {
     return (int32_t)a[0] * (int32_t)b[0] + (int32_t)a[1] * (int32_t)b[1];
 }
-
-// --- pm2sub.h: a[0]*b[0] - a[1]*b[1] (scalar, RV32) ---
 
 // CHECK-LABEL: test_pm2sub_h_scalar:
 // CHECK: pm2sub.h
@@ -34,5 +30,19 @@ int32_t test_pm2sub_h_scalar(int16x2_t a, int16x2_t b) {
     return (int32_t)a[0] * (int32_t)b[0] - (int32_t)a[1] * (int32_t)b[1];
 }
 
+// CHECK-LABEL: test_pm2adda_h_scalar:
+// CHECK: pm2adda.h
+int32_t test_pm2adda_h_scalar(int16x2_t a, int16x2_t b, int32_t acc) {
+    return acc + ((int32_t)a[0] * (int32_t)b[0] + (int32_t)a[1] * (int32_t)b[1]);
+}
+
+// CHECK-LABEL: test_pm2suba_h_scalar:
+// CHECK: pm2suba.h
+int32_t test_pm2suba_h_scalar(int16x2_t a, int16x2_t b, int32_t acc) {
+    return acc + ((int32_t)a[0] * (int32_t)b[0] - (int32_t)a[1] * (int32_t)b[1]);
+}
+
 /* { dg-final { scan-assembler-times {\mpm2add\.h\M} 1 } } */
 /* { dg-final { scan-assembler-times {\mpm2sub\.h\M} 1 } } */
+/* { dg-final { scan-assembler-times {\mpm2adda\.h\M} 1 } } */
+/* { dg-final { scan-assembler-times {\mpm2suba\.h\M} 1 } } */
