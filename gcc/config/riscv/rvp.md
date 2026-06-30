@@ -536,20 +536,27 @@
   [(set_attr "type" "logical")
    (set_attr "mode" "<MODE>")])
 
-;; Bitwise operations for 8-byte vectors.
-;; RV64: single register instruction.
-;; RV32: register pair; split into two 32-bit operations after reload.
-(define_insn_and_split "<optab><mode>3"
+;; Bitwise operations for 8-byte vectors on RV64 (single register instruction).
+(define_insn "<optab><mode>3"
   [(set (match_operand:PV64 0 "register_operand" "=r")
 	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand" "r")
 			  (match_operand:PV64 2 "register_operand" "r")))]
-  "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      return "<insn>\t%0,%1,%2";
-    return "#";
-  }
-  "&& !TARGET_64BIT && reload_completed"
+  "TARGET_RVP && TARGET_64BIT"
+  "<insn>\t%0,%1,%2"
+  [(set_attr "type" "logical")
+   (set_attr "mode" "<MODE>")])
+
+;; Bitwise operations for 8-byte vectors on RV32 (register pair).
+;; Use early-clobber (=&r) to prevent the RA from assigning the destination
+;; pair to overlap with either source pair in a crossed fashion, which would
+;; cause wrong-code when the split fires after reload.
+(define_insn_and_split "<optab><mode>3_rv32"
+  [(set (match_operand:PV64 0 "register_operand" "=&r")
+	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand" "r")
+			  (match_operand:PV64 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& reload_completed"
   [(set (match_dup 3) (any_bitwise:SI (match_dup 5) (match_dup 7)))
    (set (match_dup 4) (any_bitwise:SI (match_dup 6) (match_dup 8)))]
   {
