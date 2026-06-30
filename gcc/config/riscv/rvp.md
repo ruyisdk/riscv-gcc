@@ -662,6 +662,99 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
+;; ============================================================================
+;; PMV.BS/HS/WS: vec_duplicate for register (non-constant) scalars.
+;; PMV.xS rd, rs == PADD.xS rd, x0, rs: broadcast low element of rs.
+;; ============================================================================
+
+;; 4-byte vectors: PMV.BS (byte) and PMV.HS (halfword), both ISAs.
+(define_insn "vec_duplicate<mode>"
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(vec_duplicate:PV32
+	  (match_operand:<PVALL_ELT> 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "pmv.<rvp_width>s\t%0,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte vectors: RV64 single register; RV32 register pair.
+(define_insn "vec_duplicate<mode>"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(vec_duplicate:PV64
+	  (match_operand:<PVALL_ELT> 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "pmv.<rvp_width>s\t%0,%1";
+    else
+      return "pmv.<rvp_dwidth>s\t%0,%1";
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; ============================================================================
+;; PADD.BS/HS/WS: packed add with scalar second operand.
+;; rd[i] = rs1[i] + low_element(rs2)  for all lanes i.
+;; ============================================================================
+
+;; 4-byte vectors (PV4QI/PV2HI), always single register.
+(define_insn "*padd_<rvp_width>s<mode>"
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(plus:PV32
+	  (match_operand:PV32 1 "register_operand" "r")
+	  (vec_duplicate:PV32
+	    (match_operand:<PVALL_ELT> 2 "register_operand" "r"))))]
+  "TARGET_RVP"
+  "padd.<rvp_width>s\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; Commuted form: scalar first.
+(define_insn "*padd_<rvp_width>s<mode>_rev"
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(plus:PV32
+	  (vec_duplicate:PV32
+	    (match_operand:<PVALL_ELT> 2 "register_operand" "r"))
+	  (match_operand:PV32 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "padd.<rvp_width>s\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte vectors: RV64 single register (.bs/.hs/.ws), RV32 pair (.dbs/.dhs/.dws).
+(define_insn "*padd_s<mode>"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(plus:PV64
+	  (match_operand:PV64 1 "register_operand" "r")
+	  (vec_duplicate:PV64
+	    (match_operand:<PVALL_ELT> 2 "register_operand" "r"))))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "padd.<rvp_width>s\t%0,%1,%2";
+    else
+      return "padd.<rvp_dwidth>s\t%0,%1,%2";
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; Commuted form: scalar first.
+(define_insn "*padd_s<mode>_rev"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(plus:PV64
+	  (vec_duplicate:PV64
+	    (match_operand:<PVALL_ELT> 2 "register_operand" "r"))
+	  (match_operand:PV64 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "padd.<rvp_width>s\t%0,%1,%2";
+    else
+      return "padd.<rvp_dwidth>s\t%0,%1,%2";
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
 ;; Pack operations for scalar mode
 (define_insn "*ppairoe_h_1"
   [(set (match_operand:SI 0 "register_operand" "=r")
