@@ -1844,6 +1844,21 @@
 ;; Recognize smin(smax(x, 0), (1 << N) - 1) pattern for USATI.
 ;; Requires Zbb extension for smax/smin RTL operations.
 
+(define_insn "*usati_alt<X:mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(smax:X (smin:X (match_operand:X 1 "register_operand" "r")
+			(match_operand:X 2 "const_int_operand" "n"))
+		(const_int 0)))]
+  "TARGET_RVP
+   && IN_RANGE (exact_log2 (INTVAL (operands[2]) + 1), 1,
+		GET_MODE_BITSIZE (<X:MODE>mode) - 1)"
+{
+  operands[2] = GEN_INT (exact_log2 (INTVAL (operands[2]) + 1));
+  return "usati\t%0,%1,%2";
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<X:MODE>")])
+
 (define_insn "*usati<X:mode>"
   [(set (match_operand:X 0 "register_operand" "=r")
 	(smin:X (smax:X (match_operand:X 1 "register_operand" "r")
