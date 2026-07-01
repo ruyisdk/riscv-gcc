@@ -1859,6 +1859,170 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<X:MODE>")])
 
+;; PSATI.H / PSATI.DH / PSATI.W / PSATI.DW - Signed saturation clipping
+;; PUSATI.H / PUSATI.DH / PUSATI.W / PUSATI.DW - Unsigned saturation clipping
+;;
+;; psati.h rd, rs1, N  -- saturate each halfword to [-(1<<N), (1<<N)-1]
+;;   N is the immediate; the smin bound is max = 2^N - 1.
+;; pusati.h rd, rs1, N -- saturate each halfword to [0, (1<<N)-1]
+;; =========================================================================
+
+;; PSATI.H for PV2HI (4-byte, always single register)
+(define_insn "*psati_h_pv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(smax:PV2HI
+	  (smin:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+		      (match_operand:PV2HI 2 "immediate_operand"))
+	  (match_operand:PV2HI 3 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_psati_bounds_p (operands[2], operands[3], 15)"
+  {
+    static char buf[32];
+    snprintf (buf, sizeof (buf), "psati.h\t%%0, %%1, %d", riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PSATI.H (RV64) / PSATI.DH (RV32) for PV4HI (8-byte)
+(define_insn "*psati_h_pv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(smax:PV4HI
+	  (smin:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+		      (match_operand:PV4HI 2 "immediate_operand"))
+	  (match_operand:PV4HI 3 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_psati_bounds_p (operands[2], operands[3], 15)"
+  {
+    static char buf[32];
+    const char *insn = TARGET_64BIT ? "psati.h" : "psati.dh";
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PSATI.W (RV64) / PSATI.DW (RV32) for PV2SI (8-byte words)
+(define_insn "*psati_w_pv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(smax:PV2SI
+	  (smin:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+		      (match_operand:PV2SI 2 "immediate_operand"))
+	  (match_operand:PV2SI 3 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_psati_bounds_p (operands[2], operands[3], 31)"
+  {
+    static char buf[32];
+    const char *insn = TARGET_64BIT ? "psati.w" : "psati.dw";
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PUSATI.H for PV2HI -- unsigned umin form (uint16 input)
+(define_insn "*pusati_h_umin_pv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(umin:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+		    (match_operand:PV2HI 2 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_pusati_bounds_p (operands[2], 16)"
+  {
+    static char buf[32];
+    snprintf (buf, sizeof (buf), "pusati.h\t%%0, %%1, %d", riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PUSATI.H for PV4HI -- unsigned umin form (uint16 input)
+(define_insn "*pusati_h_umin_pv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(umin:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+		    (match_operand:PV4HI 2 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_pusati_bounds_p (operands[2], 16)"
+  {
+    static char buf[32];
+    const char *insn = TARGET_64BIT ? "pusati.h" : "pusati.dh";
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PUSATI.W for PV2SI -- unsigned umin form (uint32 input)
+(define_insn "*pusati_w_umin_pv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(umin:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+		    (match_operand:PV2SI 2 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_pusati_bounds_p (operands[2], 32)"
+  {
+    static char buf[32];
+    const char *insn = TARGET_64BIT ? "pusati.w" : "pusati.dw";
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PUSATI.H for PV2HI -- signed smax(smin) form: clamp [0, 2^N-1]
+(define_insn "*pusati_h_signed_pv2hi"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(smax:PV2HI
+	  (smin:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+		      (match_operand:PV2HI 2 "immediate_operand"))
+	  (match_operand:PV2HI 3 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_pusati_bounds_p (operands[2], 16)
+   && riscv_const_vector_broadcast_val_p (operands[3], 0)"
+  {
+    static char buf[32];
+    snprintf (buf, sizeof (buf), "pusati.h\t%%0, %%1, %d", riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PUSATI.H for PV4HI -- signed smax(smin) form: clamp [0, 2^N-1]
+(define_insn "*pusati_h_signed_pv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(smax:PV4HI
+	  (smin:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+		      (match_operand:PV4HI 2 "immediate_operand"))
+	  (match_operand:PV4HI 3 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_pusati_bounds_p (operands[2], 16)
+   && riscv_const_vector_broadcast_val_p (operands[3], 0)"
+  {
+    static char buf[32];
+    const char *insn = TARGET_64BIT ? "pusati.h" : "pusati.dh";
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; PUSATI.W for PV2SI -- signed smax(smin) form: clamp [0, 2^N-1]
+(define_insn "*pusati_w_signed_pv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(smax:PV2SI
+	  (smin:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+		      (match_operand:PV2SI 2 "immediate_operand"))
+	  (match_operand:PV2SI 3 "immediate_operand")))]
+  "TARGET_RVP
+   && riscv_pusati_bounds_p (operands[2], 32)
+   && riscv_const_vector_broadcast_val_p (operands[3], 0)"
+  {
+    static char buf[32];
+    const char *insn = TARGET_64BIT ? "pusati.w" : "pusati.dw";
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    return buf;
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; MVM/MVMN: Move under Mask / Move under Mask Negated
 ;; MVM:  rd = (~rs2 & rd) | (rs2 & rs1) - select rs1 where mask=1
 ;; MVMN: rd = (~rs2 & rs1) | (rs2 & rd) - select rs1 where mask=0

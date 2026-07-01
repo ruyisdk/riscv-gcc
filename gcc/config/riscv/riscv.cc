@@ -5456,6 +5456,20 @@ riscv_output_move (rtx dest, rtx src)
 		= riscv_output_pli (dest, replicated, container_bits);
 	      if (pli_result)
 		return pli_result;
+
+	      /* PV2SI on RV64: value outside PLI.W range.  Load the element
+		 value as a 32-bit integer then use pmv.ws to broadcast the
+		 low 32 bits to both 32-bit lanes of the 64-bit register.  */
+	      if (TARGET_64BIT && inner_mode == SImode)
+		{
+		  HOST_WIDE_INT word_val = sext_hwi (val, 32);
+		  rtx ops_li[2] = { gen_lowpart (SImode, dest),
+				    GEN_INT (word_val) };
+		  output_asm_insn ("li\t%0,%1", ops_li);
+		  rtx ops_pmv[2] = { dest, dest };
+		  output_asm_insn ("pmv.ws\t%0,%1", ops_pmv);
+		  return "";
+		}
 	    }
 	  gcc_unreachable ();
 	}
@@ -17180,18 +17194,82 @@ riscv_rvp_const_vector_p (rtx op)
     {
       if (inner_mode == SImode)
 	{
-	  /* PV2SI: accept if element fits in single li instruction.
-	     Large values will load from memory like DImode.  */
-	  HOST_WIDE_INT word_val = sext_hwi (val, 32);
-	  return riscv_integer_cost (word_val, false) == 1;
+	  /* PV2SI: accept any SI-range broadcast constant.  Values that do
+	     not fit in a single li (cost > 1) are split into two li insns
+	     by riscv_split_doubleword_move after reload.  Keeping them as
+	     const_vector in RTL (instead of loading from memory) lets the
+	     combine pass substitute the value inline, enabling patterns like
+	     *psati_w_pv2si and *pusati_w_pv2si to fold smin+smax into a
+	     single psati.w/pusati.w instruction.  */
+	  return true;
 	}
       /* PV8QI/PV4HI: check PLI.DB/DH/PLUI.DH patterns.  */
       return riscv_pli_operand_p (replicated);
     }
 
+  /* RV64 PV2SI: accept any SI-range broadcast constant.  Values outside
+     PLI.W range are loaded via li + pmv.ws (broadcast), keeping const_vector
+     in RTL so combine can substitute the value inline for psati.w/pusati.w.  */
+  if (TARGET_64BIT && TARGET_RVP && mode == PV2SImode && inner_mode == SImode)
+    return true;
+
   /* Accept SMALL_OPERAND values (will use li) or PLI patterns.  */
   return SMALL_OPERAND (replicated) || riscv_pli_operand_p (replicated);
 }
+
+/* Return true if CONST_VECTOR OP has all elements equal to VAL.  */
+bool
+riscv_const_vector_broadcast_val_p (rtx op, HOST_WIDE_INT val)
+{
+  if (!CONST_VECTOR_P (op))
+    return false;
+  rtx elt;
+  if (!const_vec_duplicate_p (op, &elt))
+    return false;
+  return CONST_INT_P (elt) && INTVAL (elt) == val;
+}
+
+/* For a PSATI/PSATI.DH/PSATI.DW bound const_vector of the form {2^N-1, ...},
+   return N (the instruction immediate).  Returns 0 if not a valid bound.  */
+int
+riscv_psati_imm (rtx max_op)
+{
+  if (!CONST_VECTOR_P (max_op))
+    return 0;
+  rtx elt;
+  if (!const_vec_duplicate_p (max_op, &elt) || !CONST_INT_P (elt))
+    return 0;
+  HOST_WIDE_INT max_val = INTVAL (elt);
+  if (max_val <= 0)
+    return 0;
+  HOST_WIDE_INT m1 = max_val + 1;
+  if (m1 <= 0 || (m1 & (m1 - 1)) != 0)
+    return 0;
+  return exact_log2 (m1);
+}
+
+/* Return true if MAX_OP and MIN_OP are valid PSATI bounds:
+   MAX_OP = const_vector{2^N-1} and MIN_OP = const_vector{-2^N}.  */
+bool
+riscv_psati_bounds_p (rtx max_op, rtx min_op, int max_imm)
+{
+  int imm = riscv_psati_imm (max_op);
+  if (imm <= 0 || imm > max_imm)
+    return false;
+  HOST_WIDE_INT max_val = INTVAL (CONST_VECTOR_ELT (max_op, 0));
+  HOST_WIDE_INT min_val = -(max_val + 1);
+  return riscv_const_vector_broadcast_val_p (min_op, min_val);
+}
+
+/* Return true if MAX_OP is a valid PUSATI upper bound: const_vector{2^N-1}.
+   min is implicitly 0.  */
+bool
+riscv_pusati_bounds_p (rtx max_op, int max_imm)
+{
+  int imm = riscv_psati_imm (max_op);
+  return imm > 0 && imm <= max_imm;
+}
+
 
 /* Output a P-extension PLI/PLUI instruction for constant VAL to DEST.
    CONTAINER_BITS specifies the preferred container size (32 or 64 bits).
