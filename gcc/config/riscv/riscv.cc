@@ -8432,6 +8432,17 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	  output_addr_const (file, newop);
 	}
       break;
+    case 'd':
+      /* Print RVP element-width suffix for PV64 modes: single-register
+	 (b/h/w) on RV64, register-pair (db/dh/dw) on RV32.  */
+      switch (mode)
+	{
+	case PV8QImode: fputs (TARGET_64BIT ? "b" : "db", file); break;
+	case PV4HImode: fputs (TARGET_64BIT ? "h" : "dh", file); break;
+	case PV2SImode: fputs (TARGET_64BIT ? "w" : "dw", file); break;
+	default: output_operand_lossage ("invalid mode for '%%d'"); break;
+	}
+      break;
     case 'N':
       {
 	if (!REG_P(op))

@@ -108,12 +108,7 @@
 	(rvp_binop:PV64 (match_operand:PV64 1 "register_operand" " r")
 			(match_operand:PV64 2 "register_operand" " r")))]
   "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      return "<rvp_insn>.<rvp_width>\t%0, %1, %2";
-    else
-      return "<rvp_insn>.<rvp_dwidth>\t%0, %1, %2";
-  }
+  "<rvp_insn>.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -137,22 +132,9 @@
 	  (match_operand:PV64 1 "register_operand" "r, r")
 	  (match_operand:SI 2 "reg_or_int_operand" "r, I")))]
   "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      {
-	if (which_alternative == 0)
-	  return "<rvp_shift_insn>.<rvp_width>s\t%0,%1,%2";
-	else
-	  return "<rvp_shift_insn>i.<rvp_width>\t%0,%1,%2";
-      }
-    else
-      {
-	if (which_alternative == 0)
-	  return "<rvp_shift_insn>.<rvp_dwidth>s\t%0,%1,%2";
-	else
-	  return "<rvp_shift_insn>i.<rvp_dwidth>\t%0,%1,%2";
-      }
-  }
+  "@
+   <rvp_shift_insn>.%d0s\t%0,%1,%2
+   <rvp_shift_insn>i.%d0\t%0,%1,%2"
   [(set_attr "type" "shift")
    (set_attr "mode" "<MODE>")])
 
@@ -683,12 +665,7 @@
 	(vec_duplicate:PV64
 	  (match_operand:<PVALL_ELT> 1 "register_operand" "r")))]
   "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      return "pmv.<rvp_width>s\t%0,%1";
-    else
-      return "pmv.<rvp_dwidth>s\t%0,%1";
-  }
+  "pmv.%d0s\t%0,%1"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -729,12 +706,7 @@
 	  (vec_duplicate:PV64
 	    (match_operand:<PVALL_ELT> 2 "register_operand" "r"))))]
   "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      return "padd.<rvp_width>s\t%0,%1,%2";
-    else
-      return "padd.<rvp_dwidth>s\t%0,%1,%2";
-  }
+  "padd.%d0s\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -746,12 +718,7 @@
 	    (match_operand:<PVALL_ELT> 2 "register_operand" "r"))
 	  (match_operand:PV64 1 "register_operand" "r")))]
   "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      return "padd.<rvp_width>s\t%0,%1,%2";
-    else
-      return "padd.<rvp_dwidth>s\t%0,%1,%2";
-  }
+  "padd.%d0s\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -2201,11 +2168,6 @@
 		       (const_int 1))
 	  (match_operand:PVHW 2 "register_operand" "r")))]
   "TARGET_RVP"
-  {
-    if (TARGET_64BIT)
-      return "psh1add.<rvp_width>\t%0,%1,%2";
-    else
-      return "psh1add.<rvp_dwidth>\t%0,%1,%2";
-  }
+  "psh1add.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
