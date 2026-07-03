@@ -211,6 +211,112 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+(define_insn_and_split "mulpv2hi3"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (mult:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+                    (match_operand:PV2HI 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  /* PV2HI is a 32-bit word containing two 16-bit elements [e0, e1].
+     mul.h00 multiplies lower 16-bit elements: result in lower 16 bits
+     mul.h11 multiplies upper 16-bit elements: result in lower 16 bits
+     We pack them: (mul.h11 << 16) | (mul.h00 & 0xFFFF) */
+
+  rtx temp_e0 = gen_reg_rtx (SImode);  /* element 0 result */
+  rtx temp_e1 = gen_reg_rtx (SImode);  /* element 1 result */
+
+  /* mul_h00 expects HImode operands: extract lower 16 bits as HImode */
+  rtx src1_lo = gen_lowpart (HImode, operands[1]);
+  rtx src2_lo = gen_lowpart (HImode, operands[2]);
+
+  /* mul_h11 expects SImode operands, so convert PV2HI to SI for the pattern */
+  rtx src1_si = gen_lowpart (SImode, operands[1]);
+  rtx src2_si = gen_lowpart (SImode, operands[2]);
+
+  emit_insn (gen_mul_h00 (temp_e0, src1_lo, src2_lo));
+  emit_insn (gen_mul_h11 (temp_e1, src1_si, src2_si));
+
+  rtx result_lo = gen_lowpart (HImode, temp_e0);
+  rtx result_hi = gen_lowpart (HImode, temp_e1);
+
+  emit_insn (gen_ppaire_concatpv2hi (operands[0], result_lo, result_hi)); 
+
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*packed_mul_h_b00"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (mult:PV2HI (vec_concat:PV2HI 
+                      (sign_extend:HI (subreg:QI (match_operand:PV4QI 1 "register_operand" "r") 0))
+                      (subreg:HI (sign_extract:SI (subreg:SI (match_dup 1) 0)
+                                                  (const_int 8)
+                                                  (const_int 16)) 0))
+                    (vec_concat:PV2HI 
+                      (sign_extend:HI (subreg:QI (match_operand:PV4QI 2 "register_operand" "r") 0))
+                      (subreg:HI (sign_extract:SI (subreg:SI (match_dup 2) 0)
+                                                  (const_int 8)
+                                                  (const_int 16)) 0))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pmul.h.b00\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*packed_mul_h_b01"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (mult:PV2HI (vec_concat:PV2HI
+                      (ashiftrt:HI (subreg:HI (match_operand:PV4QI 1 "register_operand" "r") 0)
+                                   (const_int 8))
+                      (subreg:HI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                              (const_int 24)) 0))
+                    (vec_concat:PV2HI
+                      (sign_extend:HI (subreg:QI (match_operand:PV4QI 2 "register_operand" "r") 0))
+                      (subreg:HI (sign_extract:SI (subreg:SI (match_dup 2) 0)
+                                                  (const_int 8)
+                                                  (const_int 16)) 0))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pmul.h.b01\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*packed_mul_h_b01_alt"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (mult:PV2HI (vec_concat:PV2HI
+                      (sign_extend:HI (subreg:QI (match_operand:PV4QI 1 "register_operand" "r") 0))
+                      (subreg:HI (sign_extract:SI (subreg:SI (match_dup 1) 0)
+                                                  (const_int 8)
+                                                  (const_int 16)) 0))
+                    (vec_concat:PV2HI
+                      (ashiftrt:HI (subreg:HI (match_operand:PV4QI 2 "register_operand" "r") 0)
+                                   (const_int 8))
+                      (subreg:HI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                              (const_int 24)) 0))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pmul.h.b01\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*packed_mul_h_b11"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (mult:PV2HI (vec_concat:PV2HI
+                      (ashiftrt:HI (subreg:HI (match_operand:PV4QI 1 "register_operand" "r") 0)
+                                   (const_int 8))
+                      (subreg:HI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                              (const_int 24)) 0))
+                    (vec_concat:PV2HI
+                      (ashiftrt:HI (subreg:HI (match_operand:PV4QI 2 "register_operand" "r") 0)
+                                   (const_int 8))
+                      (subreg:HI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
+                                              (const_int 24)) 0))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pmul.h.b11\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
 ;; 8-byte vectors: RV64 single register, RV32 register pair
 ;; riscv_hard_regno_mode_ok rejects odd base registers for 8-byte modes on
 ;; RVP+RV32, so "r" is sufficient; no separate register-pair constraint needed.
@@ -1263,7 +1369,7 @@
 ;; both RV32 and RV64; on RV64 a plain PACK would instead concatenate the
 ;; full 32-bit halves and produce a wrong result.  On RV32 PPAIRE.H is an
 ;; alias of PACK, so this is also correct there.
-(define_insn "*ppaire_concatpv2hi"
+(define_insn "ppaire_concatpv2hi"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (vec_concat:PV2HI
           (match_operand:HI 1 "register_operand" "r") 
@@ -1286,7 +1392,7 @@
 ;; ppaireo.h pattern: take bottom of first operand and top of second operand
 ;; Matches vec_concat where the top element comes from a shift (extracting top half)
 ;; For little-endian: ppaireo.h Rd, Ra, Rb means Rd[0] = Ra[0], Rd[1] = Rb[1]
-(define_insn "*ppaireo_concatpv2hi"
+(define_insn "ppaireo_concatpv2hi"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (vec_concat:PV2HI
           (match_operand:HI 1 "register_operand" "r") 
@@ -1606,7 +1712,7 @@
 ;; Result: rd[0]=op1[1], rd[1]=op2[1], rd[2]=op1[3], rd[3]=op2[3]
 ;; vec_select on op1: {1, 1, 3, 3}, on op2: {1, 1, 3, 3}
 ;; vec_merge with mask 0b1010 selects alternating elements
-(define_insn "*ppairob_mergepv4qi"
+(define_insn "ppairob_mergepv4qi"
   [(set (match_operand:PV4QI 0 "register_operand" "=r")
         (vec_merge:PV4QI
           (vec_select:PV4QI (match_operand:PV4QI 2 "register_operand" "r")
@@ -2639,7 +2745,7 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
-(define_insn "*psextqihi_2"
+(define_insn "psextqihi_2"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
      (vec_concat:PV2HI
        (sign_extend:HI (subreg:QI (match_operand:PV4QI 1 "register_operand" "r") 0))
@@ -2649,7 +2755,98 @@
   "TARGET_RVP"
   "psext.h.b\t%0, %1"
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])      
+   (set_attr "mode" "SI")]) 
+
+(define_insn_and_split "*intermediate_for_shr_24"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+     (vec_concat:PV2HI
+       (match_operand:HI 1 "register_operand" "r")
+       (subreg:HI (ashiftrt:SI (match_operand:SI 2 "register_operand" "r")
+                               (const_int 24)) 0)))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  /* This pattern concatenates:
+     - Lower element: operand 1 (HI)
+     - Upper element: top byte of operand 2, sign-extended to HI
+
+     We use: shift right 24 + ppaireo.h to pack them together.
+     ppaireo.h takes the lower HI of first operand and upper HI of second operand.
+     After srai 24, the top byte is sign-extended in bits [7:0], so we need
+     to shift it left by 16 to position it correctly, then use ppaireo.h.
+
+     Actually, simpler: use srai to get top byte, then use scalar packing. */
+
+  rtx temp = gen_reg_rtx (SImode);
+  rtx temp_shifted = gen_reg_rtx (SImode);
+
+  /* Shift right by 24 to get top byte (sign-extended) in lower bits */
+  emit_insn (gen_ashrsi3 (temp, operands[2], GEN_INT (24)));
+
+  /* Shift left by 16 to position it in upper halfword */
+  emit_insn (gen_ashlsi3 (temp_shifted, temp, GEN_INT (16)));
+
+  /* Mask operand1 into the low halfword before packing.  */
+  emit_insn (gen_ppaireo_concatpv2hi (operands[0], operands[1], temp_shifted));
+
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn_and_split "*shiftrt_8_extend"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+        (ashiftrt:HI (subreg:HI (match_operand:PV4QI 1 "register_operand" "r") 0)
+                     (const_int 8)))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx src_si = gen_lowpart (SImode, operands[1]);
+  rtx b1_at_top = gen_reg_rtx (SImode);
+  rtx tmp = gen_reg_rtx (SImode);
+
+  /* Extract byte 1 (bits [15:8]) and sign-extend it.  */
+  emit_insn (gen_ashlsi3 (b1_at_top, src_si, GEN_INT (16)));
+  emit_insn (gen_ashrsi3 (tmp, b1_at_top, GEN_INT (24)));
+  emit_move_insn (operands[0], gen_lowpart (HImode, tmp));
+  
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; Intermediate rtl pattern for pmul.h.b11
+(define_insn_and_split "*psextpv4qipv2hi_odd"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (vec_concat:PV2HI (ashiftrt:HI (subreg:HI (match_operand:PV4QI 1 "register_operand" "r")0)
+                                       (const_int 8))
+                          (subreg:HI (ashiftrt:SI (subreg:SI (match_dup 1)0)
+                                       (const_int 24))0)))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  /* PV4QI holds four bytes [b0, b1, b2, b3] packed into a 32-bit word.
+     The target packs the "odd" byte of each 16-bit lane (b1, b3),
+     sign-extended, into PV2HI as {sign_extend (b1), sign_extend (b3)}.
+
+     ppairo.b op1, op1 (same register on both sides) gathers b1 into byte 0
+     and b3 into bytes 2 and 3 of a temporary, so psext.h.b (via the
+     match_dup byte-2 form) can then sign-extend bytes 0 and 2 directly.  */
+
+  rtx tmp = gen_reg_rtx (PV4QImode);
+  emit_insn (gen_ppairob_mergepv4qi (tmp, operands[1], operands[1]));
+  emit_insn (gen_psextqihi_2 (operands[0], tmp));
+
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
 
 ;; Intermediate rtl pattern for psext.w.h
 (define_insn "*psexthisi_1"
