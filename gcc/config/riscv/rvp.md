@@ -3444,3 +3444,64 @@
   "psh1add.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
+
+;; Reduction sum
+(define_insn_and_split "*reduc_sum_inter_rtl"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+     (plus:SI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                           (const_int 16))
+              (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(set (match_dup 3)
+        (ashiftrt:SI (subreg:SI (match_dup 1) 0) (const_int 16)))
+   (set (match_dup 0)
+        (plus:SI (match_dup 3) (match_dup 2)))]
+  "operands[3] = gen_reg_rtx (SImode);"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*predsum_h_pv2hi_zero"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+     (plus:SI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                           (const_int 16))
+              (sign_extend:SI (subreg:HI (match_dup 1) 0))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "predsum.hs\t%0, %1, zero"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*predsum_h_pv2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+     (plus:SI     
+       (plus:SI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                             (const_int 16))
+                (sign_extend:SI (subreg:HI (match_dup 1) 0)))
+       (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "predsum.hs\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*predsumu_h_pv2hi_zero"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+     (plus:SI (lshiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                           (const_int 16))
+              (zero_extend:SI (subreg:HI (match_dup 1) 0))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "predsumu.hs\t%0, %1, zero"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+(define_insn "*predsumu_h_pv2hi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+     (plus:SI     
+       (plus:SI (lshiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                             (const_int 16))
+                (zero_extend:SI (subreg:HI (match_dup 1) 0)))
+       (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "predsumu.hs\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
