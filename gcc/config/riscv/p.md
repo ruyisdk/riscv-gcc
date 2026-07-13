@@ -196,57 +196,57 @@
 ])
 
 
-(define_mode_iterator VQI [(V4QI "!TARGET_64BIT") (V8QI "TARGET_64BIT")])
-(define_mode_iterator VHI [(V2HI "!TARGET_64BIT") (V4HI "TARGET_64BIT")])
-(define_mode_iterator V_SI [(SI "!TARGET_64BIT") (V2SI "TARGET_64BIT")])
+(define_mode_iterator VQI [(PV4QI "!TARGET_64BIT") (PV8QI "TARGET_64BIT")])
+(define_mode_iterator VHI [(PV2HI "!TARGET_64BIT") (PV4HI "TARGET_64BIT")])
+(define_mode_iterator V_SI [(SI "!TARGET_64BIT") (PV2SI "TARGET_64BIT")])
 (define_mode_iterator SI_DI [(SI "!TARGET_64BIT") (DI "TARGET_64BIT")])
-(define_mode_iterator VPSI [(SI "!TARGET_64BIT") (V2SI "TARGET_64BIT")])
-(define_mode_attr PSEXT [(V2HI "V4QI") (V4HI "V8QI")])
-(define_mode_iterator VD_SI [(SI "!TARGET_64BIT") (V2SI "TARGET_64BIT")])
+(define_mode_iterator VPSI [(SI "!TARGET_64BIT") (PV2SI "TARGET_64BIT")])
+(define_mode_attr PSEXT [(PV2HI "PV4QI") (PV4HI "PV8QI")])
+(define_mode_iterator VD_SI [(SI "!TARGET_64BIT") (PV2SI "TARGET_64BIT")])
 
 
-(define_mode_iterator VQIHISI [(V4QI "!TARGET_64BIT") (V8QI "TARGET_64BIT")
-                            (V2HI "!TARGET_64BIT") (V4HI "TARGET_64BIT")
-                            (V2SI "TARGET_64BIT")])
+(define_mode_iterator VQIHISI [(PV4QI "!TARGET_64BIT") (PV8QI "TARGET_64BIT")
+                            (PV2HI "!TARGET_64BIT") (PV4HI "TARGET_64BIT")
+                            (PV2SI "TARGET_64BIT")])
 
-(define_mode_attr SUFFIX [(V4QI "b") (V8QI "b") (V2HI "h") (V4HI "h") (V2SI "w")])
-(define_mode_attr PMUL [(V2HI "V4QI") (V4HI "V8QI")])
-(define_mode_iterator SAT32 [(V4QI "true") (V2HI "true")])
-(define_mode_iterator SAT64 [(V8QI "true") (V4HI "true") (V2SI "true")])
-(define_mode_iterator SHADD32 [(V2HI "true")])
-(define_mode_iterator SHADD64 [(V4HI "true") (V2SI "true")])
-(define_mode_attr SAT_NAME [(V4QI "i8x4") (V2HI "i16x2")
-                            (V8QI "i8x8") (V4HI "i16x4")
-                            (V2SI "i32x2")])
-(define_mode_attr USAT_NAME [(V4QI "u8x4") (V2HI "u16x2")
-                             (V8QI "u8x8") (V4HI "u16x4")
-                             (V2SI "u32x2")])
-(define_mode_attr SAT_SUFFIX [(V4QI "b") (V2HI "h")
-                              (V8QI "b") (V4HI "h") (V2SI "w")])
-(define_mode_attr DSAT_SUFFIX [(V8QI "db") (V4HI "dh") (V2SI "dw")])
-(define_mode_attr SSUFFIX [(V4QI "bs") (V2HI "hs")
-                            (V8QI "bs") (V4HI "hs") (V2SI "ws")])
-(define_mode_attr DSSUFFIX [(V8QI "dbs") (V4HI "dhs") (V2SI "dws")])
-(define_mode_attr SCALAR_MODE [(V4QI "QI") (V2HI "HI")
-                                (V8QI "QI") (V4HI "HI") (V2SI "SI")])
-(define_mode_iterator ABD32 [(V4QI "true") (V2HI "true")])
-(define_mode_iterator ABD64 [(V8QI "true") (V4HI "true")])
-; 64-bit packed modes excluding V2SI (used by Packed Pair 8x8/16x4, where the
+(define_mode_attr SUFFIX [(PV4QI "b") (PV8QI "b") (PV2HI "h") (PV4HI "h") (PV2SI "w")])
+(define_mode_attr PMUL [(PV2HI "PV4QI") (PV4HI "PV8QI")])
+(define_mode_iterator SAT32 [(PV4QI "true") (PV2HI "true")])
+(define_mode_iterator SAT64 [(PV8QI "true") (PV4HI "true") (PV2SI "true")])
+(define_mode_iterator SHADD32 [(PV2HI "true")])
+(define_mode_iterator SHADD64 [(PV4HI "true") (PV2SI "true")])
+(define_mode_attr SAT_NAME [(PV4QI "i8x4") (PV2HI "i16x2")
+                            (PV8QI "i8x8") (PV4HI "i16x4")
+                            (PV2SI "i32x2")])
+(define_mode_attr USAT_NAME [(PV4QI "u8x4") (PV2HI "u16x2")
+                             (PV8QI "u8x8") (PV4HI "u16x4")
+                             (PV2SI "u32x2")])
+(define_mode_attr SAT_SUFFIX [(PV4QI "b") (PV2HI "h")
+                              (PV8QI "b") (PV4HI "h") (PV2SI "w")])
+(define_mode_attr DSAT_SUFFIX [(PV8QI "db") (PV4HI "dh") (PV2SI "dw")])
+(define_mode_attr SSUFFIX [(PV4QI "bs") (PV2HI "hs")
+                            (PV8QI "bs") (PV4HI "hs") (PV2SI "ws")])
+(define_mode_attr DSSUFFIX [(PV8QI "dbs") (PV4HI "dhs") (PV2SI "dws")])
+(define_mode_attr SCALAR_MODE [(PV4QI "QI") (PV2HI "HI")
+                                (PV8QI "QI") (PV4HI "HI") (PV2SI "SI")])
+(define_mode_iterator ABD32 [(PV4QI "true") (PV2HI "true")])
+(define_mode_iterator ABD64 [(PV8QI "true") (PV4HI "true")])
+; 64-bit packed modes excluding PV2SI (used by Packed Pair 8x8/16x4, where the
 ; 32x2 case is handled separately because its RV64 mnemonic is "pack"/ppaireo.w
 ; rather than ppaire.w, and its RV32 form is intentionally unsupported).
-(define_mode_iterator PAIR64 [(V8QI "true") (V4HI "true")])
-(define_mode_iterator PMERGE32 [(V4QI "true") (V2HI "true")])
-(define_mode_iterator PMERGE64 [(V8QI "true") (V4HI "true") (V2SI "true")])
-(define_mode_attr PMERGE_NAME [(V4QI "i8x4") (V2HI "i16x2")
-                               (V8QI "i8x8") (V4HI "i16x4")
-                               (V2SI "i32x2")])
-(define_mode_attr UPMERGE_NAME [(V4QI "u8x4") (V2HI "u16x2")
-                                (V8QI "u8x8") (V4HI "u16x4")
-                                (V2SI "u32x2")])
+(define_mode_iterator PAIR64 [(PV8QI "true") (PV4HI "true")])
+(define_mode_iterator PMERGE32 [(PV4QI "true") (PV2HI "true")])
+(define_mode_iterator PMERGE64 [(PV8QI "true") (PV4HI "true") (PV2SI "true")])
+(define_mode_attr PMERGE_NAME [(PV4QI "i8x4") (PV2HI "i16x2")
+                               (PV8QI "i8x8") (PV4HI "i16x4")
+                               (PV2SI "i32x2")])
+(define_mode_attr UPMERGE_NAME [(PV4QI "u8x4") (PV2HI "u16x2")
+                                (PV8QI "u8x8") (PV4HI "u16x4")
+                                (PV2SI "u32x2")])
 ; Packed Comparison: result is always unsigned.  Input signedness varies:
 ; pmseq/pmsne accept both (two intrinsic variants, same instruction);
 ; pmslt/pmsgt/pmsge/pmsle take signed inputs; pmsltu/pmsgtu/pmsgeu/pmsleu
-; take unsigned inputs.  V4QI and UV4QI share the same machine mode, so the
+; take unsigned inputs.  PV4QI and UV4QI share the same machine mode, so the
 ; insns operate on the V*/UV* mode interchangeably; the builtin ftype carries
 ; the signedness of the inputs.
 ; Builtin/intrinsic naming: a suffix is added only to disambiguate.
@@ -256,15 +256,15 @@
 ; and pmsltu/pmsgtu/pmsgeu/pmsleu in the opcode (u = unsigned), so the input
 ; signedness is unambiguous and only the (unsigned) result width is named,
 ; e.g. pmslt_u8x4 (signed in) and pmsltu_u8x4 (unsigned in).
-(define_mode_attr PCMP_SNAME [(V4QI "i8x4_u8x4") (V2HI "i16x2_u16x2")
-                              (V8QI "i8x8_u8x8") (V4HI "i16x4_u16x4")
-                              (V2SI "i32x2_u32x2")])
-(define_mode_attr PCMP_UNAME [(V4QI "u8x4_u8x4") (V2HI "u16x2_u16x2")
-                              (V8QI "u8x8_u8x8") (V4HI "u16x4_u16x4")
-                              (V2SI "u32x2_u32x2")])
-(define_mode_attr PCMP_ONAME [(V4QI "u8x4") (V2HI "u16x2")
-                              (V8QI "u8x8") (V4HI "u16x4")
-                              (V2SI "u32x2")])
+(define_mode_attr PCMP_SNAME [(PV4QI "i8x4_u8x4") (PV2HI "i16x2_u16x2")
+                              (PV8QI "i8x8_u8x8") (PV4HI "i16x4_u16x4")
+                              (PV2SI "i32x2_u32x2")])
+(define_mode_attr PCMP_UNAME [(PV4QI "u8x4_u8x4") (PV2HI "u16x2_u16x2")
+                              (PV8QI "u8x8_u8x8") (PV4HI "u16x4_u16x4")
+                              (PV2SI "u32x2_u32x2")])
+(define_mode_attr PCMP_ONAME [(PV4QI "u8x4") (PV2HI "u16x2")
+                              (PV8QI "u8x8") (PV4HI "u16x4")
+                              (PV2SI "u32x2")])
 
 ;Scalar Intrinsics Common to RV32 and RV64
 (define_insn "riscv_abs<mode>_p"
@@ -363,8 +363,8 @@
 
 ;Packed Splat
 (define_insn "riscv_pmv_s_u8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
          UNSPEC_PLI))]
   "TARGET_RVP"
   "@
@@ -373,8 +373,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pmv_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
          UNSPEC_PLI))]
   "TARGET_RVP"
   "@
@@ -383,8 +383,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pmv_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r, r")
-        (unspec:V2HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r, r")
+        (unspec:PV2HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
          UNSPEC_PLI))]
   "TARGET_RVP"
   "@
@@ -394,8 +394,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_pmv_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r, r")
-        (unspec:V2HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r, r")
+        (unspec:PV2HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
          UNSPEC_PLI))]
   "TARGET_RVP"
   "@
@@ -405,8 +405,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_pmv_s_u8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:QI 1 "nonmemory_operand")]
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:QI 1 "nonmemory_operand")]
          UNSPEC_PLI))]
   "TARGET_RVP"
 {
@@ -422,8 +422,8 @@
 })
 
 (define_insn "riscv_pmv_s_u8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R, R")
-        (unspec:V8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
+  [(set (match_operand:PV8QI 0 "register_operand" "=R, R")
+        (unspec:PV8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
          UNSPEC_PLI))]
   "TARGET_RVP && !TARGET_64BIT"
   "@
@@ -432,8 +432,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pmv_s_u8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r, r")
-        (unspec:V8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
+  [(set (match_operand:PV8QI 0 "register_operand" "=r, r")
+        (unspec:PV8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
          UNSPEC_PLI))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -442,8 +442,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_pmv_s_i8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:QI 1 "nonmemory_operand")]
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:QI 1 "nonmemory_operand")]
          UNSPEC_PLI))]
   "TARGET_RVP"
 {
@@ -459,8 +459,8 @@
 })
 
 (define_insn "riscv_pmv_s_i8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R, R")
-        (unspec:V8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
+  [(set (match_operand:PV8QI 0 "register_operand" "=R, R")
+        (unspec:PV8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
          UNSPEC_PLI))]
   "TARGET_RVP && !TARGET_64BIT"
   "@
@@ -469,8 +469,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pmv_s_i8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r, r")
-        (unspec:V8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
+  [(set (match_operand:PV8QI 0 "register_operand" "=r, r")
+        (unspec:PV8QI [(match_operand:QI 1 "nonmemory_operand" "r, Wpb")]
          UNSPEC_PLI))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -479,8 +479,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_pmv_s_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:HI 1 "nonmemory_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:HI 1 "nonmemory_operand")]
          UNSPEC_PLI))]
   "TARGET_RVP"
 {
@@ -496,8 +496,8 @@
 })
 
 (define_insn "riscv_pmv_s_u16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R, R")
-        (unspec:V4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R, R")
+        (unspec:PV4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
          UNSPEC_PLI))]
   "TARGET_RVP && !TARGET_64BIT"
   "@
@@ -507,8 +507,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_pmv_s_u16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r, r")
-        (unspec:V4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r, r")
+        (unspec:PV4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
          UNSPEC_PLI))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -518,8 +518,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_pmv_s_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:HI 1 "nonmemory_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:HI 1 "nonmemory_operand")]
          UNSPEC_PLI))]
   "TARGET_RVP"
 {
@@ -535,8 +535,8 @@
 })
 
 (define_insn "riscv_pmv_s_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R, R")
-        (unspec:V4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R, R")
+        (unspec:PV4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
          UNSPEC_PLI))]
   "TARGET_RVP && !TARGET_64BIT"
   "@
@@ -546,8 +546,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_pmv_s_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r, r")
-        (unspec:V4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r, r")
+        (unspec:PV4HI [(match_operand:HI 1 "nonmemory_operand" "r, Wpi, Wpu")]
          UNSPEC_PLI))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -557,8 +557,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_pmv_s_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:SI 1 "nonmemory_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:SI 1 "nonmemory_operand")]
          UNSPEC_PLI))]
   "TARGET_RVP"
 {
@@ -576,16 +576,16 @@
 })
 
 (define_insn "riscv_pmv_s_u32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:SI 1 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:SI 1 "register_operand" "r")]
          UNSPEC_PLI))]
   "TARGET_RVP && !TARGET_64BIT"
   "pmv.dws\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pmv_s_u32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r, r")
-        (unspec:V2SI [(match_operand:SI 1 "nonmemory_operand" "r, Wpi, Wpw")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r, r")
+        (unspec:PV2SI [(match_operand:SI 1 "nonmemory_operand" "r, Wpi, Wpw")]
          UNSPEC_PLI))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -595,8 +595,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_pmv_s_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:SI 1 "nonmemory_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:SI 1 "nonmemory_operand")]
          UNSPEC_PLI))]
   "TARGET_RVP"
 {
@@ -614,16 +614,16 @@
 })
 
 (define_insn "riscv_pmv_s_i32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:SI 1 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:SI 1 "register_operand" "r")]
          UNSPEC_PLI))]
   "TARGET_RVP && !TARGET_64BIT"
   "pmv.dws\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pmv_s_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r, r")
-        (unspec:V2SI [(match_operand:SI 1 "nonmemory_operand" "r, Wpi, Wpw")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r, r")
+        (unspec:PV2SI [(match_operand:SI 1 "nonmemory_operand" "r, Wpi, Wpw")]
          UNSPEC_PLI))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -1394,63 +1394,63 @@
 ; are expanded to a pair of scalar add/sub instructions.
 
 (define_insn "riscv_pas_x_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PAS))]
   "TARGET_RVP"
   "pas.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psa_x_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PSA))]
   "TARGET_RVP"
   "psa.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psas_x_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PSAS))]
   "TARGET_RVP"
   "psas.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pssa_x_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PSSA))]
   "TARGET_RVP"
   "pssa.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_paas_x_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PAAS))]
   "TARGET_RVP"
   "paas.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pasa_x_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PASA))]
   "TARGET_RVP"
   "pasa.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pas_x_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4HI 2 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4HI 2 "register_operand")]
          UNSPEC_PAS))]
   "TARGET_RVP"
 {
@@ -1462,27 +1462,27 @@
 })
 
 (define_insn "riscv_pas_x_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PAS))]
   "TARGET_RVP && !TARGET_64BIT"
   "pas.dhx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pas_x_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PAS))]
   "TARGET_RVP && TARGET_64BIT"
   "pas.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psa_x_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4HI 2 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4HI 2 "register_operand")]
          UNSPEC_PSA))]
   "TARGET_RVP"
 {
@@ -1494,27 +1494,27 @@
 })
 
 (define_insn "riscv_psa_x_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PSA))]
   "TARGET_RVP && !TARGET_64BIT"
   "psa.dhx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psa_x_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PSA))]
   "TARGET_RVP && TARGET_64BIT"
   "psa.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psas_x_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4HI 2 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4HI 2 "register_operand")]
          UNSPEC_PSAS))]
   "TARGET_RVP"
 {
@@ -1526,27 +1526,27 @@
 })
 
 (define_insn "riscv_psas_x_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PSAS))]
   "TARGET_RVP && !TARGET_64BIT"
   "psas.dhx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psas_x_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PSAS))]
   "TARGET_RVP && TARGET_64BIT"
   "psas.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pssa_x_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4HI 2 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4HI 2 "register_operand")]
          UNSPEC_PSSA))]
   "TARGET_RVP"
 {
@@ -1558,27 +1558,27 @@
 })
 
 (define_insn "riscv_pssa_x_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PSSA))]
   "TARGET_RVP && !TARGET_64BIT"
   "pssa.dhx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pssa_x_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PSSA))]
   "TARGET_RVP && TARGET_64BIT"
   "pssa.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_paas_x_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4HI 2 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4HI 2 "register_operand")]
          UNSPEC_PAAS))]
   "TARGET_RVP"
 {
@@ -1590,27 +1590,27 @@
 })
 
 (define_insn "riscv_paas_x_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PAAS))]
   "TARGET_RVP && !TARGET_64BIT"
   "paas.dhx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_paas_x_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PAAS))]
   "TARGET_RVP && TARGET_64BIT"
   "paas.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pasa_x_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4HI 2 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4HI 2 "register_operand")]
          UNSPEC_PASA))]
   "TARGET_RVP"
 {
@@ -1622,27 +1622,27 @@
 })
 
 (define_insn "riscv_pasa_x_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PASA))]
   "TARGET_RVP && !TARGET_64BIT"
   "pasa.dhx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pasa_x_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
-                      (match_operand:V4HI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
+                      (match_operand:PV4HI 2 "register_operand" "r")]
          UNSPEC_PASA))]
   "TARGET_RVP && TARGET_64BIT"
   "pasa.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pas_x_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
-                      (match_operand:V2SI 2 "register_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                      (match_operand:PV2SI 2 "register_operand")]
          UNSPEC_PAS))]
   "TARGET_RVP"
 {
@@ -1665,18 +1665,18 @@
 })
 
 (define_insn "riscv_pas_x_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
-                      (match_operand:V2SI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
+                      (match_operand:PV2SI 2 "register_operand" "r")]
          UNSPEC_PAS))]
   "TARGET_RVP && TARGET_64BIT"
   "pas.wx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psa_x_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
-                      (match_operand:V2SI 2 "register_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                      (match_operand:PV2SI 2 "register_operand")]
          UNSPEC_PSA))]
   "TARGET_RVP"
 {
@@ -1699,9 +1699,9 @@
 })
 
 (define_insn "riscv_psa_x_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
-                      (match_operand:V2SI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
+                      (match_operand:PV2SI 2 "register_operand" "r")]
          UNSPEC_PSA))]
   "TARGET_RVP && TARGET_64BIT"
   "psa.wx\t%0,%1,%2"
@@ -1710,36 +1710,36 @@
 ; TODO: Implement the RV32 i32x2 psas, pssa, paas and pasa operations using
 ; the scalar sadd, ssub, aadd and asub operations.
 (define_insn "riscv_psas_x_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
-                      (match_operand:V2SI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
+                      (match_operand:PV2SI 2 "register_operand" "r")]
          UNSPEC_PSAS))]
   "TARGET_RVP && TARGET_64BIT"
   "psas.wx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pssa_x_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
-                      (match_operand:V2SI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
+                      (match_operand:PV2SI 2 "register_operand" "r")]
          UNSPEC_PSSA))]
   "TARGET_RVP && TARGET_64BIT"
   "pssa.wx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_paas_x_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
-                      (match_operand:V2SI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
+                      (match_operand:PV2SI 2 "register_operand" "r")]
          UNSPEC_PAAS))]
   "TARGET_RVP && TARGET_64BIT"
   "paas.wx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pasa_x_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
-                      (match_operand:V2SI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
+                      (match_operand:PV2SI 2 "register_operand" "r")]
          UNSPEC_PASA))]
   "TARGET_RVP && TARGET_64BIT"
   "pasa.wx\t%0,%1,%2"
@@ -1873,24 +1873,24 @@
 ;Packed Saturating Absolute Value
 
 (define_insn "riscv_psabs_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r")
-        (unspec:V4QI [(match_operand:V4QI 1 "register_operand" "r")]
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")]
          UNSPEC_PSABS))]
   "TARGET_RVP"
   "psabs.b\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psabs_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")]
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")]
          UNSPEC_PSABS))]
   "TARGET_RVP"
   "psabs.h\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psabs_i8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand")]
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand")]
          UNSPEC_PSABS))]
   "TARGET_RVP"
 {
@@ -1902,24 +1902,24 @@
 })
 
 (define_insn "riscv_psabs_i8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r")]
+  [(set (match_operand:PV8QI 0 "register_operand" "=R")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r")]
          UNSPEC_PSABS))]
   "TARGET_RVP && !TARGET_64BIT"
   "psabs.db\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psabs_i8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r")]
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r")]
          UNSPEC_PSABS))]
   "TARGET_RVP && TARGET_64BIT"
   "psabs.b\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psabs_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")]
          UNSPEC_PSABS))]
   "TARGET_RVP"
 {
@@ -1931,16 +1931,16 @@
 })
 
 (define_insn "riscv_psabs_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")]
          UNSPEC_PSABS))]
   "TARGET_RVP && !TARGET_64BIT"
   "psabs.dh\t%0,%1"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psabs_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")]
          UNSPEC_PSABS))]
   "TARGET_RVP && TARGET_64BIT"
   "psabs.h\t%0,%1"
@@ -1950,7 +1950,7 @@
 
 (define_expand "riscv_predsum_i8x4_i32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V4QI 1 "register_operand")
+        (unspec:SI [(match_operand:PV4QI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP"
@@ -1962,7 +1962,7 @@
 
       emit_insn (gen_zero_extendsidi2 (wide, low));
       emit_insn (gen_riscv_predsum_i8x8_i32_rv64
-		 (operands[0], gen_lowpart (V8QImode, wide), operands[2]));
+		 (operands[0], gen_lowpart (PV8QImode, wide), operands[2]));
     }
   else
     emit_insn (gen_riscv_predsum_i8x4_i32_rv32
@@ -1972,7 +1972,7 @@
 
 (define_insn "riscv_predsum_i8x4_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V4QI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV4QI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1981,7 +1981,7 @@
 
 (define_expand "riscv_predsumu_u8x4_u32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V4QI 1 "register_operand")
+        (unspec:SI [(match_operand:PV4QI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP"
@@ -1993,7 +1993,7 @@
 
       emit_insn (gen_zero_extendsidi2 (wide, low));
       emit_insn (gen_riscv_predsumu_u8x8_u32_rv64
-		 (operands[0], gen_lowpart (V8QImode, wide), operands[2]));
+		 (operands[0], gen_lowpart (PV8QImode, wide), operands[2]));
     }
   else
     emit_insn (gen_riscv_predsumu_u8x4_u32_rv32
@@ -2003,7 +2003,7 @@
 
 (define_insn "riscv_predsumu_u8x4_u32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V4QI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV4QI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2012,7 +2012,7 @@
 
 (define_expand "riscv_predsum_i16x2_i32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V2HI 1 "register_operand")
+        (unspec:SI [(match_operand:PV2HI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP"
@@ -2024,7 +2024,7 @@
 
       emit_insn (gen_zero_extendsidi2 (wide, low));
       emit_insn (gen_riscv_predsum_i16x4_i32_rv64
-		 (operands[0], gen_lowpart (V4HImode, wide), operands[2]));
+		 (operands[0], gen_lowpart (PV4HImode, wide), operands[2]));
     }
   else
     emit_insn (gen_riscv_predsum_i16x2_i32_rv32
@@ -2034,7 +2034,7 @@
 
 (define_insn "riscv_predsum_i16x2_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V2HI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV2HI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2043,7 +2043,7 @@
 
 (define_expand "riscv_predsumu_u16x2_u32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V2HI 1 "register_operand")
+        (unspec:SI [(match_operand:PV2HI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP"
@@ -2055,7 +2055,7 @@
 
       emit_insn (gen_zero_extendsidi2 (wide, low));
       emit_insn (gen_riscv_predsumu_u16x4_u32_rv64
-		 (operands[0], gen_lowpart (V4HImode, wide), operands[2]));
+		 (operands[0], gen_lowpart (PV4HImode, wide), operands[2]));
     }
   else
     emit_insn (gen_riscv_predsumu_u16x2_u32_rv32
@@ -2065,7 +2065,7 @@
 
 (define_insn "riscv_predsumu_u16x2_u32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V2HI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV2HI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2074,7 +2074,7 @@
 
 (define_expand "riscv_predsum_i8x8_i32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V8QI 1 "register_operand")
+        (unspec:SI [(match_operand:PV8QI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP"
@@ -2090,7 +2090,7 @@
 
 (define_insn "riscv_predsum_i8x8_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V8QI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV8QI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2099,7 +2099,7 @@
 
 (define_expand "riscv_predsumu_u8x8_u32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V8QI 1 "register_operand")
+        (unspec:SI [(match_operand:PV8QI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP"
@@ -2115,7 +2115,7 @@
 
 (define_insn "riscv_predsumu_u8x8_u32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V8QI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV8QI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2124,7 +2124,7 @@
 
 (define_expand "riscv_predsum_i16x4_i32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V4HI 1 "register_operand")
+        (unspec:SI [(match_operand:PV4HI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP"
@@ -2140,7 +2140,7 @@
 
 (define_insn "riscv_predsum_i16x4_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V4HI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV4HI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2149,7 +2149,7 @@
 
 (define_expand "riscv_predsumu_u16x4_u32"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:V4HI 1 "register_operand")
+        (unspec:SI [(match_operand:PV4HI 1 "register_operand")
                             (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP"
@@ -2165,7 +2165,7 @@
 
 (define_insn "riscv_predsumu_u16x4_u32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V4HI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV4HI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -2174,7 +2174,7 @@
 
 (define_insn "riscv_predsum_i8x8_i32_rv64"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V8QI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV8QI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2183,7 +2183,7 @@
 
 (define_insn "riscv_predsumu_u8x8_u32_rv64"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V8QI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV8QI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2192,7 +2192,7 @@
 
 (define_insn "riscv_predsum_i16x4_i32_rv64"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V4HI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV4HI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2201,7 +2201,7 @@
 
 (define_insn "riscv_predsumu_u16x4_u32_rv64"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:V4HI 1 "register_operand" "r")
+        (unspec:SI [(match_operand:PV4HI 1 "register_operand" "r")
                             (match_operand:SI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2212,7 +2212,7 @@
 ; These six i64 intrinsics are RV64-only for now.
 (define_expand "riscv_predsum_i8x8_i64"
   [(set (match_operand:DI 0 "register_operand")
-        (unspec:DI [(match_operand:V8QI 1 "register_operand")
+        (unspec:DI [(match_operand:PV8QI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2224,7 +2224,7 @@
 
 (define_insn "riscv_predsum_i8x8_i64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:V8QI 1 "register_operand" "r")
+        (unspec:DI [(match_operand:PV8QI 1 "register_operand" "r")
                             (match_operand:DI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2233,7 +2233,7 @@
 
 (define_expand "riscv_predsumu_u8x8_u64"
   [(set (match_operand:DI 0 "register_operand")
-        (unspec:DI [(match_operand:V8QI 1 "register_operand")
+        (unspec:DI [(match_operand:PV8QI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2245,7 +2245,7 @@
 
 (define_insn "riscv_predsumu_u8x8_u64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:V8QI 1 "register_operand" "r")
+        (unspec:DI [(match_operand:PV8QI 1 "register_operand" "r")
                             (match_operand:DI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2254,7 +2254,7 @@
 
 (define_expand "riscv_predsum_i16x4_i64"
   [(set (match_operand:DI 0 "register_operand")
-        (unspec:DI [(match_operand:V4HI 1 "register_operand")
+        (unspec:DI [(match_operand:PV4HI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2266,7 +2266,7 @@
 
 (define_insn "riscv_predsum_i16x4_i64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:V4HI 1 "register_operand" "r")
+        (unspec:DI [(match_operand:PV4HI 1 "register_operand" "r")
                             (match_operand:DI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2275,7 +2275,7 @@
 
 (define_expand "riscv_predsumu_u16x4_u64"
   [(set (match_operand:DI 0 "register_operand")
-        (unspec:DI [(match_operand:V4HI 1 "register_operand")
+        (unspec:DI [(match_operand:PV4HI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2287,7 +2287,7 @@
 
 (define_insn "riscv_predsumu_u16x4_u64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:V4HI 1 "register_operand" "r")
+        (unspec:DI [(match_operand:PV4HI 1 "register_operand" "r")
                             (match_operand:DI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2296,7 +2296,7 @@
 
 (define_expand "riscv_predsum_i32x2_i64"
   [(set (match_operand:DI 0 "register_operand")
-        (unspec:DI [(match_operand:V2SI 1 "register_operand")
+        (unspec:DI [(match_operand:PV2SI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2308,7 +2308,7 @@
 
 (define_insn "riscv_predsum_i32x2_i64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:V2SI 1 "register_operand" "r")
+        (unspec:DI [(match_operand:PV2SI 1 "register_operand" "r")
                             (match_operand:DI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2317,7 +2317,7 @@
 
 (define_expand "riscv_predsumu_u32x2_u64"
   [(set (match_operand:DI 0 "register_operand")
-        (unspec:DI [(match_operand:V2SI 1 "register_operand")
+        (unspec:DI [(match_operand:PV2SI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2329,7 +2329,7 @@
 
 (define_insn "riscv_predsumu_u32x2_u64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:V2SI 1 "register_operand" "r")
+        (unspec:DI [(match_operand:PV2SI 1 "register_operand" "r")
                             (match_operand:DI 2 "nonmemory_operand" "r")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && TARGET_64BIT"
@@ -2339,7 +2339,7 @@
 ;Packed Widening Addition and Subtraction
 ;
 ;pwadd/pwsub widen two narrow sources (32-bit each) into one wide result
-;(64-bit): two V4QI -> V4HI, or two V2HI -> V2SI.  Each lane is sign/zero
+;(64-bit): two PV4QI -> PV4HI, or two PV2HI -> PV2SI.  Each lane is sign/zero
 ;extended then added/subtracted.
 ;  RV32: single real instruction pwadd.b/h, pwaddu.b/h, pwsub.b/h, pwsubu.b/h
 ;        (constraint Wpd,s,t: result in even-odd register pair, two scalar
@@ -2354,72 +2354,72 @@
 ;        register-pair widening extension, per proposal note).  For now the
 ;        builtins are simd32-only (see simd.def), so RV64 calls error out.
 (define_insn "riscv_pwadd_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWADD_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwadd.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwadd_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWADD_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwadd.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwaddu_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWADDU_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwaddu.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwaddu_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWADDU_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwaddu.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwsub_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWSUB_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsub.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwsub_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWSUB_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsub.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwsubu_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWSUBU_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsubu.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_pwsubu_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWSUBU_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsubu.h\t%0,%1,%2"
@@ -2444,10 +2444,10 @@
 ;instruction on that pair.  define_expand emits the copy (emit_move_insn)
 ;then the RMW insn (operand 0 is "+R", read-write).
 (define_expand "riscv_pwadda_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4QI 2 "register_operand")
-                      (match_operand:V4QI 3 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4QI 2 "register_operand")
+                      (match_operand:PV4QI 3 "register_operand")]
          UNSPEC_PWADDA_B))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2457,20 +2457,20 @@
 })
 
 (define_insn "riscv_pwadda_i16x4_rmw"
-  [(set (match_operand:V4HI 0 "register_operand" "+R")
-        (unspec:V4HI [(match_dup 0)
-                      (match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "+R")
+        (unspec:PV4HI [(match_dup 0)
+                      (match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWADDA_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwadda.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwadda_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
-                      (match_operand:V2HI 2 "register_operand")
-                      (match_operand:V2HI 3 "register_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                      (match_operand:PV2HI 2 "register_operand")
+                      (match_operand:PV2HI 3 "register_operand")]
          UNSPEC_PWADDA_H))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2480,20 +2480,20 @@
 })
 
 (define_insn "riscv_pwadda_i32x2_rmw"
-  [(set (match_operand:V2SI 0 "register_operand" "+R")
-        (unspec:V2SI [(match_dup 0)
-                      (match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "+R")
+        (unspec:PV2SI [(match_dup 0)
+                      (match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWADDA_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwadda.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwaddau_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4QI 2 "register_operand")
-                      (match_operand:V4QI 3 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4QI 2 "register_operand")
+                      (match_operand:PV4QI 3 "register_operand")]
          UNSPEC_PWADDAU_B))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2503,20 +2503,20 @@
 })
 
 (define_insn "riscv_pwaddau_u16x4_rmw"
-  [(set (match_operand:V4HI 0 "register_operand" "+R")
-        (unspec:V4HI [(match_dup 0)
-                      (match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "+R")
+        (unspec:PV4HI [(match_dup 0)
+                      (match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWADDAU_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwaddau.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwaddau_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
-                      (match_operand:V2HI 2 "register_operand")
-                      (match_operand:V2HI 3 "register_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                      (match_operand:PV2HI 2 "register_operand")
+                      (match_operand:PV2HI 3 "register_operand")]
          UNSPEC_PWADDAU_H))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2526,20 +2526,20 @@
 })
 
 (define_insn "riscv_pwaddau_u32x2_rmw"
-  [(set (match_operand:V2SI 0 "register_operand" "+R")
-        (unspec:V2SI [(match_dup 0)
-                      (match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "+R")
+        (unspec:PV2SI [(match_dup 0)
+                      (match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWADDAU_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwaddau.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwsuba_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4QI 2 "register_operand")
-                      (match_operand:V4QI 3 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4QI 2 "register_operand")
+                      (match_operand:PV4QI 3 "register_operand")]
          UNSPEC_PWSUBA_B))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2549,20 +2549,20 @@
 })
 
 (define_insn "riscv_pwsuba_i16x4_rmw"
-  [(set (match_operand:V4HI 0 "register_operand" "+R")
-        (unspec:V4HI [(match_dup 0)
-                      (match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "+R")
+        (unspec:PV4HI [(match_dup 0)
+                      (match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWSUBA_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsuba.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwsuba_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
-                      (match_operand:V2HI 2 "register_operand")
-                      (match_operand:V2HI 3 "register_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                      (match_operand:PV2HI 2 "register_operand")
+                      (match_operand:PV2HI 3 "register_operand")]
          UNSPEC_PWSUBA_H))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2572,20 +2572,20 @@
 })
 
 (define_insn "riscv_pwsuba_i32x2_rmw"
-  [(set (match_operand:V2SI 0 "register_operand" "+R")
-        (unspec:V2SI [(match_dup 0)
-                      (match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "+R")
+        (unspec:PV2SI [(match_dup 0)
+                      (match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWSUBA_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsuba.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwsubau_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
-                      (match_operand:V4QI 2 "register_operand")
-                      (match_operand:V4QI 3 "register_operand")]
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
+                      (match_operand:PV4QI 2 "register_operand")
+                      (match_operand:PV4QI 3 "register_operand")]
          UNSPEC_PWSUBAU_B))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2595,20 +2595,20 @@
 })
 
 (define_insn "riscv_pwsubau_u16x4_rmw"
-  [(set (match_operand:V4HI 0 "register_operand" "+R")
-        (unspec:V4HI [(match_dup 0)
-                      (match_operand:V4QI 1 "register_operand" "r")
-                      (match_operand:V4QI 2 "register_operand" "r")]
+  [(set (match_operand:PV4HI 0 "register_operand" "+R")
+        (unspec:PV4HI [(match_dup 0)
+                      (match_operand:PV4QI 1 "register_operand" "r")
+                      (match_operand:PV4QI 2 "register_operand" "r")]
          UNSPEC_PWSUBAU_B))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsubau.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pwsubau_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
-                      (match_operand:V2HI 2 "register_operand")
-                      (match_operand:V2HI 3 "register_operand")]
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                      (match_operand:PV2HI 2 "register_operand")
+                      (match_operand:PV2HI 3 "register_operand")]
          UNSPEC_PWSUBAU_H))]
   "TARGET_RVP && !TARGET_64BIT"
 {
@@ -2618,10 +2618,10 @@
 })
 
 (define_insn "riscv_pwsubau_u32x2_rmw"
-  [(set (match_operand:V2SI 0 "register_operand" "+R")
-        (unspec:V2SI [(match_dup 0)
-                      (match_operand:V2HI 1 "register_operand" "r")
-                      (match_operand:V2HI 2 "register_operand" "r")]
+  [(set (match_operand:PV2SI 0 "register_operand" "+R")
+        (unspec:PV2SI [(match_dup 0)
+                      (match_operand:PV2HI 1 "register_operand" "r")
+                      (match_operand:PV2HI 2 "register_operand" "r")]
          UNSPEC_PWSUBAU_H))]
   "TARGET_RVP && !TARGET_64BIT"
   "pwsubau.h\t%0,%1,%2"

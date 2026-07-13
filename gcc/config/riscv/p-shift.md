@@ -21,8 +21,8 @@
 ;; Packed-SIMD extension.
 ; Packed Shifts
 (define_insn "riscv_psll_s_u8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -32,8 +32,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -43,8 +43,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -54,8 +54,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -65,8 +65,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psrl_s_u8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSRL))]
   "TARGET_RVP"
@@ -76,8 +76,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psrl_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PSRL))]
   "TARGET_RVP"
@@ -87,8 +87,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psra_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSRA))]
   "TARGET_RVP"
@@ -98,8 +98,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psra_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PSRA))]
   "TARGET_RVP"
@@ -109,8 +109,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psll_s_u8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand")
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -128,8 +128,8 @@
 
 
 (define_insn "riscv_psll_s_u8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R, R")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=R, R")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -139,8 +139,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_u8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r, r")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=r, r")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSLL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -150,8 +150,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psll_s_i8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand")
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -168,8 +168,8 @@
 })
 
 (define_insn "riscv_psll_s_i8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r, r")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=r, r")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSLL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -179,8 +179,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_i8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R, R")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=R, R")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
          UNSPEC_PSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -190,8 +190,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psll_s_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -208,8 +208,8 @@
 })
 
 (define_insn "riscv_psll_s_u16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -219,8 +219,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_u16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -230,8 +230,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psll_s_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -248,8 +248,8 @@
 })
 
 (define_insn "riscv_psll_s_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -259,8 +259,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -270,8 +270,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psll_s_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -288,8 +288,8 @@
 })
 
 (define_insn "riscv_psll_s_u32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u5, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -299,8 +299,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_u32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u5, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -310,8 +310,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psll_s_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSLL))]
   "TARGET_RVP"
@@ -328,8 +328,8 @@
 })
 
 (define_insn "riscv_psll_s_i32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u5, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -339,8 +339,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psll_s_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u5, r")]
           UNSPEC_PSLL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -350,8 +350,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psrl_s_u8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand")
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSRL))]
   "TARGET_RVP"
@@ -364,8 +364,8 @@
 })
 
 (define_insn "riscv_psrl_s_u8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R, R")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=R, R")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -375,8 +375,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psrl_s_u8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r, r")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=r, r")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -386,8 +386,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psrl_s_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSRL))]
   "TARGET_RVP"
@@ -400,8 +400,8 @@
 })
 
 (define_insn "riscv_psrl_s_u16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -411,8 +411,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psrl_s_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSRL))]
   "TARGET_RVP"
@@ -425,8 +425,8 @@
 })
 
 (define_insn "riscv_psrl_s_u32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -436,8 +436,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psra_s_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && TARGET_64BIT"
@@ -447,8 +447,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psra_s_i8x8"
-  [(set (match_operand:V8QI 0 "register_operand")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand")
+  [(set (match_operand:PV8QI 0 "register_operand")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSRA))]
   "TARGET_RVP"
@@ -461,8 +461,8 @@
 })
 
 (define_insn "riscv_psra_s_i8x8_rv32"
-  [(set (match_operand:V8QI 0 "register_operand" "=R, R")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=R, R")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -472,8 +472,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psra_s_i8x8_rv64"
-  [(set (match_operand:V8QI 0 "register_operand" "=r, r")
-        (unspec:V8QI [(match_operand:V8QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV8QI 0 "register_operand" "=r, r")
+        (unspec:PV8QI [(match_operand:PV8QI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && TARGET_64BIT"
@@ -483,8 +483,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psra_s_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSRA))]
   "TARGET_RVP"
@@ -497,8 +497,8 @@
 })
 
 (define_insn "riscv_psra_s_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -508,8 +508,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psra_s_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && TARGET_64BIT"
@@ -519,8 +519,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psrl_s_u16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -530,8 +530,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_expand "riscv_psra_s_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSRA))]
   "TARGET_RVP"
@@ -544,8 +544,8 @@
 })
 
 (define_insn "riscv_psra_s_i32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -555,8 +555,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_psrl_s_u32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
                     (match_operand:SI 2 "arith_operand" "u3, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -572,8 +572,8 @@
 ; psshl/psshlr: unsigned saturating (rounding) logical shift.
 
 (define_insn "riscv_pssha_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r, r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r, r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u4, w4, r")]
           UNSPEC_PSSHA))]
   "TARGET_RVP"
@@ -584,8 +584,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_psshar_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r, r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r, r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u4, w4, r")]
          UNSPEC_PSSHAR))]
   "TARGET_RVP"
@@ -596,8 +596,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_psshl_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand")
+  [(set (match_operand:PV2HI 0 "register_operand")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHL))]
   "TARGET_RVP"
@@ -607,8 +607,8 @@
 })
 
 (define_insn "riscv_psshl_s_u16x2_insn"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
                     (match_operand:SI 2 "register_operand" "r")]
          UNSPEC_PSSHL))]
   "TARGET_RVP"
@@ -616,8 +616,8 @@
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psshlr_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand")
+  [(set (match_operand:PV2HI 0 "register_operand")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHLR))]
   "TARGET_RVP"
@@ -627,8 +627,8 @@
 })
 
 (define_insn "riscv_psshlr_s_u16x2_insn"
-  [(set (match_operand:V2HI 0 "register_operand" "=r")
-        (unspec:V2HI [(match_operand:V2HI 1 "register_operand" "r")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+        (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
                     (match_operand:SI 2 "register_operand" "r")]
          UNSPEC_PSSHLR))]
   "TARGET_RVP"
@@ -636,8 +636,8 @@
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_pssha_s_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHA))]
   "TARGET_RVP"
@@ -654,8 +654,8 @@
 })
 
 (define_insn "riscv_pssha_s_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R, R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R, R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u4, w4, r")]
           UNSPEC_PSSHA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -666,8 +666,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_pssha_s_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r, r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r, r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u4, w4, r")]
           UNSPEC_PSSHA))]
   "TARGET_RVP && TARGET_64BIT"
@@ -678,8 +678,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_pssha_s_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHA))]
   "TARGET_RVP"
@@ -696,8 +696,8 @@
 })
 
 (define_insn "riscv_pssha_s_i32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R, R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R, R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u5, w5, r")]
           UNSPEC_PSSHA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -708,8 +708,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_pssha_s_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r, r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r, r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u5, w5, r")]
           UNSPEC_PSSHA))]
   "TARGET_RVP && TARGET_64BIT"
@@ -720,8 +720,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_psshar_s_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHAR))]
   "TARGET_RVP"
@@ -738,8 +738,8 @@
 })
 
 (define_insn "riscv_psshar_s_i16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R, R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R, R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u4, w4, r")]
           UNSPEC_PSSHAR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -750,8 +750,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_psshar_s_i16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r, r, r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r, r, r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u4, w4, r")]
           UNSPEC_PSSHAR))]
   "TARGET_RVP && TARGET_64BIT"
@@ -762,8 +762,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_psshar_s_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHAR))]
   "TARGET_RVP"
@@ -780,8 +780,8 @@
 })
 
 (define_insn "riscv_psshar_s_i32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R, R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R, R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u5, w5, r")]
           UNSPEC_PSSHAR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -792,8 +792,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_insn "riscv_psshar_s_i32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r, r, r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r, r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r, r, r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r, r")
                     (match_operand:SI 2 "arith_operand" "u5, w5, r")]
           UNSPEC_PSSHAR))]
   "TARGET_RVP && TARGET_64BIT"
@@ -804,8 +804,8 @@
   [(set_attr "type" "simd, simd, simd")])
 
 (define_expand "riscv_psshl_s_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHL))]
   "TARGET_RVP"
@@ -824,8 +824,8 @@
 })
 
 (define_insn "riscv_psshl_s_u16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "R")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "R")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -833,8 +833,8 @@
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psshl_s_u16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -842,8 +842,8 @@
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psshl_s_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHL))]
   "TARGET_RVP"
@@ -862,8 +862,8 @@
 })
 
 (define_insn "riscv_psshl_s_u32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -871,8 +871,8 @@
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psshl_s_u32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHL))]
   "TARGET_RVP && TARGET_64BIT"
@@ -880,8 +880,8 @@
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psshlr_s_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand")
+  [(set (match_operand:PV4HI 0 "register_operand")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHLR))]
   "TARGET_RVP"
@@ -900,8 +900,8 @@
 })
 
 (define_insn "riscv_psshlr_s_u16x4_rv32"
-  [(set (match_operand:V4HI 0 "register_operand" "=R")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHLR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -909,8 +909,8 @@
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psshlr_s_u16x4_rv64"
-  [(set (match_operand:V4HI 0 "register_operand" "=r")
-        (unspec:V4HI [(match_operand:V4HI 1 "register_operand" "r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHLR))]
   "TARGET_RVP && TARGET_64BIT"
@@ -918,8 +918,8 @@
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_psshlr_s_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand")
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
                     (match_operand:SI 2 "nonmemory_operand")]
          UNSPEC_PSSHLR))]
   "TARGET_RVP"
@@ -938,8 +938,8 @@
 })
 
 (define_insn "riscv_psshlr_s_u32x2_rv32"
-  [(set (match_operand:V2SI 0 "register_operand" "=R")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHLR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -947,8 +947,8 @@
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_psshlr_s_u32x2_rv64"
-  [(set (match_operand:V2SI 0 "register_operand" "=r")
-        (unspec:V2SI [(match_operand:V2SI 1 "register_operand" "r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
                       (match_operand:SI 2 "register_operand" "r")]
           UNSPEC_PSSHLR))]
   "TARGET_RVP && TARGET_64BIT"
@@ -958,7 +958,7 @@
 ;Packed Widening Shift
 ;
 ;pwsll_s/pwsla_s widen one narrow source (32-bit) into a wide result (64-bit)
-;and shift each widened lane left by shamt: V4QI -> V4HI, or V2HI -> V2SI.
+;and shift each widened lane left by shamt: PV4QI -> PV4HI, or PV2HI -> PV2SI.
 ;pwsll = logical left shift (zero-extend widen), pwsla = arithmetic left shift
 ;(sign-extend widen).  shamt may be an immediate or a register scalar.
 ;  RV32: immediate form  pwslli.b/h, pwslai.b/h  (constraint Wpd,s,WpH/<)
@@ -972,8 +972,8 @@
 ;and pwsll.bs/hs/pwsla.bs/hs when it is a register (matches the existing
 ;riscv_psll_s_* pattern style).
 (define_insn "riscv_pwsll_s_u16x4"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R")
-        (unspec:V4HI [(match_operand:V4QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R")
+        (unspec:PV4HI [(match_operand:PV4QI 1 "register_operand" "r, r")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PWSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -983,8 +983,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pwsll_s_u32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R")
-        (unspec:V2SI [(match_operand:V2HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R")
+        (unspec:PV2SI [(match_operand:PV2HI 1 "register_operand" "r, r")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PWSLL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -994,8 +994,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pwsla_s_i16x4"
-  [(set (match_operand:V4HI 0 "register_operand" "=R, R")
-        (unspec:V4HI [(match_operand:V4QI 1 "register_operand" "r, r")
+  [(set (match_operand:PV4HI 0 "register_operand" "=R, R")
+        (unspec:PV4HI [(match_operand:PV4QI 1 "register_operand" "r, r")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PWSLA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1005,8 +1005,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pwsla_s_i32x2"
-  [(set (match_operand:V2SI 0 "register_operand" "=R, R")
-        (unspec:V2SI [(match_operand:V2HI 1 "register_operand" "r, r")
+  [(set (match_operand:PV2SI 0 "register_operand" "=R, R")
+        (unspec:PV2SI [(match_operand:PV2HI 1 "register_operand" "r, r")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PWSLA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1018,7 +1018,7 @@
 ;Packed Narrowing Shift
 ;
 ;pnsrl_s/pnsra_s/pnsrar_s narrow one wide source (64-bit) into a narrow result
-;(32-bit) by shifting each lane right: V4HI -> V4QI, or V2SI -> V2HI.
+;(32-bit) by shifting each lane right: PV4HI -> PV4QI, or PV2SI -> PV2HI.
 ;pnsrl = logical right shift (zero-extend narrow), pnsra = arithmetic right
 ;shift (sign-extend narrow), pnsrar = rounding arithmetic right shift.
 ;shamt may be an immediate or a register scalar.
@@ -1030,8 +1030,8 @@
 ;        (psrli.h+unzip8p, etc.).  NOT implemented yet.  TODO.  Builtins are
 ;        simd32-only.
 (define_insn "riscv_pnsrl_s_u8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNSRL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1041,8 +1041,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnsrl_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNSRL))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1052,8 +1052,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnsra_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNSRA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1063,8 +1063,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnsra_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNSRA))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1074,8 +1074,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnsrar_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNSRAR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1085,8 +1085,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnsrar_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNSRAR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1098,8 +1098,8 @@
 ;Packed Narrowing Clip
 ;
 ;pnclip* narrow one wide source (64-bit) into a narrow result (32-bit) by
-;clipping (saturating to the narrow range) after a shift: V4HI -> V4QI, or
-;V2SI -> V2HI.  Four variants:
+;clipping (saturating to the narrow range) after a shift: PV4HI -> PV4QI, or
+;PV2SI -> PV2HI.  Four variants:
 ;  pnclipu  = unsigned clip,            pnclipru = unsigned rounding clip
 ;  pnclip   = signed clip,              pnclipr  = signed rounding clip
 ;shamt may be an immediate or a register scalar.
@@ -1116,8 +1116,8 @@
 ;        (psrli.h+pnclipup.b, etc.).  NOT implemented yet.  TODO.  Builtins
 ;        are simd32-only.
 (define_insn "riscv_pnclipu_s_u8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNCLIPU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1127,8 +1127,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclipu_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNCLIPU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1138,8 +1138,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclipru_s_u8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNCLIPRU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1149,8 +1149,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclipru_s_u16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNCLIPRU))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1160,8 +1160,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclip_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNCLIP))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1171,8 +1171,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclip_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNCLIP))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1182,8 +1182,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclipr_s_i8x4"
-  [(set (match_operand:V4QI 0 "register_operand" "=r, r")
-        (unspec:V4QI [(match_operand:V4HI 1 "register_operand" "R, R")
+  [(set (match_operand:PV4QI 0 "register_operand" "=r, r")
+        (unspec:PV4QI [(match_operand:PV4HI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u4, r")]
          UNSPEC_PNCLIPR))]
   "TARGET_RVP && !TARGET_64BIT"
@@ -1193,8 +1193,8 @@
   [(set_attr "type" "simd, simd")])
 
 (define_insn "riscv_pnclipr_s_i16x2"
-  [(set (match_operand:V2HI 0 "register_operand" "=r, r")
-        (unspec:V2HI [(match_operand:V2SI 1 "register_operand" "R, R")
+  [(set (match_operand:PV2HI 0 "register_operand" "=r, r")
+        (unspec:PV2HI [(match_operand:PV2SI 1 "register_operand" "R, R")
                       (match_operand:SI 2 "arith_operand" "u5, r")]
          UNSPEC_PNCLIPR))]
   "TARGET_RVP && !TARGET_64BIT"
