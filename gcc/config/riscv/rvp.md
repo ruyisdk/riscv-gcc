@@ -2905,6 +2905,7 @@
 ;; Uses iterators: pas_even_op, pas_odd_op, pas_insn
 
 ;; pas/psa.hx for PV2HI (RV32/RV64)
+;; Even: pas_even_op(rs1, rs2), Odd: pas_odd_op(rs1, rs2) - canonical form.
 (define_insn "*rvp_<pas_insn>_hx_v2hi"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
 	(vec_merge:PV2HI
@@ -2922,7 +2923,46 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "PV2HI")])
 
-;; pas/psa.hx for PV4HI (RV64 only)
+;; Commuted-plus variant: GCC's SLP may canonicalize plus(rs2, rs1) when the
+;; non-commutative odd op remains minus(rs1, rs2).  This matches pas.hx only
+;; (pas_even_op == plus swapped; psa already has minus in even which is fine).
+(define_insn "*rvp_pas_hx_v2hi_comm"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(vec_merge:PV2HI
+	  (vec_select:PV2HI
+	    (plus:PV2HI
+	      (match_operand:PV2HI 2 "register_operand" "r")
+	      (match_operand:PV2HI 1 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0)]))
+	  (vec_select:PV2HI
+	    (minus:PV2HI (match_dup 1) (match_dup 2))
+	    (parallel [(const_int 1) (const_int 1)]))
+	  (const_int 1)))]
+  "TARGET_RVP"
+  "pas.hx\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV2HI")])
+
+;; Commuted-plus variant for psa.hx: GCC may canonicalize plus(rs2, rs1) in
+;; the odd position while minus(rs1, rs2) remains in the even position.
+(define_insn "*rvp_psa_hx_v2hi_comm"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(vec_merge:PV2HI
+	  (vec_select:PV2HI
+	    (minus:PV2HI
+	      (match_operand:PV2HI 1 "register_operand" "r")
+	      (match_operand:PV2HI 2 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0)]))
+	  (vec_select:PV2HI
+	    (plus:PV2HI (match_dup 2) (match_dup 1))
+	    (parallel [(const_int 1) (const_int 1)]))
+	  (const_int 1)))]
+  "TARGET_RVP"
+  "psa.hx\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV2HI")])
+
+;; pas/psa.hx for PV4HI (RV32: pas.dhx, RV64: pas.hx)
 (define_insn "*rvp_<pas_insn>_hx_v4hi"
   [(set (match_operand:PV4HI 0 "register_operand" "=r")
 	(vec_merge:PV4HI
@@ -2935,8 +2975,44 @@
 	    (<pas_odd_op>:PV4HI (match_dup 1) (match_dup 2))
 	    (parallel [(const_int 1) (const_int 1) (const_int 3) (const_int 3)]))
 	  (const_int 5)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "<pas_insn>.hx\t%0,%1,%2"
+  "TARGET_RVP"
+  "<pas_insn>.%d0x\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV4HI")])
+
+;; Commuted-plus variant for pas.hx on PV4HI.
+(define_insn "*rvp_pas_hx_v4hi_comm"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI
+	    (plus:PV4HI
+	      (match_operand:PV4HI 2 "register_operand" "r")
+	      (match_operand:PV4HI 1 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0) (const_int 2) (const_int 2)]))
+	  (vec_select:PV4HI
+	    (minus:PV4HI (match_dup 1) (match_dup 2))
+	    (parallel [(const_int 1) (const_int 1) (const_int 3) (const_int 3)]))
+	  (const_int 5)))]
+  "TARGET_RVP"
+  "pas.%d0x\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "PV4HI")])
+
+;; Commuted-plus variant for psa.hx on PV4HI.
+(define_insn "*rvp_psa_hx_v4hi_comm"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(vec_merge:PV4HI
+	  (vec_select:PV4HI
+	    (minus:PV4HI
+	      (match_operand:PV4HI 1 "register_operand" "r")
+	      (match_operand:PV4HI 2 "register_operand" "r"))
+	    (parallel [(const_int 0) (const_int 0) (const_int 2) (const_int 2)]))
+	  (vec_select:PV4HI
+	    (plus:PV4HI (match_dup 2) (match_dup 1))
+	    (parallel [(const_int 1) (const_int 1) (const_int 3) (const_int 3)]))
+	  (const_int 5)))]
+  "TARGET_RVP"
+  "psa.%d0x\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
