@@ -1627,10 +1627,10 @@
                             (parallel [(const_int 0) (const_int 0)
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppaire.h\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppaire.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV4HI")])
 
 ;; PPAIREO.B using vec_merge + vec_select
 ;; Result: rd[0]=op1[0], rd[1]=op2[1], rd[2]=op1[2], rd[3]=op2[3]
@@ -1665,10 +1665,10 @@
                             (parallel [(const_int 0) (const_int 0)
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppaireo.h\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppaireo.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV4HI")])
 
 ;; PPAIROE.B using vec_merge + vec_select
 ;; Result: rd[0]=op1[1], rd[1]=op2[0], rd[2]=op1[3], rd[3]=op2[2]
@@ -1703,10 +1703,10 @@
                             (parallel [(const_int 1) (const_int 1)
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairoe.h\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppairoe.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV4HI")])
 
 ;; PPAIRO.B using vec_merge + vec_select
 ;; Result: rd[0]=op1[1], rd[1]=op2[1], rd[2]=op1[3], rd[3]=op2[3]
@@ -1741,10 +1741,10 @@
                             (parallel [(const_int 1) (const_int 1)
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairo.h\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppairo.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV4HI")])
 
 ;; ============================================================================
 ;; Pair instructions (PV8QI mode)
@@ -1769,10 +1769,10 @@
                                        (const_int 4) (const_int 4)
                                        (const_int 6) (const_int 6)]))
           (const_int 170)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppaire.b\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppaire.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV8QI")])
 
 ;; PPAIREO.B: pairs low bytes from op0 and high bytes from op1
 ;; Result = {s2[63:56]@s1[55:48], s2[47:40]@s1[39:32], s2[31:24]@s1[23:16], s2[15:8]@s1[7:0]} 
@@ -1794,10 +1794,10 @@
                                        (const_int 4) (const_int 4)
                                        (const_int 6) (const_int 6)]))
           (const_int 170)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppaireo.b\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppaireo.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV8QI")])
 
 ;; PPAIROE.B: pairs high bytes from op0 and low bytes from op1
 ;; Result = {s2[55:48]@s1[63:56], s2[39:32]@s1[47:40], s2[23:16]@s1[31:24], s2[7:0]@s1[15:8]}
@@ -1819,10 +1819,10 @@
                                        (const_int 5) (const_int 5)
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairoe.b\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppairoe.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV8QI")])
 
 ;; PPAIRO.B: pairs high bytes from op0 and high bytes from op1
 ;; Result = {s2[63:56]@s1[63:56], s2[47:40]@s1[47:40], s2[31:24]@s1[31:24], s2[15:8]@s1[15:8]}
@@ -1844,10 +1844,10 @@
                                        (const_int 5) (const_int 5)
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairo.b\t%0, %1, %2"
+  "TARGET_RVP"
+  "ppairo.%d0\t%0, %1, %2"
   [(set_attr "type" "arith")
-   (set_attr "mode" "DI")])
+   (set_attr "mode" "PV8QI")])
 
 ;; =========================================================================
 ;; zip8p/zip8hp

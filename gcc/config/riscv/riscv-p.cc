@@ -260,21 +260,6 @@ static void
 riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
-  /* On RV32, PV4HI is a register pair; decompose into two PV2HI operations. */
-  if (!TARGET_64BIT && vmode == PV4HImode)
-    {
-      machine_mode hmode = PV2HImode;
-      rtx op0_lo = gen_lowpart (hmode, op0);
-      rtx op0_hi = gen_highpart (hmode, op0);
-      rtx op1_lo = gen_lowpart (hmode, op1);
-      rtx op1_hi = gen_highpart (hmode, op1);
-      rtx res_lo = gen_lowpart (hmode, target);
-      rtx res_hi = gen_highpart (hmode, target);
-      riscv_emit_ppair_2_elem (res_lo, hmode, op0_lo, op1_lo, op0_odd, op1_odd);
-      riscv_emit_ppair_2_elem (res_hi, hmode, op0_hi, op1_hi, op0_odd, op1_odd);
-      return;
-    }
-
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 4;
@@ -454,21 +439,6 @@ static void
 riscv_emit_ppair_8_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
-  /* On RV32, PV8QI is a register pair; decompose into two PV4QI operations. */
-  if (!TARGET_64BIT && vmode == PV8QImode)
-    {
-      machine_mode hmode = PV4QImode;
-      rtx op0_lo = gen_lowpart (hmode, op0);
-      rtx op0_hi = gen_highpart (hmode, op0);
-      rtx op1_lo = gen_lowpart (hmode, op1);
-      rtx op1_hi = gen_highpart (hmode, op1);
-      rtx res_lo = gen_lowpart (hmode, target);
-      rtx res_hi = gen_highpart (hmode, target);
-      riscv_emit_ppair_4_elem (res_lo, hmode, op0_lo, op1_lo, op0_odd, op1_odd);
-      riscv_emit_ppair_4_elem (res_hi, hmode, op0_hi, op1_hi, op0_odd, op1_odd);
-      return;
-    }
-
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 8;
