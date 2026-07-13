@@ -4967,6 +4967,7 @@
 (include "p.md")
 (include "p-compare.md")
 (include "p-shift.md")
+(include "p-permute.md")
 (include "sync.md")
 (include "sync-rvwmo.md")
 (include "sync-ztso.md")
