@@ -132,21 +132,30 @@ RVP_CONCAT (intrinsic_prefix, name (arg_expand_macro (__VA_ARGS__)))        \
 extern "C" {
 #endif
 
-#if __riscv_xlen == 32
-CREATE_RVP_INTRINSIC_ALIAS (uint32_t, abs_u32, abs, int32_t)
-CREATE_RVP_INTRINSIC_ALIAS (unsigned, cls_32, cls, int32_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint32_t, rev_32, rev, uint32_t)
-#else
-CREATE_RVP_INTRINSIC_ALIAS (uint32_t, abs_u32, absw, int32_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, abs_u64, abs, int64_t)
-CREATE_RVP_INTRINSIC_ALIAS (unsigned, cls_32, clsw, int32_t)
-CREATE_RVP_INTRINSIC_ALIAS (unsigned, cls_64, cls, int64_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, rev_64, rev, uint64_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, rev16_64, rev16, uint64_t)
-CREATE_RVP_INTRINSIC_ALIAS (int64_t, sha_i64, sha, int64_t, int)
-CREATE_RVP_INTRINSIC_ALIAS (int64_t, shar_i64, shar, int64_t, int)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, shl_u64, shl, uint64_t, int)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, shlr_u64, shlr, uint64_t, int)
+// Bitmanip (manual "Bitmanip" section, spec lines 48-133): suffixed names.
+// These are the explicit, non-overloaded interfaces named per the spec.
+// 32-bit (RV32 + RV64):
+CREATE_RVP_INTRINSIC(unsigned, cls_32, int32_t)
+CREATE_RVP_INTRINSIC(uint32_t, rev_32, uint32_t)
+CREATE_RVP_INTRINSIC(uint32_t, slx_32, uint32_t, uint32_t, unsigned)
+CREATE_RVP_INTRINSIC(uint32_t, srx_32, uint32_t, uint32_t, unsigned)
+CREATE_RVP_INTRINSIC(uint64_t, wzip8p_64, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC(uint64_t, wzip16p_64, uint32_t, uint32_t)
+// 64-bit (RV64 only):
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC(unsigned, cls_64, int64_t)
+CREATE_RVP_INTRINSIC(uint64_t, rev_64, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, rev16_64, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, slx_64, uint64_t, uint64_t, unsigned)
+CREATE_RVP_INTRINSIC(uint64_t, srx_64, uint64_t, uint64_t, unsigned)
+CREATE_RVP_INTRINSIC(uint64_t, zip8p_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, zip16p_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, zip8hp_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, zip16hp_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, unzip8p_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, unzip16p_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, unzip8hp_64, uint64_t, uint64_t)
+CREATE_RVP_INTRINSIC(uint64_t, unzip16hp_64, uint64_t, uint64_t)
 #endif
 
 /* Packed Splat.  */

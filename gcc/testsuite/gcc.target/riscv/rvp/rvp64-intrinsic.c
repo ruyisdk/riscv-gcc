@@ -4,124 +4,207 @@
 
 #include <riscv_packed_simd.h>
 
-/*
-**test_abs_u32:
-** ...
-** absw\ta[0-9],a[0-9]
-** ...
-*/
-uint32_t
-test_abs_u32 (int32_t x)
-{
-  return __riscv_abs_u32 (x);
-}
-
-/*
-**test_abs_u64:
-** ...
-** abs\ta[0-9],a[0-9]
-** ...
-*/
-uint64_t
-test_abs_u64 (int64_t x)
-{
-  return __riscv_abs_u64 (x);
-}
+/* Bitmanip */
 
 /*
 **test_cls_32:
-** ...
 ** clsw\ta[0-9],a[0-9]
 ** ...
 */
-unsigned
-test_cls_32 (int32_t x)
+unsigned test_cls_32(int32_t rs1)
 {
-  return __riscv_cls_32 (x);
+  return __riscv_cls_32(rs1);
 }
 
 /*
-**test_cls_64:
+**test_rev_32:
+** rev\ta[0-9],a[0-9]
+** srai\ta[0-9],a[0-9],32
 ** ...
+*/
+uint32_t test_rev_32(uint32_t rs1)
+{
+  return __riscv_rev_32(rs1);
+}
+
+/*
+**test_slx_32:
+** slli\ta[0-9],a[0-9],32
+** ...
+** slx\ta[0-9],a[0-9],a[0-9]
+** ...
+** srai\ta[0-9],a[0-9],32
+** ...
+*/
+uint32_t test_slx_32(uint32_t rd, uint32_t rs1, unsigned shamt)
+{
+  return __riscv_slx_32(rd, rs1, shamt);
+}
+
+/*
+**test_srx_32:
+** slli\ta[0-9],a[0-9],32
+** ...
+** srx\ta[0-9],a[0-9],a[0-9]
+** ...
+** sext\.w\ta[0-9],a[0-9]
+** ...
+*/
+uint32_t test_srx_32(uint32_t rd, uint32_t rs1, unsigned shamt)
+{
+  return __riscv_srx_32(rd, rs1, shamt);
+}
+
+/*
+**test_wzip8p_64:
+** zip8p\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_wzip8p_64(uint32_t rs1, uint32_t rs2)
+{
+  return __riscv_wzip8p_64(rs1, rs2);
+}
+
+/*
+**test_wzip16p_64:
+** zip16p\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_wzip16p_64(uint32_t rs1, uint32_t rs2)
+{
+  return __riscv_wzip16p_64(rs1, rs2);
+}
+
+/* 64-bit (RV64 only) single instructions.  */
+
+/*
+**test_cls_64:
 ** cls\ta[0-9],a[0-9]
 ** ...
 */
-unsigned
-test_cls_64 (int64_t x)
+unsigned test_cls_64(int64_t rs1)
 {
-  return __riscv_cls_64 (x);
+  return __riscv_cls_64(rs1);
 }
 
 /*
 **test_rev_64:
-** ...
 ** rev\ta[0-9],a[0-9]
 ** ...
 */
-uint64_t
-test_rev_64 (uint64_t x)
+uint64_t test_rev_64(uint64_t rs1)
 {
-  return __riscv_rev_64 (x);
+  return __riscv_rev_64(rs1);
 }
 
 /*
 **test_rev16_64:
-** ...
 ** rev16\ta[0-9],a[0-9]
 ** ...
 */
-uint64_t
-test_rev16_64 (uint64_t x)
+uint64_t test_rev16_64(uint64_t rs1)
 {
-  return __riscv_rev16_64 (x);
+  return __riscv_rev16_64(rs1);
 }
 
 /*
-**test_sha_i64:
-** ...
-** sha\ta[0-9],a[0-9],a[0-9]
+**test_slx_64:
+** slx\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
-int64_t
-test_sha_i64 (int64_t x, int y)
+uint64_t test_slx_64(uint64_t rd, uint64_t rs1, unsigned shamt)
 {
-  return __riscv_sha_i64 (x, y);
+  return __riscv_slx_64(rd, rs1, shamt);
 }
 
 /*
-**test_shar_i64:
-** ...
-** shar\ta[0-9],a[0-9],a[0-9]
+**test_srx_64:
+** srx\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
-int64_t
-test_shar_i64 (int64_t x, int y)
+uint64_t test_srx_64(uint64_t rd, uint64_t rs1, unsigned shamt)
 {
-  return __riscv_shar_i64 (x, y);
+  return __riscv_srx_64(rd, rs1, shamt);
 }
 
 /*
-**test_shl_u64:
-** ...
-** shl\ta[0-9],a[0-9],a[0-9]
+**test_zip8p_64:
+** zip8p\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
-uint64_t
-test_shl_u64 (uint64_t x, int y)
+uint64_t test_zip8p_64(uint64_t rs1, uint64_t rs2)
 {
-  return __riscv_shl_u64 (x, y);
+  return __riscv_zip8p_64(rs1, rs2);
 }
 
 /*
-**test_shlr_u64:
-** ...
-** shlr\ta[0-9],a[0-9],a[0-9]
+**test_zip16p_64:
+** zip16p\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
-uint64_t
-test_shlr_u64 (uint64_t x, int y)
+uint64_t test_zip16p_64(uint64_t rs1, uint64_t rs2)
 {
-  return __riscv_shlr_u64 (x, y);
+  return __riscv_zip16p_64(rs1, rs2);
+}
+
+/*
+**test_zip8hp_64:
+** zip8hp\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_zip8hp_64(uint64_t rs1, uint64_t rs2)
+{
+  return __riscv_zip8hp_64(rs1, rs2);
+}
+
+/*
+**test_zip16hp_64:
+** zip16hp\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_zip16hp_64(uint64_t rs1, uint64_t rs2)
+{
+  return __riscv_zip16hp_64(rs1, rs2);
+}
+
+/*
+**test_unzip8p_64:
+** unzip8p\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_unzip8p_64(uint64_t rs1, uint64_t rs2)
+{
+  return __riscv_unzip8p_64(rs1, rs2);
+}
+
+/*
+**test_unzip16p_64:
+** unzip16p\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_unzip16p_64(uint64_t rs1, uint64_t rs2)
+{
+  return __riscv_unzip16p_64(rs1, rs2);
+}
+
+/*
+**test_unzip8hp_64:
+** unzip8hp\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_unzip8hp_64(uint64_t rs1, uint64_t rs2)
+{
+  return __riscv_unzip8hp_64(rs1, rs2);
+}
+
+/*
+**test_unzip16hp_64:
+** unzip16hp\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_unzip16hp_64(uint64_t rs1, uint64_t rs2)
+{
+  return __riscv_unzip16hp_64(rs1, rs2);
 }
 
 /* Packed Splat (32-bit) */

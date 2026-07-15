@@ -30,6 +30,17 @@
   UNSPEC_SHL
   UNSPEC_SHLR
   UNSPEC_UNZIP8P
+  UNSPEC_SLX
+  UNSPEC_SRX
+  UNSPEC_ZIP8P
+  UNSPEC_ZIP16P
+  UNSPEC_ZIP8HP
+  UNSPEC_ZIP16HP
+  UNSPEC_UNZIP16P
+  UNSPEC_UNZIP8HP
+  UNSPEC_UNZIP16HP
+  UNSPEC_WZIP8P
+  UNSPEC_WZIP16P
   UNSPEC_PSLLI
   UNSPEC_PSSLAI
   UNSPEC_SSLAI
@@ -265,101 +276,6 @@
 (define_mode_attr PCMP_ONAME [(V4QI "u8x4") (V2HI "u16x2")
                               (V8QI "u8x8") (V4HI "u16x4")
                               (V2SI "u32x2")])
-
-;Scalar Intrinsics Common to RV32 and RV64
-(define_insn "riscv_abs<mode>_p"
-  [(set (match_operand:X 0 "register_operand" "=r")
-        (abs:X (match_operand:X 1 "register_operand" "r")))]
-  "TARGET_RVP"
-  "abs\t%0,%1"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "<MODE>")])
-
-(define_insn "riscv_cls<mode>_p"
-  [(set (match_operand:X 0 "register_operand" "=r")
-        (unspec:X [(match_operand:X 1 "register_operand" "r")]
-         UNSPEC_CLS))]
-  "TARGET_RVP"
-  "cls\t%0,%1"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "<MODE>")])
-
-(define_insn "riscv_rev<mode>_p"
-  [(set (match_operand:X 0 "register_operand" "=r")
-        (unspec:X [(match_operand:X 1 "register_operand" "r")]
-         UNSPEC_REV))]
-  "TARGET_RVP"
-  "rev\t%0,%1"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "<MODE>")])
-
-;RV64 Only Scalar Intrinsics
-(define_insn "riscv_absw_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (sign_extend:DI
-          (abs:SI (match_operand:SI 1 "register_operand" "r"))))]
-  "TARGET_RVP && TARGET_64BIT"
-  "absw\t%0,%1"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "SI")])
-
-(define_insn "riscv_clsw_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (sign_extend:DI
-          (unspec:SI [(match_operand:SI 1 "register_operand" "r")] UNSPEC_CLS)))]
-  "TARGET_RVP && TARGET_64BIT"
-  "clsw\t%0,%1"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "SI")])
-
-(define_insn "riscv_rev16_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")]
-         UNSPEC_REV16))]
-  "TARGET_RVP && TARGET_64BIT"
-  "rev16\t%0,%1"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "DI")])
-
-(define_insn "riscv_sha_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")
-                    (match_operand:DI 2 "register_operand" "r")]
-         UNSPEC_SHA))]
-  "TARGET_RVP && TARGET_64BIT"
-  "sha\t%0,%1,%2"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "DI")])
-
-(define_insn "riscv_shar_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")
-                    (match_operand:DI 2 "register_operand" "r")]
-	 UNSPEC_SHAR))]
-  "TARGET_RVP && TARGET_64BIT"
-  "shar\t%0,%1,%2"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "DI")])
-
-(define_insn "riscv_shl_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")
-                    (match_operand:DI 2 "register_operand" "r")]
-         UNSPEC_SHL))]
-  "TARGET_RVP && TARGET_64BIT"
-  "shl\t%0,%1,%2"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "DI")])
-
-(define_insn "riscv_shlr_p"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")
-                    (match_operand:DI 2 "register_operand" "r")]
-	 UNSPEC_SHLR))]
-  "TARGET_RVP && TARGET_64BIT"
-  "shlr\t%0,%1,%2"
-  [(set_attr "type" "simd")
-   (set_attr "mode" "DI")])
 
 ;Packed Splat
 (define_insn "riscv_pmv_s_u8x4"

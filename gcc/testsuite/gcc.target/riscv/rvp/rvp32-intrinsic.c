@@ -4,40 +4,66 @@
 
 #include <riscv_packed_simd.h>
 
-/*
-**test_abs_u32:
-** ...
-** abs\ta[0-9],a[0-9]
-** ...
-*/
-uint32_t
-test_abs_u32 (int32_t x)
-{
-  return __riscv_abs_u32 (x);
-}
+/* Bitmanip */
 
 /*
 **test_cls_32:
-** ...
 ** cls\ta[0-9],a[0-9]
 ** ...
 */
-unsigned
-test_cls_32 (int32_t x)
+unsigned test_cls_32(int32_t rs1)
 {
-  return __riscv_cls_32 (x);
+  return __riscv_cls_32(rs1);
 }
 
 /*
 **test_rev_32:
-** ...
 ** rev\ta[0-9],a[0-9]
 ** ...
 */
-uint32_t
-test_rev_32 (uint32_t x)
+uint32_t test_rev_32(uint32_t rs1)
 {
-  return __riscv_rev_32 (x);
+  return __riscv_rev_32(rs1);
+}
+
+/*
+**test_slx_32:
+** slx\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint32_t test_slx_32(uint32_t rd, uint32_t rs1, unsigned shamt)
+{
+  return __riscv_slx_32(rd, rs1, shamt);
+}
+
+/*
+**test_srx_32:
+** srx\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint32_t test_srx_32(uint32_t rd, uint32_t rs1, unsigned shamt)
+{
+  return __riscv_srx_32(rd, rs1, shamt);
+}
+
+/*
+**test_wzip8p_64:
+** wzip8p\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_wzip8p_64(uint32_t rs1, uint32_t rs2)
+{
+  return __riscv_wzip8p_64(rs1, rs2);
+}
+
+/*
+**test_wzip16p_64:
+** wzip16p\ta[0-9],a[0-9],a[0-9]
+** ...
+*/
+uint64_t test_wzip16p_64(uint32_t rs1, uint32_t rs2)
+{
+  return __riscv_wzip16p_64(rs1, rs2);
 }
 
 /* Packed Splat (32-bit) */
