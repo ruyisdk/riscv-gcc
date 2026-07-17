@@ -14190,13 +14190,11 @@ rvp_vectorize_preferred_simd_mode (scalar_mode mode)
   switch (mode)
     {
     case E_QImode:
-      if (TARGET_64BIT)
-        return PV8QImode;
-      return PV4QImode;
+      /* On RV32 the 8-byte modes are held in even-odd register pairs and
+	 are implemented by the double-wide .db/.dh instructions.  */
+      return PV8QImode;
     case E_HImode:
-      if (TARGET_64BIT)
-        return PV4HImode;
-      return PV2HImode;
+      return PV4HImode;
     case E_SImode:
       if (TARGET_64BIT)
         return PV2SImode;
@@ -14582,13 +14580,12 @@ riscv_autovectorize_vector_modes (vector_modes *modes, bool all)
   /* Enable auto-vectorization for RVP packed modes.  */
   if (TARGET_RVP)
     {
+      /* Prefer 8-byte modes first.  On RV32 these live in even-odd register
+	 pairs and are implemented by the double-wide instructions.  */
+      modes->safe_push (PV8QImode);
+      modes->safe_push (PV4HImode);
       if (TARGET_64BIT)
-	{
-	  /* Prefer 8-byte modes first for RV64.  */
-	  modes->safe_push (PV8QImode);
-	  modes->safe_push (PV4HImode);
-	  modes->safe_push (PV2SImode);
-	}
+	modes->safe_push (PV2SImode);
 
       /* Support 4-byte modes for smaller vectors for both RV32 and RV64.  */
       modes->safe_push (PV4QImode);
@@ -14622,7 +14619,8 @@ riscv_vectorize_vec_perm_const (machine_mode vmode, machine_mode op_mode,
     return riscv_vector::expand_vec_perm_const (vmode, op_mode, target, op0,
 						op1, sel);
   if (TARGET_RVP)
-    return riscv_expand_pext_vec_perm_const (vmode, target, op0, op1, sel);
+    return riscv_expand_pext_vec_perm_const (vmode, op_mode, target, op0, op1,
+					     sel);
 
   return false;
 }

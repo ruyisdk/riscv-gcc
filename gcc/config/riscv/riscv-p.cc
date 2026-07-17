@@ -652,10 +652,17 @@ static const vec_perm_pattern<8> vec_perm_patterns_8elem[] = {
    pattern matchers in sequence and emits the appropriate instruction.  */
 
 bool
-riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
-                                  rtx op0, rtx op1, const vec_perm_indices &sel)
+riscv_expand_pext_vec_perm_const (machine_mode vmode, machine_mode op_mode,
+                                  rtx target, rtx op0, rtx op1,
+                                  const vec_perm_indices &sel)
 {
   bool testing_p = (target == NULL_RTX);
+
+  /* All patterns below build the result from OP0/OP1 in VMODE.  Narrowing
+     permutes, where the operands are wider than the result, have no P
+     extension implementation; leave them to generic lowering.  */
+  if (op_mode != vmode)
+    return false;
 
   if (vmode == PV4QImode || vmode == PV4HImode)
     {
