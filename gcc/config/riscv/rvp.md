@@ -143,7 +143,7 @@
   [(set (match_operand:PV4HI 0 "register_operand")
         (mult:PV4HI (match_operand:PV4HI 1 "register_operand")
                     (match_operand:PV4HI 2 "register_operand")))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
   [(const_int 0)]
 {
   rtx dest_lo = riscv_subword (operands[0], false);
