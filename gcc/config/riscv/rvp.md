@@ -2540,10 +2540,33 @@
 (define_insn "ustruncpv4hipv4qi2"
   [(set (match_operand:PV4QI 0 "register_operand" "=r")
 	(us_truncate:PV4QI (match_operand:PV4HI 1 "register_operand" "r")))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "pnclipiu.b\t%0, %1, 0"
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "pnclipup.b\t%0, %1, zero";
+    return "pnclipiu.b\t%0, %1, 0";
+  }
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
+
+;; truncate (umin (x, 255)) is us_truncate, but combine does not canonicalise
+;; it to one, so catch the shape and rewrite it.  The signed clamp
+;; smax (smin (x, 255), 0) must not come here: it maps negatives to 0, while
+;; the instruction maps them to 255.
+(define_insn_and_split "*ustrunc_pv4hi_pv4qi_umin"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (umin:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+		      (match_operand:PV4HI 2 "immediate_operand"))))]
+  "TARGET_RVP && riscv_const_vector_broadcast_val_p (operands[2], 255)"
+  "#"
+  "&& 1"
+  [(set (match_dup 0) (us_truncate:PV4QI (match_dup 1)))]
+  ""
+  [(set_attr "type" "arith")
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
 
 (define_insn "sstruncpv4hipv4qi2"
   [(set (match_operand:PV4QI 0 "register_operand" "=r")
@@ -2555,7 +2578,8 @@
     return "pnclipi.b\t%0, %1, 0";
   }
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
 
 ;; Routes __builtin_convertvector (PV4HI->PV4QI) through truncpv4hipv4qi2 so
 ;; combine can match the compound pnclipi.b/pnclipp.b patterns before the
@@ -2601,7 +2625,8 @@
   "TARGET_RVP"
   "pncvt.b\t%0, %1"
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
 
 ;; The odd-byte counterpart of PNCVT.B: pnsrli.b rd, rs1_p, 8 on RV32 and
 ;; unzip8hp rd, rs1, x0 on RV64.  Used by the PV4QI odd unzip permute.
@@ -2682,6 +2707,35 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; A logical shift followed by a *signed* clamp to 0..255.  The shift leaves
+;; every lane non-negative, so the clamp to 0 is a no-op and this is still the
+;; unsigned clip.  Only this shape needs a pattern: an unsigned-typed clamp
+;; yields umin instead, which combine cannot fuse with the shift, so it is left
+;; as a separate shift plus ustruncpv4hipv4qi2 -- the same two instructions
+;; this splits into.  pnclipup.b has no shift field, so split it like the
+;; signed pnclipp.b: psrli.h + pnclipup.b zero.
+(define_insn_and_split "*pnclipup_b_lshr_rv64"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (smax:PV4HI
+	    (smin:PV4HI
+	      (lshiftrt:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+			     (match_operand 2 "const_int_operand"))
+	      (match_operand:PV4HI 3 "immediate_operand"))
+	    (match_operand:PV4HI 4 "immediate_operand"))))]
+  "TARGET_RVP && TARGET_64BIT
+   && IN_RANGE (INTVAL (operands[2]), 1, 15)
+   && riscv_const_vector_broadcast_val_p (operands[3], 255)
+   && riscv_const_vector_broadcast_val_p (operands[4], 0)
+   && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(set (match_dup 5) (lshiftrt:PV4HI (match_dup 1) (match_dup 2)))
+   (set (match_dup 0) (us_truncate:PV4QI (match_dup 5)))]
+  "{ operands[5] = gen_reg_rtx (PV4HImode); }"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; -------------------------------------------------------------------------
 ;; PNCLIPIU.B (RV32 only) - Narrowing Unsigned Clip byte
 ;; -------------------------------------------------------------------------
@@ -2740,7 +2794,8 @@
     return "pnclipi.h\t%0, %1, 0";
   }
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
 
 ;; Keeps truncate:PV2HI visible to combine so pnclipi.h/pnclipp.h patterns
 ;; can absorb it.  Unmatched instances stay as PNCVT.H, which is
@@ -2751,15 +2806,36 @@
   "TARGET_RVP"
   "pncvt.h\t%0, %1"
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
 
 (define_insn "ustruncpv2sipv2hi2"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
 	(us_truncate:PV2HI (match_operand:PV2SI 1 "register_operand" "r")))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "pnclipiu.h\t%0, %1, 0"
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "pnclipup.h\t%0, %1, zero";
+    return "pnclipiu.h\t%0, %1, 0";
+  }
   [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
+
+;; See *ustrunc_pv4hi_pv4qi_umin.
+(define_insn_and_split "*ustrunc_pv2si_pv2hi_umin"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(truncate:PV2HI
+	  (umin:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+		      (match_operand:PV2SI 2 "immediate_operand"))))]
+  "TARGET_RVP && riscv_const_vector_broadcast_val_p (operands[2], 65535)"
+  "#"
+  "&& 1"
+  [(set (match_dup 0) (us_truncate:PV2HI (match_dup 1)))]
+  ""
+  [(set_attr "type" "arith")
+   (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
+				     (const_string "DI") (const_string "SI")))])
 
 ;; pnclipi.h imm=0 (RV32): smax(smin(rs1,32767),-32768) + truncate.
 (define_insn "*pnclipi_h_noshift_rv32"
@@ -2828,6 +2904,29 @@
   "&& 1"
   [(set (match_dup 5) (ashiftrt:PV2SI (match_dup 1) (match_dup 2)))
    (set (match_dup 0) (ss_truncate:PV2HI (match_dup 5)))]
+  "{ operands[5] = gen_reg_rtx (PV2SImode); }"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+;; As *pnclipup_b_lshr_rv64, for 32-bit lanes: psrli.w + pnclipup.h zero.
+(define_insn_and_split "*pnclipup_h_lshr_rv64"
+  [(set (match_operand:PV2HI 0 "register_operand" "=r")
+	(truncate:PV2HI
+	  (smax:PV2SI
+	    (smin:PV2SI
+	      (lshiftrt:PV2SI (match_operand:PV2SI 1 "register_operand" "r")
+			     (match_operand 2 "const_int_operand"))
+	      (match_operand:PV2SI 3 "immediate_operand"))
+	    (match_operand:PV2SI 4 "immediate_operand"))))]
+  "TARGET_RVP && TARGET_64BIT
+   && IN_RANGE (INTVAL (operands[2]), 1, 31)
+   && riscv_const_vector_broadcast_val_p (operands[3], 65535)
+   && riscv_const_vector_broadcast_val_p (operands[4], 0)
+   && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(set (match_dup 5) (lshiftrt:PV2SI (match_dup 1) (match_dup 2)))
+   (set (match_dup 0) (us_truncate:PV2HI (match_dup 5)))]
   "{ operands[5] = gen_reg_rtx (PV2SImode); }"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])

@@ -68,6 +68,15 @@ uint8x4_t pnclipiu_b_lshr4(uint16x4_t a)
 /* { dg-final { scan-assembler {\mpnclipiu\.b\M.*, 4} } } */
 /* { dg-final { scan-assembler-not {\mpsrli\.dh\M} } } */
 
+/* pnclipiu.b imm=0: clip[0,255] + narrow, no shift.  */
+uint8x4_t pnclipiu_b_imm0(uint16x4_t a)
+{
+  uint16x4_t hi = {255, 255, 255, 255};
+  uint16x4_t t = VSEL(a > hi, hi, a);
+  return __builtin_convertvector(t, uint8x4_t);
+}
+/* { dg-final { scan-assembler {\mpnclipiu\.b\M.*, 0} } } */
+
 /* pnclipiu.h: logical shift of unsigned + clip[0,65535], shift folded in.  */
 uint16x2_t pnclipiu_h_lshr4(uint32x2_t a)
 {
@@ -78,3 +87,12 @@ uint16x2_t pnclipiu_h_lshr4(uint32x2_t a)
 }
 /* { dg-final { scan-assembler {\mpnclipiu\.h\M.*, 4} } } */
 /* { dg-final { scan-assembler-not {\mpsrli\.dw\M} } } */
+
+/* pnclipiu.h imm=0: clip[0,65535] + narrow, no shift.  */
+uint16x2_t pnclipiu_h_imm0(uint32x2_t a)
+{
+  uint32x2_t hi = {65535, 65535};
+  uint32x2_t t = VSEL(a > hi, hi, a);
+  return __builtin_convertvector(t, uint16x2_t);
+}
+/* { dg-final { scan-assembler {\mpnclipiu\.h\M.*, 0} } } */
