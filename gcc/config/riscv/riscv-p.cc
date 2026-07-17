@@ -300,10 +300,56 @@ riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
   emit_insn (gen_rtx_SET (target, result));
 }
 
+/* Return a PV8QI holding OP0 in its low half and OP1 in its high half.  */
+
+static rtx
+riscv_concat_pv4qi (rtx op0, rtx op1)
+{
+  if (TARGET_64BIT)
+    {
+      rtx packed = gen_reg_rtx (PV2SImode);
+      emit_insn (gen_rtx_SET (packed,
+			      gen_rtx_VEC_CONCAT (PV2SImode,
+						  gen_lowpart (SImode, op0),
+						  gen_lowpart (SImode, op1))));
+      return gen_lowpart (PV8QImode, packed);
+    }
+
+  rtx wide = gen_reg_rtx (PV8QImode);
+  emit_move_insn (gen_lowpart (PV4QImode, wide), op0);
+  emit_move_insn (gen_highpart (PV4QImode, wide), op1);
+  return wide;
+}
+
+/* Return the high PV4QI half of the PV8QI value WIDE.  */
+
+static rtx
+riscv_pv8qi_highpart (rtx wide)
+{
+  if (!TARGET_64BIT)
+    return gen_highpart (PV4QImode, wide);
+
+  /* validate_subreg rejects a non-lowpart 4-byte subreg of a 64-bit pseudo.  */
+  rtx shifted = gen_reg_rtx (DImode);
+  emit_insn (gen_lshrdi3 (shifted, gen_lowpart (DImode, wide), GEN_INT (32)));
+  return gen_lowpart (PV4QImode, shifted);
+}
+
 static void
 riscv_emit_zip_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                        const int *indices)
 {
+  /* zip8p/wzip8p interleaves all eight bytes of the two 32-bit sources; the
+     low half of that is the even zip and the high half is the odd one.  */
+  if (vmode == PV4QImode)
+    {
+      rtx wide = gen_reg_rtx (PV8QImode);
+      emit_insn (gen_riscv_zip8p_pv4qi (wide, op0, op1));
+      emit_move_insn (target, indices[0] >= 2 ? riscv_pv8qi_highpart (wide)
+					      : gen_lowpart (PV4QImode, wide));
+      return;
+    }
+
   /* On RV32, PV4HI is a register pair; zip from lower or upper halfword halves. */
   if (!TARGET_64BIT && vmode == PV4HImode)
     {
@@ -326,6 +372,19 @@ static void
 riscv_emit_unzip_4_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
                          rtx op0, rtx op1, const int *indices)
 {
+  /* Viewed as PV4HI, the concatenation of the two sources has one halfword per
+     source byte pair, so the even unzip is the low byte of each halfword and
+     the odd unzip is the high byte.  */
+  if (vmode == PV4QImode)
+    {
+      rtx wide = gen_lowpart (PV4HImode, riscv_concat_pv4qi (op0, op1));
+      if (indices[0] != 0)
+	emit_insn (gen_riscv_pncvth_b (target, wide));
+      else
+	emit_insn (gen_truncpv4hipv4qi2 (target, wide));
+      return;
+    }
+
   /* On RV32, PV4HI is a register pair; unzip by applying ppair across halves. */
   if (!TARGET_64BIT && vmode == PV4HImode)
     {
@@ -567,7 +626,8 @@ static const vec_perm_pattern<2> vec_perm_patterns_2elem[] = {
 
 /* Supported 4-element vector permutation patterns.
    Only non-swapped patterns are stored; swapped patterns are detected
-   and normalized at runtime.  */
+   and normalized at runtime.  This table is shared by PV4QImode and
+   PV4HImode; every entry applies to both.  */
 static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
   /* ppaire: op0_even, op1_even  */
   {{0, 4, 2, 6}, false, false, PAIR_PERM_TYPE},
@@ -585,10 +645,9 @@ static const vec_perm_pattern<4> vec_perm_patterns_4elem[] = {
   {{0, 2, 4, 6}, false, false, UNZIP_PERM_TYPE},
   /* unzip16hp: don't care the even-odd */
   {{1, 3, 5, 7}, false, false, UNZIP_PERM_TYPE},
-  /* PV4HImode rev16: don't care the even-odd *
-   * PV4QImode rev8 : don't care the even-odd */
+  /* PV4HImode rev16 / PV4QImode rev8: don't care the even-odd.  */
   {{3, 2, 1, 0}, false, false, REV_PERM_TYPE},
-  /* PV4QImode rev16: don't care the even-odd */
+  /* PV4HImode word swap / PV4QImode rev16: don't care the even-odd.  */
   {{2, 3, 0, 1}, false, false, REV_PERM_TYPE}
 };
 
@@ -632,15 +691,6 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
     {
       for (const auto &pattern : vec_perm_patterns_4elem)
 	{
-	  /* zip16/unzip16 operate on 16-bit granularity and only apply to
-	     PV4HImode.  There is no byte-granularity zip/unzip instruction
-	     for PV4QImode, so skip these patterns and let the generic
-	     expander handle them instead of emitting an unrecognizable insn.  */
-	  if (vmode == PV4QImode
-	      && (pattern.perm == ZIP_PERM_TYPE
-		  || pattern.perm == UNZIP_PERM_TYPE))
-	    continue;
-
 	  vec_perm_match_type match_result = match_vec_perm_pattern (pattern.indices,
                                                                      4, sel);
 	  if (match_result != ERROR_MATCH)

@@ -1890,6 +1890,29 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Byte-granularity zip of two 32-bit vectors into a 64-bit one.  zip8p and
+;; wzip8p are the same operation -- both read only the low 32 bits of each
+;; source -- and differ only in whether the 64-bit result is one register or an
+;; even-odd pair, which the PV8QI mode already expresses.  The PV4QI zip
+;; permutes take the low or high half of this result.
+(define_insn "riscv_zip8p_pv4qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_select:PV8QI
+	  (vec_concat:PV8QI (match_operand:PV4QI 1 "register_operand" "r")
+			    (match_operand:PV4QI 2 "register_operand" "r"))
+	  (parallel [(const_int 0) (const_int 4)
+		     (const_int 1) (const_int 5)
+		     (const_int 2) (const_int 6)
+		     (const_int 3) (const_int 7)])))]
+  "TARGET_RVP"
+  {
+    if (TARGET_64BIT)
+      return "zip8p\t%0, %1, %2";
+    return "wzip8p\t%0, %1, %2";
+  }
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; =========================================================================
 ;; zip16p/zip16hp
 ;; =========================================================================
@@ -2364,6 +2387,18 @@
 	(truncate:PV4QI (match_operand:PV4HI 1 "register_operand" "r")))]
   "TARGET_RVP"
   "pncvt.b\t%0, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; The odd-byte counterpart of PNCVT.B: pnsrli.b rd, rs1_p, 8 on RV32 and
+;; unzip8hp rd, rs1, x0 on RV64.  Used by the PV4QI odd unzip permute.
+(define_insn "riscv_pncvth_b"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (lshiftrt:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+			  (const_int 8))))]
+  "TARGET_RVP"
+  "pncvth.b\t%0, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
