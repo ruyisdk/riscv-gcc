@@ -39,5 +39,8 @@ uint8x4_t test_rev_2byte_pv4qi_unsigned(uint8x4_t a) {
     return __builtin_shufflevector(a, a, 2, 3, 0, 1);
 }
 
-// Consolidated scan-assembler-times for all instructions
-/* { dg-final { scan-assembler-times "\\mrev16\\M" 6 } } */
+/* rev16 reverses the halfwords of the whole 64-bit register, so it serves the
+   PV4HI and PV8QI cases.  For PV4QI it would leave the result in bits [63:32];
+   ppairoe.h swaps the halfwords per 32-bit word instead.  */
+/* { dg-final { scan-assembler-times "\\mrev16\\M" 4 } } */
+/* { dg-final { scan-assembler-times "\\mppairoe\\.h\\M" 2 } } */

@@ -17,5 +17,7 @@ uint8x4_t test_rev_2byte_pv4qi_unsigned(uint8x4_t a) {
 }
 
 
-// Consolidated scan-assembler-times for all instructions
-/* { dg-final { scan-assembler-times "\\mrev16\\M" 2 } } */
+/* rev16 is RV64-only and reverses the halfwords of the whole 64-bit register;
+   ppairoe.h swaps them per 32-bit word, which is what PV4QI needs.  */
+/* { dg-final { scan-assembler-times "\\mppairoe\\.h\\M" 2 } } */
+/* { dg-final { scan-assembler-not "\\mrev16\\M" } } */

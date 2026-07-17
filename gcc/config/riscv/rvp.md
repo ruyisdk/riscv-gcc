@@ -2006,13 +2006,31 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
-(define_insn "*rev16_pv4qi"
+;; PV4QI {2,3,0,1} swaps the two halfwords of a 32-bit value.  rev16 is not
+;; usable here: it is RV64-only and reverses the halfwords of the whole 64-bit
+;; register, which leaves the result in the upper word.  ppairoe.h works per
+;; 32-bit word, so with both sources equal it swaps the halfwords in place on
+;; either XLEN.
+(define_insn "*swap16_pv4qi"
   [(set (match_operand:PV4QI 0 "register_operand" "=r")
         (vec_select: PV4QI (match_operand:PV4QI 1 "register_operand" "r")
                            (parallel [(const_int 2) (const_int 3)
                                       (const_int 0) (const_int 1)])))]
   "TARGET_RVP"
-  "rev16\t%0, %1"
+  "ppairoe.h\t%0, %1, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; PV4HI {2,3,0,1} swaps the two words of a 64-bit value.  On RV32 PV4HI is a
+;; register pair and riscv_emit_rev_4_elem swaps the halves directly, so this
+;; only has to cover RV64.
+(define_insn "*swap32_pv4hi"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+        (vec_select: PV4HI (match_operand:PV4HI 1 "register_operand" "r")
+                           (parallel [(const_int 2) (const_int 3)
+                                      (const_int 0) (const_int 1)])))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.w\t%0, %1, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
