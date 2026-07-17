@@ -632,6 +632,15 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, rtx target,
     {
       for (const auto &pattern : vec_perm_patterns_4elem)
 	{
+	  /* zip16/unzip16 operate on 16-bit granularity and only apply to
+	     PV4HImode.  There is no byte-granularity zip/unzip instruction
+	     for PV4QImode, so skip these patterns and let the generic
+	     expander handle them instead of emitting an unrecognizable insn.  */
+	  if (vmode == PV4QImode
+	      && (pattern.perm == ZIP_PERM_TYPE
+		  || pattern.perm == UNZIP_PERM_TYPE))
+	    continue;
+
 	  vec_perm_match_type match_result = match_vec_perm_pattern (pattern.indices,
                                                                      4, sel);
 	  if (match_result != ERROR_MATCH)
