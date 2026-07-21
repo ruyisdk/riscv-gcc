@@ -817,14 +817,218 @@ CREATE_RVP_INTRINSIC (int32x2_t, pmulsu_h11_i32x2, int16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w00_i64, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w01_i64, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w11_i64, int32x2_t, int32x2_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, mulu_w00_i64, mulu_w00_u64, uint32x2_t,
-			      uint32x2_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, mulu_w01_i64, mulu_w01_u64, uint32x2_t,
-			      uint32x2_t)
-CREATE_RVP_INTRINSIC_ALIAS (uint64_t, mulu_w11_i64, mulu_w11_u64, uint32x2_t,
-			      uint32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, mulu_w00_u64, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, mulu_w01_u64, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, mulu_w11_u64, uint32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mulsu_w00_i64, int32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mulsu_w11_i64, int32x2_t, uint32x2_t)
+#endif
+
+/* Packed Multiply Parts Accumulate.  */
+/* h-series i32 (both ISAs): RV32 macc.hNN/maccu.hNN/maccsu.hNN, RV64  */
+/* pmacc.w.hNN/etc  */
+CREATE_RVP_INTRINSIC(int32_t, macc_h00_i32, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, macc_h01_i32, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, macc_h11_i32, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint32_t, maccu_h00_u32, uint32_t, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(uint32_t, maccu_h01_u32, uint32_t, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(uint32_t, maccu_h11_u32, uint32_t, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, maccsu_h00_i32, int32_t, int16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, maccsu_h11_i32, int32_t, int16x2_t, uint16x2_t)
+/* h-series i32x2 (packed): RV64 pmacc.w.hNN/etc, RV32 2x macc.hNN/etc  */
+CREATE_RVP_INTRINSIC(int32x2_t, pmacc_h00_i32x2, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmacc_h01_i32x2, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmacc_h11_i32x2, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pmaccu_h00_u32x2, uint32x2_t, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pmaccu_h01_u32x2, uint32x2_t, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pmaccu_h11_u32x2, uint32x2_t, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmaccsu_h00_i32x2, int32x2_t, int16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmaccsu_h11_i32x2, int32x2_t, int16x4_t, uint16x4_t)
+/* w-series i64 (RV64-only; RV32 wmacc/wmaccu/wmaccsu register-pair TODO)  */
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC(int64_t, macc_w00_i64, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, macc_w01_i64, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, macc_w11_i64, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, maccu_w00_u64, uint64_t, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, maccu_w01_u64, uint64_t, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, maccu_w11_u64, uint64_t, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, maccsu_w00_i64, int64_t, int32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, maccsu_w11_i64, int64_t, int32x2_t, uint32x2_t)
+#endif
+
+/* Packed Multiplication with Horizontal Addition.  */
+/* 32-bit (both ISAs, single insn): pm4add.b/pm2add.h/pm2add.hx/etc  */
+CREATE_RVP_INTRINSIC(int32_t, pm4add_i8x4, int8x4_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2add_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2add_x_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint32_t, pm4addu_u8x4, uint8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(uint32_t, pm2addu_u16x2, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pmq2add_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pmqr2add_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2sadd_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2sadd_x_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2sub_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2sub_x_i16x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm4addsu_i8x4, int8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2addsu_i16x2, int16x2_t, uint16x2_t)
+/* 64-bit i32x2 (packed): RV64 single pm2add.h/etc; RV32 2x  */
+CREATE_RVP_INTRINSIC(int32x2_t, pm4add_i8x8, int8x8_t, int8x8_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2add_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2add_x_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pm4addu_u8x8, uint8x8_t, uint8x8_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pm2addu_u16x4, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmq2add_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmqr2add_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2sadd_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2sadd_x_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2sub_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2sub_x_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm4addsu_i8x8, int8x8_t, uint8x8_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2addsu_i16x4, int16x4_t, uint16x4_t)
+/* 64-bit i64 (RV64-only; RV32 wmul+wmacc / pm2wadd sequences TODO)  */
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC(int64_t, pm2add_i32x2, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2add_x_i32x2, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, pm2addu_u32x2, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pmq2add_i32x2, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2sub_i32x2, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2sub_x_i32x2, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2addsu_i32x2, int32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pmqr2add_i32x2, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm4add_i16x4, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(uint64_t, pm4addu_u16x4, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int64_t, pm4addsu_i16x4, int16x4_t, uint16x4_t)
+#endif
+
+/* Packed Multiplication with Horizontal Addition and Accumulate.  */
+/* 32-bit (both ISAs, single insn, RMW): pm4adda.b/pm2adda.h/etc  */
+CREATE_RVP_INTRINSIC(int32_t, pm4adda_i8x4, int32_t, int8x4_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2adda_i16x2, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2adda_x_i16x2, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint32_t, pm4addau_u8x4, uint32_t, uint8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(uint32_t, pm2addau_u16x2, uint32_t, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pmq2adda_i16x2, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pmqr2adda_i16x2, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2suba_i16x2, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2suba_x_i16x2, int32_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, pm4addasu_i8x4, int32_t, int8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(int32_t, pm2addasu_i16x2, int32_t, int16x2_t, uint16x2_t)
+/* 64-bit i32x2 (packed, RMW): RV64 single pm2adda.h/etc; RV32 2x  */
+CREATE_RVP_INTRINSIC(int32x2_t, pm4adda_i8x8, int32x2_t, int8x8_t, int8x8_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2adda_i16x4, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2adda_x_i16x4, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pm4addau_u8x8, uint32x2_t, uint8x8_t, uint8x8_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pm2addau_u16x4, uint32x2_t, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmq2adda_i16x4, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmqr2adda_i16x4, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2suba_i16x4, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2suba_x_i16x4, int32x2_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm4addasu_i8x8, int32x2_t, int8x8_t, uint8x8_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pm2addasu_i16x4, int32x2_t, int16x4_t, uint16x4_t)
+/* 64-bit i64 (RV64-only, RMW; RV32 wmacc/pm2wadda sequences TODO)  */
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC(int64_t, pm2adda_i32x2, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2adda_x_i32x2, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, pm2addau_u32x2, uint64_t, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pmq2adda_i32x2, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2suba_i32x2, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2suba_x_i32x2, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2addasu_i32x2, int64_t, int32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pmqr2adda_i32x2, int64_t, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm4adda_i16x4, int64_t, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC(uint64_t, pm4addau_u16x4, uint64_t, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int64_t, pm4addasu_i16x4, int64_t, int16x4_t, uint16x4_t)
+#endif
+
+/* Packed Multiply High Parts.  */
+/* b-series i16x2 (both ISAs, single insn): pmulh.h.bN/pmulhsu.h.bN  */
+CREATE_RVP_INTRINSIC(int16x2_t, pmulh_b0_i16x2, int16x2_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int16x2_t, pmulh_b1_i16x2, int16x2_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int16x2_t, pmulhsu_b0_i16x2, int16x2_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(int16x2_t, pmulhsu_b1_i16x2, int16x2_t, uint8x4_t)
+/* h-series i32 (scalar): RV32 mulh.hN/mulhsu.hN; RV64 pmulh.w.hN/etc  */
+CREATE_RVP_INTRINSIC(int32_t, mulh_h0_i32, int32_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, mulh_h1_i32, int32_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, mulhsu_h0_i32, int32_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, mulhsu_h1_i32, int32_t, uint16x2_t)
+/* b-series i16x4 (packed): RV64 single pmulh.h.bN; RV32 2x  */
+CREATE_RVP_INTRINSIC(int16x4_t, pmulh_b0_i16x4, int16x4_t, int8x8_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pmulh_b1_i16x4, int16x4_t, int8x8_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pmulhsu_b0_i16x4, int16x4_t, uint8x8_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pmulhsu_b1_i16x4, int16x4_t, uint8x8_t)
+/* h-series i32x2 (packed): RV64 pmulh.w.hN; RV32 2x mulh.hN  */
+CREATE_RVP_INTRINSIC(int32x2_t, pmulh_h0_i32x2, int32x2_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmulh_h1_i32x2, int32x2_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmulhsu_h0_i32x2, int32x2_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmulhsu_h1_i32x2, int32x2_t, uint16x4_t)
+
+/* Packed Multiply High Parts Accumulate.  */
+/* b-series i16x2 (both ISAs, single RMW insn): pmhacc.h.bN/pmhaccsu.h.bN  */
+CREATE_RVP_INTRINSIC(int16x2_t, pmhacc_b0_i16x2, int16x2_t, int16x2_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int16x2_t, pmhacc_b1_i16x2, int16x2_t, int16x2_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int16x2_t, pmhaccsu_b0_i16x2, int16x2_t, int16x2_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(int16x2_t, pmhaccsu_b1_i16x2, int16x2_t, int16x2_t, uint8x4_t)
+/* h-series i32 (scalar, RMW): RV32 mhacc.hN/mhaccsu.hN; RV64 pmhacc.w.hN/etc  */
+CREATE_RVP_INTRINSIC(int32_t, mhacc_h0_i32, int32_t, int32_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, mhacc_h1_i32, int32_t, int32_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, mhaccsu_h0_i32, int32_t, int32_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32_t, mhaccsu_h1_i32, int32_t, int32_t, uint16x2_t)
+/* b-series i16x4 (packed, RMW): RV64 single pmhacc.h.bN; RV32 2x  */
+CREATE_RVP_INTRINSIC(int16x4_t, pmhacc_b0_i16x4, int16x4_t, int16x4_t, int8x8_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pmhacc_b1_i16x4, int16x4_t, int16x4_t, int8x8_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pmhaccsu_b0_i16x4, int16x4_t, int16x4_t, uint8x8_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pmhaccsu_b1_i16x4, int16x4_t, int16x4_t, uint8x8_t)
+/* h-series i32x2 (packed, RMW): RV64 pmhacc.w.hN; RV32 2x mhacc.hN  */
+CREATE_RVP_INTRINSIC(int32x2_t, pmhacc_h0_i32x2, int32x2_t, int32x2_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmhacc_h1_i32x2, int32x2_t, int32x2_t, int16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmhaccsu_h0_i32x2, int32x2_t, int32x2_t, uint16x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmhaccsu_h1_i32x2, int32x2_t, int32x2_t, uint16x4_t)
+
+/* Packed Widening Multiply (RV32 single insn; RV64 multi-insn sequence TODO)  */
+#if __riscv_xlen == 32
+CREATE_RVP_INTRINSIC(int16x4_t, pwmul_i16x4, int8x4_t, int8x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pwmul_i32x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint16x4_t, pwmulu_u16x4, uint8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pwmulu_u32x2, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int16x4_t, pwmulsu_i16x4, int8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pwmulsu_i32x2, int16x2_t, uint16x2_t)
+#endif
+
+/* Packed Widening Multiply Accumulate (RV32 single RMW insn; RV64 multi-insn  */
+/* sequence TODO; simd32 builtin needs RV32 guard to avoid implicit-decl error)  */
+#if __riscv_xlen == 32
+CREATE_RVP_INTRINSIC(int32x2_t, pwmacc_i32x2, int32x2_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint32x2_t, pwmaccu_u32x2, uint32x2_t, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pwmaccsu_i32x2, int32x2_t, int16x2_t, uint16x2_t)
+#endif
+
+/* Packed "Q-format" Multiply with Widening Accumulate (RV32 single RMW insn;  */
+/* RV64 multi-insn sequence TODO; simd32 builtin needs RV32 guard)  */
+#if __riscv_xlen == 32
+CREATE_RVP_INTRINSIC(int32x2_t, pmqwacc_i32x2, int32x2_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int32x2_t, pmqrwacc_i32x2, int32x2_t, int16x2_t, int16x2_t)
+#endif
+
+/* Packed Multiplication with Widening Horizontal Addition (RV32 single insn;  */
+/* RV64 multi-insn sequence TODO; simd32 builtin needs RV32 guard)  */
+#if __riscv_xlen == 32
+CREATE_RVP_INTRINSIC(int64_t, pm2wadd_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2wadd_x_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, pm2waddu_u64, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2wsub_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2wsub_x_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2waddsu_u64, int16x2_t, uint16x2_t)
+#endif
+
+/* Packed Multiplication with Widening Horizontal Addition and Accumulate.  */
+/* (RV32 single RMW insn; RV64 multi-insn sequence TODO; simd32 RV32 guard)  */
+#if __riscv_xlen == 32
+CREATE_RVP_INTRINSIC(int64_t, pm2wadda_i64, int64_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2wadda_x_i64, int64_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(uint64_t, pm2waddau_u64, uint64_t, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2wsuba_i64, int64_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2wsuba_x_i64, int64_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC(int64_t, pm2waddasu_u64, int64_t, int16x2_t, uint16x2_t)
 #endif
 
 #ifdef __cplusplus
