@@ -211,6 +211,26 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+(define_insn "*pwmacc<su>pv2hi3"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (plus:PV2SI (mult:PV2SI (any_extend:PV2SI (match_operand:PV2HI 1 "register_operand" "r"))
+                                (any_extend:PV2SI (match_operand:PV2HI 2 "register_operand" "r")))
+                    (match_operand:PV2SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pwmacc<u>.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*pwmaccsupv2hi3"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+        (plus:PV2SI (mult:PV2SI (zero_extend:PV2SI (match_operand:PV2HI 1 "register_operand" "r"))
+                                (sign_extend:PV2SI (match_operand:PV2HI 2 "register_operand" "r")))
+                    (match_operand:PV2SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pwmaccsu.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 (define_insn_and_split "mulpv2hi3"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (mult:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
