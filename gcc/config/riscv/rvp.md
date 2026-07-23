@@ -355,27 +355,49 @@
   [(set_attr "type" "shift")
    (set_attr "mode" "<MODE>")])
 
-;; Signed packed multiply high for all packed element sizes (bytes/halfwords/words)
-(define_insn "smul<mode>3_highpart"
-  [(set (match_operand:PVALL 0 "register_operand" "=r")
-        (smul_highpart:PVALL
-          (match_operand:PVALL 1 "register_operand" "r")
-          (match_operand:PVALL 2 "register_operand" "r")))]
+;; Packed multiply high for the single-register modes (pmulh.b/.h/.w).
+(define_insn "<mulh_prefix>mul<mode>3_highpart"
+  [(set (match_operand:PVMULH1 0 "register_operand" "=r")
+        (any_mulh:PVMULH1
+          (match_operand:PVMULH1 1 "register_operand" "r")
+          (match_operand:PVMULH1 2 "register_operand" "r")))]
   "TARGET_RVP"
-  "pmulh.<rvp_width>\t%0,%1,%2"
+  "<pmulh_mnem>.<rvp_width>\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
-;; Unsigned packed multiply high for all packed element sizes (bytes/halfwords/words)
-(define_insn "umul<mode>3_highpart"
-  [(set (match_operand:PVALL 0 "register_operand" "=r")
-        (umul_highpart:PVALL
-          (match_operand:PVALL 1 "register_operand" "r")
-          (match_operand:PVALL 2 "register_operand" "r")))]
+;; Packed multiply high for the 8-byte byte/halfword modes.  PMULH has no
+;; double-wide encoding, so RV32 (register pair) splits into two single-register
+;; pmulh while RV64 stays a single instruction.  The RV32 alternative is
+;; early-clobber so a crossed destination/source pair cannot clobber a source
+;; half mid-split.
+(define_insn_and_split "<mulh_prefix>mul<mode>3_highpart"
+  [(set (match_operand:PV64QH 0 "register_operand" "=r,&r")
+        (any_mulh:PV64QH
+          (match_operand:PV64QH 1 "register_operand" "r,r")
+          (match_operand:PV64QH 2 "register_operand" "r,r")))]
   "TARGET_RVP"
-  "pmulhu.<rvp_width>\t%0,%1,%2"
+  "@
+   <pmulh_mnem>.<rvp_width>\t%0,%1,%2
+   #"
+  "&& !TARGET_64BIT && reload_completed"
+  [(set (match_dup 3) (any_mulh:<rvp_pairhalf> (match_dup 5) (match_dup 7)))
+   (set (match_dup 4) (any_mulh:<rvp_pairhalf> (match_dup 6) (match_dup 8)))]
+  {
+    operands[3] = gen_lowpart (<rvp_pairhalf>mode, operands[0]);
+    operands[4] = gen_highpart (<rvp_pairhalf>mode, operands[0]);
+    operands[5] = gen_lowpart (<rvp_pairhalf>mode, operands[1]);
+    operands[6] = gen_highpart (<rvp_pairhalf>mode, operands[1]);
+    operands[7] = gen_lowpart (<rvp_pairhalf>mode, operands[2]);
+    operands[8] = gen_highpart (<rvp_pairhalf>mode, operands[2]);
+  }
   [(set_attr "type" "arith")
-   (set_attr "mode" "<MODE>")])
+   (set_attr "mode" "<MODE>")
+   (set_attr_alternative "enabled"
+     [(if_then_else (match_test "TARGET_64BIT")
+	(const_string "yes") (const_string "no"))
+      (if_then_else (match_test "!TARGET_64BIT")
+	(const_string "yes") (const_string "no"))])])
 
 ;; MACC.H00/MACCU.H00: Widening multiply-accumulate (bottom x bottom)
 ;; MACC.H00:  rd = rd + sext(rs1[15:0]) * sext(rs2[15:0])

@@ -87,6 +87,10 @@
 			     (PV8QI "TARGET_64BIT") (PV4HI "TARGET_64BIT")
 			     (PV2SI "TARGET_64BIT")])
 
+;; Packed modes with a single-register pmulh.  The 8-byte byte/halfword modes
+;; (register pairs on RV32) are split instead, so they are excluded here.
+(define_mode_iterator PVMULH1 [PV4QI PV2HI (PV2SI "TARGET_64BIT")])
+
 ;; PCMP: All packed vector modes for comparison operations (PMSEQ, PMSLT, PMSLTU)
 (define_mode_iterator PCMP [PV4QI PV2HI PV8QI PV4HI PV2SI])
 
@@ -116,6 +120,11 @@
 ;; Packed extension mode extend to suffix for pattern name
 (define_mode_attr rvp_ext_mode [(PV4HI "pv4hi") (PV2SI "pv2si")])
 
+;; 4-byte half of an 8-byte register-pair mode, for splitting a register-pair
+;; pmulh into two single-register ones.  PV2SI is unused by the current pattern
+;; but kept for completeness.
+(define_mode_attr rvp_pairhalf [(PV8QI "PV4QI") (PV4HI "PV2HI") (PV2SI "SI")])
+
 ;; Code Iterators
 
 (define_code_iterator rvp_binop
@@ -132,6 +141,9 @@
 ;; Operations for shift instructions
 (define_code_iterator shift_op [ashift lshiftrt ashiftrt])
 
+;; Signed/unsigned packed multiply-high
+(define_code_iterator any_mulh [smul_highpart umul_highpart])
+
 ;; Code Attributes
 
 (define_code_attr rvp_optab
@@ -145,6 +157,12 @@
    (minus "psub") (ss_minus "pssub") (us_minus "pssubu")
    (smax "pmax") (umax "pmaxu") (smin "pmin") (umin "pminu")
    (eq "pmseq") (lt "pmslt") (ltu "pmsltu")])
+
+;; Standard optab name prefix for packed multiply-high (smul.../umul...).
+(define_code_attr mulh_prefix [(smul_highpart "s") (umul_highpart "u")])
+
+;; Mnemonic for packed multiply-high.
+(define_code_attr pmulh_mnem [(smul_highpart "pmulh") (umul_highpart "pmulhu")])
 
 (define_code_attr rvp_widen_optab
   [(plus "pwadd") (minus "pwsub")])
