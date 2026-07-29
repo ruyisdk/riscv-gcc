@@ -4724,6 +4724,29 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
       return false;
 
     case PLUS:
+      /* RVP MULH.H0 idiom.  Combine builds
+	   (plus:SI (lshiftrt:SI (mult:SI ...) (const_int 16))
+		    (ashift:SI (subreg:SI (mult:DI ...) 4) (const_int 16)))
+	 for (rs1 * sext (rs2[15:0])) >> 16.  Cost it as a single multiply so
+	 combine keeps the fused MULH.H0 instruction instead of tearing it back
+	 into a widening multiply plus shifts.  */
+      if (TARGET_RVP && !TARGET_64BIT && mode == SImode)
+	{
+	  rtx lo = XEXP (x, 0);
+	  rtx hi = XEXP (x, 1);
+	  if (GET_CODE (lo) == LSHIFTRT
+	      && GET_CODE (XEXP (lo, 0)) == MULT
+	      && CONST_INT_P (XEXP (lo, 1)) && INTVAL (XEXP (lo, 1)) == 16
+	      && GET_CODE (hi) == ASHIFT
+	      && CONST_INT_P (XEXP (hi, 1)) && INTVAL (XEXP (hi, 1)) == 16
+	      && GET_CODE (XEXP (hi, 0)) == SUBREG
+	      && GET_CODE (SUBREG_REG (XEXP (hi, 0))) == MULT
+	      && GET_MODE (SUBREG_REG (XEXP (hi, 0))) == DImode)
+	    {
+	      *total = COSTS_N_INSNS (2);
+	      return true;
+	    }
+	}
       /* add.uw pattern for zba.  */
       if (TARGET_ZBA
 	  && (TARGET_64BIT && (mode == DImode))

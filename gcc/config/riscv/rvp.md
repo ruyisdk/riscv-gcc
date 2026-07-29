@@ -613,6 +613,109 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+;; Intermediate pattern for MULH.H0.
+;; Fuse the halfword sign-extend into the widening signed multiply so combine
+;; can subsequently match the (product >> 16) highpart form as MULH.H0.  If the
+;; highpart form is not built, split back into sext.h + wmul.
+(define_insn_and_split "*rvp_mulh_h0_widen"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI (sign_extend:DI (match_operand:HI 1 "register_operand" "r"))
+		 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  rtx tmp = gen_reg_rtx (SImode);
+  emit_insn (gen_extendhisi2 (tmp, operands[1]));
+  emit_insn (gen_rtx_SET (operands[0],
+			  gen_rtx_MULT (DImode,
+					gen_rtx_SIGN_EXTEND (DImode, tmp),
+					gen_rtx_SIGN_EXTEND (DImode,
+							     operands[2]))));
+  DONE;
+}
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
+
+;; MULH.H0: rd = (rs1 * sext(rs2[15:0])) >> 16
+;; The signed 32x16 product is 48 bits; taking bits [47:16] of the 64-bit
+;; product yields (hi_word << 16) | (lo_word >>u 16), which is the form combine
+;; builds once *rvp_mulh_h0_widen has fused the halfword sign-extend into the
+;; widening multiply.
+(define_insn "*rvp_mulh_h0"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (lshiftrt:SI
+	    (mult:SI (sign_extend:SI (match_operand:HI 1 "register_operand" "r"))
+		     (match_operand:SI 2 "register_operand" "r"))
+	    (const_int 16))
+	  (ashift:SI
+	    (subreg:SI
+	      (mult:DI (sign_extend:DI (match_dup 1))
+		       (sign_extend:DI (match_dup 2))) 4)
+	    (const_int 16))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulh.h0\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; Intermediate pattern for MULH.H1.
+;; This is the generic 32x32 (product >> 16) form combine builds first; a later
+;; substitution of the halfword extract into operand 1 turns it into
+;; *rvp_mulh_h1.  If that substitution never happens, split back into a widening
+;; multiply plus the shift/merge sequence this form came from.
+(define_insn_and_split "*rvp_mulh_h1_inter"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (lshiftrt:SI
+	    (mult:SI (match_operand:SI 1 "register_operand" "r")
+		     (match_operand:SI 2 "register_operand" "r"))
+	    (const_int 16))
+	  (ashift:SI
+	    (subreg:SI
+	      (mult:DI (sign_extend:DI (match_dup 1))
+		       (sign_extend:DI (match_dup 2))) 4)
+	    (const_int 16))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "#"
+  "&& can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  rtx prod = gen_reg_rtx (DImode);
+  rtx lo = gen_reg_rtx (SImode);
+  rtx hi = gen_reg_rtx (SImode);
+
+  emit_insn (gen_mulsidi3 (prod, operands[1], operands[2]));
+  emit_insn (gen_lshrsi3 (lo, gen_lowpart (SImode, prod), GEN_INT (16)));
+  emit_insn (gen_ashlsi3 (hi, gen_highpart (SImode, prod), GEN_INT (16)));
+  emit_insn (gen_addsi3 (operands[0], hi, lo));
+  DONE;
+}
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_mulh_h1"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (plus:SI
+          (lshiftrt:SI
+            (mult:SI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 1 "register_operand" "r") 0)
+                                  (const_int 16))
+                     (match_operand:SI 2 "register_operand" "r"))
+            (const_int 16))
+          (ashift:SI
+            (subreg:SI
+              (mult:DI (sign_extend:DI
+                         (ashiftrt:SI (subreg:SI (match_dup 1) 0)
+                                      (const_int 16)))
+                       (sign_extend:DI
+                         (match_dup 2))) 4)
+            (const_int 16))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "mulh.h1\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])       
+
 ;; Intermediate rtl pattern for pm2wadd.h/pm2wsub.h
 ;; If combine does not fold this further into *pm2waddh_intermediate, split
 ;; it into a real mul.h11 (16x16->32 multiply) followed by a sign-extend to
