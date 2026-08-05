@@ -125,6 +125,18 @@
 ;; but kept for completeness.
 (define_mode_attr rvp_pairhalf [(PV8QI "PV4QI") (PV4HI "PV2HI") (PV2SI "SI")])
 
+;; Result mode of a narrowing clip.  Its source mode and element width suffix
+;; are RVP_DWIDTH_EXT and rvp_extend_width, which the widening operations use
+;; for the same pair of modes seen from the other direction.
+(define_mode_attr rvp_narrow_mode [(PV4HI "PV4QI") (PV2SI "PV2HI")])
+
+;; Saturation bounds of a narrowing clip, and the widest shift amount its
+;; immediate field can hold.
+(define_mode_attr rvp_narrow_smax [(PV4HI "127") (PV2SI "32767")])
+(define_mode_attr rvp_narrow_smin [(PV4HI "-128") (PV2SI "-32768")])
+(define_mode_attr rvp_narrow_umax [(PV4HI "255") (PV2SI "65535")])
+(define_mode_attr rvp_narrow_shmax [(PV4HI "15") (PV2SI "31")])
+
 ;; Code Iterators
 
 (define_code_iterator rvp_binop
@@ -238,3 +250,15 @@
 
 ;; Corresponding instruction name for packed extension
 (define_code_attr rvp_extend_insn [(sign_extend "psext") (zero_extend "pzext")])
+
+;; Saturating truncation, for the narrowing clips.
+(define_code_iterator any_sat_trunc [ss_truncate us_truncate])
+
+;; Optab name of a saturating truncation, and the clip that implements it:
+;; the register-pair form on RV64, the immediate-shift form on RV32.
+(define_code_attr sat_trunc_optab
+  [(ss_truncate "sstrunc") (us_truncate "ustrunc")])
+(define_code_attr nclip_pair_insn
+  [(ss_truncate "pnclipp") (us_truncate "pnclipup")])
+(define_code_attr nclip_imm_insn
+  [(ss_truncate "pnclipi") (us_truncate "pnclipiu")])
