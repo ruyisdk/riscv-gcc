@@ -1,6 +1,6 @@
 /* { dg-do compile } */
 /* { dg-options "-march=rv32gcp0p21 -mabi=ilp32" } */
-/* { dg-skip-if "" { *-*-* } { "-flto" "-O0" } } */
+/* { dg-skip-if "" { *-*-* } { "-flto" "-O0" "-Og" } } */
 
 /* Test WSUBA (widening signed subtract accumulate) instruction */
 

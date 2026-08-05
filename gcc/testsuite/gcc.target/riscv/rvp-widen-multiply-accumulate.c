@@ -1,6 +1,6 @@
 /* { dg-do compile } */
 /* { dg-options "-march=rv32gcp0p21 -mabi=ilp32" } */
-/* { dg-skip-if "" { *-*-* } { "-flto" "-O0" "-O1"} } */
+/* { dg-skip-if "" { *-*-* } { "-flto" "-O0" "-O1" "-Og" } } */
 
 /* Test WMACC (widening signed multiply-accumulate) instruction */
 
