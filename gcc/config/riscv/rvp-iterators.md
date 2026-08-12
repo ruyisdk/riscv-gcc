@@ -141,6 +141,9 @@
 ;; Operations for shift instructions
 (define_code_iterator shift_op [ashift lshiftrt ashiftrt])
 
+;; Shift op for sign/zero extend
+(define_code_iterator shift_extend [ashiftrt lshiftrt])
+
 ;; Signed/unsigned packed multiply-high
 (define_code_iterator any_mulh [smul_highpart umul_highpart])
 

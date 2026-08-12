@@ -168,7 +168,7 @@
   rtx src1_lo_hi = gen_lowpart (HImode, src1_lo);
   rtx src2_lo_hi = gen_lowpart (HImode, src2_lo);
 
-  emit_insn (gen_mul_h00 (temp_e0, src1_lo_hi, src2_lo_hi));
+  emit_insn (gen_mulhisi3 (temp_e0, src1_lo_hi, src2_lo_hi));
   emit_insn (gen_mul_h11 (temp_e1, src1_lo, src2_lo));
   emit_insn (gen_ashlsi3 (temp_e1_shifted, temp_e1, GEN_INT (16)));
   emit_insn (gen_andsi3 (temp_e0_masked, temp_e0, GEN_INT (0xFFFF)));
@@ -184,7 +184,7 @@
   rtx src1_hi_hi = gen_lowpart (HImode, src1_hi);
   rtx src2_hi_hi = gen_lowpart (HImode, src2_hi);
 
-  emit_insn (gen_mul_h00 (temp_e2, src1_hi_hi, src2_hi_hi));
+  emit_insn (gen_mulhisi3 (temp_e2, src1_hi_hi, src2_hi_hi));
   emit_insn (gen_mul_h11 (temp_e3, src1_hi, src2_hi));
   emit_insn (gen_ashlsi3 (temp_e3_shifted, temp_e3, GEN_INT (16)));
   emit_insn (gen_andsi3 (temp_e2_masked, temp_e2, GEN_INT (0xFFFF)));
@@ -256,7 +256,7 @@
   rtx src1_si = gen_lowpart (SImode, operands[1]);
   rtx src2_si = gen_lowpart (SImode, operands[2]);
 
-  emit_insn (gen_mul_h00 (temp_e0, src1_lo, src2_lo));
+  emit_insn (gen_mulhisi3 (temp_e0, src1_lo, src2_lo));
   emit_insn (gen_mul_h11 (temp_e1, src1_si, src2_si));
 
   rtx result_lo = gen_lowpart (HImode, temp_e0);
@@ -577,41 +577,55 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
-(define_insn "mul_h11"
+(define_insn "mul<shiftrt_su>_h11"
   [(set (match_operand:SI 0 "register_operand" "=r")
-	(mult:SI (ashiftrt:SI
+	(mult:SI (shift_extend:SI
 		   (match_operand:SI 1 "register_operand" "r")
 		   (const_int 16))
-		 (ashiftrt:SI
+		 (shift_extend:SI
 		   (match_operand:SI 2 "register_operand" "r")
 		   (const_int 16))))]
   "TARGET_RVP && !TARGET_64BIT"
-  "mul.h11\t%0,%1,%2"
+  "mul<shiftrt_su>.h11\t%0,%1,%2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
-(define_insn "mul_h00"
-  [(set (match_operand:SI 0 "register_operand" "=r")
-	(mult:SI (sign_extend:SI
-		   (match_operand:HI 1 "register_operand" "r"))
-		 (sign_extend:SI
-		   (match_operand:HI 2 "register_operand" "r"))))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "mul.h00\t%0,%2,%1"
+(define_insn "*mul<shiftrt_su>_w11"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI (shift_extend:DI
+		   (match_operand:DI 1 "register_operand" "r")
+		   (const_int 32))
+		 (shift_extend:DI
+		   (match_operand:DI 2 "register_operand" "r")
+		   (const_int 32))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "mul<shiftrt_su>.w11\t%0,%1,%2"
   [(set_attr "type" "imul")
-   (set_attr "mode" "SI")])
+   (set_attr "mode" "DI")])
 
-(define_insn "*mul_h01"
+(define_insn "*mul<u>_h01"
   [(set (match_operand:SI 0 "register_operand" "=r")
-	(mult:SI (ashiftrt:SI
+	(mult:SI (<su_shiftrt>:SI
 		   (match_operand:SI 1 "register_operand" "r")
 		   (const_int 16))
-		 (sign_extend:SI
+		 (any_extend:SI
 		   (match_operand:HI 2 "register_operand" "r"))))]
   "TARGET_RVP && !TARGET_64BIT"
-  "mul.h01\t%0,%2,%1"
+  "mul<u>.h01\t%0,%2,%1"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
+
+(define_insn "*mul<u>_w01"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(mult:DI (<su_shiftrt>:DI
+		   (match_operand:DI 1 "register_operand" "r")
+		   (const_int 32))
+		 (any_extend:DI
+		   (match_operand:SI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "mul<u>.w01\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
 
 ;; Intermediate pattern for MULH.H0.
 ;; Fuse the halfword sign-extend into the widening signed multiply so combine

@@ -4941,6 +4941,11 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 		  *total = COSTS_N_INSNS (2);
 		  return true;
 		}
+              if (riscv_is_macc_shift_extend_pattern_p (op0, op1, shamt))
+                {
+                  *total = COSTS_N_INSNS (4);
+                  return true;
+                }
 	    }
 	}
 
