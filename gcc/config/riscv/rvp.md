@@ -1018,6 +1018,31 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
 
+;; MACCSU.W00: Signed-unsigned multiply-accumulate (bottom x bottom)
+(define_insn "*rvp_usmaddsidi4"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (zero_extend:DI
+			    (match_operand:SI 1 "register_operand" "r"))
+			  (sign_extend:DI
+			    (match_operand:SI 2 "register_operand" "r")))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "maccsu.w00\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
+
+(define_insn "*rvp_usmaddsidi4_alt"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (sign_extend:DI
+			    (match_operand:SI 1 "register_operand" "r"))
+			  (zero_extend:DI
+			    (match_operand:SI 2 "register_operand" "r")))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "maccsu.w00\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
+
 ;; MACCSU.H11: Signed-unsigned multiply-accumulate (top x top)
 ;; rd = rd + sext(rs1[31:16]) * zext(rs2[31:16])
 ;; Two patterns for different operand orderings from GCC.
@@ -1048,6 +1073,35 @@
   "maccsu.h11\t%0,%1,%2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
+
+;; MACCSU.W11: Signed-unsigned multiply-accumulate (top x top)
+(define_insn "*rvp_usmaddsidi4tt"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (lshiftrt:DI
+			    (match_operand:DI 1 "register_operand" "r")
+			    (const_int 32))
+			  (ashiftrt:DI
+			    (match_operand:DI 2 "register_operand" "r")
+			    (const_int 32)))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "maccsu.w11\t%0,%2,%1"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
+
+(define_insn "*rvp_usmaddsidi4tt_alt"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(plus:DI (mult:DI (ashiftrt:DI
+			    (match_operand:DI 1 "register_operand" "r")
+			    (const_int 32))
+			  (lshiftrt:DI
+			    (match_operand:DI 2 "register_operand" "r")
+			    (const_int 32)))
+		 (match_operand:DI 3 "register_operand" "0")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "maccsu.w11\t%0,%1,%2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "DI")])
 
 ;; Averaging arithmetic operations with standard optab names.
 ;;
