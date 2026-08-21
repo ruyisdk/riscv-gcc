@@ -276,7 +276,8 @@
   V1BF,V2BF,V4BF,V8BF,V16BF,V32BF,V64BF,V128BF,V256BF,V512BF,V1024BF,V2048BF,
   V1SF,V2SF,V4SF,V8SF,V16SF,V32SF,V64SF,V128SF,V256SF,V512SF,V1024SF,
   V1DF,V2DF,V4DF,V8DF,V16DF,V32DF,V64DF,V128DF,V256DF,V512DF,
-  V1BI,V2BI,V4BI,V8BI,V16BI,V32BI,V64BI,V128BI,V256BI,V512BI,V1024BI,V2048BI,V4096BI"
+  V1BI,V2BI,V4BI,V8BI,V16BI,V32BI,V64BI,V128BI,V256BI,V512BI,V1024BI,V2048BI,V4096BI,
+  PV4QI,PV8QI,PV2HI,PV4HI,PV2SI"
   (const_string "unknown"))
 
 ;; True if the main data type is twice the size of a word.
@@ -761,11 +762,18 @@
   [(set (match_operand:DI          0 "register_operand")
 	(plus:DI (match_operand:DI 1 "register_operand")
 		 (match_operand:DI 2 "reg_or_const_int_operand")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
 {
+  /* On RV32 with RVP, keep the DI add as a single RTX operation so that the
+     widening add patterns can match it in the combine pass.  */
+  if (!TARGET_64BIT && TARGET_RVP)
+    {
+      if (!REG_P (operands[2]))
+	operands[2] = force_reg (DImode, operands[2]);
+    }
   /* We may be able to find a faster sequence, if so, then we are
      done.  Otherwise let expansion continue normally.  */
-  if (CONST_INT_P (operands[2]) && synthesize_add (operands))
+  else if (CONST_INT_P (operands[2]) && synthesize_add (operands))
     DONE;
 })
 
@@ -773,7 +781,7 @@
   [(set (match_operand:DI          0 "register_operand" "=r,r")
 	(plus:DI (match_operand:DI 1 "register_operand" " r,r")
 		 (match_operand:DI 2 "arith_operand"    " r,I")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
   "add%i2\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -924,7 +932,15 @@
   [(set_attr "type" "fadd")
    (set_attr "mode" "<UNITMODE>")])
 
-(define_insn "subdi3"
+(define_expand "subdi3"
+  [(set (match_operand:DI 0           "register_operand")
+        (minus:DI (match_operand:DI 1 "reg_or_0_operand")
+                  (match_operand:DI 2 "register_operand")))]
+  "TARGET_64BIT || TARGET_RVP"
+  ""
+)
+
+(define_insn "*subdi3"
   [(set (match_operand:DI 0            "register_operand" "= r")
 	(minus:DI (match_operand:DI 1  "reg_or_0_operand" " rJ")
 		   (match_operand:DI 2 "register_operand" "  r")))]
@@ -1339,14 +1355,17 @@
 		   (match_operand:SI 1 "register_operand" " r"))
 		 (any_extend:DI
 		   (match_operand:SI 2 "register_operand" " r"))))]
-  "(TARGET_ZMMUL || TARGET_MUL) && !TARGET_64BIT"
+  "((TARGET_ZMMUL || TARGET_MUL) && !TARGET_64BIT) || TARGET_RVP"
 {
-  rtx temp = gen_reg_rtx (SImode);
-  riscv_emit_binary (MULT, temp, operands[1], operands[2]);
-  emit_insn (gen_<su>mulsi3_highpart (riscv_subword (operands[0], true),
-				     operands[1], operands[2]));
-  emit_insn (gen_movsi (riscv_subword (operands[0], false), temp));
-  DONE;
+  if (!TARGET_RVP)
+    {
+      rtx temp = gen_reg_rtx (SImode);
+      riscv_emit_binary (MULT, temp, operands[1], operands[2]);
+      emit_insn (gen_<su>mulsi3_highpart (riscv_subword (operands[0], true),
+				         operands[1], operands[2]));
+      emit_insn (gen_movsi (riscv_subword (operands[0], false), temp));
+      DONE;
+    }
 })
 
 (define_insn "<su>mulsi3_highpart"
@@ -1370,14 +1389,17 @@
 		   (match_operand:SI 1 "register_operand" " r"))
 		 (sign_extend:DI
 		   (match_operand:SI 2 "register_operand" " r"))))]
-  "(TARGET_ZMMUL || TARGET_MUL) && !TARGET_64BIT"
+  "(TARGET_ZMMUL || TARGET_MUL || TARGET_RVP) && !TARGET_64BIT"
 {
-  rtx temp = gen_reg_rtx (SImode);
-  riscv_emit_binary (MULT, temp, operands[1], operands[2]);
-  emit_insn (gen_usmulsi3_highpart (riscv_subword (operands[0], true),
-				     operands[1], operands[2]));
-  emit_insn (gen_movsi (riscv_subword (operands[0], false), temp));
-  DONE;
+  if (!TARGET_RVP)
+    {
+      rtx temp = gen_reg_rtx (SImode);
+      riscv_emit_binary (MULT, temp, operands[1], operands[2]);
+      emit_insn (gen_usmulsi3_highpart (riscv_subword (operands[0], true),
+				         operands[1], operands[2]));
+      emit_insn (gen_movsi (riscv_subword (operands[0], false), temp));
+      DONE;
+    }
 })
 
 (define_insn "usmulsi3_highpart"
@@ -1851,13 +1873,24 @@
 (define_expand "zero_extendsidi2"
   [(set (match_operand:DI 0 "register_operand")
 	(zero_extend:DI (match_operand:SI 1 "nonimmediate_operand")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
 {
-  if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
-      && SUBREG_PROMOTED_UNSIGNED_P (operands[1]))
+  if (TARGET_64BIT)
     {
-      emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
-      DONE;
+      if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
+          && SUBREG_PROMOTED_UNSIGNED_P (operands[1]))
+        {
+          emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
+          DONE;
+        }
+    }
+  else if (TARGET_RVP)
+    {
+      /* For RV32+RVP, keep the zero_extend as a single RTX operation
+         so it can be matched by widening instructions like WADDU.
+         It will be split after reload by the pattern in rvp.md */
+      if (!REG_P (operands[1]))
+        operands[1] = force_reg (SImode, operands[1]);
     }
 })
 
@@ -1942,13 +1975,24 @@
   [(set (match_operand:DI     0 "register_operand"     "=r,r")
 	(sign_extend:DI
 	    (match_operand:SI 1 "nonimmediate_operand" " r,m")))]
-  "TARGET_64BIT"
+  "TARGET_64BIT || TARGET_RVP"
 {
-  if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
-      && SUBREG_PROMOTED_SIGNED_P (operands[1]))
+  if (TARGET_64BIT)
     {
-      emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
-      DONE;
+      if (SUBREG_P (operands[1]) && SUBREG_PROMOTED_VAR_P (operands[1])
+          && SUBREG_PROMOTED_SIGNED_P (operands[1]))
+        {
+          emit_insn (gen_movdi (operands[0], SUBREG_REG (operands[1])));
+          DONE;
+        }
+    }
+  else if (TARGET_RVP)
+    {
+      /* For RV32+RVP, keep the sign_extend as a single RTX operation
+         so it can be matched by widening instructions like WADD.
+         It will be split after reload by the pattern in rvp.md */
+      if (!REG_P (operands[1]))
+        operands[1] = force_reg (SImode, operands[1]);
     }
 })
 
@@ -4525,7 +4569,16 @@
 	  (mult:SI (sign_extend:SI (match_operand:HI 1 "register_operand"))
 		   (sign_extend:SI (match_operand:HI 2 "register_operand")))
 	  (match_operand:SI 3 "register_operand")))]
-  "TARGET_XTHEADMAC"
+  "TARGET_XTHEADMAC || (TARGET_RVP && !TARGET_64BIT)"
+)
+
+(define_expand "umaddhisi4"
+  [(set (match_operand:SI 0 "register_operand")
+	(plus:SI
+	  (mult:SI (zero_extend:SI (match_operand:HI 1 "register_operand"))
+		   (zero_extend:SI (match_operand:HI 2 "register_operand")))
+	  (match_operand:SI 3 "register_operand")))]
+  "TARGET_RVP && !TARGET_64BIT"
 )
 
 (define_expand "msubhisi4"
@@ -4999,3 +5052,4 @@
 (include "andes-25-series.md")
 (include "andes-45-series.md")
 (include "spacemit-x60.md")
+(include "rvp.md")

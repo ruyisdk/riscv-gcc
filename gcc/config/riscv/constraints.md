@@ -219,6 +219,11 @@
        (ior (match_test "!TARGET_XTHEADVECTOR && satisfies_constraint_K (op)")
 	    (match_test "TARGET_XTHEADVECTOR && satisfies_constraint_J (op)"))))
 
+;; P-extension const_vector constraint
+(define_constraint "vc"
+  "A P-extension const_vector that can be loaded with PLI/PLUI."
+  (match_test "riscv_rvp_const_vector_p (op)"))
+
 (define_constraint "Wc0"
   "@internal
  A constraint that matches a vector of immediate all zeros."
@@ -339,6 +344,40 @@
   "A 7-bit unsigned immediate."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 127)")))
+
+;; P-extension PLI/PLUI constraints
+;; PLI: Os<bits> for signed immediates (matches Ou<bits> naming)
+;; PLUI: Yph<shift> for upper/shifted immediates
+
+;; 8-bit signed immediate for PLI.B (-128 to 127)
+(define_constraint "Os08"
+  "@internal
+   An 8-bit signed immediate for P-extension PLI.B."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -128, 127)")))
+
+;; 10-bit signed immediate for PLI.H/PLI.W (-512 to 511)
+(define_constraint "Os10"
+  "@internal
+   A 10-bit signed immediate for P-extension PLI.H/PLI.W."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -512, 511)")))
+
+;; PLUI.H immediate: (imm10 << 6) where imm10 in [-512, 511]
+(define_constraint "Yph06"
+  "@internal
+   A shifted 10-bit immediate for P-extension PLUI.H (imm10 << 6)."
+  (and (match_code "const_int")
+       (match_test "(ival & 0x3f) == 0
+		    && IN_RANGE (ival >> 6, -512, 511)")))
+
+;; PLUI.W immediate: (imm10 << 22) where imm10 in [-512, 511]
+(define_constraint "Yph22"
+  "@internal
+   A shifted 10-bit immediate for P-extension PLUI.W (imm10 << 22)."
+  (and (match_code "const_int")
+       (match_test "(ival & 0x3fffff) == 0
+		    && IN_RANGE (ival >> 22, -512, 511)")))
 
 (define_constraint "ads_Bext"
   "Sequence bit extract."
