@@ -65,6 +65,9 @@ typedef int8x8_t int8xN_t;
 #define RVP_INTRINSIC_PREFIX __riscv_
 #define RVP_INTRINSIC_VECTOR_PREFIX __riscv_v_
 
+#define RVP_OP_ATTRS \
+  __extension__ extern __inline __attribute__ ((__always_inline__, __gnu_inline__, __artificial__))
+
 #define RVP_ARGUMENT_LIST(_0, _1, _2, _3, _4, _5, ...) _5
 #define RVP_N_ARG(...) RVP_ARGUMENT_LIST (_, ##__VA_ARGS__, 4, 3, 2, 1, 0)
 
@@ -128,6 +131,18 @@ RVP_CONCAT (intrinsic_prefix, name (arg_expand_macro (__VA_ARGS__)))        \
 		       internal_name) (var_expand_macro (__VA_ARGS__));       \
 }
 
+#define RVP_UNARY_OP(name, ty, op)                                         \
+RVP_OP_ATTRS ty __riscv_##name (ty __rs1)                                  \
+  {                                                                        \
+    return op __rs1;                                                       \
+  }
+
+#define RVP_BINARY_OP(name, ty, op)                                        \
+RVP_OP_ATTRS ty __riscv_##name (ty __rs1, ty __rs2)                        \
+  {                                                                        \
+    return __rs1 op __rs2;                                                 \
+  }
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -161,32 +176,34 @@ CREATE_RVP_INTRINSIC (int16x4_t, pmv_s_i16x4, int16_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, pmv_s_u32x2, uint32_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pmv_s_i32x2, int32_t)
 
-/* Packed Addition and Subtraction.  */
-CREATE_RVP_INTRINSIC (int8x4_t, padd_i8x4, int8x4_t, int8x4_t)
-CREATE_RVP_INTRINSIC (uint8x4_t, padd_u8x4, uint8x4_t, uint8x4_t)
-CREATE_RVP_INTRINSIC (int16x2_t, padd_i16x2, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, padd_u16x2, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC (int8x4_t, psub_i8x4, int8x4_t, int8x4_t)
-CREATE_RVP_INTRINSIC (uint8x4_t, psub_u8x4, uint8x4_t, uint8x4_t)
-CREATE_RVP_INTRINSIC (int16x2_t, psub_i16x2, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, psub_u16x2, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC (int8x4_t, pneg_i8x4, int8x4_t)
-CREATE_RVP_INTRINSIC (int16x2_t, pneg_i16x2, int16x2_t)
-CREATE_RVP_INTRINSIC (int8x8_t, padd_i8x8, int8x8_t, int8x8_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, padd_u8x8, uint8x8_t, uint8x8_t)
-CREATE_RVP_INTRINSIC (int16x4_t, padd_i16x4, int16x4_t, int16x4_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, padd_u16x4, uint16x4_t, uint16x4_t)
-CREATE_RVP_INTRINSIC (int32x2_t, padd_i32x2, int32x2_t, int32x2_t)
-CREATE_RVP_INTRINSIC (uint32x2_t, padd_u32x2, uint32x2_t, uint32x2_t)
-CREATE_RVP_INTRINSIC (int8x8_t, psub_i8x8, int8x8_t, int8x8_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, psub_u8x8, uint8x8_t, uint8x8_t)
-CREATE_RVP_INTRINSIC (int16x4_t, psub_i16x4, int16x4_t, int16x4_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, psub_u16x4, uint16x4_t, uint16x4_t)
-CREATE_RVP_INTRINSIC (int32x2_t, psub_i32x2, int32x2_t, int32x2_t)
-CREATE_RVP_INTRINSIC (uint32x2_t, psub_u32x2, uint32x2_t, uint32x2_t)
-CREATE_RVP_INTRINSIC (int8x8_t, pneg_i8x8, int8x8_t)
-CREATE_RVP_INTRINSIC (int16x4_t, pneg_i16x4, int16x4_t)
-CREATE_RVP_INTRINSIC (int32x2_t, pneg_i32x2, int32x2_t)
+/* Packed Addition and Subtraction (32-bit) */
+RVP_BINARY_OP (padd_i8x4, int8x4_t, +)
+RVP_BINARY_OP (padd_u8x4, uint8x4_t, +)
+RVP_BINARY_OP (padd_i16x2, int16x2_t, +)
+RVP_BINARY_OP (padd_u16x2, uint16x2_t, +)
+RVP_BINARY_OP (psub_i8x4, int8x4_t, -)
+RVP_BINARY_OP (psub_u8x4, uint8x4_t, -)
+RVP_BINARY_OP (psub_i16x2, int16x2_t, -)
+RVP_BINARY_OP (psub_u16x2, uint16x2_t, -)
+RVP_UNARY_OP (pneg_i8x4, int8x4_t, -)
+RVP_UNARY_OP (pneg_i16x2, int16x2_t, -)
+
+/* Packed Addition and Subtraction (64-bit) */
+RVP_BINARY_OP (padd_i8x8, int8x8_t, +)
+RVP_BINARY_OP (padd_u8x8, uint8x8_t, +)
+RVP_BINARY_OP (padd_i16x4, int16x4_t, +)
+RVP_BINARY_OP (padd_u16x4, uint16x4_t, +)
+RVP_BINARY_OP (padd_i32x2, int32x2_t, +)
+RVP_BINARY_OP (padd_u32x2, uint32x2_t, +)
+RVP_BINARY_OP (psub_i8x8, int8x8_t, -)
+RVP_BINARY_OP (psub_u8x8, uint8x8_t, -)
+RVP_BINARY_OP (psub_i16x4, int16x4_t, -)
+RVP_BINARY_OP (psub_u16x4, uint16x4_t, -)
+RVP_BINARY_OP (psub_i32x2, int32x2_t, -)
+RVP_BINARY_OP (psub_u32x2, uint32x2_t, -)
+RVP_UNARY_OP (pneg_i8x8, int8x8_t, -)
+RVP_UNARY_OP (pneg_i16x4, int16x4_t, -)
+RVP_UNARY_OP (pneg_i32x2, int32x2_t, -)
 
 /* Packed Addition with Scalar.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, padd_s_u8x4, uint8x4_t, uint8_t)
