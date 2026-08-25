@@ -1,6 +1,7 @@
 ;; Machine description for RISC-V Bit Manipulation operations.
 ;; Copyright (C) 2025-2026 Free Software Foundation, Inc.
-;; Contributed by Jiawei Chen (jiawei@iscas.ac.cn), PLCT ISCAS.
+;; Contributed by Jiawei Chen (jiawei@iscas.ac.cn) and 
+;; Dongyan Chen (chendongyan@isrc.iscas.ac.cn), PLCT ISCAS.
 
 ;; This file is part of GCC.
 
