@@ -5023,6 +5023,8 @@
 (include "p-shift.md")
 (include "p-permute.md")
 (include "p-mul.md")
+(include "p-macc.md")
+(include "p-mulh.md")
 (include "sync.md")
 (include "sync-rvwmo.md")
 (include "sync-ztso.md")
