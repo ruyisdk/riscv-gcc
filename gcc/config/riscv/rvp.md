@@ -84,7 +84,17 @@
 	(rvp_binop:PV32 (match_operand:PV32 1 "register_operand" "r")
 			(match_operand:PV32 2 "register_operand" "r")))]
   "TARGET_RVP"
-  "<rvp_insn>.<rvp_width>\t%0, %1, %2"
+  "<rvp_insn>.<rvp_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; 4-byte packed vector negation (PV4QI/PV2HI, RV32/RV64).
+;; pneg.<b,h> rd, rs is an assembler alias for psub.<b,h> rd, x0, rs.
+(define_insn "neg<mode>2"
+  [(set (match_operand:PV32 0 "register_operand" "=r")
+	(neg:PV32 (match_operand:PV32 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "pneg.<rvp_width>\t%0,%1"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -345,7 +355,18 @@
 	(rvp_binop:PV64 (match_operand:PV64 1 "register_operand" " r")
 			(match_operand:PV64 2 "register_operand" " r")))]
   "TARGET_RVP"
-  "<rvp_insn>.%d0\t%0, %1, %2"
+  "<rvp_insn>.%d0\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; 8-byte packed vector negation (PV8QI/PV4HI/PV2SI, RV64 single reg,
+;; RV32 reg pair).  pneg.<d><b,h,w> rd, rs is an assembler alias for
+;; psub.<d><b,h,w> rd, x0, rs.
+(define_insn "neg<mode>2"
+  [(set (match_operand:PV64 0 "register_operand" "=r")
+	(neg:PV64 (match_operand:PV64 1 "register_operand" " r")))]
+  "TARGET_RVP"
+  "pneg.%d0\t%0,%1"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
