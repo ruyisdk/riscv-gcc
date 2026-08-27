@@ -5018,6 +5018,7 @@
 (include "bitmanip.md")
 (include "crypto.md")
 (include "p.md")
+(include "p-scaler.md")
 (include "p-compare.md")
 (include "p-shift.md")
 (include "p-permute.md")
