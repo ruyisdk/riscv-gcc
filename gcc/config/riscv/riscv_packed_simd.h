@@ -484,14 +484,10 @@ CREATE_RVP_INTRINSIC (int16x2_t, paas_x_i16x2, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC (int16x4_t, paas_x_i16x4, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC (int16x2_t, pasa_x_i16x2, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC (int16x4_t, pasa_x_i16x4, int16x4_t, int16x4_t)
-#if __riscv_xlen == 64
-/* RV64 only: i32x2 exchanged saturating/averaging variants use the .wx  */
-/* instructions.  On RV32 these have no equivalent cross-word instruction. */
 CREATE_RVP_INTRINSIC (int32x2_t, psas_x_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pssa_x_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, paas_x_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pasa_x_i32x2, int32x2_t, int32x2_t)
-#endif
 
 /* Packed Absolute Value and Absolute Difference.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pabs_i8x4, int8x4_t)

@@ -371,6 +371,28 @@
 (define_mode_attr USAT_NAME [(PV4QI "u8x4") (PV2HI "u16x2")
                              (PV8QI "u8x8") (PV4HI "u16x4")
                              (PV2SI "u32x2")])
+(define_int_iterator RVP_EXCHANGE_I32X2
+  [UNSPEC_PSAS UNSPEC_PSSA UNSPEC_PAAS UNSPEC_PASA])
+(define_int_attr rvp_exchange_name
+  [(UNSPEC_PSAS "psas_x_i32x2")
+   (UNSPEC_PSSA "pssa_x_i32x2")
+   (UNSPEC_PAAS "paas_x_i32x2")
+   (UNSPEC_PASA "pasa_x_i32x2")])
+(define_int_attr rvp_exchange_low
+  [(UNSPEC_PSAS "ssub")
+   (UNSPEC_PSSA "sadd")
+   (UNSPEC_PAAS "asub")
+   (UNSPEC_PASA "aadd")])
+(define_int_attr rvp_exchange_high
+  [(UNSPEC_PSAS "sadd")
+   (UNSPEC_PSSA "ssub")
+   (UNSPEC_PAAS "aadd")
+   (UNSPEC_PASA "asub")])
+(define_int_attr rvp_exchange_insn
+  [(UNSPEC_PSAS "psas")
+   (UNSPEC_PSSA "pssa")
+   (UNSPEC_PAAS "paas")
+   (UNSPEC_PASA "pasa")])
 (define_mode_attr SAT_SUFFIX [(PV4QI "b") (PV2HI "h")
                               (PV8QI "b") (PV4HI "h") (PV2SI "w")])
 (define_mode_attr DSAT_SUFFIX [(PV8QI "db") (PV4HI "dh") (PV2SI "dw")])
@@ -1558,42 +1580,40 @@
   "psa.wx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-; TODO: Implement the RV32 i32x2 psas, pssa, paas and pasa operations using
-; the scalar sadd, ssub, aadd and asub operations.
-(define_insn "riscv_psas_x_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PSAS))]
-  "TARGET_RVP && TARGET_64BIT"
-  "psas.wx\t%0,%1,%2"
-  [(set_attr "type" "simd")])
+(define_expand "riscv_<rvp_exchange_name>"
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                       (match_operand:PV2SI 2 "register_operand")]
+         RVP_EXCHANGE_I32X2))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_<rvp_exchange_name>_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      machine_mode mode = GET_MODE (operands[0]);
+      rtx out_lo = operand_subword (operands[0], 0, 1, mode);
+      rtx out_hi = operand_subword (operands[0], 1, 1, mode);
+      rtx a_lo = operand_subword_force (operands[1], 0, mode);
+      rtx a_hi = operand_subword_force (operands[1], 1, mode);
+      rtx b_lo = operand_subword_force (operands[2], 0, mode);
+      rtx b_hi = operand_subword_force (operands[2], 1, mode);
+      emit_insn (gen_riscv_<rvp_exchange_low>_i32
+		 (out_lo, a_lo, b_hi));
+      emit_insn (gen_riscv_<rvp_exchange_high>_i32
+		 (out_hi, a_hi, b_lo));
+    }
+  DONE;
+})
 
-(define_insn "riscv_pssa_x_i32x2"
+(define_insn "riscv_<rvp_exchange_name>_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PSSA))]
+                       (match_operand:PV2SI 2 "register_operand" "r")]
+         RVP_EXCHANGE_I32X2))]
   "TARGET_RVP && TARGET_64BIT"
-  "pssa.wx\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_paas_x_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PAAS))]
-  "TARGET_RVP && TARGET_64BIT"
-  "paas.wx\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_pasa_x_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PASA))]
-  "TARGET_RVP && TARGET_64BIT"
-  "pasa.wx\t%0,%1,%2"
+  "<rvp_exchange_insn>.wx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 ;Packed Absolute Value and Absolute Difference
