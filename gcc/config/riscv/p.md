@@ -405,7 +405,7 @@
 (define_mode_iterator ABD64 [(PV8QI "true") (PV4HI "true")])
 ; 64-bit packed modes excluding PV2SI (used by Packed Pair 8x8/16x4, where the
 ; 32x2 case is handled separately because its RV64 mnemonic is "pack"/ppaireo.w
-; rather than ppaire.w, and its RV32 form is intentionally unsupported).
+; and its RV32 form is expanded to register moves).
 (define_mode_iterator PAIR64 [(PV8QI "true") (PV4HI "true")])
 (define_mode_iterator PMERGE32 [(PV4QI "true") (PV2HI "true")])
 (define_mode_iterator PMERGE64 [(PV8QI "true") (PV4HI "true") (PV2SI "true")])

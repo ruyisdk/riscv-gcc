@@ -724,11 +724,6 @@ RISCV_BUILTIN (psshlr_s_u32x2, "psshlr_s_u32x2", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV2SI_FTYPE_UV2SI_SI, simd),
 
 /* Packed Pair.  */
-/* 32x2 (V2SI) is RV64-only for now; its RV32 form is intentionally  */
-/* unsupported (the "mv" mapping in the spec cannot express the  */
-/* even-odd/odd-even/odd semantics that depend on both source register  */
-/* pairs).  TODO: implement the RV32 form with paired emit_move when  */
-/* needed.  */
 RISCV_BUILTIN (ppaire_u8x4, "ppaire_u8x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4QI_FTYPE_UV4QI_UV4QI, simd),
 RISCV_BUILTIN (ppaire_i8x4, "ppaire_i8x4", RISCV_BUILTIN_DIRECT,
@@ -794,21 +789,21 @@ RISCV_BUILTIN (ppairo_u16x4, "ppairo_u16x4", RISCV_BUILTIN_DIRECT,
 RISCV_BUILTIN (ppairo_i16x4, "ppairo_i16x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_V4HI_FTYPE_V4HI_V4HI, simd),
 RISCV_BUILTIN (ppaire_u32x2, "ppaire_u32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd64),
+	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd),
 RISCV_BUILTIN (ppaire_i32x2, "ppaire_i32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd64),
+	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd),
 RISCV_BUILTIN (ppaireo_u32x2, "ppaireo_u32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd64),
+	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd),
 RISCV_BUILTIN (ppaireo_i32x2, "ppaireo_i32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd64),
+	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd),
 RISCV_BUILTIN (ppairoe_u32x2, "ppairoe_u32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd64),
+	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd),
 RISCV_BUILTIN (ppairoe_i32x2, "ppairoe_i32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd64),
+	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd),
 RISCV_BUILTIN (ppairo_u32x2, "ppairo_u32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd64),
+	       RISCV_UV2SI_FTYPE_UV2SI_UV2SI, simd),
 RISCV_BUILTIN (ppairo_i32x2, "ppairo_i32x2", RISCV_BUILTIN_DIRECT,
-	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd64),
+	       RISCV_V2SI_FTYPE_V2SI_V2SI, simd),
 
 /* Packed Widening Convert.  */
 RISCV_BUILTIN (pwcvt_i16x4, "pwcvt_i16x4", RISCV_BUILTIN_DIRECT,

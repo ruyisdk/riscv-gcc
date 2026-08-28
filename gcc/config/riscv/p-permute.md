@@ -31,10 +31,32 @@
 ; Signed and unsigned variants of the same width use the same machine
 ; instruction, so they are separate patterns only because the builtin names differ.
 ;
-; 32x2 (PV2SI) on RV32 is intentionally unsupported: spec marks it "mv" but the
-; semantics of ppaireo/ppairoe/ppairo depend on both source register pairs'
-; half registers, which a plain mv cannot express.  TODO: implement with
-; paired emit_move when needed.  For now the 32x2 builtins are simd64-only.
+; 32x2 (PV2SI) uses pack and the .w instructions on RV64.  On RV32 each
+; operation selects one word from each source register pair and is expanded
+; to a pair of moves.
+
+(define_int_iterator RVP_PAIR_I32X2
+  [UNSPEC_PPAIRE UNSPEC_PPAIREO UNSPEC_PPAIROE UNSPEC_PPAIRO])
+(define_int_attr rvp_pair_name
+  [(UNSPEC_PPAIRE "ppaire")
+   (UNSPEC_PPAIREO "ppaireo")
+   (UNSPEC_PPAIROE "ppairoe")
+   (UNSPEC_PPAIRO "ppairo")])
+(define_int_attr rvp_pair_low
+  [(UNSPEC_PPAIRE "0")
+   (UNSPEC_PPAIREO "0")
+   (UNSPEC_PPAIROE "1")
+   (UNSPEC_PPAIRO "1")])
+(define_int_attr rvp_pair_high
+  [(UNSPEC_PPAIRE "0")
+   (UNSPEC_PPAIREO "1")
+   (UNSPEC_PPAIROE "0")
+   (UNSPEC_PPAIRO "1")])
+(define_int_attr rvp_pair_rv64_insn
+  [(UNSPEC_PPAIRE "pack")
+   (UNSPEC_PPAIREO "ppaireo.w")
+   (UNSPEC_PPAIROE "ppairoe.w")
+   (UNSPEC_PPAIRO "ppairo.w")])
 
 ; ---- 8x4 (PV4QI), 32-bit, single form ----
 (define_insn "riscv_ppaire_u8x4"
@@ -492,79 +514,60 @@
   "ppairo.<SAT_SUFFIX>\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-; ---- 32x2 (PV2SI), 64-bit RV64 only ----
-; RV32 is intentionally unsupported (see TODO at top of section).
-; ppaire_u32x2/i32x2 -> "pack"; the other three use their .w mnemonics.
-(define_insn "riscv_ppaire_u32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIRE))]
-  "TARGET_RVP && TARGET_64BIT"
-  "pack\t%0,%1,%2"
-  [(set_attr "type" "simd")])
+; ---- 32x2 (PV2SI), RV32 move expansion / RV64 native instruction ----
+(define_expand "riscv_<rvp_pair_name>_u32x2"
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                       (match_operand:PV2SI 2 "register_operand")]
+         RVP_PAIR_I32X2))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_<rvp_pair_name>_32x2_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      machine_mode mode = GET_MODE (operands[0]);
+      rtx out_lo = operand_subword (operands[0], 0, 1, mode);
+      rtx out_hi = operand_subword (operands[0], 1, 1, mode);
+      rtx in_lo = operand_subword_force (operands[1], <rvp_pair_low>, mode);
+      rtx in_hi = operand_subword_force (operands[2], <rvp_pair_high>, mode);
+      emit_move_insn (out_lo, in_lo);
+      emit_move_insn (out_hi, in_hi);
+    }
+  DONE;
+})
 
-(define_insn "riscv_ppaire_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIRE))]
-  "TARGET_RVP && TARGET_64BIT"
-  "pack\t%0,%1,%2"
-  [(set_attr "type" "simd")])
+(define_expand "riscv_<rvp_pair_name>_i32x2"
+  [(set (match_operand:PV2SI 0 "register_operand")
+        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
+                       (match_operand:PV2SI 2 "register_operand")]
+         RVP_PAIR_I32X2))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_<rvp_pair_name>_32x2_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      machine_mode mode = GET_MODE (operands[0]);
+      rtx out_lo = operand_subword (operands[0], 0, 1, mode);
+      rtx out_hi = operand_subword (operands[0], 1, 1, mode);
+      rtx in_lo = operand_subword_force (operands[1], <rvp_pair_low>, mode);
+      rtx in_hi = operand_subword_force (operands[2], <rvp_pair_high>, mode);
+      emit_move_insn (out_lo, in_lo);
+      emit_move_insn (out_hi, in_hi);
+    }
+  DONE;
+})
 
-(define_insn "riscv_ppaireo_u32x2"
+(define_insn "riscv_<rvp_pair_name>_32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIREO))]
+                       (match_operand:PV2SI 2 "register_operand" "r")]
+         RVP_PAIR_I32X2))]
   "TARGET_RVP && TARGET_64BIT"
-  "ppaireo.w\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppaireo_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIREO))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppaireo.w\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairoe_u32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIROE))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairoe.w\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairoe_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIROE))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairoe.w\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairo_u32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIRO))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairo.w\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairo_i32x2"
-  [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:PV2SI 2 "register_operand" "r")]
-         UNSPEC_PPAIRO))]
-  "TARGET_RVP && TARGET_64BIT"
-  "ppairo.w\t%0,%1,%2"
+  "<rvp_pair_rv64_insn>\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 ;Packed Widening Convert

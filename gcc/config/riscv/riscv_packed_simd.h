@@ -727,12 +727,6 @@ CREATE_RVP_INTRINSIC (int16x4_t, ppairoe_i16x4, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC (uint16x4_t, ppairo_u16x4, uint16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC (int16x4_t, ppairo_i16x4, int16x4_t, int16x4_t)
 
-/* Packed Pair 32x2 is RV64-only: the RV32 form would need to compose the.  */
-/* result from both source register pairs' half registers, which a plain "mv"
- */
-/* (the spec's RV32 mapping) cannot express.  TODO: implement the RV32 form  */
-/* with paired emit_move when needed.  */
-#if __riscv_xlen == 64
 CREATE_RVP_INTRINSIC (uint32x2_t, ppaire_u32x2, uint32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, ppaire_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, ppaireo_u32x2, uint32x2_t, uint32x2_t)
@@ -741,7 +735,6 @@ CREATE_RVP_INTRINSIC (uint32x2_t, ppairoe_u32x2, uint32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, ppairoe_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, ppairo_u32x2, uint32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, ppairo_i32x2, int32x2_t, int32x2_t)
-#endif
 
 /* Packed Widening Convert.  */
 CREATE_RVP_INTRINSIC (int16x4_t, pwcvt_i16x4, int8x4_t)
