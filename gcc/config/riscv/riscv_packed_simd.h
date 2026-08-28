@@ -895,9 +895,12 @@ CREATE_RVP_INTRINSIC (int32x2_t, pmulsu_h11_i32x2, int16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w00_i64, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w01_i64, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w11_i64, int32x2_t, int32x2_t)
-CREATE_RVP_INTRINSIC(uint64_t, mulu_w00_u64, uint32x2_t, uint32x2_t)
-CREATE_RVP_INTRINSIC(uint64_t, mulu_w01_u64, uint32x2_t, uint32x2_t)
-CREATE_RVP_INTRINSIC(uint64_t, mulu_w11_u64, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC_ALIAS (uint64_t, mulu_w00_i64, mulu_w00_u64,
+			    uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC_ALIAS (uint64_t, mulu_w01_i64, mulu_w01_u64,
+			    uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC_ALIAS (uint64_t, mulu_w11_i64, mulu_w11_u64,
+			    uint32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mulsu_w00_i64, int32x2_t, uint32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mulsu_w11_i64, int32x2_t, uint32x2_t)
 #endif
