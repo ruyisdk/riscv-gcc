@@ -18,6 +18,84 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
+;; Scalar comparison.
+
+(define_int_iterator RVP_SCALAR_COMPARE
+  [UNSPEC_PMSEQ UNSPEC_PMSLT UNSPEC_PMSGT UNSPEC_PMSLTU UNSPEC_PMSGTU])
+
+(define_int_attr rvp_scalar_compare_builtin
+  [(UNSPEC_PMSEQ "mseq_i32_u32")
+   (UNSPEC_PMSLT "mslt_u32")
+   (UNSPEC_PMSGT "msgt_u32")
+   (UNSPEC_PMSLTU "msltu_u32")
+   (UNSPEC_PMSGTU "msgtu_u32")])
+
+(define_int_attr rvp_scalar_compare_insn
+  [(UNSPEC_PMSEQ "mseq")
+   (UNSPEC_PMSLT "mslt")
+   (UNSPEC_PMSGT "msgt")
+   (UNSPEC_PMSLTU "msltu")
+   (UNSPEC_PMSGTU "msgtu")])
+
+(define_insn "riscv_<rvp_scalar_compare_builtin>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 RVP_SCALAR_COMPARE))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    return "p<rvp_scalar_compare_insn>.w\t%0,%1,%2";
+  return "<rvp_scalar_compare_insn>\t%0,%1,%2";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+;; Scalar 64-bit merge.  RV32 performs the operation on both halves of the
+;; register pair.
+
+(define_expand "riscv_merge_di"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:DI 2 "register_operand")
+		    (match_operand:DI 3 "register_operand")]
+	 UNSPEC_PMERGE))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_merge_di_rv64
+	       (operands[0], operands[1], operands[2], operands[3]));
+  else
+    {
+      rtx out0 = operand_subword (operands[0], 0, 1, DImode);
+      rtx out1 = operand_subword (operands[0], 1, 1, DImode);
+      rtx rs10 = operand_subword_force (operands[1], 0, DImode);
+      rtx rs11 = operand_subword_force (operands[1], 1, DImode);
+      rtx rs20 = operand_subword_force (operands[2], 0, DImode);
+      rtx rs21 = operand_subword_force (operands[2], 1, DImode);
+      rtx mask0 = operand_subword_force (operands[3], 0, DImode);
+      rtx mask1 = operand_subword_force (operands[3], 1, DImode);
+
+      emit_insn (gen_riscv_pmerge_si (out0, rs10, rs20, mask0));
+      emit_insn (gen_riscv_pmerge_si (out1, rs11, rs21, mask1));
+    }
+  DONE;
+})
+
+(define_insn "riscv_merge_di_rv64"
+  [(set (match_operand:DI 0 "register_operand" "=r,r,r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r,0,r")
+		    (match_operand:DI 2 "register_operand" "r,r,0")
+		    (match_operand:DI 3 "register_operand" "0,r,r")]
+	 UNSPEC_PMERGE))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   merge\t%0,%1,%2
+   mvm\t%0,%2,%3
+   mvmn\t%0,%1,%3"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
 ;; Packed-SIMD extension.
 ;Packed Minimum and Maximum
 ;

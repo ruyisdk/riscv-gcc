@@ -449,3 +449,46 @@
 }
   [(set_attr "type" "simd")
    (set_attr "mode" "SI")])
+
+;; Scalar absolute value.
+
+(define_expand "riscv_abs_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(abs:SI (match_operand:SI 1 "register_operand")))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx tmp = gen_reg_rtx (DImode);
+      emit_insn (gen_riscv_abs_u32_rv64 (tmp, operands[1]));
+      emit_move_insn (operands[0], gen_lowpart (SImode, tmp));
+    }
+  else
+    emit_insn (gen_riscv_abs_u32_rv32 (operands[0], operands[1]));
+  DONE;
+})
+
+(define_insn "riscv_abs_u32_rv32"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(abs:SI (match_operand:SI 1 "register_operand" "r")))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "abs\t%0,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+(define_insn "riscv_abs_u32_rv64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (abs:SI (match_operand:SI 1 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "absw\t%0,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+(define_insn "riscv_abs_u64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(abs:DI (match_operand:DI 1 "register_operand" "r")))]
+  "TARGET_RVP && TARGET_64BIT"
+  "abs\t%0,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])

@@ -292,6 +292,26 @@ CREATE_RVP_INTRINSIC (int32_t, asub_i32, int32_t, int32_t)
 CREATE_RVP_INTRINSIC (uint32_t, asubu_u32, uint32_t, uint32_t)
 CREATE_RVP_INTRINSIC (int32_t, ssh1sadd_i32, int32_t, int32_t)
 
+/* Scalar Absolute Value.  */
+CREATE_RVP_INTRINSIC (uint32_t, abs_u32, int32_t)
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC (uint64_t, abs_u64, int64_t)
+#endif
+
+/* Scalar Comparison.  */
+CREATE_RVP_INTRINSIC (uint32_t, mseq_i32_u32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, mseq_u32_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, mslt_u32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msgt_u32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msltu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msgtu_u32, uint32_t, uint32_t)
+
+/* Scalar Merge.  */
+CREATE_RVP_INTRINSIC (int32_t, merge_i32, int32_t, int32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, merge_u32, uint32_t, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int64_t, merge_i64, int64_t, int64_t, uint64_t)
+CREATE_RVP_INTRINSIC (uint64_t, merge_u64, uint64_t, uint64_t, uint64_t)
+
 /* Packed Splat.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
 CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)

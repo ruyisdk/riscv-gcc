@@ -62,6 +62,36 @@ RISCV_BUILTIN (asubu_u32, "asubu_u32", RISCV_BUILTIN_DIRECT,
 RISCV_BUILTIN (ssh1sadd_i32, "ssh1sadd_i32", RISCV_BUILTIN_DIRECT,
 	       RISCV_SI_FTYPE_SI_SI, simd),
 
+/* Scalar absolute value.  */
+RISCV_BUILTIN (abs_u32, "abs_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_SI, simd),
+RISCV_BUILTIN (abs_u64, "abs_u64", RISCV_BUILTIN_DIRECT,
+	       RISCV_UDI_FTYPE_DI, simd64),
+
+/* Scalar comparison.  */
+RISCV_BUILTIN (mseq_i32_u32, "mseq_i32_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (mseq_i32_u32, "mseq_u32_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+RISCV_BUILTIN (mslt_u32, "mslt_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (msgt_u32, "msgt_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (msltu_u32, "msltu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+RISCV_BUILTIN (msgtu_u32, "msgtu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+
+/* Scalar merge.  */
+RISCV_BUILTIN (pmerge_si, "merge_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI_USI, simd),
+RISCV_BUILTIN (pmerge_si, "merge_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI_USI, simd),
+RISCV_BUILTIN (merge_di, "merge_i64", RISCV_BUILTIN_DIRECT,
+	       RISCV_DI_FTYPE_DI_DI_UDI, simd),
+RISCV_BUILTIN (merge_di, "merge_u64", RISCV_BUILTIN_DIRECT,
+	       RISCV_UDI_FTYPE_UDI_UDI_UDI, simd),
+
 /* Packed Splat.  */
 RISCV_BUILTIN (pmv_s_u8x4, "pmv_s_u8x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4QI_FTYPE_UQI, simd),
