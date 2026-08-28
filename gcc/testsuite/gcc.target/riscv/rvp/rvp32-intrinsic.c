@@ -1211,7 +1211,8 @@ uint16x4_t test_pabdu_u16x4(uint16x4_t a, uint16x4_t b)
   return __riscv_pabdu_u16x4(a, b);
 }
 
-// TODO(difficult): Packed Absolute Difference Sum
+/* Packed Absolute Difference Sum is covered by
+   packed-absolute-difference-sum-rv32.c.  */
 
 /* Packed Saturating Absolute Value (32-bit) */
 

@@ -382,7 +382,22 @@ RISCV_BUILTIN (pabdu_u8x8, "pabdu_u8x8", RISCV_BUILTIN_DIRECT,
 RISCV_BUILTIN (pabdu_u16x4, "pabdu_u16x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4HI_FTYPE_UV4HI_UV4HI, simd),
 
-/* TODO(difficult): Packed Absolute Difference Sum  */
+/* Packed Absolute Difference Sum.  */
+RISCV_BUILTIN (pabdsumu_u8x4_u32, "pabdsumu_u8x4_u32",
+	       RISCV_BUILTIN_DIRECT, RISCV_USI_FTYPE_UV4QI_UV4QI, simd),
+RISCV_BUILTIN (pabdsumau_u8x4_u32, "pabdsumau_u8x4_u32",
+	       RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_UV4QI_UV4QI, simd),
+RISCV_BUILTIN (pabdsumu_u8x8_u32, "pabdsumu_u8x8_u32",
+	       RISCV_BUILTIN_DIRECT, RISCV_USI_FTYPE_UV8QI_UV8QI, simd),
+RISCV_BUILTIN (pabdsumu_u8x8_u64, "pabdsumu_u8x8_u64",
+	       RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UV8QI_UV8QI, simd),
+RISCV_BUILTIN (pabdsumau_u8x8_u32, "pabdsumau_u8x8_u32",
+	       RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_UV8QI_UV8QI, simd),
+RISCV_BUILTIN (pabdsumau_u8x8_u64, "pabdsumau_u8x8_u64",
+	       RISCV_BUILTIN_DIRECT,
+	       RISCV_UDI_FTYPE_UDI_UV8QI_UV8QI, simd),
 
 /* Packed Saturating Absolute Value.  */
 RISCV_BUILTIN (psabs_i8x4, "psabs_i8x4", RISCV_BUILTIN_DIRECT,

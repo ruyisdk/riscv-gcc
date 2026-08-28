@@ -507,7 +507,16 @@ CREATE_RVP_INTRINSIC (uint16x4_t, pabd_i16x4, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC (uint8x8_t, pabdu_u8x8, uint8x8_t, uint8x8_t)
 CREATE_RVP_INTRINSIC (uint16x4_t, pabdu_u16x4, uint16x4_t, uint16x4_t)
 
-/* TODO(difficult): Packed Absolute Difference Sum  */
+/* Packed Absolute Difference Sum.  */
+CREATE_RVP_INTRINSIC (uint32_t, pabdsumu_u8x4_u32, uint8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC (uint32_t, pabdsumau_u8x4_u32, uint32_t, uint8x4_t,
+		      uint8x4_t)
+CREATE_RVP_INTRINSIC (uint32_t, pabdsumu_u8x8_u32, uint8x8_t, uint8x8_t)
+CREATE_RVP_INTRINSIC (uint64_t, pabdsumu_u8x8_u64, uint8x8_t, uint8x8_t)
+CREATE_RVP_INTRINSIC (uint32_t, pabdsumau_u8x8_u32, uint32_t, uint8x8_t,
+		      uint8x8_t)
+CREATE_RVP_INTRINSIC (uint64_t, pabdsumau_u8x8_u64, uint64_t, uint8x8_t,
+		      uint8x8_t)
 
 /* Packed Saturating Absolute Value.  */
 CREATE_RVP_INTRINSIC (int8x4_t, psabs_i8x4, int8x4_t)

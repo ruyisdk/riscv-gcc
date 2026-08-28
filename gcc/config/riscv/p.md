@@ -84,8 +84,8 @@
   UNSPEC_SATI
   UNSPEC_USATI
   UNSPEC_PSRA
-  UNSPEC_PDIFSUMU
-  UNSPEC_PDIFSUMAU
+  UNSPEC_PABDSUMU
+  UNSPEC_PABDSUMAU
   UNSPEC_PMUL
   UNSPEC_PPACK
   UNSPEC_PPAIRE
@@ -1719,7 +1719,230 @@
   "pabdu.<SAT_SUFFIX>\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-; TODO(difficult): Packed Absolute Difference Sum
+;Packed Absolute Difference Sum
+;
+;The hardware reduction covers all byte lanes in an XLEN-wide GPR.  The
+;u8x4 RV64 expanders therefore clear the unused upper word before using the
+;native instruction.  Conversely, the u8x8 RV32 expanders reduce the two
+;words separately and combine the partial sums as required by the intrinsic
+;specification.
+(define_insn "riscv_pabdsumu_si_rv32"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_PABDSUMU))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pabdsumu.b\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
+(define_insn "riscv_pabdsumau_si_rv32"
+  [(set (match_operand:SI 0 "register_operand" "+r")
+	(unspec:SI [(match_dup 0)
+		    (match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_PABDSUMAU))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "pabdsumau.b\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
+(define_insn "riscv_pabdsumu_di_rv64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")
+		    (match_operand:DI 2 "register_operand" "r")]
+	 UNSPEC_PABDSUMU))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pabdsumu.b\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
+(define_insn "riscv_pabdsumau_di_rv64"
+  [(set (match_operand:DI 0 "register_operand" "+r")
+	(unspec:DI [(match_dup 0)
+		    (match_operand:DI 1 "register_operand" "r")
+		    (match_operand:DI 2 "register_operand" "r")]
+	 UNSPEC_PABDSUMAU))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pabdsumau.b\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
+(define_expand "riscv_pabdsumu_u8x4_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:PV4QI 1 "register_operand")
+		    (match_operand:PV4QI 2 "register_operand")]
+	 UNSPEC_PABDSUMU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx dest = gen_reg_rtx (DImode);
+      rtx r1 = gen_reg_rtx (DImode);
+      rtx r2 = gen_reg_rtx (DImode);
+      emit_insn (gen_zero_extendsidi2
+		 (r1, gen_lowpart (SImode, operands[1])));
+      emit_insn (gen_zero_extendsidi2
+		 (r2, gen_lowpart (SImode, operands[2])));
+      emit_insn (gen_riscv_pabdsumu_di_rv64 (dest, r1, r2));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    emit_insn (gen_riscv_pabdsumu_si_rv32
+	       (operands[0], gen_lowpart (SImode, operands[1]),
+		gen_lowpart (SImode, operands[2])));
+  DONE;
+})
+
+(define_expand "riscv_pabdsumau_u8x4_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:PV4QI 2 "register_operand")
+		    (match_operand:PV4QI 3 "register_operand")]
+	 UNSPEC_PABDSUMAU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx dest = gen_reg_rtx (DImode);
+      rtx r1 = gen_reg_rtx (DImode);
+      rtx r2 = gen_reg_rtx (DImode);
+      emit_insn (gen_zero_extendsidi2 (dest, operands[1]));
+      emit_insn (gen_zero_extendsidi2
+		 (r1, gen_lowpart (SImode, operands[2])));
+      emit_insn (gen_zero_extendsidi2
+		 (r2, gen_lowpart (SImode, operands[3])));
+      emit_insn (gen_riscv_pabdsumau_di_rv64 (dest, r1, r2));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pabdsumau_si_rv32
+		 (operands[0], gen_lowpart (SImode, operands[2]),
+		  gen_lowpart (SImode, operands[3])));
+    }
+  DONE;
+})
+
+(define_expand "riscv_pabdsumu_u8x8_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:PV8QI 1 "register_operand")
+		    (match_operand:PV8QI 2 "register_operand")]
+	 UNSPEC_PABDSUMU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx dest = gen_reg_rtx (DImode);
+      emit_insn (gen_riscv_pabdsumu_di_rv64
+		 (dest, gen_lowpart (DImode, operands[1]),
+		  gen_lowpart (DImode, operands[2])));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    {
+      emit_insn (gen_riscv_pabdsumu_si_rv32
+		 (operands[0], riscv_subword (operands[1], false),
+		  riscv_subword (operands[2], false)));
+      emit_insn (gen_riscv_pabdsumau_si_rv32
+		 (operands[0], riscv_subword (operands[1], true),
+		  riscv_subword (operands[2], true)));
+    }
+  DONE;
+})
+
+(define_expand "riscv_pabdsumu_u8x8_u64"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:PV8QI 1 "register_operand")
+		    (match_operand:PV8QI 2 "register_operand")]
+	 UNSPEC_PABDSUMU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pabdsumu_di_rv64
+	       (operands[0], gen_lowpart (DImode, operands[1]),
+		gen_lowpart (DImode, operands[2])));
+  else
+    {
+      rtx sum1 = gen_reg_rtx (SImode);
+      rtx sum2 = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_pabdsumu_si_rv32
+		 (sum1, riscv_subword (operands[1], false),
+		  riscv_subword (operands[2], false)));
+      emit_insn (gen_riscv_pabdsumu_si_rv32
+		 (sum2, riscv_subword (operands[1], true),
+		  riscv_subword (operands[2], true)));
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS (DImode, gen_rtx_ZERO_EXTEND (DImode, sum1),
+				gen_rtx_ZERO_EXTEND (DImode, sum2))));
+    }
+  DONE;
+})
+
+(define_expand "riscv_pabdsumau_u8x8_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:PV8QI 2 "register_operand")
+		    (match_operand:PV8QI 3 "register_operand")]
+	 UNSPEC_PABDSUMAU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx dest = gen_reg_rtx (DImode);
+      emit_insn (gen_zero_extendsidi2 (dest, operands[1]));
+      emit_insn (gen_riscv_pabdsumau_di_rv64
+		 (dest, gen_lowpart (DImode, operands[2]),
+		  gen_lowpart (DImode, operands[3])));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pabdsumau_si_rv32
+		 (operands[0], riscv_subword (operands[2], false),
+		  riscv_subword (operands[3], false)));
+      emit_insn (gen_riscv_pabdsumau_si_rv32
+		 (operands[0], riscv_subword (operands[2], true),
+		  riscv_subword (operands[3], true)));
+    }
+  DONE;
+})
+
+(define_expand "riscv_pabdsumau_u8x8_u64"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:PV8QI 2 "register_operand")
+		    (match_operand:PV8QI 3 "register_operand")]
+	 UNSPEC_PABDSUMAU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pabdsumau_di_rv64
+		 (operands[0], gen_lowpart (DImode, operands[2]),
+		  gen_lowpart (DImode, operands[3])));
+    }
+  else
+    {
+      rtx sum1 = gen_reg_rtx (SImode);
+      rtx sum2 = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_pabdsumu_si_rv32
+		 (sum1, riscv_subword (operands[2], false),
+		  riscv_subword (operands[3], false)));
+      emit_insn (gen_riscv_pabdsumu_si_rv32
+		 (sum2, riscv_subword (operands[2], true),
+		  riscv_subword (operands[3], true)));
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS
+		   (DImode,
+		    gen_rtx_PLUS (DImode,
+				  gen_rtx_ZERO_EXTEND (DImode, sum1),
+				  gen_rtx_ZERO_EXTEND (DImode, sum2)),
+		    operands[1])));
+    }
+  DONE;
+})
 
 ;Packed Saturating Absolute Value
 
