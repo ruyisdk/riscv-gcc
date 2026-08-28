@@ -281,6 +281,17 @@ CREATE_RVP_INTRINSIC(uint64_t, unzip8hp_64, uint64_t, uint64_t)
 CREATE_RVP_INTRINSIC(uint64_t, unzip16hp_64, uint64_t, uint64_t)
 #endif
 
+/* Scalar Saturating and Averaging Arithmetic.  */
+CREATE_RVP_INTRINSIC (int32_t, sadd_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, saddu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, ssub_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, ssubu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, aadd_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, aaddu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, asub_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, asubu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, ssh1sadd_i32, int32_t, int32_t)
+
 /* Packed Splat.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
 CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)

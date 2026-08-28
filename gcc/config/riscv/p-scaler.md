@@ -404,3 +404,48 @@
   "TARGET_RVP && TARGET_64BIT"
   "unzip16hp\t%0,%1,%2"
   [(set_attr "type" "simd")])
+
+;; Scalar saturating and averaging arithmetic.  RV64 uses the low word of
+;; the corresponding packed instruction.  Describing the result in SImode
+;; leaves the upper word unspecified until normal ABI extension is needed.
+
+(define_int_iterator RVP_SCALAR_BINARY
+  [UNSPEC_PSADD UNSPEC_PSADDU UNSPEC_PSSUB UNSPEC_PSSUBU
+   UNSPEC_PAADD UNSPEC_PAADDU UNSPEC_PASUB UNSPEC_PASUBU
+   UNSPEC_PSSH1SADD])
+
+(define_int_attr rvp_scalar_builtin
+  [(UNSPEC_PSADD "sadd_i32")
+   (UNSPEC_PSADDU "saddu_u32")
+   (UNSPEC_PSSUB "ssub_i32")
+   (UNSPEC_PSSUBU "ssubu_u32")
+   (UNSPEC_PAADD "aadd_i32")
+   (UNSPEC_PAADDU "aaddu_u32")
+   (UNSPEC_PASUB "asub_i32")
+   (UNSPEC_PASUBU "asubu_u32")
+   (UNSPEC_PSSH1SADD "ssh1sadd_i32")])
+
+(define_int_attr rvp_scalar_insn
+  [(UNSPEC_PSADD "sadd")
+   (UNSPEC_PSADDU "saddu")
+   (UNSPEC_PSSUB "ssub")
+   (UNSPEC_PSSUBU "ssubu")
+   (UNSPEC_PAADD "aadd")
+   (UNSPEC_PAADDU "aaddu")
+   (UNSPEC_PASUB "asub")
+   (UNSPEC_PASUBU "asubu")
+   (UNSPEC_PSSH1SADD "ssh1sadd")])
+
+(define_insn "riscv_<rvp_scalar_builtin>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 RVP_SCALAR_BINARY))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    return "p<rvp_scalar_insn>.w\t%0,%1,%2";
+  return "<rvp_scalar_insn>\t%0,%1,%2";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])

@@ -42,6 +42,26 @@ RISCV_BUILTIN (unzip16p_64_p,     "unzip16p_64",  RISCV_BUILTIN_DIRECT, RISCV_UD
 RISCV_BUILTIN (unzip8hp_64_p,     "unzip8hp_64",  RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI,     simd64),
 RISCV_BUILTIN (unzip16hp_64_p,     "unzip16hp_64",  RISCV_BUILTIN_DIRECT, RISCV_UDI_FTYPE_UDI_UDI,     simd64),
 
+/* Scalar saturating and averaging arithmetic.  */
+RISCV_BUILTIN (sadd_i32, "sadd_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (saddu_u32, "saddu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+RISCV_BUILTIN (ssub_i32, "ssub_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (ssubu_u32, "ssubu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+RISCV_BUILTIN (aadd_i32, "aadd_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (aaddu_u32, "aaddu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+RISCV_BUILTIN (asub_i32, "asub_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI, simd),
+RISCV_BUILTIN (asubu_u32, "asubu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI, simd),
+RISCV_BUILTIN (ssh1sadd_i32, "ssh1sadd_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI, simd),
+
 /* Packed Splat.  */
 RISCV_BUILTIN (pmv_s_u8x4, "pmv_s_u8x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4QI_FTYPE_UQI, simd),
