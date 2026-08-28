@@ -339,6 +339,16 @@ CREATE_RVP_INTRINSIC (int32_t, nsrar_i32, int64_t, unsigned)
 CREATE_RVP_INTRINSIC (int32_t, nclip_i32, int64_t, unsigned)
 CREATE_RVP_INTRINSIC (int32_t, nclipr_i32, int64_t, unsigned)
 
+/* Scalar multiply high and Q-format multiplication.  */
+CREATE_RVP_INTRINSIC (int32_t, mulh_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (int32_t, mulhr_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, mulhu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, mulhru_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, mulhsu_i32, int32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, mulhrsu_i32, int32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int32_t, mulq_i32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (int32_t, mulqr_i32, int32_t, int32_t)
+
 /* Packed Splat.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
 CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)

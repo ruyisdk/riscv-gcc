@@ -17,6 +17,80 @@
 ;; along with GCC; see the file COPYING3.  If not see
 ;; <http://www.gnu.org/licenses/>.
 
+;Scalar Multiply High and Q-format Multiplication
+;
+;RV32 has scalar instructions.  RV64 uses lane 0 of the corresponding packed
+;.w instruction.  Widen the inputs and result to a full GPR on RV64 so that the
+;RTL accounts for the packed instruction writing both 32-bit lanes.
+(define_int_iterator RVP_SCALAR_MUL
+  [UNSPEC_PMULH UNSPEC_PMULHR UNSPEC_PMULHU UNSPEC_PMULHRU
+   UNSPEC_PMULHSU UNSPEC_PMULHRSU UNSPEC_PMULQ UNSPEC_PMULQR])
+
+(define_int_attr rvp_scalar_mul_builtin
+  [(UNSPEC_PMULH "mulh_i32")
+   (UNSPEC_PMULHR "mulhr_i32")
+   (UNSPEC_PMULHU "mulhu_u32")
+   (UNSPEC_PMULHRU "mulhru_u32")
+   (UNSPEC_PMULHSU "mulhsu_i32")
+   (UNSPEC_PMULHRSU "mulhrsu_i32")
+   (UNSPEC_PMULQ "mulq_i32")
+   (UNSPEC_PMULQR "mulqr_i32")])
+
+(define_int_attr rvp_scalar_mul_rv32
+  [(UNSPEC_PMULH "mulh")
+   (UNSPEC_PMULHR "mulhr")
+   (UNSPEC_PMULHU "mulhu")
+   (UNSPEC_PMULHRU "mulhru")
+   (UNSPEC_PMULHSU "mulhsu")
+   (UNSPEC_PMULHRSU "mulhrsu")
+   (UNSPEC_PMULQ "mulq")
+   (UNSPEC_PMULQR "mulqr")])
+
+(define_int_attr rvp_scalar_mul_packed
+  [(UNSPEC_PMULH "pmulh_i32x2")
+   (UNSPEC_PMULHR "pmulhr_i32x2")
+   (UNSPEC_PMULHU "pmulhu_u32x2")
+   (UNSPEC_PMULHRU "pmulhru_u32x2")
+   (UNSPEC_PMULHSU "pmulhsu_i32x2")
+   (UNSPEC_PMULHRSU "pmulhrsu_i32x2")
+   (UNSPEC_PMULQ "pmulq_i32x2")
+   (UNSPEC_PMULQR "pmulqr_i32x2")])
+
+(define_expand "riscv_<rvp_scalar_mul_builtin>"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "register_operand")]
+	 RVP_SCALAR_MUL))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx dest = gen_reg_rtx (DImode);
+      rtx r1 = gen_reg_rtx (DImode);
+      rtx r2 = gen_reg_rtx (DImode);
+      emit_insn (gen_zero_extendsidi2 (r1, operands[1]));
+      emit_insn (gen_zero_extendsidi2 (r2, operands[2]));
+      emit_insn (gen_riscv_<rvp_scalar_mul_packed>
+		 (gen_lowpart (PV2SImode, dest),
+		  gen_lowpart (PV2SImode, r1),
+		  gen_lowpart (PV2SImode, r2)));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    emit_insn (gen_riscv_<rvp_scalar_mul_builtin>_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_<rvp_scalar_mul_builtin>_rv32"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 RVP_SCALAR_MUL))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "<rvp_scalar_mul_rv32>\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
 ;Packed Multiply High
 ;
 ;pmulh* compute the high half of the product of corresponding lanes:
