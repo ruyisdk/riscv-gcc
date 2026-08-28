@@ -92,6 +92,16 @@ RISCV_BUILTIN (merge_di, "merge_i64", RISCV_BUILTIN_DIRECT,
 RISCV_BUILTIN (merge_di, "merge_u64", RISCV_BUILTIN_DIRECT,
 	       RISCV_UDI_FTYPE_UDI_UDI_UDI, simd),
 
+/* Scalar saturation.  */
+RISCV_BUILTIN (sati_i32, "sati_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_USI, simd),
+RISCV_BUILTIN (usati_u32, "usati_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_SI_USI, simd),
+RISCV_BUILTIN (sati_i64, "sati_i64", RISCV_BUILTIN_DIRECT,
+	       RISCV_DI_FTYPE_DI_USI, simd64),
+RISCV_BUILTIN (usati_u64, "usati_u64", RISCV_BUILTIN_DIRECT,
+	       RISCV_UDI_FTYPE_DI_USI, simd64),
+
 /* Packed Splat.  */
 RISCV_BUILTIN (pmv_s_u8x4, "pmv_s_u8x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4QI_FTYPE_UQI, simd),

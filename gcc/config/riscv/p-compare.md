@@ -1027,11 +1027,62 @@
   "ppaire.h\t%0,%1,x0"
   [(set_attr "type" "simd")])
 
-;Packed Saturation
+;; Scalar saturation.
+
+(define_insn "riscv_sati_i32"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "sati_width5_operand" "Ws5")]
+	 UNSPEC_SATI))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    return "psati.w\t%0,%1,%2";
+  return "sati\t%0,%1,%2";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+(define_insn "riscv_usati_u32"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "const_int5_operand" "u5")]
+	 UNSPEC_USATI))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    return "pusati.w\t%0,%1,%2";
+  return "usati\t%0,%1,%2";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+(define_insn "riscv_sati_i64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")
+		    (match_operand:SI 2 "sati_width6_operand" "Ws6")]
+	 UNSPEC_SATI))]
+  "TARGET_RVP && TARGET_64BIT"
+  "sati\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_insn "riscv_usati_u64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")
+		    (match_operand:SI 2 "const_int6_operand" "u6")]
+	 UNSPEC_USATI))]
+  "TARGET_RVP && TARGET_64BIT"
+  "usati\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+;; Packed saturation.
+
 (define_insn "riscv_pusati_u16x2"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u4")]
+                      (match_operand:SI 2 "const_int4_operand" "u4")]
          UNSPEC_PUSATI))]
   "TARGET_RVP"
   "pusati.h\t%0,%1,%2"
@@ -1040,7 +1091,7 @@
 (define_insn "riscv_psati_i16x2"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (unspec:PV2HI [(match_operand:PV2HI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u4")]
+                      (match_operand:SI 2 "sati_width4_operand" "Ws4")]
          UNSPEC_PSATI))]
   "TARGET_RVP"
   "psati.h\t%0,%1,%2"
@@ -1049,7 +1100,7 @@
 (define_expand "riscv_pusati_u16x4"
   [(set (match_operand:PV4HI 0 "register_operand")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
-                      (match_operand:SI 2 "const_int_operand")]
+                      (match_operand:SI 2 "const_int4_operand")]
          UNSPEC_PUSATI))]
   "TARGET_RVP"
 {
@@ -1063,7 +1114,7 @@
 (define_insn "riscv_pusati_u16x4_rv32"
   [(set (match_operand:PV4HI 0 "register_operand" "=R")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u4")]
+                      (match_operand:SI 2 "const_int4_operand" "u4")]
          UNSPEC_PUSATI))]
   "TARGET_RVP && !TARGET_64BIT"
   "pusati.dh\t%0,%1,%2"
@@ -1072,7 +1123,7 @@
 (define_insn "riscv_pusati_u16x4_rv64"
   [(set (match_operand:PV4HI 0 "register_operand" "=r")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u4")]
+                      (match_operand:SI 2 "const_int4_operand" "u4")]
          UNSPEC_PUSATI))]
   "TARGET_RVP && TARGET_64BIT"
   "pusati.h\t%0,%1,%2"
@@ -1081,7 +1132,7 @@
 (define_expand "riscv_pusati_u32x2"
   [(set (match_operand:PV2SI 0 "register_operand")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
-                      (match_operand:SI 2 "const_int_operand")]
+                      (match_operand:SI 2 "const_int5_operand")]
          UNSPEC_PUSATI))]
   "TARGET_RVP"
 {
@@ -1095,7 +1146,7 @@
 (define_insn "riscv_pusati_u32x2_rv32"
   [(set (match_operand:PV2SI 0 "register_operand" "=R")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u5")]
+                      (match_operand:SI 2 "const_int5_operand" "u5")]
          UNSPEC_PUSATI))]
   "TARGET_RVP && !TARGET_64BIT"
   "pusati.dw\t%0,%1,%2"
@@ -1104,7 +1155,7 @@
 (define_insn "riscv_pusati_u32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u5")]
+                      (match_operand:SI 2 "const_int5_operand" "u5")]
          UNSPEC_PUSATI))]
   "TARGET_RVP && TARGET_64BIT"
   "pusati.w\t%0,%1,%2"
@@ -1113,7 +1164,7 @@
 (define_expand "riscv_psati_i16x4"
   [(set (match_operand:PV4HI 0 "register_operand")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand")
-                      (match_operand:SI 2 "const_int_operand")]
+                      (match_operand:SI 2 "sati_width4_operand")]
          UNSPEC_PSATI))]
   "TARGET_RVP"
 {
@@ -1127,7 +1178,7 @@
 (define_insn "riscv_psati_i16x4_rv32"
   [(set (match_operand:PV4HI 0 "register_operand" "=R")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u4")]
+                      (match_operand:SI 2 "sati_width4_operand" "Ws4")]
          UNSPEC_PSATI))]
   "TARGET_RVP && !TARGET_64BIT"
   "psati.dh\t%0,%1,%2"
@@ -1136,7 +1187,7 @@
 (define_insn "riscv_psati_i16x4_rv64"
   [(set (match_operand:PV4HI 0 "register_operand" "=r")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u4")]
+                      (match_operand:SI 2 "sati_width4_operand" "Ws4")]
          UNSPEC_PSATI))]
   "TARGET_RVP && TARGET_64BIT"
   "psati.h\t%0,%1,%2"
@@ -1145,7 +1196,7 @@
 (define_expand "riscv_psati_i32x2"
   [(set (match_operand:PV2SI 0 "register_operand")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand")
-                      (match_operand:SI 2 "const_int_operand")]
+                      (match_operand:SI 2 "sati_width5_operand")]
          UNSPEC_PSATI))]
   "TARGET_RVP"
 {
@@ -1159,7 +1210,7 @@
 (define_insn "riscv_psati_i32x2_rv32"
   [(set (match_operand:PV2SI 0 "register_operand" "=R")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u5")]
+                      (match_operand:SI 2 "sati_width5_operand" "Ws5")]
          UNSPEC_PSATI))]
   "TARGET_RVP && !TARGET_64BIT"
   "psati.dw\t%0,%1,%2"
@@ -1168,7 +1219,7 @@
 (define_insn "riscv_psati_i32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r")
-                      (match_operand:SI 2 "const_int_operand" "u5")]
+                      (match_operand:SI 2 "sati_width5_operand" "Ws5")]
          UNSPEC_PSATI))]
   "TARGET_RVP && TARGET_64BIT"
   "psati.w\t%0,%1,%2"

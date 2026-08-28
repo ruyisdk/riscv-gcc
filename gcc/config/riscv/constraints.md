@@ -430,6 +430,26 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, 0, 31)")))
 
+(define_constraint "u6"
+  "A 6-bit unsigned immediate (0-63)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 0, 63)")))
+
+(define_constraint "Ws4"
+  "A signed saturation width encoded in 4 bits (1-16)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 16)")))
+
+(define_constraint "Ws5"
+  "A signed saturation width encoded in 5 bits (1-32)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 32)")))
+
+(define_constraint "Ws6"
+  "A signed saturation width encoded in 6 bits (1-64)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, 1, 64)")))
+
 (define_constraint "w5"
   "A 5-bit negative immediate (-31 to -1)."
   (and (match_code "const_int")

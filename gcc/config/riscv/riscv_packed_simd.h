@@ -312,6 +312,14 @@ CREATE_RVP_INTRINSIC (uint32_t, merge_u32, uint32_t, uint32_t, uint32_t)
 CREATE_RVP_INTRINSIC (int64_t, merge_i64, int64_t, int64_t, uint64_t)
 CREATE_RVP_INTRINSIC (uint64_t, merge_u64, uint64_t, uint64_t, uint64_t)
 
+/* Scalar saturation.  */
+CREATE_RVP_INTRINSIC (int32_t, sati_i32, int32_t, const unsigned)
+CREATE_RVP_INTRINSIC (uint32_t, usati_u32, int32_t, const unsigned)
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC (int64_t, sati_i64, int64_t, const unsigned)
+CREATE_RVP_INTRINSIC (uint64_t, usati_u64, int64_t, const unsigned)
+#endif
+
 /* Packed Splat.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
 CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)
