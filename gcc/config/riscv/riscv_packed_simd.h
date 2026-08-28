@@ -332,6 +332,13 @@ CREATE_RVP_INTRINSIC (uint64_t, shl_u64, uint64_t, int)
 CREATE_RVP_INTRINSIC (uint64_t, shlr_u64, uint64_t, int)
 #endif
 
+/* Scalar narrowing clips.  */
+CREATE_RVP_INTRINSIC (uint32_t, nclipu_u32, uint64_t, unsigned)
+CREATE_RVP_INTRINSIC (uint32_t, nclipru_u32, uint64_t, unsigned)
+CREATE_RVP_INTRINSIC (int32_t, nsrar_i32, int64_t, unsigned)
+CREATE_RVP_INTRINSIC (int32_t, nclip_i32, int64_t, unsigned)
+CREATE_RVP_INTRINSIC (int32_t, nclipr_i32, int64_t, unsigned)
+
 /* Packed Splat.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
 CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)

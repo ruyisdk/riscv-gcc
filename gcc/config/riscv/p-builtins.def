@@ -120,6 +120,18 @@ RISCV_BUILTIN (shl_u64, "shl_u64", RISCV_BUILTIN_DIRECT,
 RISCV_BUILTIN (shlr_u64, "shlr_u64", RISCV_BUILTIN_DIRECT,
 	       RISCV_UDI_FTYPE_UDI_SI, simd64),
 
+/* Scalar narrowing clips.  */
+RISCV_BUILTIN (nclipu_u32, "nclipu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_UDI_USI, simd),
+RISCV_BUILTIN (nclipru_u32, "nclipru_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_UDI_USI, simd),
+RISCV_BUILTIN (nsrar_i32, "nsrar_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_DI_USI, simd),
+RISCV_BUILTIN (nclip_i32, "nclip_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_DI_USI, simd),
+RISCV_BUILTIN (nclipr_i32, "nclipr_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_DI_USI, simd),
+
 /* Packed Splat.  */
 RISCV_BUILTIN (pmv_s_u8x4, "pmv_s_u8x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4QI_FTYPE_UQI, simd),

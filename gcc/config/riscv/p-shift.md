@@ -787,6 +787,156 @@
     operands[2] = force_reg (SImode, operands[2]);
 })
 
+;; Scalar narrowing clips.  The RV32 instructions consume a register pair.
+;; RV64 shifts the full-width source first and then clips the low result with
+;; PNCLIPP.W or PNCLIPUP.W.
+
+(define_int_iterator RVP_SCALAR_NCLIP
+  [UNSPEC_NCLIPU UNSPEC_NCLIPRU UNSPEC_NCLIP UNSPEC_NCLIPR])
+
+(define_int_iterator RVP_SCALAR_NCLIP_NOROUND
+  [UNSPEC_NCLIPU UNSPEC_NCLIP])
+
+(define_int_iterator RVP_SCALAR_NCLIP_ROUND
+  [UNSPEC_NCLIPRU UNSPEC_NCLIPR])
+
+(define_int_attr rvp_scalar_nclip_builtin
+  [(UNSPEC_NCLIPU "nclipu_u32")
+   (UNSPEC_NCLIPRU "nclipru_u32")
+   (UNSPEC_NCLIP "nclip_i32")
+   (UNSPEC_NCLIPR "nclipr_i32")])
+
+(define_int_attr rvp_scalar_nclip_imm
+  [(UNSPEC_NCLIPU "nclipiu")
+   (UNSPEC_NCLIPRU "nclipriu")
+   (UNSPEC_NCLIP "nclipi")
+   (UNSPEC_NCLIPR "nclipri")])
+
+(define_int_attr rvp_scalar_nclip_reg
+  [(UNSPEC_NCLIPU "nclipu")
+   (UNSPEC_NCLIPRU "nclipru")
+   (UNSPEC_NCLIP "nclip")
+   (UNSPEC_NCLIPR "nclipr")])
+
+(define_int_attr rvp_scalar_nclip_shift
+  [(UNSPEC_NCLIPU "srl")
+   (UNSPEC_NCLIP "sra")])
+
+(define_int_attr rvp_scalar_nclip_round_shift
+  [(UNSPEC_NCLIPRU "shlr")
+   (UNSPEC_NCLIPR "shar")])
+
+(define_int_attr rvp_scalar_nclip_pair
+  [(UNSPEC_NCLIPU "pnclipup.w")
+   (UNSPEC_NCLIPRU "pnclipup.w")
+   (UNSPEC_NCLIP "pnclipp.w")
+   (UNSPEC_NCLIPR "pnclipp.w")])
+
+(define_expand "riscv_<rvp_scalar_nclip_builtin>"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 RVP_SCALAR_NCLIP))]
+  "TARGET_RVP"
+{
+  if (!CONST_INT_P (operands[2])
+      || !IN_RANGE (INTVAL (operands[2]), 0, 63))
+    operands[2] = force_reg (SImode, operands[2]);
+
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_<rvp_scalar_nclip_builtin>_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    emit_insn (gen_riscv_<rvp_scalar_nclip_builtin>_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_<rvp_scalar_nclip_builtin>_rv32"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(unspec:SI [(match_operand:DI 1 "register_operand" "R,R")
+		    (match_operand:SI 2 "arith_operand" "u6,r")]
+	 RVP_SCALAR_NCLIP))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "@
+   <rvp_scalar_nclip_imm>\t%0,%1,%2
+   <rvp_scalar_nclip_reg>\t%0,%1,%2"
+  [(set_attr "type" "simd,simd")
+   (set_attr "mode" "SI")])
+
+(define_insn "riscv_<rvp_scalar_nclip_builtin>_rv64"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(unspec:SI [(match_operand:DI 1 "register_operand" "r,r")
+		    (match_operand:SI 2 "arith_operand" "u6,r")]
+	 RVP_SCALAR_NCLIP_NOROUND))
+   (clobber (match_scratch:DI 3 "=&r,&r"))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   <rvp_scalar_nclip_shift>i\t%3,%1,%2\;<rvp_scalar_nclip_pair>\t%0,%3,zero
+   <rvp_scalar_nclip_shift>\t%3,%1,%2\;<rvp_scalar_nclip_pair>\t%0,%3,zero"
+  [(set_attr "type" "simd,simd")
+   (set_attr "mode" "DI")])
+
+(define_insn "riscv_<rvp_scalar_nclip_builtin>_rv64"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(unspec:SI [(match_operand:DI 1 "register_operand" "r,r")
+		    (match_operand:SI 2 "arith_operand" "u6,r")]
+	 RVP_SCALAR_NCLIP_ROUND))
+   (clobber (match_scratch:DI 3 "=&r,&r"))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   li\t%3,%n2\;<rvp_scalar_nclip_round_shift>\t%3,%1,%3\;<rvp_scalar_nclip_pair>\t%0,%3,zero
+   andi\t%3,%2,63\;neg\t%3,%3\;<rvp_scalar_nclip_round_shift>\t%3,%1,%3\;<rvp_scalar_nclip_pair>\t%0,%3,zero"
+  [(set_attr "type" "simd,simd")
+   (set_attr "mode" "DI")])
+
+;; Rounded arithmetic narrowing without clipping.
+
+(define_expand "riscv_nsrar_i32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_NSRAR))]
+  "TARGET_RVP"
+{
+  if (!CONST_INT_P (operands[2])
+      || !IN_RANGE (INTVAL (operands[2]), 0, 63))
+    operands[2] = force_reg (SImode, operands[2]);
+
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_nsrar_i32_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    emit_insn (gen_riscv_nsrar_i32_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_nsrar_i32_rv32"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(unspec:SI [(match_operand:DI 1 "register_operand" "R,R")
+		    (match_operand:SI 2 "arith_operand" "u6,r")]
+	 UNSPEC_NSRAR))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "@
+   nsrari\t%0,%1,%2
+   nsrar\t%0,%1,%2"
+  [(set_attr "type" "simd,simd")
+   (set_attr "mode" "SI")])
+
+(define_insn "riscv_nsrar_i32_rv64"
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(unspec:SI [(match_operand:DI 1 "register_operand" "r,r")
+		    (match_operand:SI 2 "arith_operand" "u6,r")]
+	 UNSPEC_NSRAR))
+   (clobber (match_scratch:DI 3 "=&r,&r"))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   srari\t%0,%1,%2
+   andi\t%3,%2,63\;neg\t%3,%3\;shar\t%0,%1,%3"
+  [(set_attr "type" "simd,simd")
+   (set_attr "mode" "DI")])
+
 ;; Packed saturating and rounding shifts.
 ;;
 ; pssha/psshar: signed saturating (rounding) arithmetic shift, expanded via
