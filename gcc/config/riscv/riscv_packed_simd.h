@@ -867,7 +867,17 @@ CREATE_RVP_INTRINSIC (int16x2_t, pnclipr_s_i16x2, int32x2_t, unsigned)
 
 /* Packed Narrowing Clip Pair (TODO).  */
 
-/* Packed Reverse (TODO).  */
+/* Packed Reverse.  */
+CREATE_RVP_INTRINSIC (int8x4_t, prev_i8x4, int8x4_t)
+CREATE_RVP_INTRINSIC (uint8x4_t, prev_u8x4, uint8x4_t)
+CREATE_RVP_INTRINSIC (int16x2_t, prev_i16x2, int16x2_t)
+CREATE_RVP_INTRINSIC (uint16x2_t, prev_u16x2, uint16x2_t)
+CREATE_RVP_INTRINSIC (int8x8_t, prev_i8x8, int8x8_t)
+CREATE_RVP_INTRINSIC (uint8x8_t, prev_u8x8, uint8x8_t)
+CREATE_RVP_INTRINSIC (int16x4_t, prev_i16x4, int16x4_t)
+CREATE_RVP_INTRINSIC (uint16x4_t, prev_u16x4, uint16x4_t)
+CREATE_RVP_INTRINSIC (int32x2_t, prev_i32x2, int32x2_t)
+CREATE_RVP_INTRINSIC (uint32x2_t, prev_u32x2, uint32x2_t)
 
 /* Packed Multiply High.  */
 CREATE_RVP_INTRINSIC (int16x2_t, pmulh_i16x2, int16x2_t, int16x2_t)

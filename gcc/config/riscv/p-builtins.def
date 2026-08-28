@@ -1030,7 +1030,27 @@ RISCV_BUILTIN (pnclipr_s_i16x2, "pnclipr_s_i16x2", RISCV_BUILTIN_DIRECT,
 
 /* Packed Narrowing Clip Pair (TODO).  */
 
-/* Packed Reverse (TODO).  */
+/* Packed Reverse.  */
+RISCV_BUILTIN (prev_i8x4, "prev_i8x4", RISCV_BUILTIN_DIRECT,
+	       RISCV_V4QI_FTYPE_V4QI, simd),
+RISCV_BUILTIN (prev_u8x4, "prev_u8x4", RISCV_BUILTIN_DIRECT,
+	       RISCV_UV4QI_FTYPE_UV4QI, simd),
+RISCV_BUILTIN (prev_i16x2, "prev_i16x2", RISCV_BUILTIN_DIRECT,
+	       RISCV_V2HI_FTYPE_V2HI, simd),
+RISCV_BUILTIN (prev_u16x2, "prev_u16x2", RISCV_BUILTIN_DIRECT,
+	       RISCV_UV2HI_FTYPE_UV2HI, simd),
+RISCV_BUILTIN (prev_i8x8, "prev_i8x8", RISCV_BUILTIN_DIRECT,
+	       RISCV_V8QI_FTYPE_V8QI, simd),
+RISCV_BUILTIN (prev_u8x8, "prev_u8x8", RISCV_BUILTIN_DIRECT,
+	       RISCV_UV8QI_FTYPE_UV8QI, simd),
+RISCV_BUILTIN (prev_i16x4, "prev_i16x4", RISCV_BUILTIN_DIRECT,
+	       RISCV_V4HI_FTYPE_V4HI, simd),
+RISCV_BUILTIN (prev_u16x4, "prev_u16x4", RISCV_BUILTIN_DIRECT,
+	       RISCV_UV4HI_FTYPE_UV4HI, simd),
+RISCV_BUILTIN (prev_i32x2, "prev_i32x2", RISCV_BUILTIN_DIRECT,
+	       RISCV_V2SI_FTYPE_V2SI, simd),
+RISCV_BUILTIN (prev_u32x2, "prev_u32x2", RISCV_BUILTIN_DIRECT,
+	       RISCV_UV2SI_FTYPE_UV2SI, simd),
 
 /* Packed Multiply High.  */
 RISCV_BUILTIN (pmulh_i16x2, "pmulh_i16x2", RISCV_BUILTIN_DIRECT,

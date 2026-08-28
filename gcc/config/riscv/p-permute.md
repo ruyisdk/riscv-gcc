@@ -570,6 +570,194 @@
   "<rvp_pair_rv64_insn>\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
+;Packed Reverse
+;
+;RV32 stores a 64-bit packed vector in a register pair.  Reversing the full
+;vector therefore also exchanges the two registers, in addition to reversing
+;the elements within each register.
+
+(define_mode_iterator RVP_PREV
+  [PV4QI PV2HI PV8QI PV4HI PV2SI])
+(define_mode_attr rvp_prev_suffix
+  [(PV4QI "8x4")
+   (PV2HI "16x2")
+   (PV8QI "8x8")
+   (PV4HI "16x4")
+   (PV2SI "32x2")])
+(define_mode_attr rvp_prev_unspec
+  [(PV4QI "UNSPEC_PREV8")
+   (PV2HI "UNSPEC_PREV16")
+   (PV8QI "UNSPEC_PREV8")
+   (PV4HI "UNSPEC_PREV16")
+   (PV2SI "UNSPEC_PREV32")])
+
+(define_expand "riscv_prev_i<rvp_prev_suffix>"
+  [(set (match_operand:RVP_PREV 0 "register_operand")
+	(unspec:RVP_PREV
+	  [(match_operand:RVP_PREV 1 "register_operand")]
+	  <rvp_prev_unspec>))]
+  "TARGET_RVP"
+{
+  emit_insn (gen_riscv_prev_<rvp_prev_suffix> (operands[0], operands[1]));
+  DONE;
+})
+
+(define_expand "riscv_prev_u<rvp_prev_suffix>"
+  [(set (match_operand:RVP_PREV 0 "register_operand")
+	(unspec:RVP_PREV
+	  [(match_operand:RVP_PREV 1 "register_operand")]
+	  <rvp_prev_unspec>))]
+  "TARGET_RVP"
+{
+  emit_insn (gen_riscv_prev_<rvp_prev_suffix> (operands[0], operands[1]));
+  DONE;
+})
+
+(define_expand "riscv_prev_8x4"
+  [(set (match_operand:PV4QI 0 "register_operand")
+	(unspec:PV4QI
+	  [(match_operand:PV4QI 1 "register_operand")] UNSPEC_PREV8))]
+  "TARGET_RVP"
+{
+  rtx out = gen_lowpart (SImode, operands[0]);
+  rtx in = gen_lowpart (SImode, operands[1]);
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_prev_8x4_rv64 (out, in));
+  else
+    emit_insn (gen_riscv_prev_8x4_rv32 (out, in));
+  DONE;
+})
+
+(define_insn "riscv_prev_8x4_rv32"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")]
+	 UNSPEC_PREV8))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "rev8\t%0,%1"
+  [(set_attr "type" "simd")])
+
+(define_insn "riscv_prev_8x4_rv64"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")]
+	 UNSPEC_PREV8))]
+  "TARGET_RVP && TARGET_64BIT"
+  "rev8\t%0,%1\;srli\t%0,%0,32"
+  [(set_attr "type" "simd")
+   (set_attr "length" "8")])
+
+(define_expand "riscv_prev_16x2"
+  [(set (match_operand:PV2HI 0 "register_operand")
+	(unspec:PV2HI
+	  [(match_operand:PV2HI 1 "register_operand")] UNSPEC_PREV16))]
+  "TARGET_RVP"
+{
+  emit_insn (gen_riscv_prev_16x2_insn
+	     (gen_lowpart (SImode, operands[0]),
+	      gen_lowpart (SImode, operands[1])));
+  DONE;
+})
+
+(define_insn "riscv_prev_16x2_insn"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")]
+	 UNSPEC_PREV16))]
+  "TARGET_RVP"
+  "ppairoe.h\t%0,%1,%1"
+  [(set_attr "type" "simd")])
+
+(define_expand "riscv_prev_8x8"
+  [(set (match_operand:PV8QI 0 "register_operand")
+	(unspec:PV8QI
+	  [(match_operand:PV8QI 1 "register_operand")] UNSPEC_PREV8))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_prev_8x8_rv64
+	       (gen_lowpart (DImode, operands[0]),
+		gen_lowpart (DImode, operands[1])));
+  else
+    {
+      machine_mode mode = GET_MODE (operands[0]);
+      rtx out_lo = operand_subword (operands[0], 0, 1, mode);
+      rtx out_hi = operand_subword (operands[0], 1, 1, mode);
+      rtx in_lo = operand_subword_force (operands[1], 0, mode);
+      rtx in_hi = operand_subword_force (operands[1], 1, mode);
+      emit_insn (gen_riscv_prev_8x4_rv32 (out_lo, in_hi));
+      emit_insn (gen_riscv_prev_8x4_rv32 (out_hi, in_lo));
+    }
+  DONE;
+})
+
+(define_insn "riscv_prev_8x8_rv64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")]
+	 UNSPEC_PREV8))]
+  "TARGET_RVP && TARGET_64BIT"
+  "rev8\t%0,%1"
+  [(set_attr "type" "simd")])
+
+(define_expand "riscv_prev_16x4"
+  [(set (match_operand:PV4HI 0 "register_operand")
+	(unspec:PV4HI
+	  [(match_operand:PV4HI 1 "register_operand")] UNSPEC_PREV16))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_prev_16x4_rv64
+	       (gen_lowpart (DImode, operands[0]),
+		gen_lowpart (DImode, operands[1])));
+  else
+    {
+      machine_mode mode = GET_MODE (operands[0]);
+      rtx out_lo = operand_subword (operands[0], 0, 1, mode);
+      rtx out_hi = operand_subword (operands[0], 1, 1, mode);
+      rtx in_lo = operand_subword_force (operands[1], 0, mode);
+      rtx in_hi = operand_subword_force (operands[1], 1, mode);
+      emit_insn (gen_riscv_prev_16x2_insn (out_lo, in_hi));
+      emit_insn (gen_riscv_prev_16x2_insn (out_hi, in_lo));
+    }
+  DONE;
+})
+
+(define_insn "riscv_prev_16x4_rv64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")]
+	 UNSPEC_PREV16))]
+  "TARGET_RVP && TARGET_64BIT"
+  "rev16\t%0,%1"
+  [(set_attr "type" "simd")])
+
+(define_expand "riscv_prev_32x2"
+  [(set (match_operand:PV2SI 0 "register_operand")
+	(unspec:PV2SI
+	  [(match_operand:PV2SI 1 "register_operand")] UNSPEC_PREV32))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_prev_32x2_rv64
+	       (gen_lowpart (DImode, operands[0]),
+		gen_lowpart (DImode, operands[1])));
+  else
+    {
+      machine_mode mode = GET_MODE (operands[0]);
+      rtx out_lo = operand_subword (operands[0], 0, 1, mode);
+      rtx out_hi = operand_subword (operands[0], 1, 1, mode);
+      rtx in_lo = operand_subword_force (operands[1], 0, mode);
+      rtx in_hi = operand_subword_force (operands[1], 1, mode);
+      emit_move_insn (out_lo, in_hi);
+      emit_move_insn (out_hi, in_lo);
+    }
+  DONE;
+})
+
+(define_insn "riscv_prev_32x2_rv64"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")]
+	 UNSPEC_PREV32))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.w\t%0,%1,%1"
+  [(set_attr "type" "simd")])
+
 ;Packed Widening Convert
 ;
 ;pwcvt.* / pwcvtu.* / pwcvth.* are NOT real instructions; per the P-ext spec
