@@ -565,8 +565,230 @@
    psrl.ws\t%0,%1,%2"
   [(set_attr "type" "simd, simd")])
 
-;Packed Saturating and Rounding Shifts
-;
+;; Scalar saturating and rounding shifts.
+
+(define_expand "riscv_ssha_i32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_PSSHA))]
+  "TARGET_RVP"
+{
+  if (!CONST_INT_P (operands[2])
+      || (!IN_RANGE (INTVAL (operands[2]), 0, 31)
+	  && !IN_RANGE (INTVAL (operands[2]), -31, -1)))
+    operands[2] = force_reg (SImode, operands[2]);
+  emit_insn (gen_riscv_ssha_i32_insn
+	     (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_ssha_i32_insn"
+  [(set (match_operand:SI 0 "register_operand" "=r,r,r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r,r,r")
+		    (match_operand:SI 2 "arith_operand" "u5,w5,r")]
+	 UNSPEC_PSSHA))]
+  "TARGET_RVP"
+{
+  switch (which_alternative)
+    {
+    case 0:
+      return TARGET_64BIT ? "psslai.w\t%0,%1,%2" : "sslai\t%0,%1,%2";
+    case 1:
+      return TARGET_64BIT ? "psrai.w\t%0,%1,%n2" : "srai\t%0,%1,%n2";
+    default:
+      return TARGET_64BIT ? "pssha.ws\t%0,%1,%2" : "ssha\t%0,%1,%2";
+    }
+}
+  [(set_attr "type" "simd,simd,simd")
+   (set_attr "mode" "SI")])
+
+(define_expand "riscv_sshar_i32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_PSSHAR))]
+  "TARGET_RVP"
+{
+  if (!CONST_INT_P (operands[2])
+      || (!IN_RANGE (INTVAL (operands[2]), 0, 31)
+	  && !IN_RANGE (INTVAL (operands[2]), -31, -1)))
+    operands[2] = force_reg (SImode, operands[2]);
+  emit_insn (gen_riscv_sshar_i32_insn
+	     (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_sshar_i32_insn"
+  [(set (match_operand:SI 0 "register_operand" "=r,r,r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r,r,r")
+		    (match_operand:SI 2 "arith_operand" "u5,w5,r")]
+	 UNSPEC_PSSHAR))]
+  "TARGET_RVP"
+{
+  switch (which_alternative)
+    {
+    case 0:
+      return TARGET_64BIT ? "psslai.w\t%0,%1,%2" : "sslai\t%0,%1,%2";
+    case 1:
+      return TARGET_64BIT ? "psrari.w\t%0,%1,%n2" : "srari\t%0,%1,%n2";
+    default:
+      return TARGET_64BIT ? "psshar.ws\t%0,%1,%2" : "sshar\t%0,%1,%2";
+    }
+}
+  [(set_attr "type" "simd,simd,simd")
+   (set_attr "mode" "SI")])
+
+(define_expand "riscv_sshl_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_PSSHL))]
+  "TARGET_RVP"
+{
+  if (!register_operand (operands[2], SImode))
+    operands[2] = force_reg (SImode, operands[2]);
+})
+
+(define_insn "riscv_sshl_u32_insn"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_PSSHL))]
+  "TARGET_RVP"
+{
+  return TARGET_64BIT ? "psshl.ws\t%0,%1,%2" : "sshl\t%0,%1,%2";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+(define_expand "riscv_sshlr_u32"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_PSSHLR))]
+  "TARGET_RVP"
+{
+  if (!register_operand (operands[2], SImode))
+    operands[2] = force_reg (SImode, operands[2]);
+})
+
+(define_insn "riscv_sshlr_u32_insn"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_PSSHLR))]
+  "TARGET_RVP"
+{
+  return TARGET_64BIT ? "psshlr.ws\t%0,%1,%2" : "sshlr\t%0,%1,%2";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
+;; Full-width shifts are available on RV64 only.
+
+(define_expand "riscv_sha_i64"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_SHA))]
+  "TARGET_RVP && TARGET_64BIT"
+{
+  if (!CONST_INT_P (operands[2])
+      || (!IN_RANGE (INTVAL (operands[2]), 0, 63)
+	  && !IN_RANGE (INTVAL (operands[2]), -63, -1)))
+    operands[2] = force_reg (SImode, operands[2]);
+  emit_insn (gen_riscv_sha_i64_insn
+	     (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_sha_i64_insn"
+  [(set (match_operand:DI 0 "register_operand" "=r,r,r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r,r,r")
+		    (match_operand:SI 2 "arith_operand" "u6,w6,r")]
+	 UNSPEC_SHA))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   slli\t%0,%1,%2
+   srai\t%0,%1,%n2
+   sha\t%0,%1,%2"
+  [(set_attr "type" "simd,simd,simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_shar_i64"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_SHAR))]
+  "TARGET_RVP && TARGET_64BIT"
+{
+  if (!CONST_INT_P (operands[2])
+      || (!IN_RANGE (INTVAL (operands[2]), 0, 63)
+	  && !IN_RANGE (INTVAL (operands[2]), -63, -1)))
+    operands[2] = force_reg (SImode, operands[2]);
+  emit_insn (gen_riscv_shar_i64_insn
+	     (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_shar_i64_insn"
+  [(set (match_operand:DI 0 "register_operand" "=r,r,r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r,r,r")
+		    (match_operand:SI 2 "arith_operand" "u6,w6,r")]
+	 UNSPEC_SHAR))]
+  "TARGET_RVP && TARGET_64BIT"
+  "@
+   slli\t%0,%1,%2
+   srari\t%0,%1,%n2
+   shar\t%0,%1,%2"
+  [(set_attr "type" "simd,simd,simd")
+   (set_attr "mode" "DI")])
+
+(define_insn "riscv_shl_u64_insn"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_SHL))]
+  "TARGET_RVP && TARGET_64BIT"
+  "shl\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_shl_u64"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_SHL))]
+  "TARGET_RVP && TARGET_64BIT"
+{
+  if (!register_operand (operands[2], SImode))
+    operands[2] = force_reg (SImode, operands[2]);
+})
+
+(define_insn "riscv_shlr_u64_insn"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(unspec:DI [(match_operand:DI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 UNSPEC_SHLR))]
+  "TARGET_RVP && TARGET_64BIT"
+  "shlr\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_shlr_u64"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "nonmemory_operand")]
+	 UNSPEC_SHLR))]
+  "TARGET_RVP && TARGET_64BIT"
+{
+  if (!register_operand (operands[2], SImode))
+    operands[2] = force_reg (SImode, operands[2]);
+})
+
+;; Packed saturating and rounding shifts.
+;;
 ; pssha/psshar: signed saturating (rounding) arithmetic shift, expanded via
 ; psslai (immediate) / psrai or psrari (negative immediate) / pssha[r].hs.
 ; psshl/psshlr: unsigned saturating (rounding) logical shift.

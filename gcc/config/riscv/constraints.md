@@ -454,3 +454,8 @@
   "A 5-bit negative immediate (-31 to -1)."
   (and (match_code "const_int")
        (match_test "IN_RANGE (ival, -31, -1)")))
+
+(define_constraint "w6"
+  "A 6-bit negative immediate (-63 to -1)."
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (ival, -63, -1)")))

@@ -320,6 +320,18 @@ CREATE_RVP_INTRINSIC (int64_t, sati_i64, int64_t, const unsigned)
 CREATE_RVP_INTRINSIC (uint64_t, usati_u64, int64_t, const unsigned)
 #endif
 
+/* Scalar saturating and rounding shifts.  */
+CREATE_RVP_INTRINSIC (int32_t, ssha_i32, int32_t, int)
+CREATE_RVP_INTRINSIC (int32_t, sshar_i32, int32_t, int)
+CREATE_RVP_INTRINSIC (uint32_t, sshl_u32, int32_t, int)
+CREATE_RVP_INTRINSIC (uint32_t, sshlr_u32, int32_t, int)
+#if __riscv_xlen == 64
+CREATE_RVP_INTRINSIC (int64_t, sha_i64, int64_t, int)
+CREATE_RVP_INTRINSIC (int64_t, shar_i64, int64_t, int)
+CREATE_RVP_INTRINSIC (uint64_t, shl_u64, uint64_t, int)
+CREATE_RVP_INTRINSIC (uint64_t, shlr_u64, uint64_t, int)
+#endif
+
 /* Packed Splat.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
 CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)
