@@ -42,6 +42,14 @@ typedef unsigned short uint16x2_t __attribute__ ((vector_size (4)));
 typedef unsigned short uint16x4_t __attribute__ ((vector_size (8)));
 typedef unsigned int uint32x2_t __attribute__ ((vector_size (8)));
 
+/* The memory intrinsics accept pointers with arbitrary alignment.  These
+   types also avoid imposing the aliasing rules of their scalar types on the
+   pointed-to objects.  */
+typedef uint32_t __rvp_unaligned_uint32_t
+  __attribute__ ((__aligned__ (1), __may_alias__));
+typedef uint64_t __rvp_unaligned_uint64_t
+  __attribute__ ((__aligned__ (1), __may_alias__));
+
 #if __riscv_xlen == 32
 typedef int32_t intXLEN_t;
 typedef uint32_t uintXLEN_t;
@@ -143,9 +151,53 @@ RVP_OP_ATTRS ty __riscv_##name (ty __rs1, ty __rs2)                        \
     return __rs1 op __rs2;                                                 \
   }
 
+#define RVP_LOAD(name, vector_type, element_type, memory_type)              \
+RVP_OP_ATTRS vector_type __riscv_##name (element_type *__p)                 \
+  {                                                                        \
+    union                                                                  \
+    {                                                                      \
+      vector_type __vector;                                                \
+      memory_type __memory;                                                \
+    } __value;                                                             \
+    __value.__memory = *(const memory_type *) __p;                          \
+    return __value.__vector;                                               \
+  }
+
+#define RVP_STORE(name, vector_type, element_type, memory_type)             \
+RVP_OP_ATTRS void __riscv_##name (element_type *__p, vector_type __v)       \
+  {                                                                        \
+    union                                                                  \
+    {                                                                      \
+      vector_type __vector;                                                \
+      memory_type __memory;                                                \
+    } __value;                                                             \
+    __value.__vector = __v;                                                \
+    *(memory_type *) __p = __value.__memory;                               \
+  }
+
+#define RVP_CHECK_INDEX(index, limit)                                      \
+  (__builtin_constant_p (index) && (unsigned int) (index) <= (limit)       \
+   ? (void) 0                                                             \
+   : __rvp_invalid_element_index ())
+
+#define RVP_GET(value, index, limit)                                       \
+  (RVP_CHECK_INDEX (index, limit), (value)[index])
+
+#define RVP_SET(type, value, element, index, limit)                        \
+  __extension__ ({                                                        \
+    type __rvp_value = (value);                                           \
+    RVP_CHECK_INDEX (index, limit);                                       \
+    __rvp_value[index] = (element);                                       \
+    __rvp_value;                                                          \
+  })
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+extern void __rvp_invalid_element_index (void)
+  __attribute__ ((__error__
+		  ("P intrinsic index must be a constant in range")));
 
 // Bitmanip (manual "Bitmanip" section, spec lines 48-133): suffixed names.
 // These are the explicit, non-overloaded interfaces named per the spec.
@@ -1056,6 +1108,64 @@ CREATE_RVP_INTRINSIC(int64_t, pm2wsuba_i64, int64_t, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC(int64_t, pm2wsuba_x_i64, int64_t, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC(int64_t, pm2waddasu_u64, int64_t, int16x2_t, uint16x2_t)
 #endif
+
+/* Packed Load.  */
+RVP_LOAD (pld_i8x4, int8x4_t, int8_t, __rvp_unaligned_uint32_t)
+RVP_LOAD (pld_u8x4, uint8x4_t, uint8_t, __rvp_unaligned_uint32_t)
+RVP_LOAD (pld_i16x2, int16x2_t, int16_t, __rvp_unaligned_uint32_t)
+RVP_LOAD (pld_u16x2, uint16x2_t, uint16_t, __rvp_unaligned_uint32_t)
+RVP_LOAD (pld_i8x8, int8x8_t, int8_t, __rvp_unaligned_uint64_t)
+RVP_LOAD (pld_u8x8, uint8x8_t, uint8_t, __rvp_unaligned_uint64_t)
+RVP_LOAD (pld_i16x4, int16x4_t, int16_t, __rvp_unaligned_uint64_t)
+RVP_LOAD (pld_u16x4, uint16x4_t, uint16_t, __rvp_unaligned_uint64_t)
+RVP_LOAD (pld_i32x2, int32x2_t, int32_t, __rvp_unaligned_uint64_t)
+RVP_LOAD (pld_u32x2, uint32x2_t, uint32_t, __rvp_unaligned_uint64_t)
+
+/* Packed Store.  */
+RVP_STORE (pst_i8x4, int8x4_t, int8_t, __rvp_unaligned_uint32_t)
+RVP_STORE (pst_u8x4, uint8x4_t, uint8_t, __rvp_unaligned_uint32_t)
+RVP_STORE (pst_i16x2, int16x2_t, int16_t, __rvp_unaligned_uint32_t)
+RVP_STORE (pst_u16x2, uint16x2_t, uint16_t, __rvp_unaligned_uint32_t)
+RVP_STORE (pst_i8x8, int8x8_t, int8_t, __rvp_unaligned_uint64_t)
+RVP_STORE (pst_u8x8, uint8x8_t, uint8_t, __rvp_unaligned_uint64_t)
+RVP_STORE (pst_i16x4, int16x4_t, int16_t, __rvp_unaligned_uint64_t)
+RVP_STORE (pst_u16x4, uint16x4_t, uint16_t, __rvp_unaligned_uint64_t)
+RVP_STORE (pst_i32x2, int32x2_t, int32_t, __rvp_unaligned_uint64_t)
+RVP_STORE (pst_u32x2, uint32x2_t, uint32_t, __rvp_unaligned_uint64_t)
+
+/* Packed Element Extract.  */
+#define __riscv_pget_i8x4_i8(value, index) RVP_GET (value, index, 3)
+#define __riscv_pget_u8x4_u8(value, index) RVP_GET (value, index, 3)
+#define __riscv_pget_i16x2_i16(value, index) RVP_GET (value, index, 1)
+#define __riscv_pget_u16x2_u16(value, index) RVP_GET (value, index, 1)
+#define __riscv_pget_i8x8_i8(value, index) RVP_GET (value, index, 7)
+#define __riscv_pget_u8x8_u8(value, index) RVP_GET (value, index, 7)
+#define __riscv_pget_i16x4_i16(value, index) RVP_GET (value, index, 3)
+#define __riscv_pget_u16x4_u16(value, index) RVP_GET (value, index, 3)
+#define __riscv_pget_i32x2_i32(value, index) RVP_GET (value, index, 1)
+#define __riscv_pget_u32x2_u32(value, index) RVP_GET (value, index, 1)
+
+/* Packed Element Insert.  */
+#define __riscv_pset_i8_i8x4(value, element, index)                         \
+  RVP_SET (int8x4_t, value, element, index, 3)
+#define __riscv_pset_u8_u8x4(value, element, index)                         \
+  RVP_SET (uint8x4_t, value, element, index, 3)
+#define __riscv_pset_i16_i16x2(value, element, index)                       \
+  RVP_SET (int16x2_t, value, element, index, 1)
+#define __riscv_pset_u16_u16x2(value, element, index)                       \
+  RVP_SET (uint16x2_t, value, element, index, 1)
+#define __riscv_pset_i8_i8x8(value, element, index)                         \
+  RVP_SET (int8x8_t, value, element, index, 7)
+#define __riscv_pset_u8_u8x8(value, element, index)                         \
+  RVP_SET (uint8x8_t, value, element, index, 7)
+#define __riscv_pset_i16_i16x4(value, element, index)                       \
+  RVP_SET (int16x4_t, value, element, index, 3)
+#define __riscv_pset_u16_u16x4(value, element, index)                       \
+  RVP_SET (uint16x4_t, value, element, index, 3)
+#define __riscv_pset_i32_i32x2(value, element, index)                       \
+  RVP_SET (int32x2_t, value, element, index, 1)
+#define __riscv_pset_u32_u32x2(value, element, index)                       \
+  RVP_SET (uint32x2_t, value, element, index, 1)
 
 #ifdef __cplusplus
 }
