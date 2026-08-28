@@ -191,6 +191,62 @@ RVP_OP_ATTRS void __riscv_##name (element_type *__p, vector_type __v)       \
     __rvp_value;                                                          \
   })
 
+#define RVP_JOIN2(name, vector_type, element_type)                         \
+RVP_OP_ATTRS vector_type __riscv_##name (element_type __e0,                \
+					 element_type __e1)                \
+  {                                                                        \
+    return (vector_type) { __e0, __e1 };                                   \
+  }
+
+#define RVP_JOIN4(name, vector_type, element_type)                         \
+RVP_OP_ATTRS vector_type __riscv_##name (element_type __e0,                \
+					 element_type __e1,                \
+					 element_type __e2,                \
+					 element_type __e3)                \
+  {                                                                        \
+    return (vector_type) { __e0, __e1, __e2, __e3 };                       \
+  }
+
+#define RVP_SUBVECTOR_GET(vector_type, subvector_type, value, index)       \
+  __extension__ ({                                                        \
+    union                                                                  \
+    {                                                                      \
+      vector_type __vector;                                                \
+      subvector_type __subvectors[2];                                      \
+    } __rvp_value;                                                         \
+    __rvp_value.__vector = (value);                                        \
+    RVP_CHECK_INDEX (index, 1);                                            \
+    __rvp_value.__subvectors[index];                                       \
+  })
+
+#define RVP_SUBVECTOR_SET(vector_type, subvector_type, value, subvector,   \
+			  index)                                            \
+  __extension__ ({                                                        \
+    union                                                                  \
+    {                                                                      \
+      vector_type __vector;                                                \
+      subvector_type __subvectors[2];                                      \
+    } __rvp_value;                                                         \
+    __rvp_value.__vector = (value);                                        \
+    RVP_CHECK_INDEX (index, 1);                                            \
+    __rvp_value.__subvectors[index] = (subvector);                          \
+    __rvp_value.__vector;                                                  \
+  })
+
+#define RVP_SUBVECTOR_JOIN(name, vector_type, subvector_type)              \
+RVP_OP_ATTRS vector_type __riscv_##name (subvector_type __lo,              \
+					 subvector_type __hi)              \
+  {                                                                        \
+    union                                                                  \
+    {                                                                      \
+      vector_type __vector;                                                \
+      subvector_type __subvectors[2];                                      \
+    } __value;                                                             \
+    __value.__subvectors[0] = __lo;                                        \
+    __value.__subvectors[1] = __hi;                                        \
+    return __value.__vector;                                               \
+  }
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1211,6 +1267,42 @@ RVP_STORE (pst_u32x2, uint32x2_t, uint32_t, __rvp_unaligned_uint64_t)
   RVP_SET (int32x2_t, value, element, index, 1)
 #define __riscv_pset_u32_u32x2(value, element, index)                       \
   RVP_SET (uint32x2_t, value, element, index, 1)
+
+/* Packed Element Join.  */
+RVP_JOIN4 (pjoin4_i8x4, int8x4_t, int8_t)
+RVP_JOIN4 (pjoin4_u8x4, uint8x4_t, uint8_t)
+RVP_JOIN2 (pjoin2_i16x2, int16x2_t, int16_t)
+RVP_JOIN2 (pjoin2_u16x2, uint16x2_t, uint16_t)
+RVP_JOIN4 (pjoin4_i16x4, int16x4_t, int16_t)
+RVP_JOIN4 (pjoin4_u16x4, uint16x4_t, uint16_t)
+RVP_JOIN2 (pjoin2_i32x2, int32x2_t, int32_t)
+RVP_JOIN2 (pjoin2_u32x2, uint32x2_t, uint32_t)
+
+/* Packed Subvector Extract.  */
+#define __riscv_pget_i8x8_i8x4(value, index)                               \
+  RVP_SUBVECTOR_GET (int8x8_t, int8x4_t, value, index)
+#define __riscv_pget_u8x8_u8x4(value, index)                               \
+  RVP_SUBVECTOR_GET (uint8x8_t, uint8x4_t, value, index)
+#define __riscv_pget_i16x4_i16x2(value, index)                             \
+  RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, value, index)
+#define __riscv_pget_u16x4_u16x2(value, index)                             \
+  RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, value, index)
+
+/* Packed Subvector Insert.  */
+#define __riscv_pset_i8x4_i8x8(value, subvector, index)                    \
+  RVP_SUBVECTOR_SET (int8x8_t, int8x4_t, value, subvector, index)
+#define __riscv_pset_u8x4_u8x8(value, subvector, index)                    \
+  RVP_SUBVECTOR_SET (uint8x8_t, uint8x4_t, value, subvector, index)
+#define __riscv_pset_i16x2_i16x4(value, subvector, index)                  \
+  RVP_SUBVECTOR_SET (int16x4_t, int16x2_t, value, subvector, index)
+#define __riscv_pset_u16x2_u16x4(value, subvector, index)                  \
+  RVP_SUBVECTOR_SET (uint16x4_t, uint16x2_t, value, subvector, index)
+
+/* Packed Subvector Join.  */
+RVP_SUBVECTOR_JOIN (pjoin2_i8x8, int8x8_t, int8x4_t)
+RVP_SUBVECTOR_JOIN (pjoin2_u8x8, uint8x8_t, uint8x4_t)
+RVP_SUBVECTOR_JOIN (pjoin2_i16x4, int16x4_t, int16x2_t)
+RVP_SUBVECTOR_JOIN (pjoin2_u16x4, uint16x4_t, uint16x2_t)
 
 #ifdef __cplusplus
 }
