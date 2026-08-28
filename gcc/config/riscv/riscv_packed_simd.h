@@ -533,16 +533,12 @@ CREATE_RVP_INTRINSIC (int32_t, predsum_i8x8_i32, int8x8_t, int32_t)
 CREATE_RVP_INTRINSIC (uint32_t, predsumu_u8x8_u32, uint8x8_t, uint32_t)
 CREATE_RVP_INTRINSIC (int32_t, predsum_i16x4_i32, int16x4_t, int32_t)
 CREATE_RVP_INTRINSIC (uint32_t, predsumu_u16x4_u32, uint16x4_t, uint32_t)
-/* TODO(difficult): RV32 i64 accumulate variants need wadda/waddau  */
-/* (unimplemented); these six i64 intrinsics are RV64-only for now.  */
-#if __riscv_xlen == 64
 CREATE_RVP_INTRINSIC (int64_t, predsum_i8x8_i64, int8x8_t, int64_t)
 CREATE_RVP_INTRINSIC (uint64_t, predsumu_u8x8_u64, uint8x8_t, uint64_t)
 CREATE_RVP_INTRINSIC (int64_t, predsum_i16x4_i64, int16x4_t, int64_t)
 CREATE_RVP_INTRINSIC (uint64_t, predsumu_u16x4_u64, uint16x4_t, uint64_t)
 CREATE_RVP_INTRINSIC (int64_t, predsum_i32x2_i64, int32x2_t, int64_t)
 CREATE_RVP_INTRINSIC (uint64_t, predsumu_u32x2_u64, uint32x2_t, uint64_t)
-#endif
 
 /* Packed Minimum and Maximum.  */
 CREATE_RVP_INTRINSIC (int8x4_t, pmin_i8x4, int8x4_t, int8x4_t)

@@ -2165,10 +2165,10 @@
 (define_insn "riscv_predsum_i8x8_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (unspec:SI [(match_operand:PV8QI 1 "register_operand" "r")
-                            (match_operand:SI 2 "nonmemory_operand" "r")]
+                    (match_operand:SI 2 "reg_or_0_operand" "rJ")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
-  "predsum.dbs\t%0,%1,%2"
+  "predsum.dbs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsumu_u8x8_u32"
@@ -2190,10 +2190,10 @@
 (define_insn "riscv_predsumu_u8x8_u32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (unspec:SI [(match_operand:PV8QI 1 "register_operand" "r")
-                            (match_operand:SI 2 "nonmemory_operand" "r")]
+                    (match_operand:SI 2 "reg_or_0_operand" "rJ")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && !TARGET_64BIT"
-  "predsumu.dbs\t%0,%1,%2"
+  "predsumu.dbs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsum_i16x4_i32"
@@ -2215,10 +2215,10 @@
 (define_insn "riscv_predsum_i16x4_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (unspec:SI [(match_operand:PV4HI 1 "register_operand" "r")
-                            (match_operand:SI 2 "nonmemory_operand" "r")]
+                    (match_operand:SI 2 "reg_or_0_operand" "rJ")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
-  "predsum.dhs\t%0,%1,%2"
+  "predsum.dhs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsumu_u16x4_u32"
@@ -2240,10 +2240,10 @@
 (define_insn "riscv_predsumu_u16x4_u32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (unspec:SI [(match_operand:PV4HI 1 "register_operand" "r")
-                            (match_operand:SI 2 "nonmemory_operand" "r")]
+                    (match_operand:SI 2 "reg_or_0_operand" "rJ")]
          UNSPEC_PREDSUMU))]
   "TARGET_RVP && !TARGET_64BIT"
-  "predsumu.dhs\t%0,%1,%2"
+  "predsumu.dhs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_insn "riscv_predsum_i8x8_i32_rv64"
@@ -2282,17 +2282,30 @@
   "predsumu.hs\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-; TODO(difficult): RV32 i64 accumulate variants need wadda/waddau (unimplemented).
-; These six i64 intrinsics are RV64-only for now.
+;; The i64 RV32 expanders first reduce packed byte or halfword sources into a
+;; 32-bit partial sum, then use wadda/waddau to update the 64-bit accumulator.
+;; A two-word source can be accumulated directly by wadda/waddau.
 (define_expand "riscv_predsum_i8x8_i64"
   [(set (match_operand:DI 0 "register_operand")
         (unspec:DI [(match_operand:PV8QI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
-  "TARGET_RVP && TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_insn (gen_riscv_predsum_i8x8_i64_rv64
-	     (operands[0], operands[1], operands[2]));
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_predsum_i8x8_i64_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx sum = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_predsum_i8x8_i32_rv32
+		 (sum, operands[1], const0_rtx));
+      emit_move_insn (operands[0], operands[2]);
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS (DImode, gen_rtx_SIGN_EXTEND (DImode, sum),
+				operands[0])));
+    }
   DONE;
 })
 
@@ -2310,10 +2323,22 @@
         (unspec:DI [(match_operand:PV8QI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
-  "TARGET_RVP && TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_insn (gen_riscv_predsumu_u8x8_u64_rv64
-	     (operands[0], operands[1], operands[2]));
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_predsumu_u8x8_u64_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx sum = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_predsumu_u8x8_u32_rv32
+		 (sum, operands[1], const0_rtx));
+      emit_move_insn (operands[0], operands[2]);
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS (DImode, gen_rtx_ZERO_EXTEND (DImode, sum),
+				operands[0])));
+    }
   DONE;
 })
 
@@ -2331,10 +2356,22 @@
         (unspec:DI [(match_operand:PV4HI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
-  "TARGET_RVP && TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_insn (gen_riscv_predsum_i16x4_i64_rv64
-	     (operands[0], operands[1], operands[2]));
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_predsum_i16x4_i64_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx sum = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_predsum_i16x4_i32_rv32
+		 (sum, operands[1], const0_rtx));
+      emit_move_insn (operands[0], operands[2]);
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS (DImode, gen_rtx_SIGN_EXTEND (DImode, sum),
+				operands[0])));
+    }
   DONE;
 })
 
@@ -2352,10 +2389,22 @@
         (unspec:DI [(match_operand:PV4HI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
-  "TARGET_RVP && TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_insn (gen_riscv_predsumu_u16x4_u64_rv64
-	     (operands[0], operands[1], operands[2]));
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_predsumu_u16x4_u64_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx sum = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_predsumu_u16x4_u32_rv32
+		 (sum, operands[1], const0_rtx));
+      emit_move_insn (operands[0], operands[2]);
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS (DImode, gen_rtx_ZERO_EXTEND (DImode, sum),
+				operands[0])));
+    }
   DONE;
 })
 
@@ -2373,10 +2422,24 @@
         (unspec:DI [(match_operand:PV2SI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUM))]
-  "TARGET_RVP && TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_insn (gen_riscv_predsum_i32x2_i64_rv64
-	     (operands[0], operands[1], operands[2]));
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_predsum_i32x2_i64_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = riscv_subword (operands[1], false);
+      rtx hi = riscv_subword (operands[1], true);
+      emit_move_insn (operands[0], operands[2]);
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS
+		   (DImode,
+		    gen_rtx_PLUS (DImode, gen_rtx_SIGN_EXTEND (DImode, lo),
+				  gen_rtx_SIGN_EXTEND (DImode, hi)),
+		    operands[0])));
+    }
   DONE;
 })
 
@@ -2394,10 +2457,24 @@
         (unspec:DI [(match_operand:PV2SI 1 "register_operand")
                             (match_operand:DI 2 "nonmemory_operand")]
          UNSPEC_PREDSUMU))]
-  "TARGET_RVP && TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_insn (gen_riscv_predsumu_u32x2_u64_rv64
-	     (operands[0], operands[1], operands[2]));
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_predsumu_u32x2_u64_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = riscv_subword (operands[1], false);
+      rtx hi = riscv_subword (operands[1], true);
+      emit_move_insn (operands[0], operands[2]);
+      emit_insn (gen_rtx_SET
+		 (operands[0],
+		  gen_rtx_PLUS
+		   (DImode,
+		    gen_rtx_PLUS (DImode, gen_rtx_ZERO_EXTEND (DImode, lo),
+				  gen_rtx_ZERO_EXTEND (DImode, hi)),
+		    operands[0])));
+    }
   DONE;
 })
 

@@ -1343,8 +1343,8 @@ uint32_t test_predsumu_u16x4_u32(uint16x4_t a, uint32_t b)
   return __riscv_predsumu_u16x4_u32(a, b);
 }
 
-// TODO(difficult): RV32 i64 accumulate variants (predsum_*_i64) need
-// wadda/waddau (unimplemented); not supported on RV32 yet.
+/* The i64 Packed Reduction Sum interfaces are covered by
+   packed-reduction-sum-i64-rv32.c.  */
 
 /* Packed Minimum and Maximum (32-bit) */
 
