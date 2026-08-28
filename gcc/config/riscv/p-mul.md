@@ -91,6 +91,136 @@
   "<rvp_scalar_mul_rv32>\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
+;Scalar Multiply High Accumulate
+;
+;RV32 has scalar read-modify-write instructions.  RV64 uses lane 0 of the
+;corresponding packed .w instruction.  Model the complete RV64 GPR operands so
+;that the implicit update of the second lane is visible to the RTL data flow.
+(define_int_iterator RVP_SCALAR_MUL_ACC
+  [UNSPEC_PMHACC UNSPEC_PMHRACC UNSPEC_PMHACCU UNSPEC_PMHRACCU
+   UNSPEC_PMHACCSU UNSPEC_PMHRACCSU])
+
+(define_int_attr rvp_scalar_mul_acc_builtin
+  [(UNSPEC_PMHACC "mhacc_i32")
+   (UNSPEC_PMHRACC "mhracc_i32")
+   (UNSPEC_PMHACCU "mhaccu_u32")
+   (UNSPEC_PMHRACCU "mhraccu_u32")
+   (UNSPEC_PMHACCSU "mhaccsu_i32")
+   (UNSPEC_PMHRACCSU "mhraccsu_i32")])
+
+(define_int_attr rvp_scalar_mul_acc_rv32
+  [(UNSPEC_PMHACC "mhacc")
+   (UNSPEC_PMHRACC "mhracc")
+   (UNSPEC_PMHACCU "mhaccu")
+   (UNSPEC_PMHRACCU "mhraccu")
+   (UNSPEC_PMHACCSU "mhaccsu")
+   (UNSPEC_PMHRACCSU "mhraccsu")])
+
+(define_int_attr rvp_scalar_mul_acc_packed
+  [(UNSPEC_PMHACC "pmhacc_i32x2_rmw")
+   (UNSPEC_PMHRACC "pmhracc_i32x2_rmw")
+   (UNSPEC_PMHACCU "pmhaccu_u32x2_rmw")
+   (UNSPEC_PMHRACCU "pmhraccu_u32x2_rmw")
+   (UNSPEC_PMHACCSU "pmhaccsu_i32x2_rmw")
+   (UNSPEC_PMHRACCSU "pmhraccsu_i32x2_rmw")])
+
+(define_expand "riscv_<rvp_scalar_mul_acc_builtin>"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "register_operand")
+		    (match_operand:SI 3 "register_operand")]
+	 RVP_SCALAR_MUL_ACC))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx dest = gen_reg_rtx (DImode);
+      rtx acc = gen_reg_rtx (DImode);
+      rtx r1 = gen_reg_rtx (DImode);
+      rtx r2 = gen_reg_rtx (DImode);
+      emit_insn (gen_zero_extendsidi2 (acc, operands[1]));
+      emit_insn (gen_zero_extendsidi2 (r1, operands[2]));
+      emit_insn (gen_zero_extendsidi2 (r2, operands[3]));
+      emit_move_insn (dest, acc);
+      emit_insn (gen_riscv_<rvp_scalar_mul_acc_packed>
+		 (gen_lowpart (PV2SImode, dest),
+		  gen_lowpart (PV2SImode, r1),
+		  gen_lowpart (PV2SImode, r2)));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_<rvp_scalar_mul_acc_builtin>_rv32_rmw
+		 (operands[0], operands[2], operands[3]));
+    }
+  DONE;
+})
+
+(define_insn "riscv_<rvp_scalar_mul_acc_builtin>_rv32_rmw"
+  [(set (match_operand:SI 0 "register_operand" "+r")
+	(unspec:SI [(match_dup 0)
+		    (match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 RVP_SCALAR_MUL_ACC))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "<rvp_scalar_mul_acc_rv32>\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
+;Scalar Q-format Multiply with Widening Accumulate
+;
+;RV32 uses an even-odd GPR pair for the 64-bit accumulator.  RV64 selects the
+;low word from each source with mqacc.w00/mqracc.w00.
+(define_int_iterator RVP_SCALAR_QACC
+  [UNSPEC_PMQACC_W00 UNSPEC_PMQRACC_W00])
+
+(define_int_attr rvp_scalar_qacc_builtin
+  [(UNSPEC_PMQACC_W00 "mqwacc_i64")
+   (UNSPEC_PMQRACC_W00 "mqrwacc_i64")])
+
+(define_int_attr rvp_scalar_qacc_rv32
+  [(UNSPEC_PMQACC_W00 "mqwacc")
+   (UNSPEC_PMQRACC_W00 "mqrwacc")])
+
+(define_int_attr rvp_scalar_qacc_rv64
+  [(UNSPEC_PMQACC_W00 "mqacc_w00_i64_rv64")
+   (UNSPEC_PMQRACC_W00 "mqracc_w00_i64_rv64")])
+
+(define_expand "riscv_<rvp_scalar_qacc_builtin>"
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:SI 2 "register_operand")
+		    (match_operand:SI 3 "register_operand")]
+	 RVP_SCALAR_QACC))]
+  "TARGET_RVP"
+{
+  emit_move_insn (operands[0], operands[1]);
+  if (TARGET_64BIT)
+    {
+      rtx r1 = gen_reg_rtx (DImode);
+      rtx r2 = gen_reg_rtx (DImode);
+      emit_insn (gen_zero_extendsidi2 (r1, operands[2]));
+      emit_insn (gen_zero_extendsidi2 (r2, operands[3]));
+      emit_insn (gen_riscv_<rvp_scalar_qacc_rv64>
+		 (operands[0], gen_lowpart (PV2SImode, r1),
+		  gen_lowpart (PV2SImode, r2)));
+    }
+  else
+    emit_insn (gen_riscv_<rvp_scalar_qacc_builtin>_rv32_rmw
+	       (operands[0], operands[2], operands[3]));
+  DONE;
+})
+
+(define_insn "riscv_<rvp_scalar_qacc_builtin>_rv32_rmw"
+  [(set (match_operand:DI 0 "register_operand" "+R")
+	(unspec:DI [(match_dup 0)
+		    (match_operand:SI 1 "register_operand" "r")
+		    (match_operand:SI 2 "register_operand" "r")]
+	 RVP_SCALAR_QACC))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "<rvp_scalar_qacc_rv32>\t%0,%1,%2"
+  [(set_attr "type" "simd")])
+
 ;Packed Multiply High
 ;
 ;pmulh* compute the high half of the product of corresponding lanes:

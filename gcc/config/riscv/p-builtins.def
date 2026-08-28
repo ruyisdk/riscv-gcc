@@ -150,6 +150,26 @@ RISCV_BUILTIN (mulq_i32, "mulq_i32", RISCV_BUILTIN_DIRECT,
 RISCV_BUILTIN (mulqr_i32, "mulqr_i32", RISCV_BUILTIN_DIRECT,
 	       RISCV_SI_FTYPE_SI_SI, simd),
 
+/* Scalar multiply high accumulate.  */
+RISCV_BUILTIN (mhacc_i32, "mhacc_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI_SI, simd),
+RISCV_BUILTIN (mhracc_i32, "mhracc_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI_SI, simd),
+RISCV_BUILTIN (mhaccu_u32, "mhaccu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI_USI, simd),
+RISCV_BUILTIN (mhraccu_u32, "mhraccu_u32", RISCV_BUILTIN_DIRECT,
+	       RISCV_USI_FTYPE_USI_USI_USI, simd),
+RISCV_BUILTIN (mhaccsu_i32, "mhaccsu_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI_USI, simd),
+RISCV_BUILTIN (mhraccsu_i32, "mhraccsu_i32", RISCV_BUILTIN_DIRECT,
+	       RISCV_SI_FTYPE_SI_SI_USI, simd),
+
+/* Scalar Q-format multiply with widening accumulate.  */
+RISCV_BUILTIN (mqwacc_i64, "mqwacc_i64", RISCV_BUILTIN_DIRECT,
+	       RISCV_DI_FTYPE_DI_SI_SI, simd),
+RISCV_BUILTIN (mqrwacc_i64, "mqrwacc_i64", RISCV_BUILTIN_DIRECT,
+	       RISCV_DI_FTYPE_DI_SI_SI, simd),
+
 /* Packed Splat.  */
 RISCV_BUILTIN (pmv_s_u8x4, "pmv_s_u8x4", RISCV_BUILTIN_DIRECT,
 	       RISCV_UV4QI_FTYPE_UQI, simd),
