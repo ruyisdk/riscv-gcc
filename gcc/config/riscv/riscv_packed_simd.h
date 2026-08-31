@@ -264,6 +264,18 @@ RVP_OP_ATTRS vector_type __riscv_##name (subvector_type __lo,              \
     return __value.__vector;                                               \
   }
 
+#define RVP_REINTERPRET(name, to_type, from_type) \
+RVP_OP_ATTRS to_type __riscv_##name (from_type __x) \
+  { \
+    union \
+    { \
+      from_type __from; \
+      to_type __to; \
+    } __value; \
+    __value.__from = __x; \
+    return __value.__to; \
+  }
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1404,6 +1416,94 @@ RVP_SUBVECTOR_JOIN (pjoin2_i8x8, int8x8_t, int8x4_t)
 RVP_SUBVECTOR_JOIN (pjoin2_u8x8, uint8x8_t, uint8x4_t)
 RVP_SUBVECTOR_JOIN (pjoin2_i16x4, int16x4_t, int16x2_t)
 RVP_SUBVECTOR_JOIN (pjoin2_u16x4, uint16x4_t, uint16x2_t)
+
+/* Reinterpret casts between packed and scalar types.  */
+RVP_REINTERPRET (preinterpret_u8x4_u32, uint32_t, uint8x4_t)
+RVP_REINTERPRET (preinterpret_u16x2_u32, uint32_t, uint16x2_t)
+RVP_REINTERPRET (preinterpret_i8x4_u32, uint32_t, int8x4_t)
+RVP_REINTERPRET (preinterpret_i16x2_u32, uint32_t, int16x2_t)
+RVP_REINTERPRET (preinterpret_u8x4_i32, int32_t, uint8x4_t)
+RVP_REINTERPRET (preinterpret_u16x2_i32, int32_t, uint16x2_t)
+RVP_REINTERPRET (preinterpret_i8x4_i32, int32_t, int8x4_t)
+RVP_REINTERPRET (preinterpret_i16x2_i32, int32_t, int16x2_t)
+RVP_REINTERPRET (preinterpret_u32_u8x4, uint8x4_t, uint32_t)
+RVP_REINTERPRET (preinterpret_u32_u16x2, uint16x2_t, uint32_t)
+RVP_REINTERPRET (preinterpret_u32_i8x4, int8x4_t, uint32_t)
+RVP_REINTERPRET (preinterpret_u32_i16x2, int16x2_t, uint32_t)
+RVP_REINTERPRET (preinterpret_i32_u8x4, uint8x4_t, int32_t)
+RVP_REINTERPRET (preinterpret_i32_u16x2, uint16x2_t, int32_t)
+RVP_REINTERPRET (preinterpret_i32_i8x4, int8x4_t, int32_t)
+RVP_REINTERPRET (preinterpret_i32_i16x2, int16x2_t, int32_t)
+
+RVP_REINTERPRET (preinterpret_u8x8_u64, uint64_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_u64, uint64_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_u64, uint64_t, uint32x2_t)
+RVP_REINTERPRET (preinterpret_i8x8_u64, uint64_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_i16x4_u64, uint64_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_i32x2_u64, uint64_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u8x8_i64, int64_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_i64, int64_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_i64, int64_t, uint32x2_t)
+RVP_REINTERPRET (preinterpret_i8x8_i64, int64_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_i16x4_i64, int64_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_i32x2_i64, int64_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u64_u8x8, uint8x8_t, uint64_t)
+RVP_REINTERPRET (preinterpret_u64_u16x4, uint16x4_t, uint64_t)
+RVP_REINTERPRET (preinterpret_u64_u32x2, uint32x2_t, uint64_t)
+RVP_REINTERPRET (preinterpret_u64_i8x8, int8x8_t, uint64_t)
+RVP_REINTERPRET (preinterpret_u64_i16x4, int16x4_t, uint64_t)
+RVP_REINTERPRET (preinterpret_u64_i32x2, int32x2_t, uint64_t)
+RVP_REINTERPRET (preinterpret_i64_u8x8, uint8x8_t, int64_t)
+RVP_REINTERPRET (preinterpret_i64_u16x4, uint16x4_t, int64_t)
+RVP_REINTERPRET (preinterpret_i64_u32x2, uint32x2_t, int64_t)
+RVP_REINTERPRET (preinterpret_i64_i8x8, int8x8_t, int64_t)
+RVP_REINTERPRET (preinterpret_i64_i16x4, int16x4_t, int64_t)
+RVP_REINTERPRET (preinterpret_i64_i32x2, int32x2_t, int64_t)
+
+/* Reinterpret casts between packed types.  */
+RVP_REINTERPRET (preinterpret_i8x4_u8x4, uint8x4_t, int8x4_t)
+RVP_REINTERPRET (preinterpret_u16x2_u8x4, uint8x4_t, uint16x2_t)
+RVP_REINTERPRET (preinterpret_i16x2_u8x4, uint8x4_t, int16x2_t)
+RVP_REINTERPRET (preinterpret_u8x4_i8x4, int8x4_t, uint8x4_t)
+RVP_REINTERPRET (preinterpret_u16x2_i8x4, int8x4_t, uint16x2_t)
+RVP_REINTERPRET (preinterpret_i16x2_i8x4, int8x4_t, int16x2_t)
+RVP_REINTERPRET (preinterpret_u8x4_u16x2, uint16x2_t, uint8x4_t)
+RVP_REINTERPRET (preinterpret_i8x4_u16x2, uint16x2_t, int8x4_t)
+RVP_REINTERPRET (preinterpret_i16x2_u16x2, uint16x2_t, int16x2_t)
+RVP_REINTERPRET (preinterpret_u8x4_i16x2, int16x2_t, uint8x4_t)
+RVP_REINTERPRET (preinterpret_i8x4_i16x2, int16x2_t, int8x4_t)
+RVP_REINTERPRET (preinterpret_u16x2_i16x2, int16x2_t, uint16x2_t)
+
+RVP_REINTERPRET (preinterpret_i8x8_u8x8, uint8x8_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_u8x8, uint8x8_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_i16x4_u8x8, uint8x8_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_u8x8, uint8x8_t, uint32x2_t)
+RVP_REINTERPRET (preinterpret_i32x2_u8x8, uint8x8_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u8x8_i8x8, int8x8_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_i8x8, int8x8_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_i16x4_i8x8, int8x8_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_i8x8, int8x8_t, uint32x2_t)
+RVP_REINTERPRET (preinterpret_i32x2_i8x8, int8x8_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u8x8_u16x4, uint16x4_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_i8x8_u16x4, uint16x4_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_i16x4_u16x4, uint16x4_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_u16x4, uint16x4_t, uint32x2_t)
+RVP_REINTERPRET (preinterpret_i32x2_u16x4, uint16x4_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u8x8_i16x4, int16x4_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_i8x8_i16x4, int16x4_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_i16x4, int16x4_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_i16x4, int16x4_t, uint32x2_t)
+RVP_REINTERPRET (preinterpret_i32x2_i16x4, int16x4_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u8x8_u32x2, uint32x2_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_i8x8_u32x2, uint32x2_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_u32x2, uint32x2_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_i16x4_u32x2, uint32x2_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_i32x2_u32x2, uint32x2_t, int32x2_t)
+RVP_REINTERPRET (preinterpret_u8x8_i32x2, int32x2_t, uint8x8_t)
+RVP_REINTERPRET (preinterpret_i8x8_i32x2, int32x2_t, int8x8_t)
+RVP_REINTERPRET (preinterpret_u16x4_i32x2, int32x2_t, uint16x4_t)
+RVP_REINTERPRET (preinterpret_i16x4_i32x2, int32x2_t, int16x4_t)
+RVP_REINTERPRET (preinterpret_u32x2_i32x2, int32x2_t, uint32x2_t)
 
 #ifdef __cplusplus
 }
