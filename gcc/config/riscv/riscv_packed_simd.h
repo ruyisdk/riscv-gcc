@@ -151,6 +151,23 @@ RVP_OP_ATTRS ty __riscv_##name (ty __rs1, ty __rs2)                        \
     return __rs1 op __rs2;                                                 \
   }
 
+#define RVP_SPLAT2(ty, x) ((ty){(x), (x)})
+#define RVP_SPLAT4(ty, x) ((ty){(x), (x), (x), (x)})
+#define RVP_SPLAT8(ty, x) \
+  ((ty){(x), (x), (x), (x), (x), (x), (x), (x)})
+
+#define RVP_SPLAT(name, ty, scalar_ty, splat)                              \
+RVP_OP_ATTRS ty __riscv_##name (scalar_ty __x)                             \
+  {                                                                        \
+    return splat (ty, __x);                                                \
+  }
+
+#define RVP_SCALAR_BINARY_OP(name, ty, scalar_ty, op, splat)               \
+RVP_OP_ATTRS ty __riscv_##name (ty __rs1, scalar_ty __rs2)                 \
+  {                                                                        \
+    return __rs1 op splat (ty, __rs2);                                     \
+  }
+
 #define RVP_LOAD(name, vector_type, element_type, memory_type)              \
 RVP_OP_ATTRS vector_type __riscv_##name (element_type *__p)                 \
   {                                                                        \
@@ -361,17 +378,17 @@ CREATE_RVP_INTRINSIC (int32_t, mhraccsu_i32, int32_t, int32_t, uint32_t)
 CREATE_RVP_INTRINSIC (int64_t, mqwacc_i64, int64_t, int32_t, int32_t)
 CREATE_RVP_INTRINSIC (int64_t, mqrwacc_i64, int64_t, int32_t, int32_t)
 
-/* Packed Splat.  */
-CREATE_RVP_INTRINSIC (uint8x4_t, pmv_s_u8x4, uint8_t)
-CREATE_RVP_INTRINSIC (int8x4_t, pmv_s_i8x4, int8_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, pmv_s_u16x2, uint16_t)
-CREATE_RVP_INTRINSIC (int16x2_t, pmv_s_i16x2, int16_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, pmv_s_u8x8, uint8_t)
-CREATE_RVP_INTRINSIC (int8x8_t, pmv_s_i8x8, int8_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, pmv_s_u16x4, uint16_t)
-CREATE_RVP_INTRINSIC (int16x4_t, pmv_s_i16x4, int16_t)
-CREATE_RVP_INTRINSIC (uint32x2_t, pmv_s_u32x2, uint32_t)
-CREATE_RVP_INTRINSIC (int32x2_t, pmv_s_i32x2, int32_t)
+/* Packed Splat */
+RVP_SPLAT (pmv_s_u8x4, uint8x4_t, uint8_t, RVP_SPLAT4)
+RVP_SPLAT (pmv_s_i8x4, int8x4_t, int8_t, RVP_SPLAT4)
+RVP_SPLAT (pmv_s_u16x2, uint16x2_t, uint16_t, RVP_SPLAT2)
+RVP_SPLAT (pmv_s_i16x2, int16x2_t, int16_t, RVP_SPLAT2)
+RVP_SPLAT (pmv_s_u8x8, uint8x8_t, uint8_t, RVP_SPLAT8)
+RVP_SPLAT (pmv_s_i8x8, int8x8_t, int8_t, RVP_SPLAT8)
+RVP_SPLAT (pmv_s_u16x4, uint16x4_t, uint16_t, RVP_SPLAT4)
+RVP_SPLAT (pmv_s_i16x4, int16x4_t, int16_t, RVP_SPLAT4)
+RVP_SPLAT (pmv_s_u32x2, uint32x2_t, uint32_t, RVP_SPLAT2)
+RVP_SPLAT (pmv_s_i32x2, int32x2_t, int32_t, RVP_SPLAT2)
 
 /* Packed Addition and Subtraction (32-bit) */
 RVP_BINARY_OP (padd_i8x4, int8x4_t, +)
@@ -402,17 +419,17 @@ RVP_UNARY_OP (pneg_i8x8, int8x8_t, -)
 RVP_UNARY_OP (pneg_i16x4, int16x4_t, -)
 RVP_UNARY_OP (pneg_i32x2, int32x2_t, -)
 
-/* Packed Addition with Scalar.  */
-CREATE_RVP_INTRINSIC (uint8x4_t, padd_s_u8x4, uint8x4_t, uint8_t)
-CREATE_RVP_INTRINSIC (int8x4_t, padd_s_i8x4, int8x4_t, int8_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, padd_s_u16x2, uint16x2_t, uint16_t)
-CREATE_RVP_INTRINSIC (int16x2_t, padd_s_i16x2, int16x2_t, int16_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, padd_s_u8x8, uint8x8_t, uint8_t)
-CREATE_RVP_INTRINSIC (int8x8_t, padd_s_i8x8, int8x8_t, int8_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, padd_s_u16x4, uint16x4_t, uint16_t)
-CREATE_RVP_INTRINSIC (int16x4_t, padd_s_i16x4, int16x4_t, int16_t)
-CREATE_RVP_INTRINSIC (uint32x2_t, padd_s_u32x2, uint32x2_t, uint32_t)
-CREATE_RVP_INTRINSIC (int32x2_t, padd_s_i32x2, int32x2_t, int32_t)
+/* Packed Addition with Scalar */
+RVP_SCALAR_BINARY_OP (padd_s_u8x4,  uint8x4_t,  uint8_t,  +, RVP_SPLAT4)
+RVP_SCALAR_BINARY_OP (padd_s_i8x4,  int8x4_t,   int8_t,   +, RVP_SPLAT4)
+RVP_SCALAR_BINARY_OP (padd_s_u16x2, uint16x2_t, uint16_t, +, RVP_SPLAT2)
+RVP_SCALAR_BINARY_OP (padd_s_i16x2, int16x2_t,  int16_t,  +, RVP_SPLAT2)
+RVP_SCALAR_BINARY_OP (padd_s_u8x8,  uint8x8_t,  uint8_t,  +, RVP_SPLAT8)
+RVP_SCALAR_BINARY_OP (padd_s_i8x8,  int8x8_t,   int8_t,   +, RVP_SPLAT8)
+RVP_SCALAR_BINARY_OP (padd_s_u16x4, uint16x4_t, uint16_t, +, RVP_SPLAT4)
+RVP_SCALAR_BINARY_OP (padd_s_i16x4, int16x4_t,  int16_t,  +, RVP_SPLAT4)
+RVP_SCALAR_BINARY_OP (padd_s_u32x2, uint32x2_t, uint32_t, +, RVP_SPLAT2)
+RVP_SCALAR_BINARY_OP (padd_s_i32x2, int32x2_t,  int32_t,  +, RVP_SPLAT2)
 
 /* Packed Saturating Addition and Subtraction.  */
 CREATE_RVP_INTRINSIC (int8x4_t, psadd_i8x4, int8x4_t, int8x4_t)
