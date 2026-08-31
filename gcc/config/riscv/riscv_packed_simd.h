@@ -956,7 +956,17 @@ CREATE_RVP_INTRINSIC (int8x4_t, pnclipr_s_i8x4, int16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x2_t, pnclipr_s_i16x2, int32x2_t, unsigned)
 #endif
 
-/* Packed Narrowing Clip Pair (TODO).  */
+/* Packed Narrowing Clip Pair.  */
+CREATE_RVP_INTRINSIC (int8x4_t, pnclipp_i8x4, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (uint8x4_t, pnclipup_u8x4, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC (int16x2_t, pnclipp_i16x2, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint16x2_t, pnclipup_u16x2, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (int8x8_t, pnclipp_i8x8, int16x4_t, int16x4_t)
+CREATE_RVP_INTRINSIC (uint8x8_t, pnclipup_u8x8, uint16x4_t, uint16x4_t)
+CREATE_RVP_INTRINSIC (int16x4_t, pnclipp_i16x4, int32x2_t, int32x2_t)
+CREATE_RVP_INTRINSIC (uint16x4_t, pnclipup_u16x4, uint32x2_t, uint32x2_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pnclipp_i32x2, int64_t, int64_t)
+CREATE_RVP_INTRINSIC (uint32x2_t, pnclipup_u32x2, uint64_t, uint64_t)
 
 /* Packed Reverse.  */
 CREATE_RVP_INTRINSIC (int8x4_t, prev_i8x4, int8x4_t)

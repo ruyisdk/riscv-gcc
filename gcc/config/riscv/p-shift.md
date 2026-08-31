@@ -1574,3 +1574,299 @@
    pnclipri.h\t%0,%1,%2
    pnclipr.hs\t%0,%1,%2"
   [(set_attr "type" "simd, simd")])
+
+;; Packed narrowing clip pairs.  The 32-bit result forms first concatenate
+;; two half-width inputs and then use the existing saturating truncation
+;; optabs.  On RV32 this feeds the register-pair PNCLIPI instruction.  RV64
+;; needs PACK followed by PNCLIPP with a zero second source because each input
+;; contains only half of the lanes consumed by PNCLIPP.
+
+(define_expand "riscv_pnclipp_i8x4"
+  [(set (match_operand:PV4QI 0 "register_operand")
+	(unspec:PV4QI [(match_operand:PV2HI 1 "register_operand")
+		       (match_operand:PV2HI 2 "register_operand")]
+	 UNSPEC_PNCLIP))]
+  "TARGET_RVP"
+{
+  rtx combined;
+  if (TARGET_64BIT)
+    {
+      rtx combined_v = gen_reg_rtx (PV2SImode);
+      emit_insn (gen_rtx_SET
+	(combined_v,
+	 gen_rtx_VEC_CONCAT (PV2SImode, gen_lowpart (SImode, operands[1]),
+				       gen_lowpart (SImode, operands[2]))));
+      combined = gen_lowpart (PV4HImode, combined_v);
+    }
+  else
+    {
+      combined = gen_reg_rtx (PV4HImode);
+      emit_move_insn (gen_lowpart (PV2HImode, combined), operands[1]);
+      emit_move_insn (gen_highpart (PV2HImode, combined), operands[2]);
+    }
+  emit_insn (gen_sstruncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+})
+
+(define_expand "riscv_pnclipup_u8x4"
+  [(set (match_operand:PV4QI 0 "register_operand")
+	(unspec:PV4QI [(match_operand:PV2HI 1 "register_operand")
+		       (match_operand:PV2HI 2 "register_operand")]
+	 UNSPEC_PNCLIPU))]
+  "TARGET_RVP"
+{
+  rtx combined;
+  if (TARGET_64BIT)
+    {
+      rtx combined_v = gen_reg_rtx (PV2SImode);
+      emit_insn (gen_rtx_SET
+	(combined_v,
+	 gen_rtx_VEC_CONCAT (PV2SImode, gen_lowpart (SImode, operands[1]),
+				       gen_lowpart (SImode, operands[2]))));
+      combined = gen_lowpart (PV4HImode, combined_v);
+    }
+  else
+    {
+      combined = gen_reg_rtx (PV4HImode);
+      emit_move_insn (gen_lowpart (PV2HImode, combined), operands[1]);
+      emit_move_insn (gen_highpart (PV2HImode, combined), operands[2]);
+    }
+  emit_insn (gen_ustruncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+})
+
+(define_expand "riscv_pnclipp_i16x2"
+  [(set (match_operand:PV2HI 0 "register_operand")
+	(unspec:PV2HI [(match_operand:SI 1 "register_operand")
+		       (match_operand:SI 2 "register_operand")]
+	 UNSPEC_PNCLIP))]
+  "TARGET_RVP"
+{
+  rtx combined = gen_reg_rtx (PV2SImode);
+  if (TARGET_64BIT)
+    emit_insn (gen_rtx_SET
+	(combined, gen_rtx_VEC_CONCAT (PV2SImode, operands[1], operands[2])));
+  else
+    {
+      emit_move_insn (gen_lowpart (SImode, combined), operands[1]);
+      emit_move_insn (gen_highpart (SImode, combined), operands[2]);
+    }
+  emit_insn (gen_sstruncpv2sipv2hi2 (operands[0], combined));
+  DONE;
+})
+
+(define_expand "riscv_pnclipup_u16x2"
+  [(set (match_operand:PV2HI 0 "register_operand")
+	(unspec:PV2HI [(match_operand:SI 1 "register_operand")
+		       (match_operand:SI 2 "register_operand")]
+	 UNSPEC_PNCLIPU))]
+  "TARGET_RVP"
+{
+  rtx combined = gen_reg_rtx (PV2SImode);
+  if (TARGET_64BIT)
+    emit_insn (gen_rtx_SET
+	(combined, gen_rtx_VEC_CONCAT (PV2SImode, operands[1], operands[2])));
+  else
+    {
+      emit_move_insn (gen_lowpart (SImode, combined), operands[1]);
+      emit_move_insn (gen_highpart (SImode, combined), operands[2]);
+    }
+  emit_insn (gen_ustruncpv2sipv2hi2 (operands[0], combined));
+  DONE;
+})
+
+;; The 64-bit result forms consume two complete XLEN-bit sources on RV64.
+;; RV32 clips each register-pair source separately and returns the two narrow
+;; results in the corresponding halves of the destination pair.
+
+(define_expand "riscv_pnclipp_i8x8"
+  [(set (match_operand:PV8QI 0 "register_operand")
+	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand")
+		       (match_operand:PV4HI 2 "register_operand")]
+	 UNSPEC_PNCLIP))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pnclipp_i8x8_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (PV4QImode);
+      rtx hi = gen_reg_rtx (PV4QImode);
+      emit_insn (gen_riscv_pnclip_s_i8x4 (lo, operands[1], const0_rtx));
+      emit_insn (gen_riscv_pnclip_s_i8x4 (hi, operands[2], const0_rtx));
+      emit_move_insn (gen_lowpart (PV4QImode, operands[0]), lo);
+      emit_move_insn (gen_highpart (PV4QImode, operands[0]), hi);
+    }
+  DONE;
+})
+
+(define_insn "riscv_pnclipp_i8x8_rv64"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand" "r")
+		       (match_operand:PV4HI 2 "register_operand" "r")]
+	 UNSPEC_PNCLIP))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pnclipp.b\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_pnclipup_u8x8"
+  [(set (match_operand:PV8QI 0 "register_operand")
+	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand")
+		       (match_operand:PV4HI 2 "register_operand")]
+	 UNSPEC_PNCLIPU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pnclipup_u8x8_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (PV4QImode);
+      rtx hi = gen_reg_rtx (PV4QImode);
+      emit_insn (gen_riscv_pnclipu_s_u8x4 (lo, operands[1], const0_rtx));
+      emit_insn (gen_riscv_pnclipu_s_u8x4 (hi, operands[2], const0_rtx));
+      emit_move_insn (gen_lowpart (PV4QImode, operands[0]), lo);
+      emit_move_insn (gen_highpart (PV4QImode, operands[0]), hi);
+    }
+  DONE;
+})
+
+(define_insn "riscv_pnclipup_u8x8_rv64"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand" "r")
+		       (match_operand:PV4HI 2 "register_operand" "r")]
+	 UNSPEC_PNCLIPU))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pnclipup.b\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_pnclipp_i16x4"
+  [(set (match_operand:PV4HI 0 "register_operand")
+	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand")
+		       (match_operand:PV2SI 2 "register_operand")]
+	 UNSPEC_PNCLIP))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pnclipp_i16x4_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (PV2HImode);
+      rtx hi = gen_reg_rtx (PV2HImode);
+      emit_insn (gen_riscv_pnclip_s_i16x2 (lo, operands[1], const0_rtx));
+      emit_insn (gen_riscv_pnclip_s_i16x2 (hi, operands[2], const0_rtx));
+      emit_move_insn (gen_lowpart (PV2HImode, operands[0]), lo);
+      emit_move_insn (gen_highpart (PV2HImode, operands[0]), hi);
+    }
+  DONE;
+})
+
+(define_insn "riscv_pnclipp_i16x4_rv64"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand" "r")
+		       (match_operand:PV2SI 2 "register_operand" "r")]
+	 UNSPEC_PNCLIP))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pnclipp.h\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_pnclipup_u16x4"
+  [(set (match_operand:PV4HI 0 "register_operand")
+	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand")
+		       (match_operand:PV2SI 2 "register_operand")]
+	 UNSPEC_PNCLIPU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pnclipup_u16x4_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (PV2HImode);
+      rtx hi = gen_reg_rtx (PV2HImode);
+      emit_insn (gen_riscv_pnclipu_s_u16x2 (lo, operands[1], const0_rtx));
+      emit_insn (gen_riscv_pnclipu_s_u16x2 (hi, operands[2], const0_rtx));
+      emit_move_insn (gen_lowpart (PV2HImode, operands[0]), lo);
+      emit_move_insn (gen_highpart (PV2HImode, operands[0]), hi);
+    }
+  DONE;
+})
+
+(define_insn "riscv_pnclipup_u16x4_rv64"
+  [(set (match_operand:PV4HI 0 "register_operand" "=r")
+	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand" "r")
+		       (match_operand:PV2SI 2 "register_operand" "r")]
+	 UNSPEC_PNCLIPU))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pnclipup.h\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_pnclipp_i32x2"
+  [(set (match_operand:PV2SI 0 "register_operand")
+	(unspec:PV2SI [(match_operand:DI 1 "register_operand")
+		       (match_operand:DI 2 "register_operand")]
+	 UNSPEC_NCLIP))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pnclipp_i32x2_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (SImode);
+      rtx hi = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_nclip_i32 (lo, operands[1], const0_rtx));
+      emit_insn (gen_riscv_nclip_i32 (hi, operands[2], const0_rtx));
+      emit_move_insn (gen_lowpart (SImode, operands[0]), lo);
+      emit_move_insn (gen_highpart (SImode, operands[0]), hi);
+    }
+  DONE;
+})
+
+(define_insn "riscv_pnclipp_i32x2_rv64"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(unspec:PV2SI [(match_operand:DI 1 "register_operand" "r")
+		       (match_operand:DI 2 "register_operand" "r")]
+	 UNSPEC_NCLIP))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pnclipp.w\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_expand "riscv_pnclipup_u32x2"
+  [(set (match_operand:PV2SI 0 "register_operand")
+	(unspec:PV2SI [(match_operand:DI 1 "register_operand")
+		       (match_operand:DI 2 "register_operand")]
+	 UNSPEC_NCLIPU))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_pnclipup_u32x2_rv64
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (SImode);
+      rtx hi = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_nclipu_u32 (lo, operands[1], const0_rtx));
+      emit_insn (gen_riscv_nclipu_u32 (hi, operands[2], const0_rtx));
+      emit_move_insn (gen_lowpart (SImode, operands[0]), lo);
+      emit_move_insn (gen_highpart (SImode, operands[0]), hi);
+    }
+  DONE;
+})
+
+(define_insn "riscv_pnclipup_u32x2_rv64"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(unspec:PV2SI [(match_operand:DI 1 "register_operand" "r")
+		       (match_operand:DI 2 "register_operand" "r")]
+	 UNSPEC_NCLIPU))]
+  "TARGET_RVP && TARGET_64BIT"
+  "pnclipup.w\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
