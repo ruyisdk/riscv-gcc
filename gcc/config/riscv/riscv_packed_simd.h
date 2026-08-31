@@ -276,6 +276,68 @@ RVP_OP_ATTRS to_type __riscv_##name (from_type __x) \
     return __value.__to; \
   }
 
+#define RVP_SLIDE1(suffix, vector_type, scalar_type, unsigned_scalar_type, \
+		   to_word, from_word, word_type, word_bits, \
+		   element_bits, slx, srx) \
+RVP_OP_ATTRS vector_type __riscv_pslide1up_##suffix \
+  (vector_type __rd, scalar_type __rs1) \
+  { \
+    word_type __insert = ((word_type) (unsigned_scalar_type) __rs1 \
+			  << ((word_bits) - (element_bits))); \
+    return from_word (slx (to_word (__rd), __insert, element_bits)); \
+  } \
+RVP_OP_ATTRS vector_type __riscv_pslide1down_##suffix \
+  (vector_type __rd, scalar_type __rs1) \
+  { \
+    word_type __insert = (word_type) (unsigned_scalar_type) __rs1; \
+    return from_word (srx (to_word (__rd), __insert, element_bits)); \
+  }
+
+#define RVP_SLIDE1_PAIR(suffix, vector_type, scalar_type, to_vector, \
+			pair_even, pair_odd_even) \
+RVP_OP_ATTRS vector_type __riscv_pslide1up_##suffix \
+  (vector_type __rd, scalar_type __rs1) \
+  { \
+    vector_type __insert = to_vector (__rs1); \
+    return pair_even (__insert, __rd); \
+  } \
+RVP_OP_ATTRS vector_type __riscv_pslide1down_##suffix \
+  (vector_type __rd, scalar_type __rs1) \
+  { \
+    vector_type __insert = to_vector (__rs1); \
+    return pair_odd_even (__rd, __insert); \
+  }
+
+#define RVP_SLIDE1_PAIR_INIT(suffix, vector_type, scalar_type, pair_even, \
+			     pair_odd_even) \
+RVP_OP_ATTRS vector_type __riscv_pslide1up_##suffix \
+  (vector_type __rd, scalar_type __rs1) \
+  { \
+    vector_type __insert = { __rs1, 0 }; \
+    return pair_even (__insert, __rd); \
+  } \
+RVP_OP_ATTRS vector_type __riscv_pslide1down_##suffix \
+  (vector_type __rd, scalar_type __rs1) \
+  { \
+    vector_type __insert = { __rs1, 0 }; \
+    return pair_odd_even (__rd, __insert); \
+  }
+
+#define RVP_SLIDE(suffix, vector_type, to_word, from_word, element_bits, \
+		  slx, srx) \
+RVP_OP_ATTRS vector_type __riscv_pslideupx_##suffix \
+  (vector_type __rd, vector_type __rs1, unsigned int __rs2) \
+  { \
+    return from_word (slx (to_word (__rd), to_word (__rs1), \
+			    __rs2 * (element_bits))); \
+  } \
+RVP_OP_ATTRS vector_type __riscv_pslidedownx_##suffix \
+  (vector_type __rd, vector_type __rs1, unsigned int __rs2) \
+  { \
+    return from_word (srx (to_word (__rd), to_word (__rs1), \
+			    __rs2 * (element_bits))); \
+  }
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1504,6 +1566,142 @@ RVP_REINTERPRET (preinterpret_i8x8_i32x2, int32x2_t, int8x8_t)
 RVP_REINTERPRET (preinterpret_u16x4_i32x2, int32x2_t, uint16x4_t)
 RVP_REINTERPRET (preinterpret_i16x4_i32x2, int32x2_t, int16x4_t)
 RVP_REINTERPRET (preinterpret_u32x2_i32x2, int32x2_t, uint32x2_t)
+
+/* The scalar SLX and SRX intrinsics operate on one XLEN-bit register.  Split
+   64-bit values into two halves when XLEN is 32 so that slides across the
+   register-pair boundary retain the same concatenation semantics.  */
+#if __riscv_xlen == 32
+RVP_OP_ATTRS uint64_t
+__rvp_slx_64 (uint64_t __rd, uint64_t __rs1, unsigned int __shamt)
+{
+  uint32_t __rd_lo = (uint32_t) __rd;
+  uint32_t __rd_hi = (uint32_t) (__rd >> 32);
+  uint32_t __rs1_lo = (uint32_t) __rs1;
+  uint32_t __rs1_hi = (uint32_t) (__rs1 >> 32);
+  uint32_t __result_lo;
+  uint32_t __result_hi;
+
+  __shamt &= 63;
+  if (__shamt & 32)
+    {
+      __shamt &= 31;
+      __result_lo = __riscv_slx_32 (__rs1_hi, __rs1_lo, __shamt);
+      __result_hi = __riscv_slx_32 (__rd_lo, __rs1_hi, __shamt);
+    }
+  else
+    {
+      __result_lo = __riscv_slx_32 (__rd_lo, __rs1_hi, __shamt);
+      __result_hi = __riscv_slx_32 (__rd_hi, __rd_lo, __shamt);
+    }
+
+  return ((uint64_t) __result_hi << 32) | __result_lo;
+}
+
+RVP_OP_ATTRS uint64_t
+__rvp_srx_64 (uint64_t __rd, uint64_t __rs1, unsigned int __shamt)
+{
+  uint32_t __rd_lo = (uint32_t) __rd;
+  uint32_t __rd_hi = (uint32_t) (__rd >> 32);
+  uint32_t __rs1_lo = (uint32_t) __rs1;
+  uint32_t __rs1_hi = (uint32_t) (__rs1 >> 32);
+  uint32_t __result_lo;
+  uint32_t __result_hi;
+
+  __shamt &= 63;
+  if (__shamt & 32)
+    {
+      __shamt &= 31;
+      __result_lo = __riscv_srx_32 (__rd_hi, __rs1_lo, __shamt);
+      __result_hi = __riscv_srx_32 (__rs1_lo, __rs1_hi, __shamt);
+    }
+  else
+    {
+      __result_lo = __riscv_srx_32 (__rd_lo, __rd_hi, __shamt);
+      __result_hi = __riscv_srx_32 (__rd_hi, __rs1_lo, __shamt);
+    }
+
+  return ((uint64_t) __result_hi << 32) | __result_lo;
+}
+
+#define RVP_SLX_64 __rvp_slx_64
+#define RVP_SRX_64 __rvp_srx_64
+#else
+#define RVP_SLX_64 __riscv_slx_64
+#define RVP_SRX_64 __riscv_srx_64
+#endif
+
+/* Packed slide 1 up and down.  */
+RVP_SLIDE1 (i8x4, int8x4_t, int8_t, uint8_t,
+	    __riscv_preinterpret_i8x4_u32,
+	    __riscv_preinterpret_u32_i8x4, uint32_t, 32, 8,
+	    __riscv_slx_32, __riscv_srx_32)
+RVP_SLIDE1 (u8x4, uint8x4_t, uint8_t, uint8_t,
+	    __riscv_preinterpret_u8x4_u32,
+	    __riscv_preinterpret_u32_u8x4, uint32_t, 32, 8,
+	    __riscv_slx_32, __riscv_srx_32)
+RVP_SLIDE1_PAIR (i16x2, int16x2_t, int16_t,
+		 __riscv_preinterpret_i32_i16x2,
+		 __riscv_ppaire_i16x2, __riscv_ppairoe_i16x2)
+RVP_SLIDE1_PAIR (u16x2, uint16x2_t, uint16_t,
+		 __riscv_preinterpret_u32_u16x2,
+		 __riscv_ppaire_u16x2, __riscv_ppairoe_u16x2)
+RVP_SLIDE1 (i8x8, int8x8_t, int8_t, uint8_t,
+	    __riscv_preinterpret_i8x8_u64,
+	    __riscv_preinterpret_u64_i8x8, uint64_t, 64, 8,
+	    RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE1 (u8x8, uint8x8_t, uint8_t, uint8_t,
+	    __riscv_preinterpret_u8x8_u64,
+	    __riscv_preinterpret_u64_u8x8, uint64_t, 64, 8,
+	    RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE1 (i16x4, int16x4_t, int16_t, uint16_t,
+	    __riscv_preinterpret_i16x4_u64,
+	    __riscv_preinterpret_u64_i16x4, uint64_t, 64, 16,
+	    RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE1 (u16x4, uint16x4_t, uint16_t, uint16_t,
+	    __riscv_preinterpret_u16x4_u64,
+	    __riscv_preinterpret_u64_u16x4, uint64_t, 64, 16,
+	    RVP_SLX_64, RVP_SRX_64)
+#if __riscv_xlen == 32
+RVP_SLIDE1_PAIR_INIT (i32x2, int32x2_t, int32_t,
+		      __riscv_ppaire_i32x2, __riscv_ppairoe_i32x2)
+RVP_SLIDE1_PAIR_INIT (u32x2, uint32x2_t, uint32_t,
+		      __riscv_ppaire_u32x2, __riscv_ppairoe_u32x2)
+#else
+RVP_SLIDE1_PAIR (i32x2, int32x2_t, int32_t,
+		 __riscv_preinterpret_i64_i32x2,
+		 __riscv_ppaire_i32x2, __riscv_ppairoe_i32x2)
+RVP_SLIDE1_PAIR (u32x2, uint32x2_t, uint32_t,
+		 __riscv_preinterpret_u64_u32x2,
+		 __riscv_ppaire_u32x2, __riscv_ppairoe_u32x2)
+#endif
+
+/* Packed slide up and down by a run-time element count.  Multiplying the
+   count by the element width leaves the instruction's masked shift amount
+   equivalent to masking the count by the number of elements.  */
+RVP_SLIDE (i8x4, int8x4_t, __riscv_preinterpret_i8x4_u32,
+	   __riscv_preinterpret_u32_i8x4, 8,
+	   __riscv_slx_32, __riscv_srx_32)
+RVP_SLIDE (u8x4, uint8x4_t, __riscv_preinterpret_u8x4_u32,
+	   __riscv_preinterpret_u32_u8x4, 8,
+	   __riscv_slx_32, __riscv_srx_32)
+RVP_SLIDE (i16x2, int16x2_t, __riscv_preinterpret_i16x2_u32,
+	   __riscv_preinterpret_u32_i16x2, 16,
+	   __riscv_slx_32, __riscv_srx_32)
+RVP_SLIDE (u16x2, uint16x2_t, __riscv_preinterpret_u16x2_u32,
+	   __riscv_preinterpret_u32_u16x2, 16,
+	   __riscv_slx_32, __riscv_srx_32)
+RVP_SLIDE (i8x8, int8x8_t, __riscv_preinterpret_i8x8_u64,
+	   __riscv_preinterpret_u64_i8x8, 8, RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE (u8x8, uint8x8_t, __riscv_preinterpret_u8x8_u64,
+	   __riscv_preinterpret_u64_u8x8, 8, RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE (i16x4, int16x4_t, __riscv_preinterpret_i16x4_u64,
+	   __riscv_preinterpret_u64_i16x4, 16, RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE (u16x4, uint16x4_t, __riscv_preinterpret_u16x4_u64,
+	   __riscv_preinterpret_u64_u16x4, 16, RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE (i32x2, int32x2_t, __riscv_preinterpret_i32x2_u64,
+	   __riscv_preinterpret_u64_i32x2, 32, RVP_SLX_64, RVP_SRX_64)
+RVP_SLIDE (u32x2, uint32x2_t, __riscv_preinterpret_u32x2_u64,
+	   __riscv_preinterpret_u64_u32x2, 32, RVP_SLX_64, RVP_SRX_64)
 
 #ifdef __cplusplus
 }
