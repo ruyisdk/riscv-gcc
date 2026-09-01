@@ -1589,8 +1589,44 @@ CREATE_RVP_INTRINSIC (int32x2_t, pmqracc_h01_i32x2, int32x2_t, int16x4_t,
 			int16x4_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pmqracc_h11_i32x2, int32x2_t, int16x4_t,
 			int16x4_t)
-/* w-series i64 (RV64-only; RV32 mqwacc/mqrwacc register-pair TODO)  */
-#if __riscv_xlen == 64
+/* w-series i64.  */
+#if __riscv_xlen == 32
+RVP_OP_ATTRS int64_t
+__riscv_mqacc_w00_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return __builtin_riscv_mqwacc_i64 (__rd, __rs1[0], __rs2[0]);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mqacc_w01_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return __builtin_riscv_mqwacc_i64 (__rd, __rs1[0], __rs2[1]);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mqacc_w11_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return __builtin_riscv_mqwacc_i64 (__rd, __rs1[1], __rs2[1]);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mqracc_w00_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return __builtin_riscv_mqrwacc_i64 (__rd, __rs1[0], __rs2[0]);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mqracc_w01_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return __builtin_riscv_mqrwacc_i64 (__rd, __rs1[0], __rs2[1]);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mqracc_w11_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return __builtin_riscv_mqrwacc_i64 (__rd, __rs1[1], __rs2[1]);
+}
+#else
 CREATE_RVP_INTRINSIC (int64_t, mqacc_w00_i64, int64_t, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mqacc_w01_i64, int64_t, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mqacc_w11_i64, int64_t, int32x2_t, int32x2_t)
@@ -1638,9 +1674,56 @@ CREATE_RVP_INTRINSIC (uint32x2_t, pmulu_h01_u32x2, uint16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, pmulu_h11_u32x2, uint16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pmulsu_h00_i32x2, int16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pmulsu_h11_i32x2, int16x4_t, uint16x4_t)
-/* w-series i64 (scalar, RV64-only; RV32 wmul/wmulu/wmulsu register-pair TODO)
- */
-#if __riscv_xlen == 64
+/* w-series i64.  */
+#if __riscv_xlen == 32
+RVP_OP_ATTRS int64_t
+__riscv_mul_w00_i64 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  return (int64_t) __rs1[0] * (int64_t) __rs2[0];
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mul_w01_i64 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  return (int64_t) __rs1[0] * (int64_t) __rs2[1];
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mul_w11_i64 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  return (int64_t) __rs1[1] * (int64_t) __rs2[1];
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_mulu_w00_u64 (uint32x2_t __rs1, uint32x2_t __rs2)
+{
+  return (uint64_t) __rs1[0] * (uint64_t) __rs2[0];
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_mulu_w01_u64 (uint32x2_t __rs1, uint32x2_t __rs2)
+{
+  return (uint64_t) __rs1[0] * (uint64_t) __rs2[1];
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_mulu_w11_u64 (uint32x2_t __rs1, uint32x2_t __rs2)
+{
+  return (uint64_t) __rs1[1] * (uint64_t) __rs2[1];
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mulsu_w00_i64 (int32x2_t __rs1, uint32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) (int64_t) __rs1[0] * __rs2[0]);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_mulsu_w11_i64 (int32x2_t __rs1, uint32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) (int64_t) __rs1[1] * __rs2[1]);
+}
+#else
 CREATE_RVP_INTRINSIC (int64_t, mul_w00_i64, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w01_i64, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int64_t, mul_w11_i64, int32x2_t, int32x2_t)
@@ -1671,8 +1754,66 @@ CREATE_RVP_INTRINSIC(uint32x2_t, pmaccu_h01_u32x2, uint32x2_t, uint16x4_t, uint1
 CREATE_RVP_INTRINSIC(uint32x2_t, pmaccu_h11_u32x2, uint32x2_t, uint16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pmaccsu_h00_i32x2, int32x2_t, int16x4_t, uint16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pmaccsu_h11_i32x2, int32x2_t, int16x4_t, uint16x4_t)
-/* w-series i64 (RV64-only; RV32 wmacc/wmaccu/wmaccsu register-pair TODO)  */
-#if __riscv_xlen == 64
+/* w-series i64.  */
+#if __riscv_xlen == 32
+RVP_OP_ATTRS int64_t
+__riscv_macc_w00_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) __rd
+		    + (uint64_t) __riscv_mul_w00_i64 (__rs1, __rs2));
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_macc_w01_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) __rd
+		    + (uint64_t) __riscv_mul_w01_i64 (__rs1, __rs2));
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_macc_w11_i64 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) __rd
+		    + (uint64_t) __riscv_mul_w11_i64 (__rs1, __rs2));
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_maccu_w00_u64 (uint64_t __rd, uint32x2_t __rs1,
+			uint32x2_t __rs2)
+{
+  return __rd + __riscv_mulu_w00_u64 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_maccu_w01_u64 (uint64_t __rd, uint32x2_t __rs1,
+			uint32x2_t __rs2)
+{
+  return __rd + __riscv_mulu_w01_u64 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_maccu_w11_u64 (uint64_t __rd, uint32x2_t __rs1,
+			uint32x2_t __rs2)
+{
+  return __rd + __riscv_mulu_w11_u64 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_maccsu_w00_i64 (int64_t __rd, int32x2_t __rs1,
+			 uint32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) __rd
+		    + (uint64_t) __riscv_mulsu_w00_i64 (__rs1, __rs2));
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_maccsu_w11_i64 (int64_t __rd, int32x2_t __rs1,
+			 uint32x2_t __rs2)
+{
+  return (int64_t) ((uint64_t) __rd
+		    + (uint64_t) __riscv_mulsu_w11_i64 (__rs1, __rs2));
+}
+#else
 CREATE_RVP_INTRINSIC(int64_t, macc_w00_i64, int64_t, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC(int64_t, macc_w01_i64, int64_t, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC(int64_t, macc_w11_i64, int64_t, int32x2_t, int32x2_t)
