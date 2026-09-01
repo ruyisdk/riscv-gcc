@@ -903,7 +903,7 @@ CREATE_RVP_INTRINSIC (uint32x2_t, pwunziphe_u32x2, uint16x4_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pwunzipho_i32x2, int16x4_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, pwunzipho_u32x2, uint16x4_t)
 
-/* Packed Widening Addition and Subtraction (RV32-only; RV64 TODO).  */
+/* Packed Widening Addition and Subtraction.  */
 #if __riscv_xlen == 32
 CREATE_RVP_INTRINSIC (int16x4_t, pwadd_i16x4, int8x4_t, int8x4_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pwadd_i32x2, int16x2_t, int16x2_t)
@@ -914,8 +914,7 @@ CREATE_RVP_INTRINSIC (int32x2_t, pwsub_i32x2, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC (uint16x4_t, pwsubu_u16x4, uint8x4_t, uint8x4_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, pwsubu_u32x2, uint16x2_t, uint16x2_t)
 
-/* Packed Widening Addition and Subtraction Accumulate (RV32-only; RV64 TODO)
- */
+/* Packed Widening Addition and Subtraction Accumulate.  */
 CREATE_RVP_INTRINSIC (int16x4_t, pwadda_i16x4, int16x4_t, int8x4_t, int8x4_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pwadda_i32x2, int32x2_t, int16x2_t,
 			int16x2_t)
@@ -930,8 +929,141 @@ CREATE_RVP_INTRINSIC (uint16x4_t, pwsubau_u16x4, uint16x4_t, uint8x4_t,
 			uint8x4_t)
 CREATE_RVP_INTRINSIC (uint32x2_t, pwsubau_u32x2, uint32x2_t, uint16x2_t,
 			uint16x2_t)
+#else
+RVP_OP_ATTRS int16x4_t
+__riscv_pwadd_i16x4 (int8x4_t __rs1, int8x4_t __rs2)
+{
+  union
+  {
+    int8x8_t __bytes;
+    int16x4_t __halves;
+  } __zipped;
+
+  __zipped.__bytes = __builtin_riscv_pzip_i8x8 (__rs1, __rs2);
+  return (__builtin_riscv_psext_b_i16x4 (__zipped.__halves)
+	  + __builtin_riscv_psra_s_i16x4 (__zipped.__halves, 8));
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwadd_i32x2 (int16x2_t __rs1, int16x2_t __rs2)
+{
+  int16x4_t __ones = { 1, 1, 1, 1 };
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pm2add_i16x4 (__zipped, __ones);
+}
+
+RVP_OP_ATTRS uint16x4_t
+__riscv_pwaddu_u16x4 (uint8x4_t __rs1, uint8x4_t __rs2)
+{
+  return (__builtin_riscv_pwcvtu_u16x4 (__rs1)
+	  + __builtin_riscv_pwcvtu_u16x4 (__rs2));
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwaddu_u32x2 (uint16x2_t __rs1, uint16x2_t __rs2)
+{
+  uint16x4_t __ones = { 1, 1, 1, 1 };
+  uint16x4_t __zipped = __builtin_riscv_pzip_u16x4 (__rs1, __rs2);
+  return __builtin_riscv_pm2addu_u16x4 (__zipped, __ones);
+}
+
+RVP_OP_ATTRS int16x4_t
+__riscv_pwsub_i16x4 (int8x4_t __rs1, int8x4_t __rs2)
+{
+  union
+  {
+    int8x8_t __bytes;
+    int16x4_t __halves;
+  } __zipped;
+
+  __zipped.__bytes = __builtin_riscv_pzip_i8x8 (__rs1, __rs2);
+  return (__builtin_riscv_psext_b_i16x4 (__zipped.__halves)
+	  - __builtin_riscv_psra_s_i16x4 (__zipped.__halves, 8));
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwsub_i32x2 (int16x2_t __rs1, int16x2_t __rs2)
+{
+  int16x4_t __ones = { 1, 1, 1, 1 };
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pm2sub_i16x4 (__zipped, __ones);
+}
+
+RVP_OP_ATTRS uint16x4_t
+__riscv_pwsubu_u16x4 (uint8x4_t __rs1, uint8x4_t __rs2)
+{
+  return (__builtin_riscv_pwcvtu_u16x4 (__rs1)
+	  - __builtin_riscv_pwcvtu_u16x4 (__rs2));
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwsubu_u32x2 (uint16x2_t __rs1, uint16x2_t __rs2)
+{
+  return (__builtin_riscv_pwcvtu_u32x2 (__rs1)
+	  - __builtin_riscv_pwcvtu_u32x2 (__rs2));
+}
+
+RVP_OP_ATTRS int16x4_t
+__riscv_pwadda_i16x4 (int16x4_t __rd, int8x4_t __rs1, int8x4_t __rs2)
+{
+  return __rd + __riscv_pwadd_i16x4 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwadda_i32x2 (int32x2_t __rd, int16x2_t __rs1, int16x2_t __rs2)
+{
+  int16x4_t __ones = { 1, 1, 1, 1 };
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pm2adda_i16x4 (__rd, __zipped, __ones);
+}
+
+RVP_OP_ATTRS uint16x4_t
+__riscv_pwaddau_u16x4 (uint16x4_t __rd, uint8x4_t __rs1,
+			uint8x4_t __rs2)
+{
+  return __rd + __riscv_pwaddu_u16x4 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwaddau_u32x2 (uint32x2_t __rd, uint16x2_t __rs1,
+			uint16x2_t __rs2)
+{
+  uint16x4_t __ones = { 1, 1, 1, 1 };
+  uint16x4_t __zipped = __builtin_riscv_pzip_u16x4 (__rs1, __rs2);
+  return __builtin_riscv_pm2addau_u16x4 (__rd, __zipped, __ones);
+}
+
+RVP_OP_ATTRS int16x4_t
+__riscv_pwsuba_i16x4 (int16x4_t __rd, int8x4_t __rs1, int8x4_t __rs2)
+{
+  return __rd + __riscv_pwsub_i16x4 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwsuba_i32x2 (int32x2_t __rd, int16x2_t __rs1, int16x2_t __rs2)
+{
+  int16x4_t __ones = { 1, 1, 1, 1 };
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pm2suba_i16x4 (__rd, __zipped, __ones);
+}
+
+RVP_OP_ATTRS uint16x4_t
+__riscv_pwsubau_u16x4 (uint16x4_t __rd, uint8x4_t __rs1,
+			uint8x4_t __rs2)
+{
+  return __rd + __riscv_pwsubu_u16x4 (__rs1, __rs2);
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwsubau_u32x2 (uint32x2_t __rd, uint16x2_t __rs1,
+			uint16x2_t __rs2)
+{
+  return __rd + __riscv_pwsubu_u32x2 (__rs1, __rs2);
+}
+#endif
 
 /* Packed Widening Shift (RV32-only; RV64 TODO).  */
+#if __riscv_xlen == 32
 CREATE_RVP_INTRINSIC (uint16x4_t, pwsll_s_u16x4, uint8x4_t, unsigned)
 CREATE_RVP_INTRINSIC (uint32x2_t, pwsll_s_u32x2, uint16x2_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x4_t, pwsla_s_i16x4, int8x4_t, unsigned)
