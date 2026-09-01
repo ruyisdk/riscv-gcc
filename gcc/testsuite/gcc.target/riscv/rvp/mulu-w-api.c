@@ -4,21 +4,21 @@
 #include <riscv_packed_simd.h>
 
 uint64_t
-test_mulu_w00_i64 (uint32x2_t rs1, uint32x2_t rs2)
+test_mulu_w00_u64 (uint32x2_t rs1, uint32x2_t rs2)
 {
-  return __riscv_mulu_w00_i64 (rs1, rs2);
+  return __riscv_mulu_w00_u64 (rs1, rs2);
 }
 
 uint64_t
-test_mulu_w01_i64 (uint32x2_t rs1, uint32x2_t rs2)
+test_mulu_w01_u64 (uint32x2_t rs1, uint32x2_t rs2)
 {
-  return __riscv_mulu_w01_i64 (rs1, rs2);
+  return __riscv_mulu_w01_u64 (rs1, rs2);
 }
 
 uint64_t
-test_mulu_w11_i64 (uint32x2_t rs1, uint32x2_t rs2)
+test_mulu_w11_u64 (uint32x2_t rs1, uint32x2_t rs2)
 {
-  return __riscv_mulu_w11_i64 (rs1, rs2);
+  return __riscv_mulu_w11_u64 (rs1, rs2);
 }
 
 /* { dg-final { scan-assembler-times {mulu\.w00} 1 } } */
