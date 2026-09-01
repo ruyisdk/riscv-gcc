@@ -1336,12 +1336,34 @@
   [(set_attr "type" "simd")])
 
 ;-------- Packed Multiplication with Widening Horizontal Addition ----------
-;Two-operand widening mul+horizontal-add: V2HI -> DI (64-bit result in a
-;register pair, =R).  RV32 single insns (pm2wadd.h/pm2wadd.hx/pm2waddu.h/
-;pm2wsub.h/pm2wsub.hx/pm2waddsu.h).  RV64 sequences (zext.w+pm4add.h / etc.)
-;not wired -- simd32-only, RV64 errors out, matching pwmul / pwadd.
+;Two-operand widening mul+horizontal-add: V2HI -> DI.  RV32 has single
+;register-pair instructions.  RV64 clears the unused upper word of one source
+;before using PM4ADD, or sign-extends the scalar PM2SUB result.
 
-(define_insn "riscv_pm2wadd_i64"
+(define_expand "riscv_pm2wadd_i64"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec:DI [(match_operand:V2HI 1 "register_operand")
+                    (match_operand:V2HI 2 "register_operand")]
+         UNSPEC_PM2WADD_H))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[1]);
+      rtx rhs = lowpart_subreg (V4HImode, operands[2], V2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_pm4add_i16x4
+	(operands[0], gen_lowpart (V4HImode, lhs_di), rhs));
+    }
+  else
+    emit_insn (gen_riscv_pm2wadd_i64_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_pm2wadd_i64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:V2HI 1 "register_operand" "r")
                     (match_operand:V2HI 2 "register_operand" "r")]
@@ -1350,7 +1372,33 @@
   "pm2wadd.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_insn "riscv_pm2wadd_x_i64"
+(define_expand "riscv_pm2wadd_x_i64"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec:DI [(match_operand:V2HI 1 "register_operand")
+                    (match_operand:V2HI 2 "register_operand")]
+         UNSPEC_PM2WADD_HX))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[1]);
+      rtx rhs = gen_lowpart (PV2HImode, operands[2]);
+      rtx exchanged = gen_reg_rtx (PV2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_ppairoe_i16x2 (exchanged, rhs, rhs));
+      emit_insn (gen_riscv_pm4add_i16x4
+	(operands[0], gen_lowpart (V4HImode, lhs_di),
+	 lowpart_subreg (V4HImode, exchanged, PV2HImode)));
+    }
+  else
+    emit_insn (gen_riscv_pm2wadd_x_i64_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_pm2wadd_x_i64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:V2HI 1 "register_operand" "r")
                     (match_operand:V2HI 2 "register_operand" "r")]
@@ -1359,7 +1407,30 @@
   "pm2wadd.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_insn "riscv_pm2waddu_u64"
+(define_expand "riscv_pm2waddu_u64"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec:DI [(match_operand:V2HI 1 "register_operand")
+                    (match_operand:V2HI 2 "register_operand")]
+         UNSPEC_PM2WADDU_H))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[1]);
+      rtx rhs = lowpart_subreg (V4HImode, operands[2], V2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_pm4addu_u16x4
+	(operands[0], gen_lowpart (V4HImode, lhs_di), rhs));
+    }
+  else
+    emit_insn (gen_riscv_pm2waddu_u64_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_pm2waddu_u64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:V2HI 1 "register_operand" "r")
                     (match_operand:V2HI 2 "register_operand" "r")]
@@ -1368,7 +1439,28 @@
   "pm2waddu.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_insn "riscv_pm2wsub_i64"
+(define_expand "riscv_pm2wsub_i64"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec:DI [(match_operand:V2HI 1 "register_operand")
+                    (match_operand:V2HI 2 "register_operand")]
+         UNSPEC_PM2WSUB_H))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx difference = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_pm2sub_i16x2
+	(difference, operands[1], operands[2]));
+      emit_insn (gen_rtx_SET
+	(operands[0], gen_rtx_SIGN_EXTEND (DImode, difference)));
+    }
+  else
+    emit_insn (gen_riscv_pm2wsub_i64_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_pm2wsub_i64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:V2HI 1 "register_operand" "r")
                     (match_operand:V2HI 2 "register_operand" "r")]
@@ -1377,7 +1469,28 @@
   "pm2wsub.h\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_insn "riscv_pm2wsub_x_i64"
+(define_expand "riscv_pm2wsub_x_i64"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec:DI [(match_operand:V2HI 1 "register_operand")
+                    (match_operand:V2HI 2 "register_operand")]
+         UNSPEC_PM2WSUB_HX))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx difference = gen_reg_rtx (SImode);
+      emit_insn (gen_riscv_pm2sub_x_i16x2
+	(difference, operands[1], operands[2]));
+      emit_insn (gen_rtx_SET
+	(operands[0], gen_rtx_SIGN_EXTEND (DImode, difference)));
+    }
+  else
+    emit_insn (gen_riscv_pm2wsub_x_i64_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_pm2wsub_x_i64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:V2HI 1 "register_operand" "r")
                     (match_operand:V2HI 2 "register_operand" "r")]
@@ -1386,7 +1499,30 @@
   "pm2wsub.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_insn "riscv_pm2waddsu_u64"
+(define_expand "riscv_pm2waddsu_u64"
+  [(set (match_operand:DI 0 "register_operand")
+        (unspec:DI [(match_operand:V2HI 1 "register_operand")
+                    (match_operand:V2HI 2 "register_operand")]
+         UNSPEC_PM2WADDSU_H))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[1]);
+      rtx rhs = lowpart_subreg (V4HImode, operands[2], V2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_pm4addsu_i16x4
+	(operands[0], gen_lowpart (V4HImode, lhs_di), rhs));
+    }
+  else
+    emit_insn (gen_riscv_pm2waddsu_u64_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
+(define_insn "riscv_pm2waddsu_u64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:V2HI 1 "register_operand" "r")
                     (match_operand:V2HI 2 "register_operand" "r")]
@@ -1397,10 +1533,9 @@
 
 ;-------- Packed Multiplication with Widening Horizontal Addition and Accumulate
 ;Three-operand RMW widening mul+horizontal-add accumulate: rd (DI/UDI) +=
-;(rs1 * rs2) widened where rs1/rs2 are V2HI/UV2HI.  RV32 single RMW insns
-;(pm2wadda.h/pm2wadda.hx/pm2waddau.h/pm2wsuba.h/pm2wsuba.hx/pm2waddasu.h)
-;using a register pair (+R).  RV64 sequences (zext.w+pm4adda.h / etc.) not
-;wired -- simd32-only, RV64 errors out, matching pm2wadd / pwmacc.
+;(rs1 * rs2) widened where rs1/rs2 are V2HI/UV2HI.  RV32 uses single
+;register-pair instructions.  RV64 uses PM4ADDA for addition and a PM2SUB,
+;zero-extension, and PREDSUM sequence for subtraction.
 
 (define_expand "riscv_pm2wadda_i64"
   [(set (match_operand:DI 0 "register_operand")
@@ -1408,10 +1543,24 @@
                     (match_operand:V2HI 2 "register_operand")
                     (match_operand:V2HI 3 "register_operand")]
          UNSPEC_PM2WADDA_H))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_move_insn (operands[0], operands[1]);
-  emit_insn (gen_riscv_pm2wadda_i64_rmw (operands[0], operands[2], operands[3]));
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[2]);
+      rtx rhs = lowpart_subreg (V4HImode, operands[3], V2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_pm4adda_i16x4
+	(operands[0], operands[1], gen_lowpart (V4HImode, lhs_di), rhs));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pm2wadda_i64_rmw
+	(operands[0], operands[2], operands[3]));
+    }
   DONE;
 })
 
@@ -1431,10 +1580,27 @@
                     (match_operand:V2HI 2 "register_operand")
                     (match_operand:V2HI 3 "register_operand")]
          UNSPEC_PM2WADDA_HX))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_move_insn (operands[0], operands[1]);
-  emit_insn (gen_riscv_pm2wadda_x_i64_rmw (operands[0], operands[2], operands[3]));
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[2]);
+      rtx rhs = gen_lowpart (PV2HImode, operands[3]);
+      rtx exchanged = gen_reg_rtx (PV2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_ppairoe_i16x2 (exchanged, rhs, rhs));
+      emit_insn (gen_riscv_pm4adda_i16x4
+	(operands[0], operands[1], gen_lowpart (V4HImode, lhs_di),
+	 lowpart_subreg (V4HImode, exchanged, PV2HImode)));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pm2wadda_x_i64_rmw
+	(operands[0], operands[2], operands[3]));
+    }
   DONE;
 })
 
@@ -1454,10 +1620,24 @@
                     (match_operand:V2HI 2 "register_operand")
                     (match_operand:V2HI 3 "register_operand")]
          UNSPEC_PM2WADDAU_H))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_move_insn (operands[0], operands[1]);
-  emit_insn (gen_riscv_pm2waddau_u64_rmw (operands[0], operands[2], operands[3]));
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[2]);
+      rtx rhs = lowpart_subreg (V4HImode, operands[3], V2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_pm4addau_u16x4
+	(operands[0], operands[1], gen_lowpart (V4HImode, lhs_di), rhs));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pm2waddau_u64_rmw
+	(operands[0], operands[2], operands[3]));
+    }
   DONE;
 })
 
@@ -1477,10 +1657,25 @@
                     (match_operand:V2HI 2 "register_operand")
                     (match_operand:V2HI 3 "register_operand")]
          UNSPEC_PM2WSUBA_H))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_move_insn (operands[0], operands[1]);
-  emit_insn (gen_riscv_pm2wsuba_i64_rmw (operands[0], operands[2], operands[3]));
+  if (TARGET_64BIT)
+    {
+      rtx difference = gen_reg_rtx (SImode);
+      rtx widened = gen_reg_rtx (DImode);
+      emit_insn (gen_riscv_pm2sub_i16x2
+	(difference, operands[2], operands[3]));
+      emit_insn (gen_rtx_SET
+	(widened, gen_rtx_ZERO_EXTEND (DImode, difference)));
+      emit_insn (gen_riscv_predsum_i32x2_i64
+	(operands[0], gen_lowpart (PV2SImode, widened), operands[1]));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pm2wsuba_i64_rmw
+	(operands[0], operands[2], operands[3]));
+    }
   DONE;
 })
 
@@ -1500,10 +1695,25 @@
                     (match_operand:V2HI 2 "register_operand")
                     (match_operand:V2HI 3 "register_operand")]
          UNSPEC_PM2WSUBA_HX))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_move_insn (operands[0], operands[1]);
-  emit_insn (gen_riscv_pm2wsuba_x_i64_rmw (operands[0], operands[2], operands[3]));
+  if (TARGET_64BIT)
+    {
+      rtx difference = gen_reg_rtx (SImode);
+      rtx widened = gen_reg_rtx (DImode);
+      emit_insn (gen_riscv_pm2sub_x_i16x2
+	(difference, operands[2], operands[3]));
+      emit_insn (gen_rtx_SET
+	(widened, gen_rtx_ZERO_EXTEND (DImode, difference)));
+      emit_insn (gen_riscv_predsum_i32x2_i64
+	(operands[0], gen_lowpart (PV2SImode, widened), operands[1]));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pm2wsuba_x_i64_rmw
+	(operands[0], operands[2], operands[3]));
+    }
   DONE;
 })
 
@@ -1523,10 +1733,24 @@
                     (match_operand:V2HI 2 "register_operand")
                     (match_operand:V2HI 3 "register_operand")]
          UNSPEC_PM2WADDASU_H))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP"
 {
-  emit_move_insn (operands[0], operands[1]);
-  emit_insn (gen_riscv_pm2waddasu_u64_rmw (operands[0], operands[2], operands[3]));
+  if (TARGET_64BIT)
+    {
+      rtx lhs_di = gen_reg_rtx (DImode);
+      rtx lhs_si = gen_lowpart (SImode, operands[2]);
+      rtx rhs = lowpart_subreg (V4HImode, operands[3], V2HImode);
+      emit_insn (gen_rtx_SET
+	(lhs_di, gen_rtx_ZERO_EXTEND (DImode, lhs_si)));
+      emit_insn (gen_riscv_pm4addasu_i16x4
+	(operands[0], operands[1], gen_lowpart (V4HImode, lhs_di), rhs));
+    }
+  else
+    {
+      emit_move_insn (operands[0], operands[1]);
+      emit_insn (gen_riscv_pm2waddasu_u64_rmw
+	(operands[0], operands[2], operands[3]));
+    }
   DONE;
 })
 

@@ -1759,27 +1759,27 @@ __riscv_pmqrwacc_i32x2 (int32x2_t __rd, int16x2_t __rs1,
 }
 #endif
 
-/* Packed Multiplication with Widening Horizontal Addition (RV32 single insn;  */
-/* RV64 multi-insn sequence TODO; simd32 builtin needs RV32 guard)  */
-#if __riscv_xlen == 32
-CREATE_RVP_INTRINSIC(int64_t, pm2wadd_i64, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2wadd_x_i64, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(uint64_t, pm2waddu_u64, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2wsub_i64, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2wsub_x_i64, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2waddsu_u64, int16x2_t, uint16x2_t)
-#endif
+/* Packed Multiplication with Widening Horizontal Addition.  */
+CREATE_RVP_INTRINSIC (int64_t, pm2wadd_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2wadd_x_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (uint64_t, pm2waddu_u64, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2wsub_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2wsub_x_i64, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2waddsu_u64, int16x2_t, uint16x2_t)
 
 /* Packed Multiplication with Widening Horizontal Addition and Accumulate.  */
-/* (RV32 single RMW insn; RV64 multi-insn sequence TODO; simd32 RV32 guard)  */
-#if __riscv_xlen == 32
-CREATE_RVP_INTRINSIC(int64_t, pm2wadda_i64, int64_t, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2wadda_x_i64, int64_t, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(uint64_t, pm2waddau_u64, uint64_t, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2wsuba_i64, int64_t, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2wsuba_x_i64, int64_t, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int64_t, pm2waddasu_u64, int64_t, int16x2_t, uint16x2_t)
-#endif
+CREATE_RVP_INTRINSIC (int64_t, pm2wadda_i64, int64_t, int16x2_t,
+		      int16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2wadda_x_i64, int64_t, int16x2_t,
+		      int16x2_t)
+CREATE_RVP_INTRINSIC (uint64_t, pm2waddau_u64, uint64_t, uint16x2_t,
+		      uint16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2wsuba_i64, int64_t, int16x2_t,
+		      int16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2wsuba_x_i64, int64_t, int16x2_t,
+		      int16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2waddasu_u64, int64_t, int16x2_t,
+		      uint16x2_t)
 
 /* Packed Logical Operations.  */
 RVP_BINARY_OP (pand_i8x4, int8x4_t, &)
