@@ -1607,29 +1607,156 @@ CREATE_RVP_INTRINSIC(int32x2_t, pmhacc_h1_i32x2, int32x2_t, int32x2_t, int16x4_t
 CREATE_RVP_INTRINSIC(int32x2_t, pmhaccsu_h0_i32x2, int32x2_t, int32x2_t, uint16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pmhaccsu_h1_i32x2, int32x2_t, int32x2_t, uint16x4_t)
 
-/* Packed Widening Multiply (RV32 single insn; RV64 multi-insn sequence TODO)  */
+/* Packed Widening Multiply.  */
 #if __riscv_xlen == 32
-CREATE_RVP_INTRINSIC(int16x4_t, pwmul_i16x4, int8x4_t, int8x4_t)
-CREATE_RVP_INTRINSIC(int32x2_t, pwmul_i32x2, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(uint16x4_t, pwmulu_u16x4, uint8x4_t, uint8x4_t)
-CREATE_RVP_INTRINSIC(uint32x2_t, pwmulu_u32x2, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC(int16x4_t, pwmulsu_i16x4, int8x4_t, uint8x4_t)
-CREATE_RVP_INTRINSIC(int32x2_t, pwmulsu_i32x2, int16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC (int16x4_t, pwmul_i16x4, int8x4_t, int8x4_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pwmul_i32x2, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (uint16x4_t, pwmulu_u16x4, uint8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC (uint32x2_t, pwmulu_u32x2, uint16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC (int16x4_t, pwmulsu_i16x4, int8x4_t, uint8x4_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pwmulsu_i32x2, int16x2_t, uint16x2_t)
+#else
+RVP_OP_ATTRS int16x4_t
+__riscv_pwmul_i16x4 (int8x4_t __rs1, int8x4_t __rs2)
+{
+  int8x8_t __zipped = __builtin_riscv_pzip_i8x8 (__rs1, __rs2);
+  return __builtin_riscv_pmul_b01_i16x4 (__zipped, __zipped);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwmul_i32x2 (int16x2_t __rs1, int16x2_t __rs2)
+{
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pmul_h01_i32x2 (__zipped, __zipped);
+}
+
+RVP_OP_ATTRS uint16x4_t
+__riscv_pwmulu_u16x4 (uint8x4_t __rs1, uint8x4_t __rs2)
+{
+  uint8x8_t __zipped = __builtin_riscv_pzip_u8x8 (__rs1, __rs2);
+  return __builtin_riscv_pmulu_b01_u16x4 (__zipped, __zipped);
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwmulu_u32x2 (uint16x2_t __rs1, uint16x2_t __rs2)
+{
+  uint16x4_t __zipped = __builtin_riscv_pzip_u16x4 (__rs1, __rs2);
+  return __builtin_riscv_pmulu_h01_u32x2 (__zipped, __zipped);
+}
+
+RVP_OP_ATTRS int16x4_t
+__riscv_pwmulsu_i16x4 (int8x4_t __rs1, uint8x4_t __rs2)
+{
+  union
+  {
+    uint16x4_t __halves;
+    int8x8_t __bytes;
+  } __lhs;
+  union
+  {
+    uint16x4_t __halves;
+    uint8x8_t __bytes;
+  } __rhs;
+
+  __lhs.__halves
+    = __builtin_riscv_pwcvtu_u16x4 ((uint8x4_t) __rs1);
+  __rhs.__halves = __builtin_riscv_pwcvtu_u16x4 (__rs2);
+  return __builtin_riscv_pmulsu_b00_i16x4 (__lhs.__bytes,
+					   __rhs.__bytes);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwmulsu_i32x2 (int16x2_t __rs1, uint16x2_t __rs2)
+{
+  union
+  {
+    uint32x2_t __words;
+    int16x4_t __halves;
+  } __lhs;
+  union
+  {
+    uint32x2_t __words;
+    uint16x4_t __halves;
+  } __rhs;
+
+  __lhs.__words
+    = __builtin_riscv_pwcvtu_u32x2 ((uint16x2_t) __rs1);
+  __rhs.__words = __builtin_riscv_pwcvtu_u32x2 (__rs2);
+  return __builtin_riscv_pmulsu_h00_i32x2 (__lhs.__halves,
+					   __rhs.__halves);
+}
 #endif
 
-/* Packed Widening Multiply Accumulate (RV32 single RMW insn; RV64 multi-insn  */
-/* sequence TODO; simd32 builtin needs RV32 guard to avoid implicit-decl error)  */
+/* Packed Widening Multiply Accumulate.  */
 #if __riscv_xlen == 32
-CREATE_RVP_INTRINSIC(int32x2_t, pwmacc_i32x2, int32x2_t, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(uint32x2_t, pwmaccu_u32x2, uint32x2_t, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC(int32x2_t, pwmaccsu_i32x2, int32x2_t, int16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pwmacc_i32x2, int32x2_t, int16x2_t,
+		      int16x2_t)
+CREATE_RVP_INTRINSIC (uint32x2_t, pwmaccu_u32x2, uint32x2_t, uint16x2_t,
+		      uint16x2_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pwmaccsu_i32x2, int32x2_t, int16x2_t,
+		      uint16x2_t)
+#else
+RVP_OP_ATTRS int32x2_t
+__riscv_pwmacc_i32x2 (int32x2_t __rd, int16x2_t __rs1,
+		       int16x2_t __rs2)
+{
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pmacc_h01_i32x2 (__rd, __zipped, __zipped);
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwmaccu_u32x2 (uint32x2_t __rd, uint16x2_t __rs1,
+			uint16x2_t __rs2)
+{
+  uint16x4_t __zipped = __builtin_riscv_pzip_u16x4 (__rs1, __rs2);
+  return __builtin_riscv_pmaccu_h01_u32x2 (__rd, __zipped, __zipped);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwmaccsu_i32x2 (int32x2_t __rd, int16x2_t __rs1,
+			 uint16x2_t __rs2)
+{
+  union
+  {
+    uint32x2_t __words;
+    int16x4_t __halves;
+  } __lhs;
+  union
+  {
+    uint32x2_t __words;
+    uint16x4_t __halves;
+  } __rhs;
+
+  __lhs.__words
+    = __builtin_riscv_pwcvtu_u32x2 ((uint16x2_t) __rs1);
+  __rhs.__words = __builtin_riscv_pwcvtu_u32x2 (__rs2);
+  return __builtin_riscv_pmaccsu_h00_i32x2 (__rd, __lhs.__halves,
+					     __rhs.__halves);
+}
 #endif
 
-/* Packed "Q-format" Multiply with Widening Accumulate (RV32 single RMW insn;  */
-/* RV64 multi-insn sequence TODO; simd32 builtin needs RV32 guard)  */
+/* Packed "Q-format" Multiply with Widening Accumulate.  */
 #if __riscv_xlen == 32
-CREATE_RVP_INTRINSIC(int32x2_t, pmqwacc_i32x2, int32x2_t, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC(int32x2_t, pmqrwacc_i32x2, int32x2_t, int16x2_t, int16x2_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pmqwacc_i32x2, int32x2_t, int16x2_t,
+		      int16x2_t)
+CREATE_RVP_INTRINSIC (int32x2_t, pmqrwacc_i32x2, int32x2_t, int16x2_t,
+		      int16x2_t)
+#else
+RVP_OP_ATTRS int32x2_t
+__riscv_pmqwacc_i32x2 (int32x2_t __rd, int16x2_t __rs1,
+			int16x2_t __rs2)
+{
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pmqacc_h01_i32x2 (__rd, __zipped, __zipped);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pmqrwacc_i32x2 (int32x2_t __rd, int16x2_t __rs1,
+			 int16x2_t __rs2)
+{
+  int16x4_t __zipped = __builtin_riscv_pzip_i16x4 (__rs1, __rs2);
+  return __builtin_riscv_pmqracc_h01_i32x2 (__rd, __zipped, __zipped);
+}
 #endif
 
 /* Packed Multiplication with Widening Horizontal Addition (RV32 single insn;  */
