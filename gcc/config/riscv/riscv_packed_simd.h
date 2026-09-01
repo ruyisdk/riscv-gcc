@@ -1853,8 +1853,111 @@ CREATE_RVP_INTRINSIC(int32x2_t, pm2sub_i16x4, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pm2sub_x_i16x4, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pm4addsu_i8x8, int8x8_t, uint8x8_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pm2addsu_i16x4, int16x4_t, uint16x4_t)
-/* 64-bit i64 (RV64-only; RV32 wmul+wmacc / pm2wadd sequences TODO)  */
-#if __riscv_xlen == 64
+/* 64-bit i64.  */
+#if __riscv_xlen == 32
+RVP_OP_ATTRS int64_t
+__riscv_pm2add_i32x2 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  int64_t __result = __riscv_mul_w00_i64 (__rs1, __rs2);
+  return __riscv_macc_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2add_x_i32x2 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  int64_t __result = __riscv_mul_w01_i64 (__rs1, __rs2);
+  return __riscv_macc_w01_i64 (__result, __rs2, __rs1);
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_pm2addu_u32x2 (uint32x2_t __rs1, uint32x2_t __rs2)
+{
+  uint64_t __result = __riscv_mulu_w00_u64 (__rs1, __rs2);
+  return __riscv_maccu_w11_u64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pmq2add_i32x2 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  int64_t __result = __riscv_mqacc_w00_i64 (0, __rs1, __rs2);
+  return __riscv_mqacc_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2sub_i32x2 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  uint64_t __lhs = (uint64_t) __riscv_mul_w00_i64 (__rs1, __rs2);
+  uint64_t __rhs = (uint64_t) __riscv_mul_w11_i64 (__rs1, __rs2);
+  return (int64_t) (__lhs - __rhs);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2sub_x_i32x2 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  uint64_t __lhs = (uint64_t) __riscv_mul_w01_i64 (__rs1, __rs2);
+  uint64_t __rhs = (uint64_t) __riscv_mul_w01_i64 (__rs2, __rs1);
+  return (int64_t) (__lhs - __rhs);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2addsu_i32x2 (int32x2_t __rs1, uint32x2_t __rs2)
+{
+  int64_t __result = __riscv_mulsu_w00_i64 (__rs1, __rs2);
+  return __riscv_maccsu_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pmqr2add_i32x2 (int32x2_t __rs1, int32x2_t __rs2)
+{
+  int64_t __result = __riscv_mqracc_w00_i64 (0, __rs1, __rs2);
+  return __riscv_mqracc_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm4add_i16x4 (int16x4_t __rs1, int16x4_t __rs2)
+{
+  int16x2_t __rs1_lo
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 0);
+  int16x2_t __rs2_lo
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs2, 0);
+  int16x2_t __rs1_hi
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 1);
+  int16x2_t __rs2_hi
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs2, 1);
+  int64_t __result = __builtin_riscv_pm2wadd_i64 (__rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2wadda_i64 (__result, __rs1_hi, __rs2_hi);
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_pm4addu_u16x4 (uint16x4_t __rs1, uint16x4_t __rs2)
+{
+  uint16x2_t __rs1_lo
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs1, 0);
+  uint16x2_t __rs2_lo
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 0);
+  uint16x2_t __rs1_hi
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs1, 1);
+  uint16x2_t __rs2_hi
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 1);
+  uint64_t __result = __builtin_riscv_pm2waddu_u64 (__rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2waddau_u64 (__result, __rs1_hi, __rs2_hi);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm4addsu_i16x4 (int16x4_t __rs1, uint16x4_t __rs2)
+{
+  int16x2_t __rs1_lo
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 0);
+  uint16x2_t __rs2_lo
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 0);
+  int16x2_t __rs1_hi
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 1);
+  uint16x2_t __rs2_hi
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 1);
+  int64_t __result = __builtin_riscv_pm2waddsu_u64 (__rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2waddasu_u64 (__result, __rs1_hi, __rs2_hi);
+}
+#else
 CREATE_RVP_INTRINSIC(int64_t, pm2add_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC(int64_t, pm2add_x_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC(uint64_t, pm2addu_u32x2, uint32x2_t, uint32x2_t)
@@ -1893,8 +1996,126 @@ CREATE_RVP_INTRINSIC(int32x2_t, pm2suba_i16x4, int32x2_t, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pm2suba_x_i16x4, int32x2_t, int16x4_t, int16x4_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pm4addasu_i8x8, int32x2_t, int8x8_t, uint8x8_t)
 CREATE_RVP_INTRINSIC(int32x2_t, pm2addasu_i16x4, int32x2_t, int16x4_t, uint16x4_t)
-/* 64-bit i64 (RV64-only, RMW; RV32 wmacc/pm2wadda sequences TODO)  */
-#if __riscv_xlen == 64
+/* 64-bit i64.  */
+#if __riscv_xlen == 32
+RVP_OP_ATTRS int64_t
+__riscv_pm2adda_i32x2 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  int64_t __result = __riscv_macc_w00_i64 (__rd, __rs1, __rs2);
+  __result = __builtin_assoc_barrier (__result);
+  return __riscv_macc_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2adda_x_i32x2 (int64_t __rd, int32x2_t __rs1,
+			  int32x2_t __rs2)
+{
+  int64_t __result = __riscv_macc_w01_i64 (__rd, __rs1, __rs2);
+  __result = __builtin_assoc_barrier (__result);
+  return __riscv_macc_w01_i64 (__result, __rs2, __rs1);
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_pm2addau_u32x2 (uint64_t __rd, uint32x2_t __rs1,
+			 uint32x2_t __rs2)
+{
+  uint64_t __result = __riscv_maccu_w00_u64 (__rd, __rs1, __rs2);
+  __result = __builtin_assoc_barrier (__result);
+  return __riscv_maccu_w11_u64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pmq2adda_i32x2 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  int64_t __result = __riscv_mqacc_w00_i64 (__rd, __rs1, __rs2);
+  return __riscv_mqacc_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2suba_i32x2 (int64_t __rd, int32x2_t __rs1, int32x2_t __rs2)
+{
+  uint64_t __lhs = (uint64_t) __riscv_macc_w00_i64 (__rd, __rs1, __rs2);
+  uint64_t __rhs = (uint64_t) __riscv_mul_w11_i64 (__rs1, __rs2);
+  return (int64_t) (__lhs - __rhs);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2suba_x_i32x2 (int64_t __rd, int32x2_t __rs1,
+			  int32x2_t __rs2)
+{
+  uint64_t __lhs = (uint64_t) __riscv_macc_w01_i64 (__rd, __rs1,
+						      __rs2);
+  uint64_t __rhs = (uint64_t) __riscv_mul_w01_i64 (__rs2, __rs1);
+  return (int64_t) (__lhs - __rhs);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm2addasu_i32x2 (int64_t __rd, int32x2_t __rs1,
+			  uint32x2_t __rs2)
+{
+  int64_t __result = __riscv_maccsu_w00_i64 (__rd, __rs1, __rs2);
+  __result = __builtin_assoc_barrier (__result);
+  return __riscv_maccsu_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pmqr2adda_i32x2 (int64_t __rd, int32x2_t __rs1,
+			  int32x2_t __rs2)
+{
+  int64_t __result = __riscv_mqracc_w00_i64 (__rd, __rs1, __rs2);
+  return __riscv_mqracc_w11_i64 (__result, __rs1, __rs2);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm4adda_i16x4 (int64_t __rd, int16x4_t __rs1, int16x4_t __rs2)
+{
+  int16x2_t __rs1_lo
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 0);
+  int16x2_t __rs2_lo
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs2, 0);
+  int16x2_t __rs1_hi
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 1);
+  int16x2_t __rs2_hi
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs2, 1);
+  int64_t __result
+    = __builtin_riscv_pm2wadda_i64 (__rd, __rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2wadda_i64 (__result, __rs1_hi, __rs2_hi);
+}
+
+RVP_OP_ATTRS uint64_t
+__riscv_pm4addau_u16x4 (uint64_t __rd, uint16x4_t __rs1,
+			 uint16x4_t __rs2)
+{
+  uint16x2_t __rs1_lo
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs1, 0);
+  uint16x2_t __rs2_lo
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 0);
+  uint16x2_t __rs1_hi
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs1, 1);
+  uint16x2_t __rs2_hi
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 1);
+  uint64_t __result
+    = __builtin_riscv_pm2waddau_u64 (__rd, __rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2waddau_u64 (__result, __rs1_hi, __rs2_hi);
+}
+
+RVP_OP_ATTRS int64_t
+__riscv_pm4addasu_i16x4 (int64_t __rd, int16x4_t __rs1,
+			  uint16x4_t __rs2)
+{
+  int16x2_t __rs1_lo
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 0);
+  uint16x2_t __rs2_lo
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 0);
+  int16x2_t __rs1_hi
+    = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 1);
+  uint16x2_t __rs2_hi
+    = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 1);
+  int64_t __result
+    = __builtin_riscv_pm2waddasu_u64 (__rd, __rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2waddasu_u64 (__result, __rs1_hi, __rs2_hi);
+}
+#else
 CREATE_RVP_INTRINSIC(int64_t, pm2adda_i32x2, int64_t, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC(int64_t, pm2adda_x_i32x2, int64_t, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC(uint64_t, pm2addau_u32x2, uint64_t, uint32x2_t, uint32x2_t)
