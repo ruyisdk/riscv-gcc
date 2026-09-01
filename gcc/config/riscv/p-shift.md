@@ -438,7 +438,7 @@
 (define_insn "riscv_psra_s_i32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
-                    (match_operand:SI 2 "arith_operand" "u3, r")]
+                    (match_operand:SI 2 "arith_operand" "u5, r")]
           UNSPEC_PSRA))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -521,7 +521,7 @@
 (define_insn "riscv_psrl_s_u16x4_rv64"
   [(set (match_operand:PV4HI 0 "register_operand" "=r, r")
         (unspec:PV4HI [(match_operand:PV4HI 1 "register_operand" "r, r")
-                    (match_operand:SI 2 "arith_operand" "u3, r")]
+                    (match_operand:SI 2 "arith_operand" "u4, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && TARGET_64BIT"
   "@
@@ -557,7 +557,7 @@
 (define_insn "riscv_psrl_s_u32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r, r")
         (unspec:PV2SI [(match_operand:PV2SI 1 "register_operand" "r, r")
-                    (match_operand:SI 2 "arith_operand" "u3, r")]
+                    (match_operand:SI 2 "arith_operand" "u5, r")]
           UNSPEC_PSRL))]
   "TARGET_RVP && TARGET_64BIT"
   "@

@@ -1062,22 +1062,118 @@ __riscv_pwsubau_u32x2 (uint32x2_t __rd, uint16x2_t __rs1,
 }
 #endif
 
-/* Packed Widening Shift (RV32-only; RV64 TODO).  */
+/* Packed Widening Shift.  */
 #if __riscv_xlen == 32
 CREATE_RVP_INTRINSIC (uint16x4_t, pwsll_s_u16x4, uint8x4_t, unsigned)
 CREATE_RVP_INTRINSIC (uint32x2_t, pwsll_s_u32x2, uint16x2_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x4_t, pwsla_s_i16x4, int8x4_t, unsigned)
 CREATE_RVP_INTRINSIC (int32x2_t, pwsla_s_i32x2, int16x2_t, unsigned)
 
-/* Packed Narrowing Shift (RV32-only; RV64 TODO).  */
+/* Packed Narrowing Shift.  */
 CREATE_RVP_INTRINSIC (uint8x4_t, pnsrl_s_u8x4, uint16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (uint16x2_t, pnsrl_s_u16x2, uint32x2_t, unsigned)
 CREATE_RVP_INTRINSIC (int8x4_t, pnsra_s_i8x4, int16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x2_t, pnsra_s_i16x2, int32x2_t, unsigned)
 CREATE_RVP_INTRINSIC (int8x4_t, pnsrar_s_i8x4, int16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x2_t, pnsrar_s_i16x2, int32x2_t, unsigned)
+#else
+RVP_OP_ATTRS uint16x4_t
+__riscv_pwsll_s_u16x4 (uint8x4_t __rs1, unsigned int __shamt)
+{
+  uint16x4_t __wide = __builtin_riscv_pwcvtu_u16x4 (__rs1);
+  return __builtin_riscv_psll_s_u16x4 (__wide, __shamt);
+}
+
+RVP_OP_ATTRS uint32x2_t
+__riscv_pwsll_s_u32x2 (uint16x2_t __rs1, unsigned int __shamt)
+{
+  uint32x2_t __wide = __builtin_riscv_pwcvtu_u32x2 (__rs1);
+  return __builtin_riscv_psll_s_u32x2 (__wide, __shamt);
+}
+
+RVP_OP_ATTRS int16x4_t
+__riscv_pwsla_s_i16x4 (int8x4_t __rs1, unsigned int __shamt)
+{
+  if (__builtin_constant_p (__shamt))
+    {
+      unsigned int __shift = __shamt & 31;
+      int16x4_t __wide = __builtin_riscv_pwcvth_i16x4 (__rs1);
+
+      if (__shift <= 8)
+	return __builtin_riscv_psra_s_i16x4 (__wide, 8 - __shift);
+      if (__shift < 16)
+	return __builtin_riscv_psll_s_i16x4 (__wide, __shift - 8);
+      return (int16x4_t) { 0, 0, 0, 0 };
+    }
+
+  int16x4_t __wide = __builtin_riscv_pwcvt_i16x4 (__rs1);
+  return __builtin_riscv_psll_s_i16x4 (__wide, __shamt);
+}
+
+RVP_OP_ATTRS int32x2_t
+__riscv_pwsla_s_i32x2 (int16x2_t __rs1, unsigned int __shamt)
+{
+  if (__builtin_constant_p (__shamt))
+    {
+      unsigned int __shift = __shamt & 31;
+      int32x2_t __wide = __builtin_riscv_pwcvth_i32x2 (__rs1);
+
+      if (__shift <= 16)
+	return __builtin_riscv_psra_s_i32x2 (__wide, 16 - __shift);
+      return __builtin_riscv_psll_s_i32x2 (__wide, __shift - 16);
+    }
+
+  int32x2_t __wide = __builtin_riscv_pwcvt_i32x2 (__rs1);
+  return __builtin_riscv_psll_s_i32x2 (__wide, __shamt);
+}
+
+RVP_OP_ATTRS uint8x4_t
+__riscv_pnsrl_s_u8x4 (uint16x4_t __rs1, unsigned int __shamt)
+{
+  uint16x4_t __shifted = __builtin_riscv_psrl_s_u16x4 (__rs1, __shamt);
+  return __builtin_riscv_pncvt_u8x4 (__shifted);
+}
+
+RVP_OP_ATTRS uint16x2_t
+__riscv_pnsrl_s_u16x2 (uint32x2_t __rs1, unsigned int __shamt)
+{
+  uint32x2_t __shifted = __builtin_riscv_psrl_s_u32x2 (__rs1, __shamt);
+  return __builtin_riscv_pncvt_u16x2 (__shifted);
+}
+
+RVP_OP_ATTRS int8x4_t
+__riscv_pnsra_s_i8x4 (int16x4_t __rs1, unsigned int __shamt)
+{
+  int16x4_t __shifted = __builtin_riscv_psra_s_i16x4 (__rs1, __shamt);
+  return __builtin_riscv_pncvt_i8x4 (__shifted);
+}
+
+RVP_OP_ATTRS int16x2_t
+__riscv_pnsra_s_i16x2 (int32x2_t __rs1, unsigned int __shamt)
+{
+  int32x2_t __shifted = __builtin_riscv_psra_s_i32x2 (__rs1, __shamt);
+  return __builtin_riscv_pncvt_i16x2 (__shifted);
+}
+
+RVP_OP_ATTRS int8x4_t
+__riscv_pnsrar_s_i8x4 (int16x4_t __rs1, unsigned int __shamt)
+{
+  int __shift = -((int) __shamt & 31);
+  int16x4_t __shifted = __builtin_riscv_psshar_s_i16x4 (__rs1, __shift);
+  return __builtin_riscv_pncvt_i8x4 (__shifted);
+}
+
+RVP_OP_ATTRS int16x2_t
+__riscv_pnsrar_s_i16x2 (int32x2_t __rs1, unsigned int __shamt)
+{
+  int __shift = -((int) __shamt & 31);
+  int32x2_t __shifted = __builtin_riscv_psshar_s_i32x2 (__rs1, __shift);
+  return __builtin_riscv_pncvt_i16x2 (__shifted);
+}
+#endif
 
 /* Packed Narrowing Clip (RV32-only; RV64 TODO).  */
+#if __riscv_xlen == 32
 CREATE_RVP_INTRINSIC (uint8x4_t, pnclipu_s_u8x4, uint16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (uint16x2_t, pnclipu_s_u16x2, uint32x2_t, unsigned)
 CREATE_RVP_INTRINSIC (uint8x4_t, pnclipru_s_u8x4, uint16x4_t, unsigned)
