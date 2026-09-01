@@ -1172,7 +1172,7 @@ __riscv_pnsrar_s_i16x2 (int32x2_t __rs1, unsigned int __shamt)
 }
 #endif
 
-/* Packed Narrowing Clip (RV32-only; RV64 TODO).  */
+/* Packed Narrowing Clip.  */
 #if __riscv_xlen == 32
 CREATE_RVP_INTRINSIC (uint8x4_t, pnclipu_s_u8x4, uint16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (uint16x2_t, pnclipu_s_u16x2, uint32x2_t, unsigned)
@@ -1182,6 +1182,82 @@ CREATE_RVP_INTRINSIC (int8x4_t, pnclip_s_i8x4, int16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x2_t, pnclip_s_i16x2, int32x2_t, unsigned)
 CREATE_RVP_INTRINSIC (int8x4_t, pnclipr_s_i8x4, int16x4_t, unsigned)
 CREATE_RVP_INTRINSIC (int16x2_t, pnclipr_s_i16x2, int32x2_t, unsigned)
+#else
+RVP_OP_ATTRS uint8x4_t
+__riscv_pnclipu_s_u8x4 (uint16x4_t __rs1, unsigned int __shamt)
+{
+  uint16x4_t __shifted = __builtin_riscv_psrl_s_u16x4 (__rs1, __shamt);
+  uint8x8_t __narrowed
+    = __builtin_riscv_pnclipup_u8x8 (__shifted, (uint16x4_t) { 0 });
+  return RVP_SUBVECTOR_GET (uint8x8_t, uint8x4_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS uint16x2_t
+__riscv_pnclipu_s_u16x2 (uint32x2_t __rs1, unsigned int __shamt)
+{
+  uint32x2_t __shifted = __builtin_riscv_psrl_s_u32x2 (__rs1, __shamt);
+  uint16x4_t __narrowed
+    = __builtin_riscv_pnclipup_u16x4 (__shifted, (uint32x2_t) { 0 });
+  return RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS uint8x4_t
+__riscv_pnclipru_s_u8x4 (uint16x4_t __rs1, unsigned int __shamt)
+{
+  int __shift = -((int) __shamt & 31);
+  uint16x4_t __shifted = __builtin_riscv_psshlr_s_u16x4 (__rs1, __shift);
+  uint8x8_t __narrowed
+    = __builtin_riscv_pnclipup_u8x8 (__shifted, (uint16x4_t) { 0 });
+  return RVP_SUBVECTOR_GET (uint8x8_t, uint8x4_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS uint16x2_t
+__riscv_pnclipru_s_u16x2 (uint32x2_t __rs1, unsigned int __shamt)
+{
+  int __shift = -((int) __shamt & 31);
+  uint32x2_t __shifted = __builtin_riscv_psshlr_s_u32x2 (__rs1, __shift);
+  uint16x4_t __narrowed
+    = __builtin_riscv_pnclipup_u16x4 (__shifted, (uint32x2_t) { 0 });
+  return RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS int8x4_t
+__riscv_pnclip_s_i8x4 (int16x4_t __rs1, unsigned int __shamt)
+{
+  int16x4_t __shifted = __builtin_riscv_psra_s_i16x4 (__rs1, __shamt);
+  int8x8_t __narrowed
+    = __builtin_riscv_pnclipp_i8x8 (__shifted, (int16x4_t) { 0 });
+  return RVP_SUBVECTOR_GET (int8x8_t, int8x4_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS int16x2_t
+__riscv_pnclip_s_i16x2 (int32x2_t __rs1, unsigned int __shamt)
+{
+  int32x2_t __shifted = __builtin_riscv_psra_s_i32x2 (__rs1, __shamt);
+  int16x4_t __narrowed
+    = __builtin_riscv_pnclipp_i16x4 (__shifted, (int32x2_t) { 0 });
+  return RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS int8x4_t
+__riscv_pnclipr_s_i8x4 (int16x4_t __rs1, unsigned int __shamt)
+{
+  int __shift = -((int) __shamt & 31);
+  int16x4_t __shifted = __builtin_riscv_psshar_s_i16x4 (__rs1, __shift);
+  int8x8_t __narrowed
+    = __builtin_riscv_pnclipp_i8x8 (__shifted, (int16x4_t) { 0 });
+  return RVP_SUBVECTOR_GET (int8x8_t, int8x4_t, __narrowed, 0);
+}
+
+RVP_OP_ATTRS int16x2_t
+__riscv_pnclipr_s_i16x2 (int32x2_t __rs1, unsigned int __shamt)
+{
+  int __shift = -((int) __shamt & 31);
+  int32x2_t __shifted = __builtin_riscv_psshar_s_i32x2 (__rs1, __shift);
+  int16x4_t __narrowed
+    = __builtin_riscv_pnclipp_i16x4 (__shifted, (int32x2_t) { 0 });
+  return RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __narrowed, 0);
+}
 #endif
 
 /* Packed Narrowing Clip Pair.  */

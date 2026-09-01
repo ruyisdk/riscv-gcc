@@ -1682,7 +1682,7 @@
 (define_expand "riscv_pnclipp_i8x8"
   [(set (match_operand:PV8QI 0 "register_operand")
 	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand")
-		       (match_operand:PV4HI 2 "register_operand")]
+		       (match_operand:PV4HI 2 "reg_or_0_operand")]
 	 UNSPEC_PNCLIP))]
   "TARGET_RVP"
 {
@@ -1704,17 +1704,17 @@
 (define_insn "riscv_pnclipp_i8x8_rv64"
   [(set (match_operand:PV8QI 0 "register_operand" "=r")
 	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand" "r")
-		       (match_operand:PV4HI 2 "register_operand" "r")]
+		       (match_operand:PV4HI 2 "reg_or_0_operand" "rWc0")]
 	 UNSPEC_PNCLIP))]
   "TARGET_RVP && TARGET_64BIT"
-  "pnclipp.b\t%0,%1,%2"
+  "pnclipp.b\t%0,%1,%z2"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
 (define_expand "riscv_pnclipup_u8x8"
   [(set (match_operand:PV8QI 0 "register_operand")
 	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand")
-		       (match_operand:PV4HI 2 "register_operand")]
+		       (match_operand:PV4HI 2 "reg_or_0_operand")]
 	 UNSPEC_PNCLIPU))]
   "TARGET_RVP"
 {
@@ -1736,17 +1736,17 @@
 (define_insn "riscv_pnclipup_u8x8_rv64"
   [(set (match_operand:PV8QI 0 "register_operand" "=r")
 	(unspec:PV8QI [(match_operand:PV4HI 1 "register_operand" "r")
-		       (match_operand:PV4HI 2 "register_operand" "r")]
+		       (match_operand:PV4HI 2 "reg_or_0_operand" "rWc0")]
 	 UNSPEC_PNCLIPU))]
   "TARGET_RVP && TARGET_64BIT"
-  "pnclipup.b\t%0,%1,%2"
+  "pnclipup.b\t%0,%1,%z2"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
 (define_expand "riscv_pnclipp_i16x4"
   [(set (match_operand:PV4HI 0 "register_operand")
 	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand")
-		       (match_operand:PV2SI 2 "register_operand")]
+		       (match_operand:PV2SI 2 "reg_or_0_operand")]
 	 UNSPEC_PNCLIP))]
   "TARGET_RVP"
 {
@@ -1768,17 +1768,17 @@
 (define_insn "riscv_pnclipp_i16x4_rv64"
   [(set (match_operand:PV4HI 0 "register_operand" "=r")
 	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand" "r")
-		       (match_operand:PV2SI 2 "register_operand" "r")]
+		       (match_operand:PV2SI 2 "reg_or_0_operand" "rWc0")]
 	 UNSPEC_PNCLIP))]
   "TARGET_RVP && TARGET_64BIT"
-  "pnclipp.h\t%0,%1,%2"
+  "pnclipp.h\t%0,%1,%z2"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
 (define_expand "riscv_pnclipup_u16x4"
   [(set (match_operand:PV4HI 0 "register_operand")
 	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand")
-		       (match_operand:PV2SI 2 "register_operand")]
+		       (match_operand:PV2SI 2 "reg_or_0_operand")]
 	 UNSPEC_PNCLIPU))]
   "TARGET_RVP"
 {
@@ -1800,17 +1800,17 @@
 (define_insn "riscv_pnclipup_u16x4_rv64"
   [(set (match_operand:PV4HI 0 "register_operand" "=r")
 	(unspec:PV4HI [(match_operand:PV2SI 1 "register_operand" "r")
-		       (match_operand:PV2SI 2 "register_operand" "r")]
+		       (match_operand:PV2SI 2 "reg_or_0_operand" "rWc0")]
 	 UNSPEC_PNCLIPU))]
   "TARGET_RVP && TARGET_64BIT"
-  "pnclipup.h\t%0,%1,%2"
+  "pnclipup.h\t%0,%1,%z2"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
 (define_expand "riscv_pnclipp_i32x2"
   [(set (match_operand:PV2SI 0 "register_operand")
 	(unspec:PV2SI [(match_operand:DI 1 "register_operand")
-		       (match_operand:DI 2 "register_operand")]
+		       (match_operand:DI 2 "reg_or_0_operand")]
 	 UNSPEC_NCLIP))]
   "TARGET_RVP"
 {
@@ -1832,17 +1832,17 @@
 (define_insn "riscv_pnclipp_i32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
 	(unspec:PV2SI [(match_operand:DI 1 "register_operand" "r")
-		       (match_operand:DI 2 "register_operand" "r")]
+		       (match_operand:DI 2 "reg_or_0_operand" "rJ")]
 	 UNSPEC_NCLIP))]
   "TARGET_RVP && TARGET_64BIT"
-  "pnclipp.w\t%0,%1,%2"
+  "pnclipp.w\t%0,%1,%z2"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
 (define_expand "riscv_pnclipup_u32x2"
   [(set (match_operand:PV2SI 0 "register_operand")
 	(unspec:PV2SI [(match_operand:DI 1 "register_operand")
-		       (match_operand:DI 2 "register_operand")]
+		       (match_operand:DI 2 "reg_or_0_operand")]
 	 UNSPEC_NCLIPU))]
   "TARGET_RVP"
 {
@@ -1864,9 +1864,9 @@
 (define_insn "riscv_pnclipup_u32x2_rv64"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
 	(unspec:PV2SI [(match_operand:DI 1 "register_operand" "r")
-		       (match_operand:DI 2 "register_operand" "r")]
+		       (match_operand:DI 2 "reg_or_0_operand" "rJ")]
 	 UNSPEC_NCLIPU))]
   "TARGET_RVP && TARGET_64BIT"
-  "pnclipup.w\t%0,%1,%2"
+  "pnclipup.w\t%0,%1,%z2"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
