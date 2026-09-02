@@ -5138,6 +5138,7 @@ int64_t test_mqracc_w11_i64(int64_t rd, int32x2_t a, int32x2_t b)
 
 /*
 **test_macc_h00_i32:
+** ...
 ** pmacc.w.h00\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5148,6 +5149,7 @@ int32_t test_macc_h00_i32(int32_t rd, int16x2_t a, int16x2_t b)
 
 /*
 **test_macc_h01_i32:
+** ...
 ** pmacc.w.h01\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5158,6 +5160,7 @@ int32_t test_macc_h01_i32(int32_t rd, int16x2_t a, int16x2_t b)
 
 /*
 **test_macc_h11_i32:
+** ...
 ** pmacc.w.h11\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5168,6 +5171,7 @@ int32_t test_macc_h11_i32(int32_t rd, int16x2_t a, int16x2_t b)
 
 /*
 **test_maccu_h00_u32:
+** ...
 ** pmaccu.w.h00\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5178,6 +5182,7 @@ uint32_t test_maccu_h00_u32(uint32_t rd, uint16x2_t a, uint16x2_t b)
 
 /*
 **test_maccu_h01_u32:
+** ...
 ** pmaccu.w.h01\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5188,6 +5193,7 @@ uint32_t test_maccu_h01_u32(uint32_t rd, uint16x2_t a, uint16x2_t b)
 
 /*
 **test_maccu_h11_u32:
+** ...
 ** pmaccu.w.h11\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5198,6 +5204,7 @@ uint32_t test_maccu_h11_u32(uint32_t rd, uint16x2_t a, uint16x2_t b)
 
 /*
 **test_maccsu_h00_i32:
+** ...
 ** pmaccsu.w.h00\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -5208,6 +5215,7 @@ int32_t test_maccsu_h00_i32(int32_t rd, int16x2_t a, uint16x2_t b)
 
 /*
 **test_maccsu_h11_i32:
+** ...
 ** pmaccsu.w.h11\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6138,6 +6146,7 @@ int16x2_t test_pmulhsu_b1_i16x2(int16x2_t a, uint8x4_t b)
 
 /*
 **test_mulh_h0_i32:
+** ...
 ** pmulh.w.h0\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6148,6 +6157,7 @@ int32_t test_mulh_h0_i32(int32_t a, int16x2_t b)
 
 /*
 **test_mulh_h1_i32:
+** ...
 ** pmulh.w.h1\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6158,6 +6168,7 @@ int32_t test_mulh_h1_i32(int32_t a, int16x2_t b)
 
 /*
 **test_mulhsu_h0_i32:
+** ...
 ** pmulhsu.w.h0\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6168,6 +6179,7 @@ int32_t test_mulhsu_h0_i32(int32_t a, uint16x2_t b)
 
 /*
 **test_mulhsu_h1_i32:
+** ...
 ** pmulhsu.w.h1\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6304,6 +6316,7 @@ int16x2_t test_pmhaccsu_b1_i16x2(int16x2_t rd, int16x2_t a, uint8x4_t b)
 
 /*
 **test_mhacc_h0_i32:
+** ...
 ** pmhacc.w.h0\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6314,6 +6327,7 @@ int32_t test_mhacc_h0_i32(int32_t rd, int32_t a, int16x2_t b)
 
 /*
 **test_mhacc_h1_i32:
+** ...
 ** pmhacc.w.h1\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6324,6 +6338,7 @@ int32_t test_mhacc_h1_i32(int32_t rd, int32_t a, int16x2_t b)
 
 /*
 **test_mhaccsu_h0_i32:
+** ...
 ** pmhaccsu.w.h0\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
@@ -6334,6 +6349,7 @@ int32_t test_mhaccsu_h0_i32(int32_t rd, int32_t a, uint16x2_t b)
 
 /*
 **test_mhaccsu_h1_i32:
+** ...
 ** pmhaccsu.w.h1\ta[0-9],a[0-9],a[0-9]
 ** ...
 */
