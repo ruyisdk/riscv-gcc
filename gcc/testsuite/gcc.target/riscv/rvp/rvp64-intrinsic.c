@@ -29,11 +29,10 @@ uint32_t test_rev_32(uint32_t rs1)
 
 /*
 **test_slx_32:
-** slli\ta[0-9],a[0-9],32
-** ...
-** slx\ta[0-9],a[0-9],a[0-9]
-** ...
-** srai\ta[0-9],a[0-9],32
+** slli\ta1,a1,32
+** andi\ta2,a2,31
+** slx\ta0,a1,a2
+** sext\.w\ta0,a0
 ** ...
 */
 uint32_t test_slx_32(uint32_t rd, uint32_t rs1, unsigned shamt)
@@ -43,11 +42,10 @@ uint32_t test_slx_32(uint32_t rd, uint32_t rs1, unsigned shamt)
 
 /*
 **test_srx_32:
-** slli\ta[0-9],a[0-9],32
-** ...
-** srx\ta[0-9],a[0-9],a[0-9]
-** ...
-** sext\.w\ta[0-9],a[0-9]
+** ori\ta2,a2,32
+** slli\ta0,a0,32
+** srx\ta0,a1,a2
+** sext\.w\ta0,a0
 ** ...
 */
 uint32_t test_srx_32(uint32_t rd, uint32_t rs1, unsigned shamt)

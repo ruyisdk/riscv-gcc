@@ -130,19 +130,13 @@
 ; value participates in the 2*XLEN concatenation.  Emit_move copies the user's
 ; rd into the target first, then the insn reuses that register via match_dup 0.
 
-; slx_32: RV32 -> slx (32-bit); RV64 -> slli+slli+slx+srai sequence.
-; The 32-bit pair (rd@rs1) must occupy the high halves of two 64-bit registers
-; so the 64-bit slx picks the 32-bit result from bits 63..32.
-;
-; The expand below emits andi for safety (rs1 may have garbage in the high
-; half), but combine elides it for uint32_t args whose high half is already
-; known clean, so the final asm is slli+slli+slx+srai, not andi+slli+slx.
-; Likewise the trailing srli folds to srai (result low half is identical).
-;   slli  rd, rd, 32      ; rd's 32 bits -> bits 63..32
-;   andi  t,  rs1, 0xffffffff ; keep only rs1's low 32 bits (elided by combine)
-;   slli  t,  t, 32        ; rs1's 32 bits -> bits 63..32
-;   slx   rd, t,  rs2      ; (rd@t)<<shamt, high 32 bits land in bits 63..32
-;   srai  rd, rd, 32       ; bring result back to low 32 bits (was srli)
+; slx_32: RV32 -> slx (32-bit); RV64 -> andi+slli+slx sequence.
+; Mask the shift amount to the five bits used by RV32 and place rs1 in the
+; high half of a 64-bit register.  The low 32 bits of the RV64 slx result are
+; then the RV32 result.
+;   andi  shamt, shamt, 31
+;   slli  rs1, rs1, 32
+;   slx   rd, rs1, shamt
 (define_expand "riscv_slx_32_p"
   [(set (match_operand:SI 0 "register_operand")
         (unspec:SI [(match_operand:SI 1 "register_operand")
@@ -155,15 +149,13 @@
     {
       rtx rd = gen_reg_rtx (DImode);
       rtx rs1 = gen_reg_rtx (DImode);
-      emit_insn (gen_ashldi3 (rd, gen_lowpart (DImode, operands[0]),
+      rtx shamt = gen_reg_rtx (DImode);
+      emit_move_insn (rd, gen_lowpart (DImode, operands[0]));
+      emit_insn (gen_ashldi3 (rs1, gen_lowpart (DImode, operands[2]),
 			      GEN_INT (32)));
-      rtx t = gen_reg_rtx (DImode);
-      emit_insn (gen_anddi3 (t, gen_lowpart (DImode, operands[2]),
-			     GEN_INT (0xFFFFFFFF)));
-      emit_insn (gen_ashldi3 (rs1, t, GEN_INT (32)));
-      emit_insn (gen_riscv_slx_64_raw (rd, rs1,
-				       gen_lowpart (DImode, operands[3])));
-      emit_insn (gen_lshrdi3 (rd, rd, GEN_INT (32)));
+      emit_insn (gen_anddi3 (shamt, gen_lowpart (DImode, operands[3]),
+			     GEN_INT (31)));
+      emit_insn (gen_riscv_slx_64_raw (rd, rs1, shamt));
       emit_move_insn (operands[0], gen_lowpart (SImode, rd));
     }
   else
@@ -205,20 +197,13 @@
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
-; srx_32: RV32 -> srx (32-bit); RV64 -> slli+slli+srx+sext.w sequence.
-; srx concatenates rs1@rd (rs1 high), so rs1's 32 bits are also shifted into
-; the high half.
-;
-; The expand below emits andi for safety (rs1 may have garbage in the high
-; half), but combine elides it for uint32_t args whose high half is already
-; known clean, so the final asm is slli+slli+srx+sext.w, not ori+slli+srx.
-; srx writes the 32-bit result to the low half, so only a sign-extend is
-; needed (no full-width shift).
-;   slli  rd, rd, 32        ; rd's 32 bits -> bits 63..32  (rs1@rd concat high)
-;   andi  t,  rs1, 0xffffffff ; keep only rs1's low 32 bits (elided by combine)
-;   slli  t,  t, 32         ; rs1's 32 bits -> bits 63..32
-;   srx   rd, t,  rs2       ; (t@rd)>>shamt, low 32 bits land in bits 31..0
-;   sext.w rd, rd           ; sign-extend the low 32-bit result to XLEN
+; srx_32: RV32 -> srx (32-bit); RV64 -> ori+slli+srx sequence.
+; Set bit 5 of the shift amount so that RV64 shifts by 32 plus the RV32
+; five-bit shift amount, and place rd in the high half of a 64-bit register.
+; The low 32 bits of the RV64 srx result are then the RV32 result.
+;   ori   shamt, shamt, 32
+;   slli  rd, rd, 32
+;   srx   rd, rs1, shamt
 (define_expand "riscv_srx_32_p"
   [(set (match_operand:SI 0 "register_operand")
         (unspec:SI [(match_operand:SI 1 "register_operand")
@@ -230,14 +215,13 @@
   if (TARGET_64BIT)
     {
       rtx rd = gen_reg_rtx (DImode);
-      rtx t = gen_reg_rtx (DImode);
+      rtx shamt = gen_reg_rtx (DImode);
       emit_insn (gen_ashldi3 (rd, gen_lowpart (DImode, operands[0]),
 			      GEN_INT (32)));
-      emit_insn (gen_anddi3 (t, gen_lowpart (DImode, operands[2]),
-			     GEN_INT (0xFFFFFFFF)));
-      emit_insn (gen_ashldi3 (t, t, GEN_INT (32)));
-      emit_insn (gen_riscv_srx_64_raw (rd, t,
-				       gen_lowpart (DImode, operands[3])));
+      emit_insn (gen_iordi3 (shamt, gen_lowpart (DImode, operands[3]),
+			     GEN_INT (32)));
+      emit_insn (gen_riscv_srx_64_raw
+		   (rd, gen_lowpart (DImode, operands[2]), shamt));
       emit_move_insn (operands[0], gen_lowpart (SImode, rd));
     }
   else
