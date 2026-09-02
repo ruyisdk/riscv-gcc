@@ -37,6 +37,13 @@
    (UNSPEC_PMSLTU "msltu")
    (UNSPEC_PMSGTU "msgtu")])
 
+(define_int_attr rvp_scalar_inverse_compare_builtin
+  [(UNSPEC_PMSEQ "msne_i32_u32")
+   (UNSPEC_PMSLT "msge_u32")
+   (UNSPEC_PMSGT "msle_u32")
+   (UNSPEC_PMSLTU "msgeu_u32")
+   (UNSPEC_PMSGTU "msleu_u32")])
+
 (define_insn "riscv_<rvp_scalar_compare_builtin>"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(unspec:SI [(match_operand:SI 1 "register_operand" "r")
@@ -50,6 +57,23 @@
 }
   [(set_attr "type" "simd")
    (set_attr "mode" "SI")])
+
+;; Derived scalar comparisons are the inverse of the corresponding base
+;; comparison.
+
+(define_expand "riscv_<rvp_scalar_inverse_compare_builtin>"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "register_operand")]
+	 RVP_SCALAR_COMPARE))]
+  "TARGET_RVP"
+{
+  rtx tmp = gen_reg_rtx (SImode);
+  emit_insn (gen_riscv_<rvp_scalar_compare_builtin>
+	       (tmp, operands[1], operands[2]));
+  riscv_emit_packed_not (operands[0], tmp, SImode);
+  DONE;
+})
 
 ;; Scalar 64-bit merge.  RV32 performs the operation on both halves of the
 ;; register pair.

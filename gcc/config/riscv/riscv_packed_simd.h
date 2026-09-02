@@ -396,6 +396,12 @@ CREATE_RVP_INTRINSIC (uint32_t, mslt_u32, int32_t, int32_t)
 CREATE_RVP_INTRINSIC (uint32_t, msgt_u32, int32_t, int32_t)
 CREATE_RVP_INTRINSIC (uint32_t, msltu_u32, uint32_t, uint32_t)
 CREATE_RVP_INTRINSIC (uint32_t, msgtu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msne_i32_u32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msne_u32_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msge_u32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msle_u32, int32_t, int32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msgeu_u32, uint32_t, uint32_t)
+CREATE_RVP_INTRINSIC (uint32_t, msleu_u32, uint32_t, uint32_t)
 
 /* Scalar Merge.  */
 CREATE_RVP_INTRINSIC (int32_t, merge_i32, int32_t, int32_t, uint32_t)
