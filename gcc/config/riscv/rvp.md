@@ -3019,11 +3019,18 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+;; Packed absolute value with wrapping semantics (pabs is the pseudo
+;; pabd.<w> rs1, x0).  ABS_EXPR on the packed modes must not map to the
+;; saturating psabs.  The 8-byte modes are register pairs on RV32.
 (define_insn "abs<mode>2"
-  [(set (match_operand:QIHI 0 "register_operand" "=r")
-	(abs:QIHI (match_operand:QIHI 1 "register_operand" "r")))]
+  [(set (match_operand:PVQIH 0 "register_operand" "=r")
+	(abs:PVQIH (match_operand:PVQIH 1 "register_operand" "r")))]
   "TARGET_RVP"
-  "psabs.<rvp_width>\t%0,%1"
+{
+  if (!TARGET_64BIT && <MODE>mode != PV4QImode && <MODE>mode != PV2HImode)
+    return "pabd.d<rvp_width>\t%0,%1,x0";
+  return "pabd.<rvp_width>\t%0,%1,x0";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
@@ -3227,9 +3234,9 @@
   "TARGET_RVP"
   {
     if (TARGET_64BIT)
-      return "<abd_insn>.<rvp_width>\t%0, %1, %2";
+      return "<abd_insn>.<rvp_width>\t%0,%1,%2";
     else
-      return "<abd_insn>.<rvp_dwidth>\t%0, %1, %2";
+      return "<abd_insn>.<rvp_dwidth>\t%0,%1,%2";
   }
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])

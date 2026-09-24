@@ -189,6 +189,21 @@ RVP_OP_ATTRS ty __riscv_##name (ty __rs1, ty __rs2)                        \
     return (__rs1 << 1) + __rs2;                                           \
   }
 
+#define RVP_ABS_OP(name, ty, rty, shift)                                   \
+RVP_OP_ATTRS rty __riscv_##name (ty __rs1)                                 \
+  {                                                                        \
+    return (rty)((__rs1 + (__rs1 >> shift)) ^ (__rs1 >> shift));           \
+  }
+
+#define RVP_ABD_OP(name, ty, rty)                                          \
+RVP_OP_ATTRS rty __riscv_##name (ty __rs1, ty __rs2)                       \
+  {                                                                        \
+    ty __c = __rs1 > __rs2;                                                \
+    ty __max = (__c & __rs1) | (~__c & __rs2);                             \
+    ty __min = (__c & __rs2) | (~__c & __rs1);                             \
+    return (rty) (__max - __min);                                          \
+  }
+
 #define RVP_LOAD(name, vector_type, element_type, memory_type)              \
 RVP_OP_ATTRS vector_type __riscv_##name (element_type *__p)                 \
   {                                                                        \
@@ -405,9 +420,9 @@ CREATE_RVP_INTRINSIC (uint32_t, asubu_u32, uint32_t, uint32_t)
 CREATE_RVP_INTRINSIC (int32_t, ssh1sadd_i32, int32_t, int32_t)
 
 /* Scalar Absolute Value.  */
-CREATE_RVP_INTRINSIC (uint32_t, abs_u32, int32_t)
+RVP_ABS_OP (abs_u32, int32_t, uint32_t, 31)
 #if __riscv_xlen == 64
-CREATE_RVP_INTRINSIC (uint64_t, abs_u64, int64_t)
+RVP_ABS_OP (abs_u64, int64_t, uint64_t, 63)
 #endif
 
 /* Scalar Comparison.  */
@@ -608,18 +623,18 @@ CREATE_RVP_INTRINSIC (int32x2_t, paas_x_i32x2, int32x2_t, int32x2_t)
 CREATE_RVP_INTRINSIC (int32x2_t, pasa_x_i32x2, int32x2_t, int32x2_t)
 
 /* Packed Absolute Value and Absolute Difference.  */
-CREATE_RVP_INTRINSIC (uint8x4_t, pabs_i8x4, int8x4_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, pabs_i16x2, int16x2_t)
-CREATE_RVP_INTRINSIC (uint8x4_t, pabd_i8x4, int8x4_t, int8x4_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, pabd_i16x2, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC (uint8x4_t, pabdu_u8x4, uint8x4_t, uint8x4_t)
-CREATE_RVP_INTRINSIC (uint16x2_t, pabdu_u16x2, uint16x2_t, uint16x2_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, pabs_i8x8, int8x8_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, pabs_i16x4, int16x4_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, pabd_i8x8, int8x8_t, int8x8_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, pabd_i16x4, int16x4_t, int16x4_t)
-CREATE_RVP_INTRINSIC (uint8x8_t, pabdu_u8x8, uint8x8_t, uint8x8_t)
-CREATE_RVP_INTRINSIC (uint16x4_t, pabdu_u16x4, uint16x4_t, uint16x4_t)
+RVP_ABS_OP (pabs_i8x4, int8x4_t, uint8x4_t, 7)
+RVP_ABS_OP (pabs_i16x2, int16x2_t, uint16x2_t, 15)
+RVP_ABD_OP (pabd_i8x4,   int8x4_t,   uint8x4_t)
+RVP_ABD_OP (pabd_i16x2,  int16x2_t,  uint16x2_t)
+RVP_ABD_OP (pabdu_u8x4,  uint8x4_t,  uint8x4_t)
+RVP_ABD_OP (pabdu_u16x2, uint16x2_t, uint16x2_t)
+RVP_ABS_OP (pabs_i8x8, int8x8_t, uint8x8_t, 7)
+RVP_ABS_OP (pabs_i16x4, int16x4_t, uint16x4_t, 15)
+RVP_ABD_OP (pabd_i8x8,   int8x8_t,   uint8x8_t)
+RVP_ABD_OP (pabd_i16x4,  int16x4_t,  uint16x4_t)
+RVP_ABD_OP (pabdu_u8x8,  uint8x8_t,  uint8x8_t)
+RVP_ABD_OP (pabdu_u16x4, uint16x4_t, uint16x4_t)
 
 /* Packed Absolute Difference Sum.  */
 CREATE_RVP_INTRINSIC (uint32_t, pabdsumu_u8x4_u32, uint8x4_t, uint8x4_t)
