@@ -1996,8 +1996,8 @@ __riscv_pm4addsu_i16x4 (int16x4_t __rs1, uint16x4_t __rs2)
     = RVP_SUBVECTOR_GET (int16x4_t, int16x2_t, __rs1, 1);
   uint16x2_t __rs2_hi
     = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 1);
-  int64_t __result = __builtin_riscv_pm2waddsu_u64 (__rs1_lo, __rs2_lo);
-  return __builtin_riscv_pm2waddasu_u64 (__result, __rs1_hi, __rs2_hi);
+  int64_t __result = __builtin_riscv_pm2waddsu_i64 (__rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2waddasu_i64 (__result, __rs1_hi, __rs2_hi);
 }
 #else
 CREATE_RVP_INTRINSIC(int64_t, pm2add_i32x2, int32x2_t, int32x2_t)
@@ -2154,8 +2154,8 @@ __riscv_pm4addasu_i16x4 (int64_t __rd, int16x4_t __rs1,
   uint16x2_t __rs2_hi
     = RVP_SUBVECTOR_GET (uint16x4_t, uint16x2_t, __rs2, 1);
   int64_t __result
-    = __builtin_riscv_pm2waddasu_u64 (__rd, __rs1_lo, __rs2_lo);
-  return __builtin_riscv_pm2waddasu_u64 (__result, __rs1_hi, __rs2_hi);
+    = __builtin_riscv_pm2waddasu_i64 (__rd, __rs1_lo, __rs2_lo);
+  return __builtin_riscv_pm2waddasu_i64 (__result, __rs1_hi, __rs2_hi);
 }
 #else
 CREATE_RVP_INTRINSIC(int64_t, pm2adda_i32x2, int64_t, int32x2_t, int32x2_t)
@@ -2373,7 +2373,7 @@ CREATE_RVP_INTRINSIC (int64_t, pm2wadd_x_i64, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC (uint64_t, pm2waddu_u64, uint16x2_t, uint16x2_t)
 CREATE_RVP_INTRINSIC (int64_t, pm2wsub_i64, int16x2_t, int16x2_t)
 CREATE_RVP_INTRINSIC (int64_t, pm2wsub_x_i64, int16x2_t, int16x2_t)
-CREATE_RVP_INTRINSIC (int64_t, pm2waddsu_u64, int16x2_t, uint16x2_t)
+CREATE_RVP_INTRINSIC (int64_t, pm2waddsu_i64, int16x2_t, uint16x2_t)
 
 /* Packed Multiplication with Widening Horizontal Addition and Accumulate.  */
 CREATE_RVP_INTRINSIC (int64_t, pm2wadda_i64, int64_t, int16x2_t,
@@ -2386,7 +2386,7 @@ CREATE_RVP_INTRINSIC (int64_t, pm2wsuba_i64, int64_t, int16x2_t,
 		      int16x2_t)
 CREATE_RVP_INTRINSIC (int64_t, pm2wsuba_x_i64, int64_t, int16x2_t,
 		      int16x2_t)
-CREATE_RVP_INTRINSIC (int64_t, pm2waddasu_u64, int64_t, int16x2_t,
+CREATE_RVP_INTRINSIC (int64_t, pm2waddasu_i64, int64_t, int16x2_t,
 		      uint16x2_t)
 
 /* Packed Logical Operations.  */

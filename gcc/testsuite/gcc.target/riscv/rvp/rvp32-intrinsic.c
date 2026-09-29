@@ -5682,13 +5682,13 @@ int64_t test_pm2wsub_x_i64(int16x2_t a, int16x2_t b)
 }
 
 /*
-**test_pm2waddsu_u64:
+**test_pm2waddsu_i64:
 ** pm2waddsu.h\ta0,a0,a1
 ** ...
 */
-int64_t test_pm2waddsu_u64(int16x2_t a, uint16x2_t b)
+int64_t test_pm2waddsu_i64(int16x2_t a, uint16x2_t b)
 {
-  return __riscv_pm2waddsu_u64(a, b);
+  return __riscv_pm2waddsu_i64(a, b);
 }
 
 /* Packed Multiplication with Widening Horizontal Addition and Accumulate
@@ -5746,11 +5746,11 @@ int64_t test_pm2wsuba_x_i64(int64_t rd, int16x2_t a, int16x2_t b)
 }
 
 /*
-**test_pm2waddasu_u64:
+**test_pm2waddasu_i64:
 ** pm2waddasu.h\ta4,a2,a3
 ** ...
 */
-int64_t test_pm2waddasu_u64(int64_t rd, int16x2_t a, uint16x2_t b)
+int64_t test_pm2waddasu_i64(int64_t rd, int16x2_t a, uint16x2_t b)
 {
-  return __riscv_pm2waddasu_u64(rd, a, b);
+  return __riscv_pm2waddasu_i64(rd, a, b);
 }

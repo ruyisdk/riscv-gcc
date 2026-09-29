@@ -1499,7 +1499,7 @@
   "pm2wsub.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_expand "riscv_pm2waddsu_u64"
+(define_expand "riscv_pm2waddsu_i64"
   [(set (match_operand:DI 0 "register_operand")
         (unspec:DI [(match_operand:PV2HI 1 "register_operand")
                     (match_operand:PV2HI 2 "register_operand")]
@@ -1517,12 +1517,12 @@
 	(operands[0], gen_lowpart (PV4HImode, lhs_di), rhs));
     }
   else
-    emit_insn (gen_riscv_pm2waddsu_u64_rv32
+    emit_insn (gen_riscv_pm2waddsu_i64_rv32
 	       (operands[0], operands[1], operands[2]));
   DONE;
 })
 
-(define_insn "riscv_pm2waddsu_u64_rv32"
+(define_insn "riscv_pm2waddsu_i64_rv32"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (unspec:DI [(match_operand:PV2HI 1 "register_operand" "r")
                     (match_operand:PV2HI 2 "register_operand" "r")]
@@ -1727,7 +1727,7 @@
   "pm2wsuba.hx\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
-(define_expand "riscv_pm2waddasu_u64"
+(define_expand "riscv_pm2waddasu_i64"
   [(set (match_operand:DI 0 "register_operand")
         (unspec:DI [(match_operand:DI 1 "register_operand")
                     (match_operand:PV2HI 2 "register_operand")
@@ -1748,13 +1748,13 @@
   else
     {
       emit_move_insn (operands[0], operands[1]);
-      emit_insn (gen_riscv_pm2waddasu_u64_rmw
+      emit_insn (gen_riscv_pm2waddasu_i64_rmw
 	(operands[0], operands[2], operands[3]));
     }
   DONE;
 })
 
-(define_insn "riscv_pm2waddasu_u64_rmw"
+(define_insn "riscv_pm2waddasu_i64_rmw"
   [(set (match_operand:DI 0 "register_operand" "+R")
         (unspec:DI [(match_dup 0)
                     (match_operand:PV2HI 1 "register_operand" "r")
