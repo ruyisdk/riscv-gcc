@@ -3021,13 +3021,16 @@
 
 ;; Packed absolute value with wrapping semantics (pabs is the pseudo
 ;; pabd.<w> rs1, x0).  ABS_EXPR on the packed modes must not map to the
-;; saturating psabs.  The 8-byte modes are register pairs on RV32.
+;; saturating psabs.  Also covers the scalar QI/HI modes, where a single
+;; pabd.<w> rs1, x0 computes the absolute value.  The 8-byte modes are
+;; register pairs on RV32.
 (define_insn "abs<mode>2"
   [(set (match_operand:PVQIH 0 "register_operand" "=r")
 	(abs:PVQIH (match_operand:PVQIH 1 "register_operand" "r")))]
   "TARGET_RVP"
 {
-  if (!TARGET_64BIT && <MODE>mode != PV4QImode && <MODE>mode != PV2HImode)
+  if (!TARGET_64BIT
+      && (<MODE>mode == PV8QImode || <MODE>mode == PV4HImode))
     return "pabd.d<rvp_width>\t%0,%1,x0";
   return "pabd.<rvp_width>\t%0,%1,x0";
 }
