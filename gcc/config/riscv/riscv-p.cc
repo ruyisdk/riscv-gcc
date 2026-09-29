@@ -242,6 +242,30 @@ riscv_emit_ppair_2_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
   emit_insn (gen_rtx_SET (target, result));
 }
 
+/* Emit the RV32 double-wide ppair patterns for the register-pair modes
+   (PV8QI, PV4HI).  The vec_merge/vec_select form used on RV64 defeats
+   register-pair allocation here, so emit the unspec patterns that take
+   the pair directly.  op0_odd/op1_odd pick the ppaire/ppaireo/ppairoe/
+   ppairo variant exactly as in the merge-based emitters.  */
+
+static void
+riscv_emit_ppair_rv32_unspec (rtx target, machine_mode vmode, rtx op0, rtx op1,
+                              bool op0_odd, bool op1_odd)
+{
+  rtx (*gen) (rtx, rtx, rtx);
+  if (vmode == PV8QImode)
+    gen = (!op0_odd && !op1_odd) ? gen_riscv_ppaire_u8x8_rv32
+	 : (!op0_odd) ? gen_riscv_ppaireo_u8x8_rv32
+	 : (!op1_odd) ? gen_riscv_ppairoe_u8x8_rv32
+	 : gen_riscv_ppairo_u8x8_rv32;
+  else
+    gen = (!op0_odd && !op1_odd) ? gen_riscv_ppaire_u16x4_rv32
+	 : (!op0_odd) ? gen_riscv_ppaireo_u16x4_rv32
+	 : (!op1_odd) ? gen_riscv_ppairoe_u16x4_rv32
+	 : gen_riscv_ppairo_u16x4_rv32;
+  emit_insn (gen (target, op0, op1));
+}
+
 /* Emit ppair RTL pattern for 4-element vectors using vec_merge/vec_select.
    Supports both PV4QI and PV4HI modes.
    op0_odd/op1_odd: false = even selector {0,0,2,2}, true = odd selector {1,1,3,3}
@@ -256,6 +280,13 @@ static void
 riscv_emit_ppair_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
+  /* On RV32, PV4HI is a register pair; use the double-wide unspec form.  */
+  if (!TARGET_64BIT && vmode == PV4HImode)
+    {
+      riscv_emit_ppair_rv32_unspec (target, vmode, op0, op1, op0_odd, op1_odd);
+      return;
+    }
+
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 4;
@@ -435,6 +466,13 @@ static void
 riscv_emit_ppair_8_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
                          bool op0_odd, bool op1_odd)
 {
+  /* On RV32, PV8QI is a register pair; use the double-wide unspec form.  */
+  if (!TARGET_64BIT)
+    {
+      riscv_emit_ppair_rv32_unspec (target, vmode, op0, op1, op0_odd, op1_odd);
+      return;
+    }
+
   int base0 = op0_odd ? 1 : 0;
   int base1 = op1_odd ? 1 : 0;
   const int nelems = 8;
