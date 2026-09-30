@@ -3513,6 +3513,11 @@ build_indirect_ref (location_t loc, tree ptr, ref_operator errstring)
 
   if (TREE_CODE (type) == POINTER_TYPE)
     {
+      tree t = TREE_TYPE (type);
+
+      if (!verify_type_context (loc, TCTX_DEREFERENCE, t))
+	return error_mark_node;
+
       if (CONVERT_EXPR_P (pointer)
           || TREE_CODE (pointer) == VIEW_CONVERT_EXPR)
 	{
@@ -3535,8 +3540,6 @@ build_indirect_ref (location_t loc, tree ptr, ref_operator errstring)
 	}
       else
 	{
-	  tree t = TREE_TYPE (type);
-
 	  ref = build1 (INDIRECT_REF, t, pointer);
 
 	  if (VOID_TYPE_P (t) && c_inhibit_evaluation_warnings == 0)

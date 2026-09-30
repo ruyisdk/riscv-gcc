@@ -4598,6 +4598,9 @@ verify_type_context (location_t loc, type_context_kind context,
 	error_at (loc, "arithmetic on pointer to SVE type %qT", type);
       return false;
 
+    case TCTX_DEREFERENCE:
+      return true;
+
     case TCTX_FIELD:
       if (silent_p)
 	;

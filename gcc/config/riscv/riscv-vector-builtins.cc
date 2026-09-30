@@ -5556,6 +5556,9 @@ verify_type_context (location_t loc, type_context_kind context, const_tree type,
 
       return false;
 
+    case TCTX_DEREFERENCE:
+      return true;
+
     case TCTX_FIELD:
       if (silent_p)
 	;

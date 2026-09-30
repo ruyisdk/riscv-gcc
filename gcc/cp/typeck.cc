@@ -4028,6 +4028,11 @@ cp_build_indirect_ref_1 (location_t loc, tree ptr, ref_operator errorstring,
 	 of  the  result  is  "T."  */
       tree t = TREE_TYPE (type);
 
+      if (TREE_CODE (type) == POINTER_TYPE
+	  && !verify_type_context (loc, TCTX_DEREFERENCE, t,
+				   !(complain & tf_error)))
+	return error_mark_node;
+
       if ((CONVERT_EXPR_P (ptr)
 	   || TREE_CODE (ptr) == VIEW_CONVERT_EXPR)
 	  && (!CLASS_TYPE_P (t) || !CLASSTYPE_EMPTY_P (t)))

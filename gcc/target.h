@@ -273,6 +273,9 @@ enum type_context_kind {
      difference between two pointers when one of them is a pointer to T.  */
   TCTX_POINTER_ARITH,
 
+  /* Dereferencing a pointer to T.  */
+  TCTX_DEREFERENCE,
+
   /* Dynamically allocating objects of type T.  */
   TCTX_ALLOCATION,
 
