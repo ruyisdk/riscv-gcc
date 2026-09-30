@@ -1,0 +1,43 @@
+/* Append 1x2 value interfaces without renumbering older builtin codes.  */
+#define ZTT_ZIP_VALUE(OP, NAME, ID, TYPE) \
+  ZTT_INTRINSIC (OP##_##ID##_1X2, "__riscv_ztt_" #NAME "_" #TYPE "_1x2", \
+                 M_M, OP, ID##_1X2)
+#define ZTT_ZIP_VALUES(ID, TYPE) \
+  ZTT_ZIP_VALUE (MCOLZIP_EW, mcolzip_ew, ID, TYPE) \
+  ZTT_ZIP_VALUE (MROWZIP_EW, mrowzip_ew, ID, TYPE) \
+  ZTT_ZIP_VALUE (MCOLUNZIP_EW, mcolunzip_ew, ID, TYPE) \
+  ZTT_ZIP_VALUE (MROWUNZIP_EW, mrowunzip_ew, ID, TYPE)
+#define ZTT_ZIP_INT_RM(ID, TYPE, RM, SUFFIX) \
+  ZTT_ZIP_VALUES (ID##_##RM, TYPE##_##SUFFIX) \
+  ZTT_ZIP_VALUES (ID##_##RM##_SAT, TYPE##_##SUFFIX##_sat)
+#define ZTT_ZIP_INT(ID, TYPE) \
+  ZTT_ZIP_INT_RM (ID, TYPE, RNU, rnu) \
+  ZTT_ZIP_INT_RM (ID, TYPE, RNE, rne) \
+  ZTT_ZIP_INT_RM (ID, TYPE, RDN, rdn) \
+  ZTT_ZIP_INT_RM (ID, TYPE, ROD, rod)
+ZTT_ZIP_INT (I8, i8)
+ZTT_ZIP_INT (U8, u8)
+ZTT_ZIP_INT (I16, i16)
+ZTT_ZIP_INT (U16, u16)
+ZTT_ZIP_INT (I32, i32)
+ZTT_ZIP_INT (U32, u32)
+ZTT_ZIP_INT (I64, i64)
+ZTT_ZIP_INT (U64, u64)
+ZTT_ZIP_INT (I128, i128)
+ZTT_ZIP_INT (U128, u128)
+#define ZTT_ZIP_FP(ID, TYPE) \
+  ZTT_ZIP_VALUES (ID##_RNE, TYPE##_rne) \
+  ZTT_ZIP_VALUES (ID##_RTZ, TYPE##_rtz) \
+  ZTT_ZIP_VALUES (ID##_RDN, TYPE##_rdn) \
+  ZTT_ZIP_VALUES (ID##_RUP, TYPE##_rup) \
+  ZTT_ZIP_VALUES (ID##_RMM, TYPE##_rmm) \
+  ZTT_ZIP_VALUES (ID##_RNO, TYPE##_rno)
+ZTT_ZIP_FP (F16, f16)
+ZTT_ZIP_FP (BF16, bf16)
+ZTT_ZIP_FP (F32, f32)
+ZTT_ZIP_FP (F64, f64)
+#undef ZTT_ZIP_FP
+#undef ZTT_ZIP_INT
+#undef ZTT_ZIP_INT_RM
+#undef ZTT_ZIP_VALUES
+#undef ZTT_ZIP_VALUE

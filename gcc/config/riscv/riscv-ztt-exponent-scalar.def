@@ -1,0 +1,20 @@
+/* Fixed signed exponent controls, not amestype data scalars.  */
+
+#include "riscv-ztt-catalog-iterators.h"
+
+/* Operation-major order is part of the canonical builtin numbering.  */
+#define ZTT_EXPONENT_SCALAR_ENTRY(TYPE, NAME, OP, SPELLING, PROTO) \
+  ZTT_INTRINSIC (OP##_##TYPE, "__riscv_ztt_" #SPELLING "_" #NAME, \
+		 PROTO, OP, TYPE)
+
+#define ZTT_EXPONENT_SCALAR_SHAPES(TYPE, NAME, OP, SPELLING, PROTO) \
+  ZTT_CATALOG_M_SHAPES (ZTT_EXPONENT_SCALAR_ENTRY, TYPE, NAME, \
+			OP, SPELLING, PROTO)
+
+ZTT_CATALOG_ALL_TYPES (ZTT_EXPONENT_SCALAR_SHAPES,
+		       MLDEXP_EW_X, mldexp_ew_x, M_EXPONENT_X)
+ZTT_CATALOG_ALL_TYPES (ZTT_EXPONENT_SCALAR_SHAPES,
+		       MLDEXPACC_EW_X, mldexpacc_ew_x, M_EXPONENT_ACC_X)
+
+#undef ZTT_EXPONENT_SCALAR_ENTRY
+#undef ZTT_EXPONENT_SCALAR_SHAPES

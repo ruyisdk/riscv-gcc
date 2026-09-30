@@ -1,0 +1,1615 @@
+/* Typed intrinsics supported by the compiler-only AME/Ztt profiles.
+   The clear constructor uses settyp itself; numeric zero remains a
+   separate operation.  */
+
+ZTT_INTRINSIC (MZERO_2D_M_I8_RNE_1X1,
+	       "__riscv_ztt_mzero_2d_m_i8_rne_1x1",
+	       M_VOID, MZERO_2D_M, I8_RNE_1X1)
+ZTT_INTRINSIC (MLS_RM_I8_RNE_1X1,
+	       "__riscv_ztt_mls_rm_i8_rne_1x1",
+	       M_CONST_PTR, MLS_RM, I8_RNE_1X1)
+ZTT_INTRINSIC (MSS_RM_I8_RNE_1X1,
+	       "__riscv_ztt_mss_rm",
+	       VOID_PTR_M, MSS_RM, I8_RNE_1X1)
+ZTT_INTRINSIC (MADD_EW_I8_RNE_1X1,
+	       "__riscv_ztt_madd_ew_i8_rne_1x1",
+	       M_M_M, MADD_EW, I8_RNE_1X1)
+
+/* Append the provisional v0.2.4 names to retain the old builtin indices.  */
+ZTT_INTRINSIC (MCLEAR_M_I8_RNE_1X1,
+	       "__riscv_ztt_mclear_m_i8_rne_1x1",
+	       M_VOID, MCLEAR_M, I8_RNE_1X1)
+ZTT_INTRINSIC (MZERO_M_I8_RNE_1X1,
+	       "__riscv_ztt_mzero_m_i8_rne_1x1",
+	       M_VOID, MZERO_2D_M, I8_RNE_1X1)
+
+/* Provisional integer RM variants; preserve the preceding builtin indices.  */
+ZTT_INTRINSIC (MCLEAR_M_I8_RNU_1X1,
+	       "__riscv_ztt_mclear_m_i8_rnu_1x1",
+	       M_VOID, MCLEAR_M, I8_RNU_1X1)
+ZTT_INTRINSIC (MZERO_M_I8_RNU_1X1,
+	       "__riscv_ztt_mzero_m_i8_rnu_1x1",
+	       M_VOID, MZERO_2D_M, I8_RNU_1X1)
+ZTT_INTRINSIC (MLS_RM_I8_RNU_1X1,
+	       "__riscv_ztt_mls_rm_i8_rnu_1x1",
+	       M_CONST_PTR, MLS_RM, I8_RNU_1X1)
+ZTT_INTRINSIC (MSS_RM_I8_RNU_1X1,
+	       "__riscv_ztt_mss_rm_i8_rnu_1x1",
+	       VOID_PTR_M, MSS_RM, I8_RNU_1X1)
+ZTT_INTRINSIC (MADD_EW_I8_RNU_1X1,
+	       "__riscv_ztt_madd_ew_i8_rnu_1x1",
+	       M_M_M, MADD_EW, I8_RNU_1X1)
+ZTT_INTRINSIC (MCLEAR_M_I8_RDN_1X1,
+	       "__riscv_ztt_mclear_m_i8_rdn_1x1",
+	       M_VOID, MCLEAR_M, I8_RDN_1X1)
+ZTT_INTRINSIC (MZERO_M_I8_RDN_1X1,
+	       "__riscv_ztt_mzero_m_i8_rdn_1x1",
+	       M_VOID, MZERO_2D_M, I8_RDN_1X1)
+ZTT_INTRINSIC (MLS_RM_I8_RDN_1X1,
+	       "__riscv_ztt_mls_rm_i8_rdn_1x1",
+	       M_CONST_PTR, MLS_RM, I8_RDN_1X1)
+ZTT_INTRINSIC (MSS_RM_I8_RDN_1X1,
+	       "__riscv_ztt_mss_rm_i8_rdn_1x1",
+	       VOID_PTR_M, MSS_RM, I8_RDN_1X1)
+ZTT_INTRINSIC (MADD_EW_I8_RDN_1X1,
+	       "__riscv_ztt_madd_ew_i8_rdn_1x1",
+	       M_M_M, MADD_EW, I8_RDN_1X1)
+ZTT_INTRINSIC (MCLEAR_M_I8_ROD_1X1,
+	       "__riscv_ztt_mclear_m_i8_rod_1x1",
+	       M_VOID, MCLEAR_M, I8_ROD_1X1)
+ZTT_INTRINSIC (MZERO_M_I8_ROD_1X1,
+	       "__riscv_ztt_mzero_m_i8_rod_1x1",
+	       M_VOID, MZERO_2D_M, I8_ROD_1X1)
+ZTT_INTRINSIC (MLS_RM_I8_ROD_1X1,
+	       "__riscv_ztt_mls_rm_i8_rod_1x1",
+	       M_CONST_PTR, MLS_RM, I8_ROD_1X1)
+ZTT_INTRINSIC (MSS_RM_I8_ROD_1X1,
+	       "__riscv_ztt_mss_rm_i8_rod_1x1",
+	       VOID_PTR_M, MSS_RM, I8_ROD_1X1)
+ZTT_INTRINSIC (MADD_EW_I8_ROD_1X1,
+	       "__riscv_ztt_madd_ew_i8_rod_1x1",
+	       M_M_M, MADD_EW, I8_ROD_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U8_RNU_1X1,
+	       "__riscv_ztt_mclear_m_u8_rnu_1x1",
+	       M_VOID, MCLEAR_M, U8_RNU_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U8_RNU_1X1,
+	       "__riscv_ztt_mzero_m_u8_rnu_1x1",
+	       M_VOID, MZERO_2D_M, U8_RNU_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U8_RNU_1X1,
+	       "__riscv_ztt_mls_rm_u8_rnu_1x1",
+	       M_CONST_PTR, MLS_RM, U8_RNU_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U8_RNU_1X1,
+	       "__riscv_ztt_mss_rm_u8_rnu_1x1",
+	       VOID_PTR_M, MSS_RM, U8_RNU_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U8_RNU_1X1,
+	       "__riscv_ztt_madd_ew_u8_rnu_1x1",
+	       M_M_M, MADD_EW, U8_RNU_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U8_RNE_1X1,
+	       "__riscv_ztt_mclear_m_u8_rne_1x1",
+	       M_VOID, MCLEAR_M, U8_RNE_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U8_RNE_1X1,
+	       "__riscv_ztt_mzero_m_u8_rne_1x1",
+	       M_VOID, MZERO_2D_M, U8_RNE_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U8_RNE_1X1,
+	       "__riscv_ztt_mls_rm_u8_rne_1x1",
+	       M_CONST_PTR, MLS_RM, U8_RNE_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U8_RNE_1X1,
+	       "__riscv_ztt_mss_rm_u8_rne_1x1",
+	       VOID_PTR_M, MSS_RM, U8_RNE_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U8_RNE_1X1,
+	       "__riscv_ztt_madd_ew_u8_rne_1x1",
+	       M_M_M, MADD_EW, U8_RNE_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U8_RDN_1X1,
+	       "__riscv_ztt_mclear_m_u8_rdn_1x1",
+	       M_VOID, MCLEAR_M, U8_RDN_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U8_RDN_1X1,
+	       "__riscv_ztt_mzero_m_u8_rdn_1x1",
+	       M_VOID, MZERO_2D_M, U8_RDN_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U8_RDN_1X1,
+	       "__riscv_ztt_mls_rm_u8_rdn_1x1",
+	       M_CONST_PTR, MLS_RM, U8_RDN_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U8_RDN_1X1,
+	       "__riscv_ztt_mss_rm_u8_rdn_1x1",
+	       VOID_PTR_M, MSS_RM, U8_RDN_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U8_RDN_1X1,
+	       "__riscv_ztt_madd_ew_u8_rdn_1x1",
+	       M_M_M, MADD_EW, U8_RDN_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U8_ROD_1X1,
+	       "__riscv_ztt_mclear_m_u8_rod_1x1",
+	       M_VOID, MCLEAR_M, U8_ROD_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U8_ROD_1X1,
+	       "__riscv_ztt_mzero_m_u8_rod_1x1",
+	       M_VOID, MZERO_2D_M, U8_ROD_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U8_ROD_1X1,
+	       "__riscv_ztt_mls_rm_u8_rod_1x1",
+	       M_CONST_PTR, MLS_RM, U8_ROD_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U8_ROD_1X1,
+	       "__riscv_ztt_mss_rm_u8_rod_1x1",
+	       VOID_PTR_M, MSS_RM, U8_ROD_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U8_ROD_1X1,
+	       "__riscv_ztt_madd_ew_u8_rod_1x1",
+	       M_M_M, MADD_EW, U8_ROD_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I16_RNU_1X1,
+	       "__riscv_ztt_mclear_m_i16_rnu_1x1",
+	       M_VOID, MCLEAR_M, I16_RNU_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I16_RNU_1X1,
+	       "__riscv_ztt_mzero_m_i16_rnu_1x1",
+	       M_VOID, MZERO_2D_M, I16_RNU_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I16_RNU_1X1,
+	       "__riscv_ztt_mls_rm_i16_rnu_1x1",
+	       M_CONST_PTR, MLS_RM, I16_RNU_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I16_RNU_1X1,
+	       "__riscv_ztt_mss_rm_i16_rnu_1x1",
+	       VOID_PTR_M, MSS_RM, I16_RNU_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I16_RNU_1X1,
+	       "__riscv_ztt_madd_ew_i16_rnu_1x1",
+	       M_M_M, MADD_EW, I16_RNU_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I16_RNE_1X1,
+	       "__riscv_ztt_mclear_m_i16_rne_1x1",
+	       M_VOID, MCLEAR_M, I16_RNE_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I16_RNE_1X1,
+	       "__riscv_ztt_mzero_m_i16_rne_1x1",
+	       M_VOID, MZERO_2D_M, I16_RNE_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I16_RNE_1X1,
+	       "__riscv_ztt_mls_rm_i16_rne_1x1",
+	       M_CONST_PTR, MLS_RM, I16_RNE_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I16_RNE_1X1,
+	       "__riscv_ztt_mss_rm_i16_rne_1x1",
+	       VOID_PTR_M, MSS_RM, I16_RNE_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I16_RNE_1X1,
+	       "__riscv_ztt_madd_ew_i16_rne_1x1",
+	       M_M_M, MADD_EW, I16_RNE_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I16_RDN_1X1,
+	       "__riscv_ztt_mclear_m_i16_rdn_1x1",
+	       M_VOID, MCLEAR_M, I16_RDN_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I16_RDN_1X1,
+	       "__riscv_ztt_mzero_m_i16_rdn_1x1",
+	       M_VOID, MZERO_2D_M, I16_RDN_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I16_RDN_1X1,
+	       "__riscv_ztt_mls_rm_i16_rdn_1x1",
+	       M_CONST_PTR, MLS_RM, I16_RDN_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I16_RDN_1X1,
+	       "__riscv_ztt_mss_rm_i16_rdn_1x1",
+	       VOID_PTR_M, MSS_RM, I16_RDN_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I16_RDN_1X1,
+	       "__riscv_ztt_madd_ew_i16_rdn_1x1",
+	       M_M_M, MADD_EW, I16_RDN_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I16_ROD_1X1,
+	       "__riscv_ztt_mclear_m_i16_rod_1x1",
+	       M_VOID, MCLEAR_M, I16_ROD_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I16_ROD_1X1,
+	       "__riscv_ztt_mzero_m_i16_rod_1x1",
+	       M_VOID, MZERO_2D_M, I16_ROD_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I16_ROD_1X1,
+	       "__riscv_ztt_mls_rm_i16_rod_1x1",
+	       M_CONST_PTR, MLS_RM, I16_ROD_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I16_ROD_1X1,
+	       "__riscv_ztt_mss_rm_i16_rod_1x1",
+	       VOID_PTR_M, MSS_RM, I16_ROD_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I16_ROD_1X1,
+	       "__riscv_ztt_madd_ew_i16_rod_1x1",
+	       M_M_M, MADD_EW, I16_ROD_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U16_RNU_1X1,
+	       "__riscv_ztt_mclear_m_u16_rnu_1x1",
+	       M_VOID, MCLEAR_M, U16_RNU_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U16_RNU_1X1,
+	       "__riscv_ztt_mzero_m_u16_rnu_1x1",
+	       M_VOID, MZERO_2D_M, U16_RNU_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U16_RNU_1X1,
+	       "__riscv_ztt_mls_rm_u16_rnu_1x1",
+	       M_CONST_PTR, MLS_RM, U16_RNU_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U16_RNU_1X1,
+	       "__riscv_ztt_mss_rm_u16_rnu_1x1",
+	       VOID_PTR_M, MSS_RM, U16_RNU_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U16_RNU_1X1,
+	       "__riscv_ztt_madd_ew_u16_rnu_1x1",
+	       M_M_M, MADD_EW, U16_RNU_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U16_RNE_1X1,
+	       "__riscv_ztt_mclear_m_u16_rne_1x1",
+	       M_VOID, MCLEAR_M, U16_RNE_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U16_RNE_1X1,
+	       "__riscv_ztt_mzero_m_u16_rne_1x1",
+	       M_VOID, MZERO_2D_M, U16_RNE_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U16_RNE_1X1,
+	       "__riscv_ztt_mls_rm_u16_rne_1x1",
+	       M_CONST_PTR, MLS_RM, U16_RNE_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U16_RNE_1X1,
+	       "__riscv_ztt_mss_rm_u16_rne_1x1",
+	       VOID_PTR_M, MSS_RM, U16_RNE_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U16_RNE_1X1,
+	       "__riscv_ztt_madd_ew_u16_rne_1x1",
+	       M_M_M, MADD_EW, U16_RNE_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U16_RDN_1X1,
+	       "__riscv_ztt_mclear_m_u16_rdn_1x1",
+	       M_VOID, MCLEAR_M, U16_RDN_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U16_RDN_1X1,
+	       "__riscv_ztt_mzero_m_u16_rdn_1x1",
+	       M_VOID, MZERO_2D_M, U16_RDN_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U16_RDN_1X1,
+	       "__riscv_ztt_mls_rm_u16_rdn_1x1",
+	       M_CONST_PTR, MLS_RM, U16_RDN_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U16_RDN_1X1,
+	       "__riscv_ztt_mss_rm_u16_rdn_1x1",
+	       VOID_PTR_M, MSS_RM, U16_RDN_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U16_RDN_1X1,
+	       "__riscv_ztt_madd_ew_u16_rdn_1x1",
+	       M_M_M, MADD_EW, U16_RDN_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U16_ROD_1X1,
+	       "__riscv_ztt_mclear_m_u16_rod_1x1",
+	       M_VOID, MCLEAR_M, U16_ROD_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U16_ROD_1X1,
+	       "__riscv_ztt_mzero_m_u16_rod_1x1",
+	       M_VOID, MZERO_2D_M, U16_ROD_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U16_ROD_1X1,
+	       "__riscv_ztt_mls_rm_u16_rod_1x1",
+	       M_CONST_PTR, MLS_RM, U16_ROD_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U16_ROD_1X1,
+	       "__riscv_ztt_mss_rm_u16_rod_1x1",
+	       VOID_PTR_M, MSS_RM, U16_ROD_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U16_ROD_1X1,
+	       "__riscv_ztt_madd_ew_u16_rod_1x1",
+	       M_M_M, MADD_EW, U16_ROD_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I32_RNU_1X1,
+	       "__riscv_ztt_mclear_m_i32_rnu_1x1",
+	       M_VOID, MCLEAR_M, I32_RNU_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I32_RNU_1X1,
+	       "__riscv_ztt_mzero_m_i32_rnu_1x1",
+	       M_VOID, MZERO_2D_M, I32_RNU_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I32_RNU_1X1,
+	       "__riscv_ztt_mls_rm_i32_rnu_1x1",
+	       M_CONST_PTR, MLS_RM, I32_RNU_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I32_RNU_1X1,
+	       "__riscv_ztt_mss_rm_i32_rnu_1x1",
+	       VOID_PTR_M, MSS_RM, I32_RNU_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I32_RNU_1X1,
+	       "__riscv_ztt_madd_ew_i32_rnu_1x1",
+	       M_M_M, MADD_EW, I32_RNU_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I32_RNE_1X1,
+	       "__riscv_ztt_mclear_m_i32_rne_1x1",
+	       M_VOID, MCLEAR_M, I32_RNE_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I32_RNE_1X1,
+	       "__riscv_ztt_mzero_m_i32_rne_1x1",
+	       M_VOID, MZERO_2D_M, I32_RNE_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I32_RNE_1X1,
+	       "__riscv_ztt_mls_rm_i32_rne_1x1",
+	       M_CONST_PTR, MLS_RM, I32_RNE_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I32_RNE_1X1,
+	       "__riscv_ztt_mss_rm_i32_rne_1x1",
+	       VOID_PTR_M, MSS_RM, I32_RNE_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I32_RNE_1X1,
+	       "__riscv_ztt_madd_ew_i32_rne_1x1",
+	       M_M_M, MADD_EW, I32_RNE_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I32_RDN_1X1,
+	       "__riscv_ztt_mclear_m_i32_rdn_1x1",
+	       M_VOID, MCLEAR_M, I32_RDN_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I32_RDN_1X1,
+	       "__riscv_ztt_mzero_m_i32_rdn_1x1",
+	       M_VOID, MZERO_2D_M, I32_RDN_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I32_RDN_1X1,
+	       "__riscv_ztt_mls_rm_i32_rdn_1x1",
+	       M_CONST_PTR, MLS_RM, I32_RDN_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I32_RDN_1X1,
+	       "__riscv_ztt_mss_rm_i32_rdn_1x1",
+	       VOID_PTR_M, MSS_RM, I32_RDN_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I32_RDN_1X1,
+	       "__riscv_ztt_madd_ew_i32_rdn_1x1",
+	       M_M_M, MADD_EW, I32_RDN_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_I32_ROD_1X1,
+	       "__riscv_ztt_mclear_m_i32_rod_1x1",
+	       M_VOID, MCLEAR_M, I32_ROD_1X1)
+
+ZTT_INTRINSIC (MZERO_M_I32_ROD_1X1,
+	       "__riscv_ztt_mzero_m_i32_rod_1x1",
+	       M_VOID, MZERO_2D_M, I32_ROD_1X1)
+
+ZTT_INTRINSIC (MLS_RM_I32_ROD_1X1,
+	       "__riscv_ztt_mls_rm_i32_rod_1x1",
+	       M_CONST_PTR, MLS_RM, I32_ROD_1X1)
+
+ZTT_INTRINSIC (MSS_RM_I32_ROD_1X1,
+	       "__riscv_ztt_mss_rm_i32_rod_1x1",
+	       VOID_PTR_M, MSS_RM, I32_ROD_1X1)
+
+ZTT_INTRINSIC (MADD_EW_I32_ROD_1X1,
+	       "__riscv_ztt_madd_ew_i32_rod_1x1",
+	       M_M_M, MADD_EW, I32_ROD_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U32_RNU_1X1,
+	       "__riscv_ztt_mclear_m_u32_rnu_1x1",
+	       M_VOID, MCLEAR_M, U32_RNU_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U32_RNU_1X1,
+	       "__riscv_ztt_mzero_m_u32_rnu_1x1",
+	       M_VOID, MZERO_2D_M, U32_RNU_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U32_RNU_1X1,
+	       "__riscv_ztt_mls_rm_u32_rnu_1x1",
+	       M_CONST_PTR, MLS_RM, U32_RNU_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U32_RNU_1X1,
+	       "__riscv_ztt_mss_rm_u32_rnu_1x1",
+	       VOID_PTR_M, MSS_RM, U32_RNU_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U32_RNU_1X1,
+	       "__riscv_ztt_madd_ew_u32_rnu_1x1",
+	       M_M_M, MADD_EW, U32_RNU_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U32_RNE_1X1,
+	       "__riscv_ztt_mclear_m_u32_rne_1x1",
+	       M_VOID, MCLEAR_M, U32_RNE_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U32_RNE_1X1,
+	       "__riscv_ztt_mzero_m_u32_rne_1x1",
+	       M_VOID, MZERO_2D_M, U32_RNE_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U32_RNE_1X1,
+	       "__riscv_ztt_mls_rm_u32_rne_1x1",
+	       M_CONST_PTR, MLS_RM, U32_RNE_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U32_RNE_1X1,
+	       "__riscv_ztt_mss_rm_u32_rne_1x1",
+	       VOID_PTR_M, MSS_RM, U32_RNE_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U32_RNE_1X1,
+	       "__riscv_ztt_madd_ew_u32_rne_1x1",
+	       M_M_M, MADD_EW, U32_RNE_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U32_RDN_1X1,
+	       "__riscv_ztt_mclear_m_u32_rdn_1x1",
+	       M_VOID, MCLEAR_M, U32_RDN_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U32_RDN_1X1,
+	       "__riscv_ztt_mzero_m_u32_rdn_1x1",
+	       M_VOID, MZERO_2D_M, U32_RDN_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U32_RDN_1X1,
+	       "__riscv_ztt_mls_rm_u32_rdn_1x1",
+	       M_CONST_PTR, MLS_RM, U32_RDN_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U32_RDN_1X1,
+	       "__riscv_ztt_mss_rm_u32_rdn_1x1",
+	       VOID_PTR_M, MSS_RM, U32_RDN_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U32_RDN_1X1,
+	       "__riscv_ztt_madd_ew_u32_rdn_1x1",
+	       M_M_M, MADD_EW, U32_RDN_1X1)
+
+ZTT_INTRINSIC (MCLEAR_M_U32_ROD_1X1,
+	       "__riscv_ztt_mclear_m_u32_rod_1x1",
+	       M_VOID, MCLEAR_M, U32_ROD_1X1)
+
+ZTT_INTRINSIC (MZERO_M_U32_ROD_1X1,
+	       "__riscv_ztt_mzero_m_u32_rod_1x1",
+	       M_VOID, MZERO_2D_M, U32_ROD_1X1)
+
+ZTT_INTRINSIC (MLS_RM_U32_ROD_1X1,
+	       "__riscv_ztt_mls_rm_u32_rod_1x1",
+	       M_CONST_PTR, MLS_RM, U32_ROD_1X1)
+
+ZTT_INTRINSIC (MSS_RM_U32_ROD_1X1,
+	       "__riscv_ztt_mss_rm_u32_rod_1x1",
+	       VOID_PTR_M, MSS_RM, U32_ROD_1X1)
+
+ZTT_INTRINSIC (MADD_EW_U32_ROD_1X1,
+	       "__riscv_ztt_madd_ew_u32_rod_1x1",
+	       M_M_M, MADD_EW, U32_ROD_1X1)
+
+/* Append to preserve
+   existing builtin codes; only legal profile/type combinations register.  */
+#define ZTT_M_SHAPE(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) \
+  ZTT_INTRINSIC (MCLEAR_M_##ID, "__riscv_ztt_mclear_m_" #NAME, \
+                 M_VOID, MCLEAR_M, ID) \
+  ZTT_INTRINSIC (MZERO_M_##ID, "__riscv_ztt_mzero_m_" #NAME, \
+                 M_VOID, MZERO_2D_M, ID) \
+  ZTT_INTRINSIC (MLS_RM_##ID, "__riscv_ztt_mls_rm_" #NAME, \
+                 M_CONST_PTR, MLS_RM, ID) \
+  ZTT_INTRINSIC (MSS_RM_##ID, "__riscv_ztt_mss_rm_" #NAME, \
+                 VOID_PTR_M, MSS_RM, ID) \
+  ZTT_INTRINSIC (MADD_EW_##ID, "__riscv_ztt_madd_ew_" #NAME, \
+                 M_M_M, MADD_EW, ID)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_SHAPE
+
+/* Runtime UDS32, i32/RNU only.  */
+ZTT_INTRINSIC (MCLEAR_ACC_I32_RNU_ACCX1,
+               "__riscv_ztt_mclear_acc_i32_rnu_accx1",
+               A_VOID, ACLEAR, I32_RNU_ACCX1)
+ZTT_INTRINSIC (MZERO_ACC_I32_RNU_ACCX1,
+               "__riscv_ztt_mzero_acc_i32_rnu_accx1",
+               A_VOID, AZERO, I32_RNU_ACCX1)
+ZTT_INTRINSIC (MCOPY_M2A_I32_RNU_ACCX1,
+               "__riscv_ztt_mcopy_m2a_i32_rnu_accx1",
+               A_M, A_FROM_M, I32_RNU_ACCX1)
+ZTT_INTRINSIC (MCOPY_A2M_I32_RNU_1X1,
+               "__riscv_ztt_mcopy_a2m_i32_rnu_1x1",
+               M_A, M_FROM_A, I32_RNU_ACCX1)
+ZTT_INTRINSIC (MMULACC_2D_I32_RNU_ACCX1,
+               "__riscv_ztt_mmulacc_2d_i32_rnu_accx1",
+               A_A_M_M, A_MMUL, I32_RNU_ACCX1)
+
+/* Keep old builtin indices;
+   availability follows the existing M type and profile registry.  */
+#define ZTT_COPY_RM(ID, NAME, RM, SUFFIX) \
+  ZTT_INTRINSIC (MCOPY_M2M_##ID##_##RM##_1X1, \
+                 "__riscv_ztt_mcopy_m2m_" #NAME "_" #SUFFIX "_1x1", \
+                 M_M, MCOPY_M2M, ID##_##RM##_1X1)
+#define ZTT_COPY_TYPE(ID, NAME) \
+  ZTT_COPY_RM (ID, NAME, RNU, rnu) \
+  ZTT_COPY_RM (ID, NAME, RNE, rne) \
+  ZTT_COPY_RM (ID, NAME, RDN, rdn) \
+  ZTT_COPY_RM (ID, NAME, ROD, rod)
+ZTT_COPY_TYPE (I8, i8)
+ZTT_COPY_TYPE (U8, u8)
+ZTT_COPY_TYPE (I16, i16)
+ZTT_COPY_TYPE (U16, u16)
+ZTT_COPY_TYPE (I32, i32)
+ZTT_COPY_TYPE (U32, u32)
+#undef ZTT_COPY_TYPE
+#undef ZTT_COPY_RM
+
+#define ZTT_M_SHAPE(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) \
+  ZTT_INTRINSIC (MCOPY_M2M_##ID, "__riscv_ztt_mcopy_m2m_" #NAME, \
+                 M_M, MCOPY_M2M, ID)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_SHAPE
+
+/* Append the remaining
+   UDS32 integer ACC variants without renumbering existing builtins.  */
+#define ZTT_ACC_API(ID, NAME) \
+  ZTT_INTRINSIC (MCLEAR_ACC_##ID##_ACCX1, \
+                 "__riscv_ztt_mclear_acc_" #NAME "_accx1", \
+                 A_VOID, ACLEAR, ID##_ACCX1) \
+  ZTT_INTRINSIC (MZERO_ACC_##ID##_ACCX1, \
+                 "__riscv_ztt_mzero_acc_" #NAME "_accx1", \
+                 A_VOID, AZERO, ID##_ACCX1) \
+  ZTT_INTRINSIC (MCOPY_M2A_##ID##_ACCX1, \
+                 "__riscv_ztt_mcopy_m2a_" #NAME "_accx1", \
+                 A_M, A_FROM_M, ID##_ACCX1) \
+  ZTT_INTRINSIC (MCOPY_A2M_##ID##_1X1, \
+                 "__riscv_ztt_mcopy_a2m_" #NAME "_1x1", \
+                 M_A, M_FROM_A, ID##_ACCX1) \
+  ZTT_INTRINSIC (MMULACC_2D_##ID##_ACCX1, \
+                 "__riscv_ztt_mmulacc_2d_" #NAME "_accx1", \
+                 A_A_M_M, A_MMUL, ID##_ACCX1)
+ZTT_ACC_API (I32_RNE, i32_rne)
+ZTT_ACC_API (I32_RDN, i32_rdn)
+ZTT_ACC_API (I32_ROD, i32_rod)
+ZTT_ACC_API (U32_RNU, u32_rnu)
+ZTT_ACC_API (U32_RNE, u32_rne)
+ZTT_ACC_API (U32_RDN, u32_rdn)
+ZTT_ACC_API (U32_ROD, u32_rod)
+
+/* Append entries so
+   existing builtin indices remain unchanged.  No mixed tuple is implied.  */
+#define ZTT_ACC_VARIANTS(ID, NAME) \
+  ZTT_INTRINSIC (MMULACCNEG_2D_##ID##_ACCX1, \
+                 "__riscv_ztt_mmulaccneg_2d_" #NAME "_accx1", \
+                 A_A_M_M, A_MMULNEG, ID##_ACCX1) \
+  ZTT_INTRINSIC (MMULATACC_2D_##ID##_ACCX1, \
+                 "__riscv_ztt_mmulatacc_2d_" #NAME "_accx1", \
+                 A_A_M_M, A_MMULAT, ID##_ACCX1) \
+  ZTT_INTRINSIC (MMULATACCNEG_2D_##ID##_ACCX1, \
+                 "__riscv_ztt_mmulataccneg_2d_" #NAME "_accx1", \
+                 A_A_M_M, A_MMULATNEG, ID##_ACCX1) \
+  ZTT_INTRINSIC (MMULBTACC_2D_##ID##_ACCX1, \
+                 "__riscv_ztt_mmulbtacc_2d_" #NAME "_accx1", \
+                 A_A_M_M, A_MMULBT, ID##_ACCX1) \
+  ZTT_INTRINSIC (MMULBTACCNEG_2D_##ID##_ACCX1, \
+                 "__riscv_ztt_mmulbtaccneg_2d_" #NAME "_accx1", \
+                 A_A_M_M, A_MMULBTNEG, ID##_ACCX1)
+ZTT_ACC_VARIANTS (I32_RNU, i32_rnu)
+ZTT_ACC_VARIANTS (I32_RNE, i32_rne)
+ZTT_ACC_VARIANTS (I32_RDN, i32_rdn)
+ZTT_ACC_VARIANTS (I32_ROD, i32_rod)
+ZTT_ACC_VARIANTS (U32_RNU, u32_rnu)
+ZTT_ACC_VARIANTS (U32_RNE, u32_rne)
+ZTT_ACC_VARIANTS (U32_RDN, u32_rdn)
+ZTT_ACC_VARIANTS (U32_ROD, u32_rod)
+
+/* Append only;
+   single-ACC registration rejects D < UDS; complete packed groups
+   use the separate tuple copy entries below.  */
+#define ZTT_ACC_WIDTH_RM(ID, NAME, RM, SUFFIX) \
+  ZTT_ACC_API (ID##_##RM, NAME##_##SUFFIX) \
+  ZTT_ACC_VARIANTS (ID##_##RM, NAME##_##SUFFIX)
+#define ZTT_ACC_WIDTH(ID, NAME) \
+  ZTT_ACC_WIDTH_RM (ID, NAME, RNU, rnu) \
+  ZTT_ACC_WIDTH_RM (ID, NAME, RNE, rne) \
+  ZTT_ACC_WIDTH_RM (ID, NAME, RDN, rdn) \
+  ZTT_ACC_WIDTH_RM (ID, NAME, ROD, rod)
+ZTT_ACC_WIDTH (I8, i8)
+ZTT_ACC_WIDTH (U8, u8)
+ZTT_ACC_WIDTH (I16, i16)
+ZTT_ACC_WIDTH (U16, u16)
+#undef ZTT_ACC_WIDTH
+#undef ZTT_ACC_WIDTH_RM
+#undef ZTT_ACC_API
+#undef ZTT_ACC_VARIANTS
+
+/* Append IDs.  The column
+   m2a entry is an internal overload target, not another public API.  */
+#define ZTT_ACC_COPY(ID, NAME, LEN, DESC, ALIAS, K) \
+  ZTT_INTRINSIC (MCLEAR_ACC_##ID##_ACCX##K, \
+                 "__riscv_ztt_mclear_acc_" #NAME "_accx" #K, \
+                 A_VOID, ACLEAR, ID##_ACCX##K) \
+  ZTT_INTRINSIC (MZERO_ACC_##ID##_ACCX##K, \
+                 "__riscv_ztt_mzero_acc_" #NAME "_accx" #K, \
+                 A_VOID, AZERO, ID##_ACCX##K) \
+  ZTT_INTRINSIC (MCOPY_M2A_##ID##_ACCX##K, \
+                 "__riscv_ztt_mcopy_m2a_" #NAME "_accx" #K, \
+                 A_M, A_FROM_M, ID##_ACCX##K) \
+  ZTT_INTRINSIC (MCOPY_M2A_COLUMN_##ID##_ACCX##K, \
+                 "__builtin_riscv_ztt_mcopy_m2a_" #NAME "_accx" #K "_column", \
+                 A_M_COLUMN, A_FROM_M, ID##_ACCX##K) \
+  ZTT_INTRINSIC (MCOPY_A2M_##ID##_1X##K, \
+                 "__riscv_ztt_mcopy_a2m_" #NAME "_1x" #K, \
+                 M_A, M_FROM_A, ID##_ACCX##K) \
+  ZTT_INTRINSIC (MCOPY_A2M_##ID##_##K##X1, \
+                 "__riscv_ztt_mcopy_a2m_" #NAME "_" #K "x1", \
+                 M_A_COLUMN, M_FROM_A, ID##_ACCX##K)
+#define ZTT_ACC_TUPLE ZTT_ACC_COPY
+#include "riscv-ztt-types.def"
+#undef ZTT_ACC_TUPLE
+
+/* Same-type 1x1 inputs;
+   append IDs and preserve every unmodified old accumulator member.  */
+#define ZTT_ACC_TUPLE_MUL(ID, NAME, K, STEM, SUFFIX, EXPANSION) \
+  ZTT_INTRINSIC (STEM##_2D_##ID##_ACCX##K, \
+                 "__riscv_ztt_" #SUFFIX "_2d_" #NAME "_accx" #K, \
+                 A_A_M_M, EXPANSION, ID##_ACCX##K)
+#define ZTT_ACC_TUPLE(ID, NAME, LEN, DESC, ALIAS, K) \
+  ZTT_ACC_TUPLE_MUL (ID, NAME, K, MMULACC, mmulacc, A_MMUL) \
+  ZTT_ACC_TUPLE_MUL (ID, NAME, K, MMULACCNEG, mmulaccneg, A_MMULNEG) \
+  ZTT_ACC_TUPLE_MUL (ID, NAME, K, MMULATACC, mmulatacc, A_MMULAT) \
+  ZTT_ACC_TUPLE_MUL (ID, NAME, K, MMULATACCNEG, mmulataccneg, A_MMULATNEG) \
+  ZTT_ACC_TUPLE_MUL (ID, NAME, K, MMULBTACC, mmulbtacc, A_MMULBT) \
+  ZTT_ACC_TUPLE_MUL (ID, NAME, K, MMULBTACCNEG, mmulbtaccneg, A_MMULBTNEG)
+#include "riscv-ztt-types.def"
+#undef ZTT_ACC_TUPLE
+#undef ZTT_ACC_TUPLE_MUL
+
+/* Internal overload targets;
+   public spellings and previous indices are unchanged.  Registration
+   requires both the output type and the complete Q-Square M inputs.  */
+#define ZTT_ACC_CONCAT_ENTRY(ID, NAME, STEM, SPELL, EXPAND, Q, DIR) \
+  ZTT_INTRINSIC (STEM##_CONCAT_##ID##_Q##Q##_##DIR, \
+                 "__builtin_riscv_ztt_" #SPELL "_2d_" #NAME "_q" #Q "_" #DIR, \
+                 A_A_M_M_Q##Q##_##DIR, EXPAND, ID)
+#define ZTT_ACC_CONCAT_Q(ID, NAME, Q) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULACC, mmulacc, A_MMUL, Q, RC) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULACCNEG, mmulaccneg, A_MMULNEG, Q, RC) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULATACC, mmulatacc, A_MMULAT, Q, RR) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULATACC, mmulatacc, A_MMULAT, Q, CC) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULATACCNEG, mmulataccneg, A_MMULATNEG, Q, RR) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULATACCNEG, mmulataccneg, A_MMULATNEG, Q, CC) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULBTACC, mmulbtacc, A_MMULBT, Q, RR) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULBTACC, mmulbtacc, A_MMULBT, Q, CC) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULBTACCNEG, mmulbtaccneg, A_MMULBTNEG, Q, RR) \
+  ZTT_ACC_CONCAT_ENTRY (ID, NAME, MMULBTACCNEG, mmulbtaccneg, A_MMULBTNEG, Q, CC)
+#define ZTT_ACC_CONCAT_TYPE(ID, NAME) \
+  ZTT_ACC_CONCAT_Q (ID, NAME, 2) \
+  ZTT_ACC_CONCAT_Q (ID, NAME, 4)
+#define ZTT_ACC_TYPE(ID, NAME, LEN, DESC, ALIAS) ZTT_ACC_CONCAT_TYPE (ID, NAME)
+#include "riscv-ztt-types.def"
+#undef ZTT_ACC_TYPE
+#define ZTT_ACC_TUPLE(ID, NAME, LEN, DESC, ALIAS, K) \
+  ZTT_ACC_CONCAT_TYPE (ID##_ACCX##K, NAME##_accx##K)
+#include "riscv-ztt-types.def"
+#undef ZTT_ACC_TUPLE
+#undef ZTT_ACC_CONCAT_TYPE
+#undef ZTT_ACC_CONCAT_Q
+#undef ZTT_ACC_CONCAT_ENTRY
+
+/* Append fixed IDs;
+   registration requires both the source and result storage types.  */
+#define ZTT_M_UTIL_PAIR(ID, NAME, BIG, BIG_NAME, SMALL, SMALL_NAME, PROTO, PREFIX) \
+  ZTT_INTRINSIC (MCONCAT_##ID##_##BIG, \
+                 "__riscv_ztt_mconcat_m_" #NAME "_" #BIG_NAME, \
+                 M_CONCAT, MCONCAT, ID##_##BIG) \
+  ZTT_INTRINSIC (MEXTRACT_##ID##_##BIG, \
+                 PREFIX #NAME "_" #SMALL_NAME, \
+                 PROTO, MEXTRACT, ID##_##SMALL)
+#define ZTT_M_UTIL_TYPE(ID, NAME) \
+  ZTT_M_UTIL_PAIR (ID, NAME, 1X2, 1x2, 1X1, 1x1, M_EXTRACT, "__riscv_ztt_mextract_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 2X1, 2x1, 1X1, 1x1, M_EXTRACT_COLUMN, "__builtin_riscv_ztt_mextract_column_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 1X4, 1x4, 1X2, 1x2, M_EXTRACT, "__riscv_ztt_mextract_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 4X1, 4x1, 2X1, 2x1, M_EXTRACT, "__riscv_ztt_mextract_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 1X8, 1x8, 1X4, 1x4, M_EXTRACT, "__riscv_ztt_mextract_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 8X1, 8x1, 4X1, 4x1, M_EXTRACT, "__riscv_ztt_mextract_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 1X16, 1x16, 1X8, 1x8, M_EXTRACT, "__riscv_ztt_mextract_") \
+  ZTT_M_UTIL_PAIR (ID, NAME, 16X1, 16x1, 8X1, 8x1, M_EXTRACT, "__riscv_ztt_mextract_")
+#define ZTT_M_UTIL_RM(ID, NAME, RM, LOWER) ZTT_M_UTIL_TYPE (ID##_##RM, NAME##_##LOWER)
+#define ZTT_M_UTIL_INT(ID, NAME) \
+  ZTT_M_UTIL_RM (ID, NAME, RNU, rnu) \
+  ZTT_M_UTIL_RM (ID, NAME, RNE, rne) \
+  ZTT_M_UTIL_RM (ID, NAME, RDN, rdn) \
+  ZTT_M_UTIL_RM (ID, NAME, ROD, rod)
+ZTT_M_UTIL_INT (I8, i8)
+ZTT_M_UTIL_INT (U8, u8)
+ZTT_M_UTIL_INT (I16, i16)
+ZTT_M_UTIL_INT (U16, u16)
+ZTT_M_UTIL_INT (I32, i32)
+ZTT_M_UTIL_INT (U32, u32)
+#undef ZTT_M_UTIL_INT
+#undef ZTT_M_UTIL_RM
+#undef ZTT_M_UTIL_TYPE
+#undef ZTT_M_UTIL_PAIR
+
+/* Append after every old
+   fixed ID; new types do not gain matmul entries or aliases.  */
+#define ZTT_ACC_LARGE ZTT_ACC_COPY
+#include "riscv-ztt-types.def"
+#undef ZTT_ACC_LARGE
+#undef ZTT_ACC_COPY
+
+/* Append large output anchors;
+   exact source overloads are registered lazily, not as a Cartesian product.  */
+#define ZTT_ACC_LARGE_MUL(ID, NAME, K, STEM, SPELL, EXPAND) \
+  ZTT_INTRINSIC (STEM##_2D_##ID##_ACCX##K, \
+                 "__riscv_ztt_" #SPELL "_2d_" #NAME "_accx" #K, \
+                 A_A_M_M, EXPAND, ID##_ACCX##K)
+#define ZTT_ACC_LARGE(ID, NAME, LEN, DESC, ALIAS, K) \
+  ZTT_ACC_LARGE_MUL (ID, NAME, K, MMULACC, mmulacc, A_MMUL) \
+  ZTT_ACC_LARGE_MUL (ID, NAME, K, MMULACCNEG, mmulaccneg, A_MMULNEG) \
+  ZTT_ACC_LARGE_MUL (ID, NAME, K, MMULATACC, mmulatacc, A_MMULAT) \
+  ZTT_ACC_LARGE_MUL (ID, NAME, K, MMULATACCNEG, mmulataccneg, A_MMULATNEG) \
+  ZTT_ACC_LARGE_MUL (ID, NAME, K, MMULBTACC, mmulbtacc, A_MMULBT) \
+  ZTT_ACC_LARGE_MUL (ID, NAME, K, MMULBTACCNEG, mmulbtaccneg, A_MMULBTNEG)
+#include "riscv-ztt-types.def"
+#undef ZTT_ACC_LARGE
+#undef ZTT_ACC_LARGE_MUL
+
+/* Arguments (a,b)
+   produce b-a.  Append after old IDs; exact same T/RM/shape only.  */
+#define ZTT_SUB(ID, NAME) \
+  ZTT_INTRINSIC (MSUB_EW_##ID, "__riscv_ztt_msub_ew_" #NAME, \
+                 M_M_M, MSUB_EW, ID)
+#define ZTT_SUB_INT(ID, NAME) \
+  ZTT_SUB (ID##_RNU_1X1, NAME##_rnu_1x1) \
+  ZTT_SUB (ID##_RNE_1X1, NAME##_rne_1x1) \
+  ZTT_SUB (ID##_RDN_1X1, NAME##_rdn_1x1) \
+  ZTT_SUB (ID##_ROD_1X1, NAME##_rod_1x1)
+ZTT_SUB_INT (I8, i8)
+ZTT_SUB_INT (U8, u8)
+ZTT_SUB_INT (I16, i16)
+ZTT_SUB_INT (U16, u16)
+ZTT_SUB_INT (I32, i32)
+ZTT_SUB_INT (U32, u32)
+#undef ZTT_SUB_INT
+#define ZTT_M_SHAPE(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) ZTT_SUB (ID, NAME)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_SHAPE
+#undef ZTT_SUB
+
+/* Identical source/result
+   datatype, signedness, RM and shape; append without renumbering old IDs.  */
+#define ZTT_MINMAX(ID, NAME) \
+  ZTT_INTRINSIC (MMIN_EW_##ID, "__riscv_ztt_mmin_ew_" #NAME, \
+                 M_M_M, MMIN_EW, ID) \
+  ZTT_INTRINSIC (MMAX_EW_##ID, "__riscv_ztt_mmax_ew_" #NAME, \
+                 M_M_M, MMAX_EW, ID)
+#define ZTT_MINMAX_INT(ID, NAME) \
+  ZTT_MINMAX (ID##_RNU_1X1, NAME##_rnu_1x1) \
+  ZTT_MINMAX (ID##_RNE_1X1, NAME##_rne_1x1) \
+  ZTT_MINMAX (ID##_RDN_1X1, NAME##_rdn_1x1) \
+  ZTT_MINMAX (ID##_ROD_1X1, NAME##_rod_1x1)
+ZTT_MINMAX_INT (I8, i8)
+ZTT_MINMAX_INT (U8, u8)
+ZTT_MINMAX_INT (I16, i16)
+ZTT_MINMAX_INT (U16, u16)
+ZTT_MINMAX_INT (I32, i32)
+ZTT_MINMAX_INT (U32, u32)
+#undef ZTT_MINMAX_INT
+#define ZTT_M_SHAPE(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) ZTT_MINMAX (ID, NAME)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_SHAPE
+#undef ZTT_MINMAX
+
+/* Source/result datatype,
+   RM and shape are identical.  AND-NOT/OR-NOT complement source2.  */
+#define ZTT_BITWISE(ID, NAME) \
+  ZTT_INTRINSIC (MAND_EW_##ID, "__riscv_ztt_mand_ew_" #NAME, \
+                 M_M_M, MAND_EW, ID) \
+  ZTT_INTRINSIC (MANDNOT_EW_##ID, "__riscv_ztt_mandnot_ew_" #NAME, \
+                 M_M_M, MANDNOT_EW, ID) \
+  ZTT_INTRINSIC (MOR_EW_##ID, "__riscv_ztt_mor_ew_" #NAME, \
+                 M_M_M, MOR_EW, ID) \
+  ZTT_INTRINSIC (MORNOT_EW_##ID, "__riscv_ztt_mornot_ew_" #NAME, \
+                 M_M_M, MORNOT_EW, ID) \
+  ZTT_INTRINSIC (MXOR_EW_##ID, "__riscv_ztt_mxor_ew_" #NAME, \
+                 M_M_M, MXOR_EW, ID)
+#define ZTT_BITWISE_INT(ID, NAME) \
+  ZTT_BITWISE (ID##_RNU_1X1, NAME##_rnu_1x1) \
+  ZTT_BITWISE (ID##_RNE_1X1, NAME##_rne_1x1) \
+  ZTT_BITWISE (ID##_RDN_1X1, NAME##_rdn_1x1) \
+  ZTT_BITWISE (ID##_ROD_1X1, NAME##_rod_1x1)
+ZTT_BITWISE_INT (I8, i8)
+ZTT_BITWISE_INT (U8, u8)
+ZTT_BITWISE_INT (I16, i16)
+ZTT_BITWISE_INT (U16, u16)
+ZTT_BITWISE_INT (I32, i32)
+ZTT_BITWISE_INT (U32, u32)
+#undef ZTT_BITWISE_INT
+#define ZTT_M_SHAPE(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) ZTT_BITWISE (ID, NAME)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_SHAPE
+#undef ZTT_BITWISE
+
+/* These are result-type
+   dispatch anchors; independent source types are resolved on demand.  */
+#define ZTT_SHIFT(ID, NAME) \
+  ZTT_INTRINSIC (MSLL_EW_##ID, "__riscv_ztt_msll_ew_" #NAME, \
+                 M_SHIFT_M, MSLL_EW, ID) \
+  ZTT_INTRINSIC (MSLL_EW_X_##ID, "__riscv_ztt_msll_ew_x_" #NAME, \
+                 M_SHIFT_X, MSLL_EW_X, ID) \
+  ZTT_INTRINSIC (MSRL_EW_##ID, "__riscv_ztt_msrl_ew_" #NAME, \
+                 M_SHIFT_M, MSRL_EW, ID) \
+  ZTT_INTRINSIC (MSRL_EW_X_##ID, "__riscv_ztt_msrl_ew_x_" #NAME, \
+                 M_SHIFT_X, MSRL_EW_X, ID) \
+  ZTT_INTRINSIC (MSRA_EW_##ID, "__riscv_ztt_msra_ew_" #NAME, \
+                 M_SHIFT_M, MSRA_EW, ID) \
+  ZTT_INTRINSIC (MSRA_EW_X_##ID, "__riscv_ztt_msra_ew_x_" #NAME, \
+                 M_SHIFT_X, MSRA_EW_X, ID)
+#define ZTT_SHIFT_INT(ID, NAME) \
+  ZTT_SHIFT (ID##_RNU_1X1, NAME##_rnu_1x1) \
+  ZTT_SHIFT (ID##_RNE_1X1, NAME##_rne_1x1) \
+  ZTT_SHIFT (ID##_RDN_1X1, NAME##_rdn_1x1) \
+  ZTT_SHIFT (ID##_ROD_1X1, NAME##_rod_1x1)
+ZTT_SHIFT_INT (I8, i8)
+ZTT_SHIFT_INT (U8, u8)
+ZTT_SHIFT_INT (I16, i16)
+ZTT_SHIFT_INT (U16, u16)
+ZTT_SHIFT_INT (I32, i32)
+ZTT_SHIFT_INT (U32, u32)
+#undef ZTT_SHIFT_INT
+#define ZTT_M_SHAPE(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) ZTT_SHIFT (ID, NAME)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_SHAPE
+#undef ZTT_SHIFT
+
+/* Append after all
+   historical fixed IDs.  Type registration still rejects spans over 4-M.  */
+#define ZTT_M_Q32(ID, NAME, MANGLED, DESC, ALIAS, ROWS, COLS) \
+  ZTT_INTRINSIC (MCLEAR_M_##ID, "__riscv_ztt_mclear_m_" #NAME, \
+                 M_VOID, MCLEAR_M, ID) \
+  ZTT_INTRINSIC (MZERO_M_##ID, "__riscv_ztt_mzero_m_" #NAME, \
+                 M_VOID, MZERO_2D_M, ID) \
+  ZTT_INTRINSIC (MLS_RM_##ID, "__riscv_ztt_mls_rm_" #NAME, \
+                 M_CONST_PTR, MLS_RM, ID) \
+  ZTT_INTRINSIC (MSS_RM_##ID, "__riscv_ztt_mss_rm_" #NAME, \
+                 VOID_PTR_M, MSS_RM, ID) \
+  ZTT_INTRINSIC (MADD_EW_##ID, "__riscv_ztt_madd_ew_" #NAME, \
+                 M_M_M, MADD_EW, ID) \
+  ZTT_INTRINSIC (MCOPY_M2M_##ID, "__riscv_ztt_mcopy_m2m_" #NAME, \
+                 M_M, MCOPY_M2M, ID) \
+  ZTT_INTRINSIC (MSUB_EW_##ID, "__riscv_ztt_msub_ew_" #NAME, \
+                 M_M_M, MSUB_EW, ID) \
+  ZTT_INTRINSIC (MMIN_EW_##ID, "__riscv_ztt_mmin_ew_" #NAME, \
+                 M_M_M, MMIN_EW, ID) \
+  ZTT_INTRINSIC (MMAX_EW_##ID, "__riscv_ztt_mmax_ew_" #NAME, \
+                 M_M_M, MMAX_EW, ID) \
+  ZTT_INTRINSIC (MAND_EW_##ID, "__riscv_ztt_mand_ew_" #NAME, \
+                 M_M_M, MAND_EW, ID) \
+  ZTT_INTRINSIC (MANDNOT_EW_##ID, "__riscv_ztt_mandnot_ew_" #NAME, \
+                 M_M_M, MANDNOT_EW, ID) \
+  ZTT_INTRINSIC (MOR_EW_##ID, "__riscv_ztt_mor_ew_" #NAME, \
+                 M_M_M, MOR_EW, ID) \
+  ZTT_INTRINSIC (MORNOT_EW_##ID, "__riscv_ztt_mornot_ew_" #NAME, \
+                 M_M_M, MORNOT_EW, ID) \
+  ZTT_INTRINSIC (MXOR_EW_##ID, "__riscv_ztt_mxor_ew_" #NAME, \
+                 M_M_M, MXOR_EW, ID) \
+  ZTT_INTRINSIC (MSLL_EW_##ID, "__riscv_ztt_msll_ew_" #NAME, \
+                 M_SHIFT_M, MSLL_EW, ID) \
+  ZTT_INTRINSIC (MSLL_EW_X_##ID, "__riscv_ztt_msll_ew_x_" #NAME, \
+                 M_SHIFT_X, MSLL_EW_X, ID) \
+  ZTT_INTRINSIC (MSRL_EW_##ID, "__riscv_ztt_msrl_ew_" #NAME, \
+                 M_SHIFT_M, MSRL_EW, ID) \
+  ZTT_INTRINSIC (MSRL_EW_X_##ID, "__riscv_ztt_msrl_ew_x_" #NAME, \
+                 M_SHIFT_X, MSRL_EW_X, ID) \
+  ZTT_INTRINSIC (MSRA_EW_##ID, "__riscv_ztt_msra_ew_" #NAME, \
+                 M_SHIFT_M, MSRA_EW, ID) \
+  ZTT_INTRINSIC (MSRA_EW_X_##ID, "__riscv_ztt_msra_ew_x_" #NAME, \
+                 M_SHIFT_X, MSRA_EW_X, ID) \
+  ZTT_INTRINSIC (MCONCAT_##ID, "__riscv_ztt_mconcat_m_" #NAME, \
+                 M_CONCAT, MCONCAT, ID)
+#include "riscv-ztt-types.def"
+#undef ZTT_M_Q32
+
+#define ZTT_Q32_EXTRACT(ID, NAME, RM, SUFFIX) \
+  ZTT_INTRINSIC (MEXTRACT_##ID##_##RM##_1X32, \
+                 "__riscv_ztt_mextract_" #NAME "_" #SUFFIX "_1x16", \
+                 M_EXTRACT, MEXTRACT, ID##_##RM##_1X16) \
+  ZTT_INTRINSIC (MEXTRACT_##ID##_##RM##_32X1, \
+                 "__riscv_ztt_mextract_" #NAME "_" #SUFFIX "_16x1", \
+                 M_EXTRACT, MEXTRACT, ID##_##RM##_16X1)
+ZTT_Q32_EXTRACT (I8, i8, RNU, rnu)
+ZTT_Q32_EXTRACT (I8, i8, RNE, rne)
+ZTT_Q32_EXTRACT (I8, i8, RDN, rdn)
+ZTT_Q32_EXTRACT (I8, i8, ROD, rod)
+ZTT_Q32_EXTRACT (U8, u8, RNU, rnu)
+ZTT_Q32_EXTRACT (U8, u8, RNE, rne)
+ZTT_Q32_EXTRACT (U8, u8, RDN, rdn)
+ZTT_Q32_EXTRACT (U8, u8, ROD, rod)
+ZTT_Q32_EXTRACT (I16, i16, RNU, rnu)
+ZTT_Q32_EXTRACT (I16, i16, RNE, rne)
+ZTT_Q32_EXTRACT (I16, i16, RDN, rdn)
+ZTT_Q32_EXTRACT (I16, i16, ROD, rod)
+ZTT_Q32_EXTRACT (U16, u16, RNU, rnu)
+ZTT_Q32_EXTRACT (U16, u16, RNE, rne)
+ZTT_Q32_EXTRACT (U16, u16, RDN, rdn)
+ZTT_Q32_EXTRACT (U16, u16, ROD, rod)
+ZTT_Q32_EXTRACT (I32, i32, RNU, rnu)
+ZTT_Q32_EXTRACT (I32, i32, RNE, rne)
+ZTT_Q32_EXTRACT (I32, i32, RDN, rdn)
+ZTT_Q32_EXTRACT (I32, i32, ROD, rod)
+ZTT_Q32_EXTRACT (U32, u32, RNU, rnu)
+ZTT_Q32_EXTRACT (U32, u32, RNE, rne)
+ZTT_Q32_EXTRACT (U32, u32, RDN, rdn)
+ZTT_Q32_EXTRACT (U32, u32, ROD, rod)
+#undef ZTT_Q32_EXTRACT
+
+/* Append result anchors; source tuples are resolved on demand.  */
+#define ZTT_MMUL_SHAPE(ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME) \
+  ZTT_INTRINSIC (MMUL_EW_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_mmul_ew_" #NAME "_" #SUFFIX "_" #SHAPENAME, \
+                 M_BINARY_M, MMUL_EW, ID##_##RM##_##SHAPE)
+#define ZTT_MMUL_TYPE(ID, NAME, RM, SUFFIX) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_MMUL_SHAPE (ID, NAME, RM, SUFFIX, 32X1, 32x1)
+ZTT_MMUL_TYPE (I8, i8, RNU, rnu)
+ZTT_MMUL_TYPE (I8, i8, RNE, rne)
+ZTT_MMUL_TYPE (I8, i8, RDN, rdn)
+ZTT_MMUL_TYPE (I8, i8, ROD, rod)
+ZTT_MMUL_TYPE (U8, u8, RNU, rnu)
+ZTT_MMUL_TYPE (U8, u8, RNE, rne)
+ZTT_MMUL_TYPE (U8, u8, RDN, rdn)
+ZTT_MMUL_TYPE (U8, u8, ROD, rod)
+ZTT_MMUL_TYPE (I16, i16, RNU, rnu)
+ZTT_MMUL_TYPE (I16, i16, RNE, rne)
+ZTT_MMUL_TYPE (I16, i16, RDN, rdn)
+ZTT_MMUL_TYPE (I16, i16, ROD, rod)
+ZTT_MMUL_TYPE (U16, u16, RNU, rnu)
+ZTT_MMUL_TYPE (U16, u16, RNE, rne)
+ZTT_MMUL_TYPE (U16, u16, RDN, rdn)
+ZTT_MMUL_TYPE (U16, u16, ROD, rod)
+ZTT_MMUL_TYPE (I32, i32, RNU, rnu)
+ZTT_MMUL_TYPE (I32, i32, RNE, rne)
+ZTT_MMUL_TYPE (I32, i32, RDN, rdn)
+ZTT_MMUL_TYPE (I32, i32, ROD, rod)
+ZTT_MMUL_TYPE (U32, u32, RNU, rnu)
+ZTT_MMUL_TYPE (U32, u32, RNE, rne)
+ZTT_MMUL_TYPE (U32, u32, RDN, rdn)
+ZTT_MMUL_TYPE (U32, u32, ROD, rod)
+#undef ZTT_MMUL_TYPE
+#undef ZTT_MMUL_SHAPE
+
+/* Append result anchors; source types are resolved on demand.  */
+#define ZTT_MCONV_SHAPE(ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME) \
+  ZTT_INTRINSIC (MCONV_EW_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_mconv_ew_" #NAME "_" #SUFFIX "_" #SHAPENAME, \
+                 M_CONVERT, MCONV_EW, ID##_##RM##_##SHAPE)
+#define ZTT_MCONV_TYPE(ID, NAME, RM, SUFFIX) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_MCONV_SHAPE (ID, NAME, RM, SUFFIX, 32X1, 32x1)
+ZTT_MCONV_TYPE (I8, i8, RNU, rnu)
+ZTT_MCONV_TYPE (I8, i8, RNE, rne)
+ZTT_MCONV_TYPE (I8, i8, RDN, rdn)
+ZTT_MCONV_TYPE (I8, i8, ROD, rod)
+ZTT_MCONV_TYPE (U8, u8, RNU, rnu)
+ZTT_MCONV_TYPE (U8, u8, RNE, rne)
+ZTT_MCONV_TYPE (U8, u8, RDN, rdn)
+ZTT_MCONV_TYPE (U8, u8, ROD, rod)
+ZTT_MCONV_TYPE (I16, i16, RNU, rnu)
+ZTT_MCONV_TYPE (I16, i16, RNE, rne)
+ZTT_MCONV_TYPE (I16, i16, RDN, rdn)
+ZTT_MCONV_TYPE (I16, i16, ROD, rod)
+ZTT_MCONV_TYPE (U16, u16, RNU, rnu)
+ZTT_MCONV_TYPE (U16, u16, RNE, rne)
+ZTT_MCONV_TYPE (U16, u16, RDN, rdn)
+ZTT_MCONV_TYPE (U16, u16, ROD, rod)
+ZTT_MCONV_TYPE (I32, i32, RNU, rnu)
+ZTT_MCONV_TYPE (I32, i32, RNE, rne)
+ZTT_MCONV_TYPE (I32, i32, RDN, rdn)
+ZTT_MCONV_TYPE (I32, i32, ROD, rod)
+ZTT_MCONV_TYPE (U32, u32, RNU, rnu)
+ZTT_MCONV_TYPE (U32, u32, RNE, rne)
+ZTT_MCONV_TYPE (U32, u32, RDN, rdn)
+ZTT_MCONV_TYPE (U32, u32, ROD, rod)
+#undef ZTT_MCONV_TYPE
+#undef ZTT_MCONV_SHAPE
+
+/* Append explicit scalar
+   datatype names without changing existing type or builtin numbers.  */
+#define ZTT_BCAST_INSTANCE(ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, SC, SCNAME, SRM, SNAME) \
+  ZTT_INTRINSIC (MBCAST_M_X_##ID##_##RM##_##SHAPE##_##SC##_##SRM, \
+                 "__riscv_ztt_mbcast_m_x_" #NAME "_" #SUFFIX "_" #SHAPENAME \
+                 "_" #SCNAME "_" #SNAME, \
+                 M_BCAST_##SC##_##SRM, MBCAST_M_X, ID##_##RM##_##SHAPE)
+#define ZTT_BCAST_SHAPE(ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I8, i8, RNU, rnu) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I8, i8, RNE, rne) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I8, i8, RDN, rdn) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I8, i8, ROD, rod) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U8, u8, RNU, rnu) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U8, u8, RNE, rne) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U8, u8, RDN, rdn) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U8, u8, ROD, rod) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I16, i16, RNU, rnu) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I16, i16, RNE, rne) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I16, i16, RDN, rdn) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I16, i16, ROD, rod) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U16, u16, RNU, rnu) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U16, u16, RNE, rne) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U16, u16, RDN, rdn) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U16, u16, ROD, rod) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I32, i32, RNU, rnu) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I32, i32, RNE, rne) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I32, i32, RDN, rdn) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, I32, i32, ROD, rod) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U32, u32, RNU, rnu) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U32, u32, RNE, rne) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U32, u32, RDN, rdn) \
+  ZTT_BCAST_INSTANCE (ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME, U32, u32, ROD, rod)
+#define ZTT_BCAST_TYPE(ID, NAME, RM, SUFFIX) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_BCAST_SHAPE (ID, NAME, RM, SUFFIX, 32X1, 32x1)
+ZTT_BCAST_TYPE (I8, i8, RNU, rnu)
+ZTT_BCAST_TYPE (I8, i8, RNE, rne)
+ZTT_BCAST_TYPE (I8, i8, RDN, rdn)
+ZTT_BCAST_TYPE (I8, i8, ROD, rod)
+ZTT_BCAST_TYPE (U8, u8, RNU, rnu)
+ZTT_BCAST_TYPE (U8, u8, RNE, rne)
+ZTT_BCAST_TYPE (U8, u8, RDN, rdn)
+ZTT_BCAST_TYPE (U8, u8, ROD, rod)
+ZTT_BCAST_TYPE (I16, i16, RNU, rnu)
+ZTT_BCAST_TYPE (I16, i16, RNE, rne)
+ZTT_BCAST_TYPE (I16, i16, RDN, rdn)
+ZTT_BCAST_TYPE (I16, i16, ROD, rod)
+ZTT_BCAST_TYPE (U16, u16, RNU, rnu)
+ZTT_BCAST_TYPE (U16, u16, RNE, rne)
+ZTT_BCAST_TYPE (U16, u16, RDN, rdn)
+ZTT_BCAST_TYPE (U16, u16, ROD, rod)
+ZTT_BCAST_TYPE (I32, i32, RNU, rnu)
+ZTT_BCAST_TYPE (I32, i32, RNE, rne)
+ZTT_BCAST_TYPE (I32, i32, RDN, rdn)
+ZTT_BCAST_TYPE (I32, i32, ROD, rod)
+ZTT_BCAST_TYPE (U32, u32, RNU, rnu)
+ZTT_BCAST_TYPE (U32, u32, RNE, rne)
+ZTT_BCAST_TYPE (U32, u32, RDN, rdn)
+ZTT_BCAST_TYPE (U32, u32, ROD, rod)
+#undef ZTT_BCAST_TYPE
+#undef ZTT_BCAST_SHAPE
+#undef ZTT_BCAST_INSTANCE
+
+/* Append stable IDs.  */
+#define ZTT_ROWCOL_INSTANCE(OP, NAME, PROTO, ID, TNAME, RM, SUFFIX) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_1X1, \
+                 "__riscv_ztt_" #NAME "_" #TNAME "_" #SUFFIX "_1x1", \
+                 PROTO, OP, ID##_##RM##_1X1)
+#define ZTT_ROWCOL_TYPE(ID, NAME, RM, SUFFIX) \
+  ZTT_ROWCOL_INSTANCE (MCOLBCAST_EW_X, mcolbcast_ew_x, M_ROWCOL_INDEX, ID, NAME, RM, SUFFIX) \
+  ZTT_ROWCOL_INSTANCE (MROWBCAST_EW_X, mrowbcast_ew_x, M_ROWCOL_INDEX, ID, NAME, RM, SUFFIX) \
+  ZTT_ROWCOL_INSTANCE (MCOLSHIFT_EW_X, mcolshift_ew_x, M_ROWCOL_OFFSET, ID, NAME, RM, SUFFIX) \
+  ZTT_ROWCOL_INSTANCE (MROWSHIFT_EW_X, mrowshift_ew_x, M_ROWCOL_OFFSET, ID, NAME, RM, SUFFIX)
+ZTT_ROWCOL_TYPE (I8, i8, RNU, rnu)
+ZTT_ROWCOL_TYPE (I8, i8, RNE, rne)
+ZTT_ROWCOL_TYPE (I8, i8, RDN, rdn)
+ZTT_ROWCOL_TYPE (I8, i8, ROD, rod)
+ZTT_ROWCOL_TYPE (U8, u8, RNU, rnu)
+ZTT_ROWCOL_TYPE (U8, u8, RNE, rne)
+ZTT_ROWCOL_TYPE (U8, u8, RDN, rdn)
+ZTT_ROWCOL_TYPE (U8, u8, ROD, rod)
+ZTT_ROWCOL_TYPE (I16, i16, RNU, rnu)
+ZTT_ROWCOL_TYPE (I16, i16, RNE, rne)
+ZTT_ROWCOL_TYPE (I16, i16, RDN, rdn)
+ZTT_ROWCOL_TYPE (I16, i16, ROD, rod)
+ZTT_ROWCOL_TYPE (U16, u16, RNU, rnu)
+ZTT_ROWCOL_TYPE (U16, u16, RNE, rne)
+ZTT_ROWCOL_TYPE (U16, u16, RDN, rdn)
+ZTT_ROWCOL_TYPE (U16, u16, ROD, rod)
+ZTT_ROWCOL_TYPE (I32, i32, RNU, rnu)
+ZTT_ROWCOL_TYPE (I32, i32, RNE, rne)
+ZTT_ROWCOL_TYPE (I32, i32, RDN, rdn)
+ZTT_ROWCOL_TYPE (I32, i32, ROD, rod)
+ZTT_ROWCOL_TYPE (U32, u32, RNU, rnu)
+ZTT_ROWCOL_TYPE (U32, u32, RNE, rne)
+ZTT_ROWCOL_TYPE (U32, u32, RDN, rdn)
+ZTT_ROWCOL_TYPE (U32, u32, ROD, rod)
+#undef ZTT_ROWCOL_TYPE
+#undef ZTT_ROWCOL_INSTANCE
+
+/* Append result anchors;
+   independent source datatypes are resolved on demand.  */
+#define ZTT_STRUCTURAL_SHAPE(OP, NAME, ID, TNAME, RM, SUFFIX, SHAPE, SHAPENAME) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_" #NAME "_" #TNAME "_" #SUFFIX "_" #SHAPENAME, \
+                 M_STRUCTURAL, OP, ID##_##RM##_##SHAPE)
+#define ZTT_STRUCTURAL_TYPE(OP, NAME, ID, TNAME, RM, SUFFIX) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_STRUCTURAL_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 32X1, 32x1)
+#define ZTT_STRUCTURAL_OP(OP, NAME) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I8, i8, RNU, rnu) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I8, i8, RNE, rne) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I8, i8, RDN, rdn) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I8, i8, ROD, rod) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U8, u8, RNU, rnu) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U8, u8, RNE, rne) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U8, u8, RDN, rdn) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U8, u8, ROD, rod) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I16, i16, RNU, rnu) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I16, i16, RNE, rne) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I16, i16, RDN, rdn) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I16, i16, ROD, rod) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U16, u16, RNU, rnu) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U16, u16, RNE, rne) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U16, u16, RDN, rdn) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U16, u16, ROD, rod) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I32, i32, RNU, rnu) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I32, i32, RNE, rne) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I32, i32, RDN, rdn) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, I32, i32, ROD, rod) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U32, u32, RNU, rnu) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U32, u32, RNE, rne) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U32, u32, RDN, rdn) \
+  ZTT_STRUCTURAL_TYPE (OP, NAME, U32, u32, ROD, rod)
+ZTT_STRUCTURAL_OP (MREDUCEADD_COL, mreduceadd_col)
+ZTT_STRUCTURAL_OP (MREDUCEADD_ROW, mreduceadd_row)
+ZTT_STRUCTURAL_OP (MREDUCEMAX_COL, mreducemax_col)
+ZTT_STRUCTURAL_OP (MREDUCEMAX_ROW, mreducemax_row)
+ZTT_STRUCTURAL_OP (MREDUCEMIN_COL, mreducemin_col)
+ZTT_STRUCTURAL_OP (MREDUCEMIN_ROW, mreducemin_row)
+ZTT_STRUCTURAL_OP (MPREFIXADD_COL, mprefixadd_col)
+ZTT_STRUCTURAL_OP (MPREFIXADD_ROW, mprefixadd_row)
+ZTT_STRUCTURAL_OP (MPREFIXMAX_COL, mprefixmax_col)
+ZTT_STRUCTURAL_OP (MPREFIXMAX_ROW, mprefixmax_row)
+#undef ZTT_STRUCTURAL_OP
+#undef ZTT_STRUCTURAL_TYPE
+#undef ZTT_STRUCTURAL_SHAPE
+
+/* Append result
+   anchors; independent contribution/index types are resolved on demand.  */
+#define ZTT_INDEXED_TYPE(OP, NAME, PROTO, ID, TNAME, RM, SUFFIX) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_1X1, \
+                 "__riscv_ztt_" #NAME "_" #TNAME "_" #SUFFIX "_1x1", \
+                 PROTO, OP, ID##_##RM##_1X1)
+#define ZTT_INDEXED_RMS(OP, NAME, PROTO, ID, TNAME) \
+  ZTT_INDEXED_TYPE (OP, NAME, PROTO, ID, TNAME, RNU, rnu) \
+  ZTT_INDEXED_TYPE (OP, NAME, PROTO, ID, TNAME, RNE, rne) \
+  ZTT_INDEXED_TYPE (OP, NAME, PROTO, ID, TNAME, RDN, rdn) \
+  ZTT_INDEXED_TYPE (OP, NAME, PROTO, ID, TNAME, ROD, rod)
+#define ZTT_INDEXED_OP(OP, NAME, PROTO) \
+  ZTT_INDEXED_RMS (OP, NAME, PROTO, I8, i8) \
+  ZTT_INDEXED_RMS (OP, NAME, PROTO, U8, u8) \
+  ZTT_INDEXED_RMS (OP, NAME, PROTO, I16, i16) \
+  ZTT_INDEXED_RMS (OP, NAME, PROTO, U16, u16) \
+  ZTT_INDEXED_RMS (OP, NAME, PROTO, I32, i32) \
+  ZTT_INDEXED_RMS (OP, NAME, PROTO, U32, u32)
+ZTT_INDEXED_OP (MCOLGATHER_EW, mcolgather_ew, M_GATHER)
+ZTT_INDEXED_OP (MROWGATHER_EW, mrowgather_ew, M_GATHER)
+ZTT_INDEXED_OP (MCOLSCATADD_EW, mcolscatadd_ew, M_SCATTER)
+ZTT_INDEXED_OP (MROWSCATADD_EW, mrowscatadd_ew, M_SCATTER)
+ZTT_INDEXED_OP (MCOLSCATMAX_EW, mcolscatmax_ew, M_SCATTER)
+ZTT_INDEXED_OP (MROWSCATMAX_EW, mrowscatmax_ew, M_SCATTER)
+#undef ZTT_INDEXED_OP
+#undef ZTT_INDEXED_RMS
+#undef ZTT_INDEXED_TYPE
+
+/* Common exact datatype,
+   two distinct writable objects; append without renumbering old entries.  */
+#define ZTT_ZIP_TYPE(OP, NAME, ID, TNAME, RM, SUFFIX) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_1X1, \
+                 "__riscv_ztt_" #NAME "_" #TNAME "_" #SUFFIX "_1x1", \
+                 VOID_MPTR_MPTR, OP, ID##_##RM##_1X1)
+#define ZTT_ZIP_RMS(OP, NAME, ID, TNAME) \
+  ZTT_ZIP_TYPE (OP, NAME, ID, TNAME, RNU, rnu) \
+  ZTT_ZIP_TYPE (OP, NAME, ID, TNAME, RNE, rne) \
+  ZTT_ZIP_TYPE (OP, NAME, ID, TNAME, RDN, rdn) \
+  ZTT_ZIP_TYPE (OP, NAME, ID, TNAME, ROD, rod)
+#define ZTT_ZIP_OP(OP, NAME) \
+  ZTT_ZIP_RMS (OP, NAME, I8, i8) \
+  ZTT_ZIP_RMS (OP, NAME, U8, u8) \
+  ZTT_ZIP_RMS (OP, NAME, I16, i16) \
+  ZTT_ZIP_RMS (OP, NAME, U16, u16) \
+  ZTT_ZIP_RMS (OP, NAME, I32, i32) \
+  ZTT_ZIP_RMS (OP, NAME, U32, u32)
+ZTT_ZIP_OP (MCOLZIP_EW, mcolzip_ew)
+ZTT_ZIP_OP (MROWZIP_EW, mrowzip_ew)
+ZTT_ZIP_OP (MCOLUNZIP_EW, mcolunzip_ew)
+ZTT_ZIP_OP (MROWUNZIP_EW, mrowunzip_ew)
+#undef ZTT_ZIP_OP
+#undef ZTT_ZIP_RMS
+#undef ZTT_ZIP_TYPE
+
+/* Only basic 1x1 integer
+   results; N-1 must be exactly representable.  Keep old IDs unchanged.  */
+#define ZTT_INDEX_CONSTRUCT_TYPE(OP, NAME, ID, TNAME, RM, SUFFIX) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_1X1, \
+                 "__riscv_ztt_" #NAME "_" #TNAME "_" #SUFFIX "_1x1", \
+                 M_VOID, OP, ID##_##RM##_1X1)
+#define ZTT_INDEX_CONSTRUCT_RMS(OP, NAME, ID, TNAME) \
+  ZTT_INDEX_CONSTRUCT_TYPE (OP, NAME, ID, TNAME, RNU, rnu) \
+  ZTT_INDEX_CONSTRUCT_TYPE (OP, NAME, ID, TNAME, RNE, rne) \
+  ZTT_INDEX_CONSTRUCT_TYPE (OP, NAME, ID, TNAME, RDN, rdn) \
+  ZTT_INDEX_CONSTRUCT_TYPE (OP, NAME, ID, TNAME, ROD, rod)
+#define ZTT_INDEX_CONSTRUCT_OP(OP, NAME) \
+  ZTT_INDEX_CONSTRUCT_RMS (OP, NAME, I8, i8) \
+  ZTT_INDEX_CONSTRUCT_RMS (OP, NAME, U8, u8) \
+  ZTT_INDEX_CONSTRUCT_RMS (OP, NAME, I16, i16) \
+  ZTT_INDEX_CONSTRUCT_RMS (OP, NAME, U16, u16) \
+  ZTT_INDEX_CONSTRUCT_RMS (OP, NAME, I32, i32) \
+  ZTT_INDEX_CONSTRUCT_RMS (OP, NAME, U32, u32)
+ZTT_INDEX_CONSTRUCT_OP (MROWID_EW, mrowid_ew)
+ZTT_INDEX_CONSTRUCT_OP (MCOLID_EW, mcolid_ew)
+#undef ZTT_INDEX_CONSTRUCT_OP
+#undef ZTT_INDEX_CONSTRUCT_RMS
+#undef ZTT_INDEX_CONSTRUCT_TYPE
+
+/* Append result anchors; independent source tuples remain lazy.  */
+#define ZTT_ARITH_SHAPE(OP, NAME, ID, TNAME, RM, SUFFIX, SHAPE, SNAME) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_" #NAME "_" #TNAME "_" #SUFFIX "_" #SNAME, \
+                 M_BINARY_M, OP, ID##_##RM##_##SHAPE)
+#define ZTT_ARITH_TYPE(OP, NAME, ID, TNAME, RM, SUFFIX) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_ARITH_SHAPE (OP, NAME, ID, TNAME, RM, SUFFIX, 32X1, 32x1)
+#define ZTT_ARITH_RMS(OP, NAME, ID, TNAME) \
+  ZTT_ARITH_TYPE (OP, NAME, ID, TNAME, RNU, rnu) \
+  ZTT_ARITH_TYPE (OP, NAME, ID, TNAME, RNE, rne) \
+  ZTT_ARITH_TYPE (OP, NAME, ID, TNAME, RDN, rdn) \
+  ZTT_ARITH_TYPE (OP, NAME, ID, TNAME, ROD, rod)
+#define ZTT_ARITH_OP(OP, NAME) \
+  ZTT_ARITH_RMS (OP, NAME, I8, i8) \
+  ZTT_ARITH_RMS (OP, NAME, U8, u8) \
+  ZTT_ARITH_RMS (OP, NAME, I16, i16) \
+  ZTT_ARITH_RMS (OP, NAME, U16, u16) \
+  ZTT_ARITH_RMS (OP, NAME, I32, i32) \
+  ZTT_ARITH_RMS (OP, NAME, U32, u32)
+ZTT_ARITH_OP (MABSDIFF_EW, mabsdiff_ew)
+ZTT_ARITH_OP (MHDIFF_EW, mhdiff_ew)
+ZTT_ARITH_OP (MMEAN_EW, mmean_ew)
+ZTT_ARITH_OP (MMULNEG_EW, mmulneg_ew)
+#undef ZTT_ARITH_OP
+#undef ZTT_ARITH_RMS
+#undef ZTT_ARITH_TYPE
+#undef ZTT_ARITH_SHAPE
+
+/* Explicit TC/RM anchors; independent M source types stay lazy.  */
+#define ZTT_SCALAR_ENTRY(OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, CRM, CSUFFIX) \
+  ZTT_INTRINSIC (OP##_##DID##_##DRM##_##SHAPE##_##CID##_##CRM, \
+                 "__riscv_ztt_" #NAME "_" #DNAME "_" #DSUFFIX "_" #SNAME \
+                 "_" #CNAME "_" #CSUFFIX, \
+                 M_SCALAR_##CID##_##CRM, OP, DID##_##DRM##_##SHAPE)
+#define ZTT_SCALAR_SOURCE(OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME) \
+  ZTT_SCALAR_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, RNU, rnu) \
+  ZTT_SCALAR_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, RNE, rne) \
+  ZTT_SCALAR_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, RDN, rdn) \
+  ZTT_SCALAR_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, ROD, rod)
+#define ZTT_SCALAR_SHAPE(OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME) \
+  ZTT_SCALAR_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, I8, i8) \
+  ZTT_SCALAR_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, U8, u8) \
+  ZTT_SCALAR_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, I16, i16) \
+  ZTT_SCALAR_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, U16, u16) \
+  ZTT_SCALAR_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, I32, i32) \
+  ZTT_SCALAR_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, U32, u32)
+#define ZTT_SCALAR_TYPE(OP, NAME, DID, DNAME, DRM, DSUFFIX) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X1, 1x1) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X2, 1x2) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 2X1, 2x1) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X4, 1x4) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 4X1, 4x1) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X8, 1x8) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 8X1, 8x1) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X16, 1x16) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 16X1, 16x1) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X32, 1x32) \
+  ZTT_SCALAR_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 32X1, 32x1)
+#define ZTT_SCALAR_RMS(OP, NAME, DID, DNAME) \
+  ZTT_SCALAR_TYPE (OP, NAME, DID, DNAME, RNU, rnu) \
+  ZTT_SCALAR_TYPE (OP, NAME, DID, DNAME, RNE, rne) \
+  ZTT_SCALAR_TYPE (OP, NAME, DID, DNAME, RDN, rdn) \
+  ZTT_SCALAR_TYPE (OP, NAME, DID, DNAME, ROD, rod)
+#define ZTT_SCALAR_OP(OP, NAME) \
+  ZTT_SCALAR_RMS (OP, NAME, I8, i8) \
+  ZTT_SCALAR_RMS (OP, NAME, U8, u8) \
+  ZTT_SCALAR_RMS (OP, NAME, I16, i16) \
+  ZTT_SCALAR_RMS (OP, NAME, U16, u16) \
+  ZTT_SCALAR_RMS (OP, NAME, I32, i32) \
+  ZTT_SCALAR_RMS (OP, NAME, U32, u32)
+ZTT_SCALAR_OP (MADD_EW_X, madd_ew_x)
+ZTT_SCALAR_OP (MSUB_EW_X, msub_ew_x)
+ZTT_SCALAR_OP (MABSDIFF_EW_X, mabsdiff_ew_x)
+ZTT_SCALAR_OP (MHDIFF_EW_X, mhdiff_ew_x)
+ZTT_SCALAR_OP (MMEAN_EW_X, mmean_ew_x)
+ZTT_SCALAR_OP (MMUL_EW_X, mmul_ew_x)
+ZTT_SCALAR_OP (MMULNEG_EW_X, mmulneg_ew_x)
+ZTT_SCALAR_OP (MMIN_EW_X, mmin_ew_x)
+ZTT_SCALAR_OP (MMAX_EW_X, mmax_ew_x)
+/* scalar bitwise.
+   Append anchors without changing existing arithmetic or lazy identities.  */
+ZTT_SCALAR_OP (MAND_EW_X, mand_ew_x)
+ZTT_SCALAR_OP (MANDNOT_EW_X, mandnot_ew_x)
+ZTT_SCALAR_OP (MOR_EW_X, mor_ew_x)
+ZTT_SCALAR_OP (MORNOT_EW_X, mornot_ew_x)
+ZTT_SCALAR_OP (MXOR_EW_X, mxor_ew_x)
+#undef ZTT_SCALAR_OP
+#undef ZTT_SCALAR_RMS
+#undef ZTT_SCALAR_TYPE
+#undef ZTT_SCALAR_SHAPE
+#undef ZTT_SCALAR_SOURCE
+#undef ZTT_SCALAR_ENTRY
+
+/* mabs.ew.  */
+#define ZTT_MABS_SHAPE(ID, NAME, RM, SUFFIX, SHAPE, SHAPENAME) \
+  ZTT_INTRINSIC (MABS_EW_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_mabs_ew_" #NAME "_" #SUFFIX "_" #SHAPENAME, \
+                 M_ABS, MABS_EW, ID##_##RM##_##SHAPE)
+#define ZTT_MABS_TYPE(ID, NAME, RM, SUFFIX) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_MABS_SHAPE (ID, NAME, RM, SUFFIX, 32X1, 32x1)
+ZTT_MABS_TYPE (I8, i8, RNU, rnu)
+ZTT_MABS_TYPE (I8, i8, RNE, rne)
+ZTT_MABS_TYPE (I8, i8, RDN, rdn)
+ZTT_MABS_TYPE (I8, i8, ROD, rod)
+ZTT_MABS_TYPE (U8, u8, RNU, rnu)
+ZTT_MABS_TYPE (U8, u8, RNE, rne)
+ZTT_MABS_TYPE (U8, u8, RDN, rdn)
+ZTT_MABS_TYPE (U8, u8, ROD, rod)
+ZTT_MABS_TYPE (I16, i16, RNU, rnu)
+ZTT_MABS_TYPE (I16, i16, RNE, rne)
+ZTT_MABS_TYPE (I16, i16, RDN, rdn)
+ZTT_MABS_TYPE (I16, i16, ROD, rod)
+ZTT_MABS_TYPE (U16, u16, RNU, rnu)
+ZTT_MABS_TYPE (U16, u16, RNE, rne)
+ZTT_MABS_TYPE (U16, u16, RDN, rdn)
+ZTT_MABS_TYPE (U16, u16, ROD, rod)
+ZTT_MABS_TYPE (I32, i32, RNU, rnu)
+ZTT_MABS_TYPE (I32, i32, RNE, rne)
+ZTT_MABS_TYPE (I32, i32, RDN, rdn)
+ZTT_MABS_TYPE (I32, i32, ROD, rod)
+ZTT_MABS_TYPE (U32, u32, RNU, rnu)
+ZTT_MABS_TYPE (U32, u32, RNE, rne)
+ZTT_MABS_TYPE (U32, u32, RDN, rdn)
+ZTT_MABS_TYPE (U32, u32, ROD, rod)
+#undef ZTT_MABS_TYPE
+#undef ZTT_MABS_SHAPE
+
+/* old-destination
+   integer arithmetic.  Append anchors; resolve both sources lazily.  */
+#define ZTT_TERNARY_SHAPE(OP, NAME, ID, TYPE, RM, SUFFIX, SHAPE, SNAME) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_" #NAME "_" #TYPE "_" #SUFFIX "_" #SNAME, \
+                 M_TERNARY_M, OP, ID##_##RM##_##SHAPE)
+#define ZTT_TERNARY_TYPE(OP, NAME, ID, TYPE, RM, SUFFIX) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_TERNARY_SHAPE (OP, NAME, ID, TYPE, RM, SUFFIX, 32X1, 32x1)
+#define ZTT_TERNARY_RMS(OP, NAME, ID, TYPE) \
+  ZTT_TERNARY_TYPE (OP, NAME, ID, TYPE, RNU, rnu) \
+  ZTT_TERNARY_TYPE (OP, NAME, ID, TYPE, RNE, rne) \
+  ZTT_TERNARY_TYPE (OP, NAME, ID, TYPE, RDN, rdn) \
+  ZTT_TERNARY_TYPE (OP, NAME, ID, TYPE, ROD, rod)
+#define ZTT_TERNARY_OP(OP, NAME) \
+  ZTT_TERNARY_RMS (OP, NAME, I8, i8) \
+  ZTT_TERNARY_RMS (OP, NAME, U8, u8) \
+  ZTT_TERNARY_RMS (OP, NAME, I16, i16) \
+  ZTT_TERNARY_RMS (OP, NAME, U16, u16) \
+  ZTT_TERNARY_RMS (OP, NAME, I32, i32) \
+  ZTT_TERNARY_RMS (OP, NAME, U32, u32)
+ZTT_TERNARY_OP (MMULACC_EW, mmulacc_ew)
+ZTT_TERNARY_OP (MMULACCNEG_EW, mmulaccneg_ew)
+ZTT_TERNARY_OP (MMULADD_EW, mmuladd_ew)
+ZTT_TERNARY_OP (MMULSUB_EW, mmulsub_ew)
+#undef ZTT_TERNARY_OP
+#undef ZTT_TERNARY_RMS
+#undef ZTT_TERNARY_TYPE
+#undef ZTT_TERNARY_SHAPE
+
+/* v0.2.4 memory operations;
+   append IDs so existing declarations and LTO codes remain stable.  */
+#define ZTT_MEMORY_SHAPE(OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_" #NAME "_" #TYPE "_" #SUFFIX "_" #SNAME, \
+                 PROTO, OP, ID##_##RM##_##SHAPE)
+#define ZTT_MEMORY_TYPE(OP, NAME, PROTO, ID, TYPE, RM, SUFFIX) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X1, 1x1) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X2, 1x2) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 2X1, 2x1) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X4, 1x4) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 4X1, 4x1) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X8, 1x8) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 8X1, 8x1) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X16, 1x16) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 16X1, 16x1) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X32, 1x32) \
+  ZTT_MEMORY_SHAPE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 32X1, 32x1)
+#define ZTT_MEMORY_RMS(OP, NAME, PROTO, ID, TYPE) \
+  ZTT_MEMORY_TYPE (OP, NAME, PROTO, ID, TYPE, RNU, rnu) \
+  ZTT_MEMORY_TYPE (OP, NAME, PROTO, ID, TYPE, RNE, rne) \
+  ZTT_MEMORY_TYPE (OP, NAME, PROTO, ID, TYPE, RDN, rdn) \
+  ZTT_MEMORY_TYPE (OP, NAME, PROTO, ID, TYPE, ROD, rod)
+#define ZTT_MEMORY_OP(OP, NAME, PROTO) \
+  ZTT_MEMORY_RMS (OP, NAME, PROTO, I8, i8) \
+  ZTT_MEMORY_RMS (OP, NAME, PROTO, U8, u8) \
+  ZTT_MEMORY_RMS (OP, NAME, PROTO, I16, i16) \
+  ZTT_MEMORY_RMS (OP, NAME, PROTO, U16, u16) \
+  ZTT_MEMORY_RMS (OP, NAME, PROTO, I32, i32) \
+  ZTT_MEMORY_RMS (OP, NAME, PROTO, U32, u32)
+ZTT_MEMORY_OP (MLS_CM, mls_cm, M_CONST_PTR)
+ZTT_MEMORY_OP (MSS_CM, mss_cm, VOID_PTR_M)
+ZTT_MEMORY_OP (MLS_ST, mls_st, M_CONST_PTR_STRIDE)
+ZTT_MEMORY_OP (MSS_ST, mss_st, VOID_PTR_STRIDE_M)
+ZTT_MEMORY_OP (MLS_TST, mls_tst, M_CONST_PTR_STRIDE)
+ZTT_MEMORY_OP (MSS_TST, mss_tst, VOID_PTR_STRIDE_M)
+ZTT_INTRINSIC (MSS_CM_DISPATCH, "__riscv_ztt_mss_cm",
+               VOID_PTR_M, MSS_CM, I8_RNU_1X1)
+ZTT_INTRINSIC (MSS_ST_DISPATCH, "__riscv_ztt_mss_st",
+               VOID_PTR_STRIDE_M, MSS_ST, I8_RNU_1X1)
+ZTT_INTRINSIC (MSS_TST_DISPATCH, "__riscv_ztt_mss_tst",
+               VOID_PTR_STRIDE_M, MSS_TST, I8_RNU_1X1)
+#undef ZTT_MEMORY_OP
+#undef ZTT_MEMORY_RMS
+#undef ZTT_MEMORY_TYPE
+#undef ZTT_MEMORY_SHAPE
+
+/* Scalar old-D anchors
+   retain explicit TC/RM; resolve the matrix source type lazily.  */
+#define ZTT_TERNARY_X_ENTRY(OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, CRM, CSUFFIX) \
+  ZTT_INTRINSIC (OP##_##DID##_##DRM##_##SHAPE##_##CID##_##CRM, \
+                 "__riscv_ztt_" #NAME "_" #DNAME "_" #DSUFFIX "_" #SNAME \
+                 "_" #CNAME "_" #CSUFFIX, \
+                 M_TERNARY_X_##CID##_##CRM, OP, DID##_##DRM##_##SHAPE)
+#define ZTT_TERNARY_X_SOURCE(OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME) \
+  ZTT_TERNARY_X_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, RNU, rnu) \
+  ZTT_TERNARY_X_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, RNE, rne) \
+  ZTT_TERNARY_X_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, RDN, rdn) \
+  ZTT_TERNARY_X_ENTRY (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, CID, CNAME, ROD, rod)
+#define ZTT_TERNARY_X_SHAPE(OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME) \
+  ZTT_TERNARY_X_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, I8, i8) \
+  ZTT_TERNARY_X_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, U8, u8) \
+  ZTT_TERNARY_X_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, I16, i16) \
+  ZTT_TERNARY_X_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, U16, u16) \
+  ZTT_TERNARY_X_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, I32, i32) \
+  ZTT_TERNARY_X_SOURCE (OP, NAME, DID, DNAME, DRM, DSUFFIX, SHAPE, SNAME, U32, u32)
+#define ZTT_TERNARY_X_TYPE(OP, NAME, DID, DNAME, DRM, DSUFFIX) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X1, 1x1) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X2, 1x2) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 2X1, 2x1) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X4, 1x4) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 4X1, 4x1) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X8, 1x8) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 8X1, 8x1) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X16, 1x16) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 16X1, 16x1) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 1X32, 1x32) \
+  ZTT_TERNARY_X_SHAPE (OP, NAME, DID, DNAME, DRM, DSUFFIX, 32X1, 32x1)
+#define ZTT_TERNARY_X_RMS(OP, NAME, DID, DNAME) \
+  ZTT_TERNARY_X_TYPE (OP, NAME, DID, DNAME, RNU, rnu) \
+  ZTT_TERNARY_X_TYPE (OP, NAME, DID, DNAME, RNE, rne) \
+  ZTT_TERNARY_X_TYPE (OP, NAME, DID, DNAME, RDN, rdn) \
+  ZTT_TERNARY_X_TYPE (OP, NAME, DID, DNAME, ROD, rod)
+#define ZTT_TERNARY_X_OP(OP, NAME) \
+  ZTT_TERNARY_X_RMS (OP, NAME, I8, i8) \
+  ZTT_TERNARY_X_RMS (OP, NAME, U8, u8) \
+  ZTT_TERNARY_X_RMS (OP, NAME, I16, i16) \
+  ZTT_TERNARY_X_RMS (OP, NAME, U16, u16) \
+  ZTT_TERNARY_X_RMS (OP, NAME, I32, i32) \
+  ZTT_TERNARY_X_RMS (OP, NAME, U32, u32)
+ZTT_TERNARY_X_OP (MMULACC_EW_X, mmulacc_ew_x)
+ZTT_TERNARY_X_OP (MMULACCNEG_EW_X, mmulaccneg_ew_x)
+ZTT_TERNARY_X_OP (MMULADD_EW_X, mmuladd_ew_x)
+ZTT_TERNARY_X_OP (MMULSUB_EW_X, mmulsub_ew_x)
+#undef ZTT_TERNARY_X_OP
+#undef ZTT_TERNARY_X_RMS
+#undef ZTT_TERNARY_X_TYPE
+#undef ZTT_TERNARY_X_SHAPE
+#undef ZTT_TERNARY_X_SOURCE
+#undef ZTT_TERNARY_X_ENTRY
+
+/* Append ordered compare
+   and representation-preserving selection anchors.  */
+#define ZTT_COMPARE_M_SHAPE(OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_##SHAPE, \
+                 "__riscv_ztt_" #NAME "_" #TYPE "_" #SUFFIX "_" #SNAME, \
+                 PROTO, OP, ID##_##RM##_##SHAPE)
+#define ZTT_COMPARE_X_ENTRY(OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, CID, CNAME, CRM, CSUFFIX) \
+  ZTT_INTRINSIC (OP##_##ID##_##RM##_##SHAPE##_##CID##_##CRM, \
+                 "__riscv_ztt_" #NAME "_" #TYPE "_" #SUFFIX "_" #SNAME \
+                 "_" #CNAME "_" #CSUFFIX, \
+                 PROTO##_##CID##_##CRM, OP, ID##_##RM##_##SHAPE)
+#define ZTT_COMPARE_X_SOURCE(OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, CID, CNAME) \
+  ZTT_COMPARE_X_ENTRY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, CID, CNAME, RNU, rnu) \
+  ZTT_COMPARE_X_ENTRY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, CID, CNAME, RNE, rne) \
+  ZTT_COMPARE_X_ENTRY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, CID, CNAME, RDN, rdn) \
+  ZTT_COMPARE_X_ENTRY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, CID, CNAME, ROD, rod)
+#define ZTT_COMPARE_X_SHAPE(OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME) \
+  ZTT_COMPARE_X_SOURCE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, I8, i8) \
+  ZTT_COMPARE_X_SOURCE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, U8, u8) \
+  ZTT_COMPARE_X_SOURCE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, I16, i16) \
+  ZTT_COMPARE_X_SOURCE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, U16, u16) \
+  ZTT_COMPARE_X_SOURCE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, I32, i32) \
+  ZTT_COMPARE_X_SOURCE (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, SHAPE, SNAME, U32, u32)
+#define ZTT_COMPARE_TYPE(APPLY, OP, NAME, PROTO, ID, TYPE, RM, SUFFIX) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X1, 1x1) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X2, 1x2) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 2X1, 2x1) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X4, 1x4) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 4X1, 4x1) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X8, 1x8) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 8X1, 8x1) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X16, 1x16) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 16X1, 16x1) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 1X32, 1x32) \
+  APPLY (OP, NAME, PROTO, ID, TYPE, RM, SUFFIX, 32X1, 32x1)
+#define ZTT_COMPARE_RMS(APPLY, OP, NAME, PROTO, ID, TYPE) \
+  ZTT_COMPARE_TYPE (APPLY, OP, NAME, PROTO, ID, TYPE, RNU, rnu) \
+  ZTT_COMPARE_TYPE (APPLY, OP, NAME, PROTO, ID, TYPE, RNE, rne) \
+  ZTT_COMPARE_TYPE (APPLY, OP, NAME, PROTO, ID, TYPE, RDN, rdn) \
+  ZTT_COMPARE_TYPE (APPLY, OP, NAME, PROTO, ID, TYPE, ROD, rod)
+#define ZTT_COMPARE_OP(APPLY, OP, NAME, PROTO) \
+  ZTT_COMPARE_RMS (APPLY, OP, NAME, PROTO, I8, i8) \
+  ZTT_COMPARE_RMS (APPLY, OP, NAME, PROTO, U8, u8) \
+  ZTT_COMPARE_RMS (APPLY, OP, NAME, PROTO, I16, i16) \
+  ZTT_COMPARE_RMS (APPLY, OP, NAME, PROTO, U16, u16) \
+  ZTT_COMPARE_RMS (APPLY, OP, NAME, PROTO, I32, i32) \
+  ZTT_COMPARE_RMS (APPLY, OP, NAME, PROTO, U32, u32)
+ZTT_COMPARE_OP (ZTT_COMPARE_M_SHAPE, MCMOVGE_EW, mcmovge_ew, M_TERNARY_M)
+ZTT_COMPARE_OP (ZTT_COMPARE_M_SHAPE, MCMOVLT_EW, mcmovlt_ew, M_TERNARY_M)
+ZTT_COMPARE_OP (ZTT_COMPARE_M_SHAPE, MCMPGE_EW, mcmpge_ew, M_BINARY_M)
+ZTT_COMPARE_OP (ZTT_COMPARE_M_SHAPE, MCMPLT_EW, mcmplt_ew, M_BINARY_M)
+ZTT_COMPARE_OP (ZTT_COMPARE_M_SHAPE, MSELGE_EW, mselge_ew, M_BINARY_M)
+ZTT_COMPARE_OP (ZTT_COMPARE_M_SHAPE, MSELLT_EW, msellt_ew, M_BINARY_M)
+ZTT_COMPARE_OP (ZTT_COMPARE_X_SHAPE, MCMPGE_EW_X, mcmpge_ew_x, M_SCALAR)
+ZTT_COMPARE_OP (ZTT_COMPARE_X_SHAPE, MCMPLT_EW_X, mcmplt_ew_x, M_SCALAR)
+#undef ZTT_COMPARE_OP
+#undef ZTT_COMPARE_RMS
+#undef ZTT_COMPARE_TYPE
+#undef ZTT_COMPARE_X_SHAPE
+#undef ZTT_COMPARE_X_SOURCE
+#undef ZTT_COMPARE_X_ENTRY
+#undef ZTT_COMPARE_M_SHAPE
+
+/* Append, do not renumber.  */
+#include "riscv-ztt-wide-intrinsics.def"
+#include "riscv-ztt-int-intrinsics.def"
+#include "riscv-ztt-fp-intrinsics.def"
+#include "riscv-ztt-exponent-scalar.def"
+#include "riscv-ztt-memory128.def"
+#include "riscv-ztt-zip-value.def"
