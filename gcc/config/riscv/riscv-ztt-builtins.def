@@ -1,0 +1,190 @@
+/* RISC-V AME/Ztt built-in definitions.
+   Copyright (C) 2026 Free Software Foundation, Inc.
+
+   This file is part of GCC.
+
+   GCC is free software; you can redistribute it and/or modify it under
+   the terms of the GNU General Public License as published by the Free
+   Software Foundation; either version 3, or (at your option) any later
+   version.
+
+   GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+   FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+   details.
+
+   You should have received a copy of the GNU General Public License along
+   with GCC; see the file COPYING3.  If not see <http://www.gnu.org/licenses/>.
+
+     Instruction and CSR
+   allocations are provisional and are not final RISC-V allocations.
+
+   ZTT_BUILTIN defines an XLEN-independent pattern.  ZTT_BUILTIN_X defines
+   SI and DI variants for patterns containing a GPR or pointer operand.  */
+
+ZTT_BUILTIN_X (ame_acquire, "ame.acquire", x_x, RISCV_UWORD_FTYPE_UWORD)
+ZTT_BUILTIN (ame_release, "ame.release", none, RISCV_VOID_FTYPE)
+ZTT_BUILTIN_X (agettyp, "agettyp", x_a, RISCV_UWORD_FTYPE_USI)
+ZTT_BUILTIN_X (asettyp, "asettyp", ax, RISCV_VOID_FTYPE_USI_UWORD)
+ZTT_BUILTIN (mabs_ew, "mabs.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mabsdiff_ew, "mabsdiff.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mabsdiff_ew_x, "mabsdiff.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (madd_ew, "madd.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (madd_ew_x, "madd.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mand_ew, "mand.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mand_ew_x, "mand.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mandnot_ew, "mandnot.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mandnot_ew_x, "mandnot.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mcmovge_ew, "mcmovge.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mcmovlt_ew, "mcmovlt.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mcmpge_ew, "mcmpge.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mcmpge_ew_x, "mcmpge.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mcmplt_ew, "mcmplt.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mcmplt_ew_x, "mcmplt.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN_X (mcolbcast_ew_x, "mcolbcast.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mcolgather_ew, "mcolgather.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mcolid_ew, "mcolid.ew", m, RISCV_VOID_FTYPE_USI)
+ZTT_BUILTIN_X (mcolshift_ew_x, "mcolshift.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mcolunzip_ew, "mcolunzip.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mcolzip_ew, "mcolzip.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mconv_ew, "mconv.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN_X (mbcast_m_x, "mbcast.m.x", mxx, RISCV_VOID_FTYPE_USI_UWORD_UWORD)
+ZTT_BUILTIN (mcos_ew, "mcos.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mexp2_ew, "mexp2.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mfrintm_ew, "mfrintm.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mfrintn_ew, "mfrintn.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mfrintp_ew, "mfrintp.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mfrintz_ew, "mfrintz.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN_X (mgettyp, "mgettyp", x_m, RISCV_UWORD_FTYPE_USI)
+ZTT_BUILTIN (mhdiff_ew, "mhdiff.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mhdiff_ew_x, "mhdiff.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mldexp_ew, "mldexp.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mldexp_ew_x, "mldexp.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mldexpacc_ew, "mldexpacc.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mldexpacc_ew_x, "mldexpacc.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mlog2_ew, "mlog2.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mlog2sub_ew, "mlog2sub.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mlog2sub_ew_x, "mlog2sub.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN_X (mls_1r, "mls.1r", load, RISCV_VOID_FTYPE_USI_VOID_PTR)
+ZTT_BUILTIN_X (mls_cm, "mls.cm", load, RISCV_VOID_FTYPE_USI_VOID_PTR)
+ZTT_BUILTIN_X (mls_rm, "mls.rm", load, RISCV_VOID_FTYPE_USI_VOID_PTR)
+ZTT_BUILTIN_X (mls_st, "mls.st", load_strided,
+	       RISCV_VOID_FTYPE_USI_VOID_PTR_UWORD)
+ZTT_BUILTIN_X (mls_tst, "mls.tst", load_strided,
+	       RISCV_VOID_FTYPE_USI_VOID_PTR_UWORD)
+ZTT_BUILTIN (mmax_ew, "mmax.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmax_ew_x, "mmax.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmean_ew, "mmean.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmean_ew_x, "mmean.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmin_ew, "mmin.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmin_ew_x, "mmin.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmov_m_a, "mmov.m.a", ma, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mmov_a_m, "mmov.a.m", am, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mmov_m_m, "mmov.m.m", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN_X (mmove8_m_x, "mmove8.m.x", mxx, RISCV_VOID_FTYPE_USI_UWORD_UWORD)
+ZTT_BUILTIN_X (mmove16_m_x, "mmove16.m.x", mxx,
+	       RISCV_VOID_FTYPE_USI_UWORD_UWORD)
+ZTT_BUILTIN_X (mmove32_m_x, "mmove32.m.x", mxx,
+	       RISCV_VOID_FTYPE_USI_UWORD_UWORD)
+ZTT_BUILTIN_X (mmove64_m_x, "mmove64.m.x", mxx,
+	       RISCV_VOID_FTYPE_USI_UWORD_UWORD)
+ZTT_BUILTIN_X (mmove8_x_m, "mmove8.x.m", x_m_x, RISCV_UWORD_FTYPE_USI_UWORD)
+ZTT_BUILTIN_X (mmove16_x_m, "mmove16.x.m", x_m_x, RISCV_UWORD_FTYPE_USI_UWORD)
+ZTT_BUILTIN_X (mmove32_x_m, "mmove32.x.m", x_m_x, RISCV_UWORD_FTYPE_USI_UWORD)
+ZTT_BUILTIN_X (mmove64_x_m, "mmove64.x.m", x_m_x, RISCV_UWORD_FTYPE_USI_UWORD)
+ZTT_BUILTIN (mmul_ew, "mmul.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmul_ew_x, "mmul.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmulacc_2d, "mmulacc.2d", amm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mmulacc_ew, "mmulacc.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmulacc_ew_x, "mmulacc.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmulaccneg_2d, "mmulaccneg.2d", amm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mmulaccneg_ew, "mmulaccneg.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmulaccneg_ew_x, "mmulaccneg.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmuladd_ew, "mmuladd.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmuladd_ew_x, "mmuladd.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmulatacc_2d, "mmulatacc.2d", amm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mmulataccneg_2d, "mmulataccneg.2d", amm,
+	     RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mmulbtacc_2d, "mmulbtacc.2d", amm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mmulbtaccneg_2d, "mmulbtaccneg.2d", amm,
+	     RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mmulneg_ew, "mmulneg.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmulneg_ew_x, "mmulneg.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mmulsub_ew, "mmulsub.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mmulsub_ew_x, "mmulsub.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mor_ew, "mor.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mor_ew_x, "mor.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mornot_ew, "mornot.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mornot_ew_x, "mornot.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN_X (mpack_ew_x, "mpack.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mprefixadd_col, "mprefixadd.col", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mprefixadd_row, "mprefixadd.row", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mprefixmax_col, "mprefixmax.col", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mprefixmax_row, "mprefixmax.row", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mrdexp_ew, "mrdexp.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mrdexpacc_ew, "mrdexpacc.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mrec_ew, "mrec.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mreduceadd_col, "mreduceadd.col", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mreduceadd_row, "mreduceadd.row", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mreducemax_col, "mreducemax.col", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mreducemax_row, "mreducemax.row", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mreducemin_col, "mreducemin.col", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mreducemin_row, "mreducemin.row", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN_X (mrowbcast_ew_x, "mrowbcast.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mrowgather_ew, "mrowgather.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mrowid_ew, "mrowid.ew", m, RISCV_VOID_FTYPE_USI)
+ZTT_BUILTIN_X (mrowshift_ew_x, "mrowshift.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mrowunzip_ew, "mrowunzip.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mrowzip_ew, "mrowzip.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mrsqrt_ew, "mrsqrt.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (mrowscatadd_ew, "mrowscatadd.ew", mmm,
+	     RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mcolscatadd_ew, "mcolscatadd.ew", mmm,
+	     RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mrowscatmax_ew, "mrowscatmax.ew", mmm,
+	     RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mcolscatmax_ew, "mcolscatmax.ew", mmm,
+	     RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (mselge_ew, "mselge.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN (msellt_ew, "msellt.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (msettyp, "msettyp", mx, RISCV_VOID_FTYPE_USI_UWORD)
+ZTT_BUILTIN (msin_ew, "msin.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (msll_ew, "msll.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (msll_ew_x, "msll.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (msqrt_ew, "msqrt.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN (msra_ew, "msra.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (msra_ew_x, "msra.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (msrl_ew, "msrl.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (msrl_ew_x, "msrl.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN_X (mss_1r, "mss.1r", store, RISCV_VOID_FTYPE_USI_VOID_PTR)
+ZTT_BUILTIN_X (mss_cm, "mss.cm", store, RISCV_VOID_FTYPE_USI_VOID_PTR)
+ZTT_BUILTIN_X (mss_rm, "mss.rm", store, RISCV_VOID_FTYPE_USI_VOID_PTR)
+ZTT_BUILTIN_X (mss_st, "mss.st", store_strided,
+	       RISCV_VOID_FTYPE_USI_VOID_PTR_UWORD)
+ZTT_BUILTIN_X (mss_tst, "mss.tst", store_strided,
+	       RISCV_VOID_FTYPE_USI_VOID_PTR_UWORD)
+ZTT_BUILTIN (msub_ew, "msub.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (msub_ew_x, "msub.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (msublog2_ew, "msublog2.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (msublog2_ew_x, "msublog2.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mtanh_ew, "mtanh.ew", mm, RISCV_VOID_FTYPE_USI_USI)
+ZTT_BUILTIN_X (munpack_ew_x, "munpack.ew.x", mxm,
+	       RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mxor_ew, "mxor.ew", mmm, RISCV_VOID_FTYPE_USI_USI_USI)
+ZTT_BUILTIN_X (mxor_ew_x, "mxor.ew.x", mxm, RISCV_VOID_FTYPE_USI_UWORD_USI)
+ZTT_BUILTIN (mzero_2d_acc, "mzero.2d.acc", a, RISCV_VOID_FTYPE_USI)
+ZTT_BUILTIN (mzero_2d_m, "mzero.2d.m", m, RISCV_VOID_FTYPE_USI)
