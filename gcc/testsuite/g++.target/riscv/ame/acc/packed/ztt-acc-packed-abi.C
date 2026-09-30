@@ -1,0 +1,15 @@
+/* Packed ACC boundaries.  */
+/* { dg-do compile } */
+/* { dg-options "-O2 -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u16-m16-a4" { target rv32 } } */
+/* { dg-options "-O2 -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u16-m16-a4" { target rv64 } } */
+#include <riscv_ztt.h>
+__riscv_ztt_i8_accx2_t
+bad_return (void) /* { dg-error "AME/Ztt typed values cannot be passed to or returned from ordinary functions" } */
+{
+  return __riscv_ztt_mclear_acc_i8_accx2 ();
+}
+void
+bad_argument (__riscv_ztt_i8_accx4_t a) /* { dg-error "AME/Ztt typed values cannot be passed to or returned from ordinary functions" } */
+{
+  asm volatile ("" : : "War" (a));
+}
