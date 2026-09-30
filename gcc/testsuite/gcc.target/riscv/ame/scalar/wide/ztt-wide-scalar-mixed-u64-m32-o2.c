@@ -1,0 +1,6 @@
+/* Compile/assemble checks, not numerical execution evidence.  */
+/* { dg-do assemble } */
+/* { dg-options "-O2 -fno-ipa-icf -std=gnu11 -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u64-m32-a16" { target rv32 } } */
+/* { dg-options "-O2 -fno-ipa-icf -std=gnu11 -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u64-m32-a16" { target rv64 } } */
+#define TEST_UDS 64
+#include "ztt-wide-scalar-mixed.h"
