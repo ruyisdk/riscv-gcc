@@ -14344,6 +14344,14 @@ gimple_canonical_types_compatible_p (const_tree t1, const_tree t2,
   /* Do type-specific comparisons.  */
   switch (TREE_CODE (t1))
     {
+    case OPAQUE_TYPE:
+      /* Target-defined opaque types can share a mode while carrying
+	 different type identities in their attributes.  They have no
+	 component types to compare.  */
+      return TYPE_ALIGN (t1) == TYPE_ALIGN (t2)
+	     && attribute_list_equal (TYPE_ATTRIBUTES (t1),
+				      TYPE_ATTRIBUTES (t2));
+
     case ARRAY_TYPE:
       /* Array types are the same if the element types are the same and
 	 minimum and maximum index are the same.  */
@@ -16860,6 +16868,31 @@ test_escaped_strings (void)
   pp_line_cutoff (pp) = saved_cutoff;
 }
 
+/* Opaque type identities must survive canonical comparison even when
+   their storage mode is shared.  No target-specific layout is needed.  */
+
+static void
+test_opaque_canonical_types ()
+{
+  tree t1 = make_node (OPAQUE_TYPE);
+  tree t2 = make_node (OPAQUE_TYPE);
+  ASSERT_TRUE (gimple_canonical_types_compatible_p (t1, t2, false));
+  TYPE_ATTRIBUTES (t1)
+    = tree_cons (get_identifier ("opaque identity"),
+		 tree_cons (NULL_TREE, integer_zero_node, NULL_TREE),
+		 NULL_TREE);
+  ASSERT_FALSE (gimple_canonical_types_compatible_p (t1, t2, false));
+  TYPE_ATTRIBUTES (t2)
+    = tree_cons (get_identifier ("opaque identity"),
+		 tree_cons (NULL_TREE, integer_one_node, NULL_TREE),
+		 NULL_TREE);
+  ASSERT_FALSE (gimple_canonical_types_compatible_p (t1, t2, false));
+  TYPE_ATTRIBUTES (t2) = TYPE_ATTRIBUTES (t1);
+  ASSERT_TRUE (gimple_canonical_types_compatible_p (t1, t2, false));
+  SET_TYPE_ALIGN (t2, TYPE_ALIGN (t1) * 2);
+  ASSERT_FALSE (gimple_canonical_types_compatible_p (t1, t2, false));
+}
+
 /* Run all of the selftests within this file.  */
 
 void
@@ -16872,6 +16905,7 @@ tree_cc_tests ()
   test_location_wrappers ();
   test_predicates ();
   test_escaped_strings ();
+  test_opaque_canonical_types ();
 }
 
 } // namespace selftest
