@@ -1,0 +1,79 @@
+Experimental AME/Ztt support
+===========================
+
+The Ztt implementation in this directory is based on the draft AME/Ztt ISA
+v0.6, specification commit 8d27acdcee7a189aad4e2907412e0c40a9d4b9e2.
+The typed interface follows intrinsic v0.2.4 with the v0.2.5 zip/unzip value
+interface and the separately agreed nominal Scalar design. This is a local,
+experimental implementation, not a ratified ISA, stable API or psABI.
+
+This source note applies to the Ztt definitions, builtins, header, RTL
+patterns and corresponding AME tests. Repeated provenance comments are not
+required at individual helpers or test cases. Keep comments that explain
+state preservation, operand formation, allocation constraints or local
+deviations; version provenance does not replace those explanations.
+
+Instruction encodings remain provisional. The local writable CSR mapping
+uses amestype=0x810, amefflags=0x811 and amexsat=0x812. These are not official
+allocations and require matching Binutils and execution-platform support.
+The architecture attribute alone does not identify this local mapping.
+
+N is runtime-sized; UDS and M/ACC resources are selected by the compile-time
+profile. Types and declarations do not imply that every hardware tuple is
+supported. Typed values are function-local and require the documented
+state and ownership restrictions.  Ordinary scalar/pointer calls can
+clobber the M/ACC bank; live typed values are saved and restored, including
+ACC descriptors, and typed operations prepare their required datatype.
+Callees must return with compatible N/profile and enabled/owned state.
+Typed arguments/returns (including varargs) and a stable typed calling
+convention are not provided.  Explicit ownership changes in typed functions
+require a successful acquire-bit or ameown guard proven over the CFG.
+Query-only observers retain the caller-owned entry contract.  A proved
+query guard permits unknown entry ownership and keeps typed state setup
+on the owned path; merely observing ameown does not imply such a guard.
+After an exceptional edge, every typed function must prove ownership again
+before typed accesses, even if it contains no ownership query or transition.
+This can be guarded inside catch or after the join.  A handler that returns
+or rethrows without further typed access needs no new ownership proof.
+Release invalidates prior status proofs; late checking includes generated
+register accesses and reloads.  N/profile must remain stable for the entire
+function, including unowned intervals, and MS must already be enabled.
+Unknown paths and raw selector mixing remain rejected.  This is not a
+guarantee for exceptional exits or arbitrary ownership-changing inline asm.
+
+The user interface is documented in gcc/doc/extend.texi. Compiler regression
+tests live in gcc.target/riscv/ame and g++.target/riscv/ame under testsuite,
+with independent ame.exp drivers. SAIL/Spike joint execution programs and
+raw build/test archives are maintained outside the GCC source tree.
+
+Definition catalogs
+-------------------
+
+The catalogs are grouped by their consumer and ordering contract, rather
+than by the historical implementation batches:
+
+  riscv-ztt-builtins.def          Raw instruction selector builtins.
+  riscv-ztt-profile.def           Compile-time resource profiles.
+  riscv-ztt-types.def             Ordered M/ACC type families.
+  riscv-ztt-operations.def        Reusable operation lists.
+  riscv-ztt-intrinsics.def        Ordered typed catalog and family includes.
+  riscv-ztt-wide-intrinsics.def   Wide integer families.
+  riscv-ztt-int-intrinsics.def    Small integer families and matmul.
+  riscv-ztt-fp-intrinsics.def     Floating-point families and matmul.
+  riscv-ztt-exponent-scalar.def   Exponent scalar interfaces.
+  riscv-ztt-memory128.def         Storage-only 128-bit memory interfaces.
+  riscv-ztt-zip-value.def         Paired-value zip/unzip interfaces.
+
+The type and operation catalogs select sections with the corresponding
+entry macros.  Consumers define only the sections they need, include the
+catalog, and undefine those entry macros afterwards.  Define all type
+entry macros for the ordered type enum and metadata table.  These files
+intentionally have no include guard; the shared iterator helpers have one.
+
+Catalog order determines builtin/type identities used by registration and
+LTO.  Keep family and row order stable when reorganizing files.  In
+particular, the exponent, memory128 and zip families retain separate late
+registration positions.  Consolidation must compare complete expanded
+records, not just names or counts.  It does not reduce the number of
+interfaces or change the lazy-registration rules.  Update t-riscv whenever
+the include graph changes so incremental builds track every catalog.

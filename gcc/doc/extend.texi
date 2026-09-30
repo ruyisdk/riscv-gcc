@@ -27740,6 +27740,869 @@ the Zihintpause extension, it indicates that the current hart should be
 temporarily paused or slowed down.
 @enddefbuiltin
 
+GCC provides provisional built-in functions for version 0.6 of the draft
+Attached Matrix Extension when @option{-march} explicitly enables
+@code{ztt}.  This support is based on AME (Ztt) version 0.6, commit
+@code{8d27acdcee7a189aad4e2907412e0c40a9d4b9e2}; its instruction and CSR
+allocations, and the built-in interface itself, are not final RISC-V
+interfaces.
+
+The built-in name is @code{__builtin_riscv_ztt_} followed by the instruction
+mnemonic with punctuation replaced by underscores.  For example,
+@code{__builtin_riscv_ztt_madd_ew (md, ms1, ms2)} emits
+@code{madd.ew md, ms1, ms2}.  Matrix register arguments must be integer
+constant expressions in the range 0 through 31, and accumulator arguments
+must be integer constant expressions in the range 0 through 15.  Scalar GPR
+arguments and results use @code{unsigned long}; load and store addresses use
+@code{void *}.
+
+The selector interface above is the L0 raw interface.  It emits explicit
+instructions and does not model matrix values or register allocation.
+
+With both @code{ztt0p6} and @code{zicsr}, GCC also provides
+@code{unsigned long __builtin_riscv_ztt_read_amenlen (void)} and
+@code{unsigned long __builtin_riscv_ztt_read_ameudsz (void)}.  These
+experimental compiler interfaces read the provisional capability CSRs at
+@code{0xcc0} and @code{0xcc1}.  They require no typed profile or V extension.
+The macro @code{__riscv_ztt_runtime_queries} indicates their availability.
+Reads are volatile observations, including when the result is discarded;
+GCC does not fold them to profile constants or merge them across AME
+ownership operations.  The caller must satisfy the platform's AME-state
+access requirements.  These observers do not change matrix registers and
+can be used with the P0 typed interface.  They do not by themselves provide
+runtime-sized matrix types or a matrix calling convention.
+
+The local experimental Binutils branch uses a temporary, local-only
+CSR mapping: @code{amestype} is at
+@code{0x810}, @code{amefflags} at @code{0x811}, and @code{amexsat} at
+@code{0x812}.  This project mapping was updated on 2026-09-17 and replaces
+the former local @code{0x8c2}/@code{0x8c4}/@code{0x8c5} mapping, without
+keeping aliases at those addresses.  These custom read/write addresses
+replace the draft's read-only-encoded @code{0xcc2}, @code{0xcc4}, and
+@code{0xcc5} for local
+experiments; they are not specification allocations.  They require a
+matching assembler and hardware mapping.  The @code{ztt0p6} architecture
+attribute does not identify this local mapping.  No dedicated GCC built-ins
+for these three CSRs are provided by this change, and it does not relax
+typed-state or function-call restrictions.
+
+GCC also provides an experimental P0 typed interface when
+@option{-mztt-profile=gcc-p0-n128-u8-m16-a4} is used together with
+@code{ztt0p6}.  Including @code{<riscv_ztt.h>} declares the opaque,
+function-local type @code{__riscv_ztt_i8_rne_1x1_t} and the following direct
+intrinsics:
+
+@smallexample
+__riscv_ztt_mzero_2d_m_i8_rne_1x1 ()
+__riscv_ztt_mls_rm_i8_rne_1x1 (const signed char *)
+__riscv_ztt_mss_rm (signed char *, __riscv_ztt_i8_rne_1x1_t)
+__riscv_ztt_madd_ew_i8_rne_1x1 (value, value)
+@end smallexample
+
+The header uses @code{#pragma riscv intrinsic "ztt"} to register typed
+functions and their default-rounding aliases.  A default integer name
+selects RNU; a default floating name selects RNE.  Each such alias has
+the same function type and built-in code as its explicit-rounding name,
+and remains subject to the profile and type availability restrictions.
+Use the family and profile capability macros to test availability.
+Individual typed intrinsic names are compiler declarations, not
+preprocessor macros; testing them with @code{#ifdef}, undefining them,
+or relying on macro stringification is not supported.  The small set of
+state-helper forwarding macros is separate from these typed aliases.
+
+The provisional v0.2.4 single-M subset additionally provides
+@code{__riscv_ztt_mclear_m_i8_rne_1x1 (void)} and
+@code{__riscv_ztt_mzero_m_i8_rne_1x1 (void)}.  Both return
+@code{__riscv_ztt_i8_rne_1x1_t} and are available with either supported
+fixed or runtime-N profile.  The macro
+@code{__riscv_ztt_i8_rne_1x1_clear_zero}, with value 1, identifies this
+experimental subset; @code{__riscv_ztt_intrinsic} remains 2002.
+
+@code{mclear_m} constructs a raw-zero value by setting the datatype and
+clearing the matrix storage at the call site.  It uses the existing
+conservative, side-effecting @code{msettyp} pattern, not just the function
+entry initialization.  No secure-erasure guarantee is provided.
+@code{mzero_m} constructs element-wise numeric zero using
+@code{mzero.2d.m}; the old @code{mzero_2d_m} name is retained with the same
+meaning.  The two operations are not generally interchangeable for
+arbitrary datatypes.  Discarded raw-clear calls are conservatively
+retained by this implementation; this is not a permanent optimization
+contract for future versions of the interface.
+
+The provisional integer rounding-mode subset extends these single-M
+operations to @code{i8_rnu}, @code{i8_rdn}, and @code{i8_rod}, while retaining
+@code{i8_rne}.  Each has a distinct
+@code{__riscv_ztt_i8_@var{rm}_1x1_t} type and corresponding
+@code{mclear_m}, @code{mzero_m}, @code{mls_rm}, and @code{madd_ew} intrinsics.
+The generic @code{__riscv_ztt_mss_rm} selects the store from the value's
+type.  Different rounding-mode types are not implicitly interchangeable.
+Their descriptors are @code{0x40000008}, @code{0x48000008},
+@code{0x50000008}, and @code{0x58000008} for RNU, RNE, RDN, and ROD.
+
+@code{__riscv_ztt_i8_1x1_t} is an alias of the RNU type, not the RNE type.
+Default @code{i8_1x1} clear, zero, load and add names are header macros
+for the RNU intrinsics.  The macro @code{__riscv_ztt_i8_1x1_irm}, with
+value 15, advertises this narrow subset: bits 0 through 3 identify the
+four rounding modes in the order above.  It requires Ztt and a supported
+typed profile, and neither changes interface version 2002 nor guarantees
+hardware tuple support.  The types share the existing storage mode;
+no accumulator, floating-point, or saturating type is added.
+
+The multi-integer extension also provides
+@code{u8}, @code{i16}, @code{u16}, @code{i32}, and @code{u32} with each
+of the four rounding modes, the same five operations, and default RNU
+aliases.  The types use the spelling
+@code{__riscv_ztt_@var{stem}_@var{rm}_1x1_t}.  Signedness, element width
+and rounding mode all contribute to C/C++ type identity.
+
+With UDS=8, 8-, 16- and 32-bit elements occupy 1, 2 and 4 consecutive M
+registers respectively.  A group starts at a multiple of its register
+count.  Rounding modes and signedness share the storage mode for a given
+span, while all group registers participate in allocation and liveness.
+The macros @code{__riscv_ztt_u8_1x1_irm},
+@code{__riscv_ztt_i16_u16_1x1_irm}, and
+@code{__riscv_ztt_i32_u32_1x1_irm}, each with value 15, advertise this
+experimental subset.  They do not change interface version 2002.
+No @code{i64} or @code{u64} typed operation is provided in this batch.
+
+A leaf signed-i8 function using one rounding mode retains entry datatype
+initialization.  A function using other element types or mixing rounding
+modes uses conservative, indivisible state
+preparation sequences.  Since @code{msettyp} clears data, live inputs are
+saved with @code{mss.1r}, assigned the required datatype, and restored with
+@code{mls.1r} before use.  The add destination cannot overlap either input.
+General matrix copies in mixed-mode functions also use raw stack storage,
+rather than relying on matching source and destination datatypes for
+@code{mmov.m.m}.  Scratch storage has the full physical group size, including
+runtime N where selected.  Each @code{.1r} instruction transfers one
+physical M; all group members are saved before @code{msettyp} and restored
+after it.  Grouped copies and spills likewise transfer every member,
+stepping by the actual size of one physical M.  This may introduce substantial memory traffic;
+redundant datatype preparation is not yet optimized.  The existing
+ownership, tuple-support, function-local type and call-boundary restrictions
+continue to apply.
+
+The typed memory interface uses the corresponding @code{int8_t},
+@code{uint8_t}, @code{int16_t}, @code{uint16_t}, @code{int32_t} or
+@code{uint32_t} carrier of the target, not an arbitrary byte pointer.  Loads accept const
+pointees, stores require writable pointees, and neither accepts volatile or
+atomic pointees.  Equivalent typedefs and arrays are accepted; @code{void *},
+plain @code{char *}, mismatched signedness, and other element widths require
+an explicit, valid conversion by the caller.  No implicit reinterpretation
+of those types is performed.  A pointer cast does not relax object bounds,
+alignment, lifetime or the ordinary C memory rules.  These are ordinary
+non-atomic memory operations, not MMIO interfaces.
+
+Selecting P0 does not prove hardware tuple support.  Its datatype setup,
+loads/stores, matrix moves and addition must all be supported by the platform.
+An unsupported instruction tuple sets @code{amestatus.UN}, leaves the
+destinations unchanged, and does not raise a synchronous exception; such a
+failure is not a valid result of a typed intrinsic.  P0 remains a fixed-N
+implementation and keeps interface version @code{2002}; it does not advertise
+complete intrinsic draft v0.2.3 support.
+
+Assignment between values uses compiler-managed matrix registers and can
+emit @code{mmov.m.m} in single-rounding-mode signed-i8 functions; other functions
+use the raw-copy path described above.  Register pressure can use @code{mls.1r} and
+@code{mss.1r} as compiler-only spill operations.  The opaque type can be an
+automatic local value but has no ordinary C object representation: it cannot
+be measured, placed in static storage or aggregates, dereferenced through a
+pointer, or passed to and returned from ordinary functions.  A function that
+uses a typed value cannot mix the L0 selector interface.  Ordinary calls
+are subject to the contract below.  P0 does not provide typed accumulator
+values, scalar forms, packed sub-byte types, an AME calling convention,
+or automatic matrixization.
+
+@subsubheading Experimental Ordinary Function Calls
+
+Functions using typed M/ACC values may call ordinary scalar/pointer
+functions, directly or indirectly.  The compiler treats the physical
+M/ACC bank as call-clobbered, preserves live complete values through
+private storage, and prepares datatype state at the point of use instead
+of relying on entry initialization.  ACC storage includes the actual Ad
+of each member.  Calls do not introduce a public representation for
+typed values: passing or returning them, including passing them through
+an ellipsis, remains unsupported.
+
+The callee must return with the same enabled/owned state and compatible
+N/profile as the caller.  GCC does not acquire a backend around ordinary
+calls, enable privileged state, or make a callee that releases ownership
+without reacquiring it safe.  The platform must preserve the required
+context over interrupts or migration.  Nonlocal jumps and asynchronous
+ownership changes are not covered by this normal-return contract.
+Explicit ownership transitions in a typed function require a proved
+ownership region.  Test the SUCCESS bit of @code{__riscv_ztt_ame_acquire},
+not whether the entire status is nonzero.  A nonzero
+@code{__riscv_ztt_get_ameown} query can also establish ownership.
+Release invalidates all earlier success observations.  A join is owned
+only when all incoming paths prove ownership; an ordinary call does not
+create ownership.
+
+An ownership observation without acquire or release does not revoke the
+existing caller-owned entry contract.  Ordinary query-only observers remain
+valid under that precondition.  When the compiler proves that a query guard
+protects all typed accesses, entry ownership may instead be unknown; state
+preparation and reloads remain on the owned path.  Merely issuing a query
+does not establish ownership, enable MS, or acquire a backend.
+After an exceptional edge, every typed function must prove ownership
+again before using typed values, including functions with no ownership
+query, acquire or release.  A guard inside the catch handler or
+after the normal and exceptional paths rejoin can establish this proof.
+The caller-owned fallback alone does not certify exceptional returns.
+A catch handler that returns or rethrows without further typed access
+does not need a new proof.  Normal-return paths keep the caller-owned
+contract; adding or removing an observational query does not change the
+exceptional-path requirement.
+
+N and the profile must be stable for the entire function, including
+unowned intervals.  MS must already be enabled, even for resource operations
+and read-only capability queries.  GCC retains the existing function-entry
+size query and uses per-operation datatype preparation.  A saved typed value
+can be restored only after ownership is proved again.  The compiler checks
+generated register accesses after allocation and late scheduling, and
+rejects unproved accesses instead of relying only on source lexical scope.
+Arbitrary ownership-changing inline assembly, nonlocal exits and an N
+change between bindings are not supported by this contract.
+
+This support supersedes the leaf-only boundary in the earlier experimental
+feature descriptions below; their sizeless, profile and raw-selector
+restrictions still apply.  It is a local integration contract, not a
+standard AME psABI.
+
+The experimental @option{-mztt-profile=gcc-runtime-uU-mM-aA} configurations,
+where @samp{U} is 8, 16, 32, 64 or 128, @samp{M} is 16 or 32 and @samp{A} is
+1, 2, 4, 8 or 16, support all fifty combinations.  For example,
+@option{-mztt-profile=gcc-runtime-u8-m32-a16} selects 32 M registers and
+16 accumulator registers.  The original
+@option{-mztt-profile=gcc-runtime-u8-m16-a4} name is unchanged.
+Each configuration
+provides the same 1/2/4-M integer operations and rounding-mode types with
+runtime-sized group storage.
+It requires Ztt, Zicsr, integer multiplication and the full integer register
+set, but does not require V.  N is obtained from @code{amenlen}; UDS,
+the M count and the accumulator count remain compile-time resource
+parameters.  Each configuration
+defines @code{__riscv_ztt_runtime_n} and @code{__riscv_ztt_profile=2}, and
+does not define @code{__riscv_ztt_n} or @code{__riscv_ztt_nelem}.
+The profile macro identifies the runtime implementation family, not an
+individual resource combination; use @code{__riscv_ztt_mregs} and
+@code{__riscv_ztt_accregs} for the selected counts.
+
+Intrinsic v0.2.4 shape support adds runtime-profile
+integer shapes @code{1x2}, @code{2x1}, @code{1x4}, @code{4x1}, @code{1x8},
+@code{8x1}, @code{1x16}, @code{16x1}, @code{1x32} and @code{32x1}
+alongside @code{1x1}.
+For element width D and Q logical squares, a type occupies
+Q times D divided by UDS physical M registers.  Only integral spans of
+1, 2 or 4 registers are registered; half-register and larger shapes are
+not available.  For example, UDS16 supports @code{i8_rnu_1x2} but not
+@code{i8_rnu_1x1}; UDS32 supports @code{i8_rnu_1x4}.
+UDS64 and UDS128 require at least @code{i8_rnu_1x8} and
+@code{i8_rnu_1x16}, respectively, for an 8-bit element type.  None of the
+implemented 8-, 16- or 32-bit @code{1x1} types is legal at UDS64 or UDS128.
+The same clear, zero, row-major load/store and same-type add families,
+four integer rounding modes, and default-RNU spellings apply to these
+shapes.  The overloaded @code{__riscv_ztt_mss_rm} accepts all registered
+shapes with the matching writable scalar carrier pointer.
+
+The macros @code{__riscv_ztt_i8_u8_shapes},
+@code{__riscv_ztt_i16_u16_shapes} and @code{__riscv_ztt_i32_u32_shapes}
+use bits 0 through 10 for @code{1x1}, @code{1x2}, @code{2x1}, @code{1x4},
+@code{4x1}, @code{1x8}, @code{8x1}, @code{1x16}, @code{16x1},
+@code{1x32} and @code{32x1},
+respectively.  A set bit advertises all four integer RMs
+for the implemented families, not arbitrary instruction tuple support.
+The older @code{1x1} capability macros are absent when that shape is
+not legal for the profile.  Fixed P0 retains only its original 1x1 types.
+
+Logical concatenations are lowered into complete hardware operands, not
+arbitrary individual registers.  At UDS16, @code{i32_1x1} is one wide
+two-M operand, whereas @code{i16_1x2} requires two unit operations.
+Row-major transfers follow the ISA square-major stream layout; a logical
+horizontal shape does not imply an interleaved C rectangular-array layout.
+UDS is included in opaque type identity and saved target options; functions
+with different profiles are not inlined into one another, even when marked
+@code{always_inline}.  This does not define a cross-profile matrix ABI.
+The @code{1x32}/@code{32x1} shapes are available for i8/u8 at UDS64,
+and for i8/u8/i16/u16 at UDS128, with all four integer RMs.  They use the
+same implemented M families, concat/extract, independent integer shifts
+and six integer accumulating matmul forms.  The old accumulator square
+count remains independent of Q; this does not introduce @code{accx32}.
+Q32 types and fixed builtin codes are appended without renumbering old
+entries; their lazy matmul codes use a separate range rather than changing
+the radix of existing LTO codes.  This internal identity discipline is
+not a promise of a cross-version GCC LTO ABI.
+Storage groups larger than four M registers and UDS256 or greater are
+not enabled by this implementation.  In particular,
+higher UDS values would require stronger private raw-save alignment than
+the current 16-byte alignment.  The existing runtime modes are shared
+across UDS values; UDS128 does not require an RV128 target or 128-bit C type.
+
+Selecting a profile also constrains explicit L0 M and accumulator selectors
+to the available register indices.  Without a profile, the L0 interface
+retains its M=0..31 and accumulator=0..15 limits.  This check applies to
+explicit register indices, not the implicit register span of a datatype
+that an L0 operation establishes at runtime.  Except for the experimental
+UDS8/16/32 integer subset described below, accumulator registers remain fixed
+in the typed interface.  The target platform must
+provide the selected resources and the operation datatype tuples used by
+the program.  No cross-profile binary compatibility is promised.
+
+The runtime mode carries a size independent of RVV VLEN.  Spill slots and
+frame adjustments use N squared times UDS divided by 8 bytes per physical M.
+The private @code{s11} cache holds this size divided by 16.  The current
+experimental implementation requires power-of-two N at least 4.  Before
+multiplication or dynamic frame allocation, it traps for invalid N or if
+the AME contribution plus the fixed frame size cannot fit in signed XLEN
+address arithmetic.  The bound also reserves room for a four-M object.
+This minimum and conservative bound are implementation restrictions, not
+new ISA requirements.  The check does not include the independent RVV
+scalable contribution and does not check available stack memory.  The
+platform must keep N stable while the function uses AME, and the caller
+remains responsible for buffer bounds, total frame representability and
+adequate stack space.  N is not a compile-time type or profile parameter.
+
+This configuration reserves @code{s11} for a private size cache, saves and
+restores its incoming value, forces a frame pointer, and disables shrink
+wrapping.  User assembly and global register variables must not use the
+cache register.  The existing leaf, sizeless and raw-selector restrictions
+still apply.  This is neither a matrix calling convention nor complete
+intrinsic draft v0.2.3 support.
+
+@subsubheading Experimental Typed Matrix Value Copy
+
+The intrinsic v0.2.4
+@code{__riscv_ztt_mcopy_m2m_@var{T}_@var{S}} interface copies an existing
+typed M value.  Its argument and result have exactly the same datatype,
+rounding mode and shape.  It is available for every currently supported
+integer M type in the selected fixed or runtime profile, including legal
+one-, two- and four-register values.  Omitting the integer rounding suffix
+selects RNU.  The capability macro @code{__riscv_ztt_mcopy_m2m} has value 1;
+it does not make unavailable datatypes or shapes legal.
+
+The operation has ordinary value-copy semantics.  Modifying the source
+later does not change the copied value.  The compiler may coalesce copies
+or use its existing complete-group copy and spill machinery; the interface
+does not force a particular physical register or an unconditional
+@code{msettyp} or @code{mmov.m.m} instruction.  It neither converts values
+nor accepts an accumulator.  The existing sizeless, profile, leaf and
+raw-selector restrictions still apply.  This addition does not change
+the ISA encoding or claim complete intrinsic v0.2.4 support.
+
+@subsubheading Experimental Matrix Zip Values
+
+Intrinsic v0.2.5 replaces
+the two-pointer zip/unzip interfaces with a single value argument and result.
+The four @code{__riscv_ztt_@var{OP}_@var{T}_1x2} operations use
+@code{mcolzip_ew}, @code{mrowzip_ew}, @code{mcolunzip_ew}, and
+@code{mrowunzip_ew}.  Argument and result have exactly the same datatype,
+including rounding and saturation identity.  Permutation preserves element
+bits and does not change the source C value.
+
+The runtime profile must support the full @code{1x2} value.  If E is the
+element width, E must be at least UDS, and the value occupies 2E/UDS
+consecutive M registers.  Packed values are not accepted.  The two ISA
+operands start at the first register and E/UDS registers after it; one
+square can occupy more than one physical M register.
+
+The macro @code{__riscv_ztt_zip_value} is 1 under a runtime typed profile.
+Old @code{_1x1} two-pointer calls are diagnosed with a migration message,
+not implemented by a compatibility wrapper.  The fixed P0 profile and
+ordinary matrix-value function arguments or returns remain unsupported.
+Use ordinary pointer boundaries for wrappers, keeping typed values local.
+This update does not promise cross-version LTO compatibility, a matrix
+calling convention, or complete intrinsic v0.2.5 support.
+
+@subsubheading Experimental Integer Matrix Subtraction
+
+The intrinsic v0.2.4
+@code{__riscv_ztt_msub_ew_@var{T}_@var{S}(a, b)} computes @code{b - a}
+elementwise, not @code{a - b}.  The two sources and the result must have
+exactly the same integer datatype, signedness, rounding mode and shape.
+It supports the existing 8-, 16- and 32-bit integer M types and legal
+complete one-, two- and four-M values in the selected typed profile.
+Omitting the rounding suffix selects RNU.  The capability macro
+@code{__riscv_ztt_msub_ew_int_same} is 1 and does not promise mixed
+datatype tuples, scalar or floating-point forms, partial values or a
+particular vendor's operation capability.
+
+The compiler preserves both source values when preparing their datatype
+state and decomposes concatenations into complete hardware operands.
+Source argument order is maintained in every constituent instruction.
+The existing sizeless, profile, leaf and raw-selector restrictions apply.
+No mode, instruction encoding, CSR or ordinary calling convention is added.
+
+@subsubheading Experimental Integer Matrix Minimum and Maximum
+
+Intrinsic v0.2.4 provides
+@code{__riscv_ztt_mmin_ew_@var{T}_@var{S}(a, b)} and
+@code{__riscv_ztt_mmax_ew_@var{T}_@var{S}(a, b)}.  They select the minimum
+and maximum element respectively, using the signedness of @var{T}.
+Both sources and the result must have identical integer datatype,
+signedness, rounding mode and shape.  No implicit conversion is performed.
+Equal elements retain that exact value; integer selection needs no rounding,
+but the descriptor's rounding mode remains part of the type contract.
+
+These interfaces cover existing 8-, 16- and 32-bit integer types and legal
+complete one-, two- and four-M values in the selected typed profile.
+Omitting the rounding suffix selects RNU.  Capability macros
+@code{__riscv_ztt_mmin_ew_int_same} and @code{__riscv_ztt_mmax_ew_int_same}
+have value 1; they do not promise a vendor supports every tuple.  Partial,
+scalar, mixed, custom and floating-point forms are not enabled here.
+
+The compiler preserves live source values during datatype preparation and
+decomposes concatenations into complete operands.  Existing sizeless,
+profile, leaf and raw-selector restrictions still apply.  These additions
+do not introduce modes, instruction encodings, CSRs or a calling convention.
+
+@subsubheading Experimental Integer Matrix Bitwise Operations
+
+Intrinsic v0.2.4 provides
+five same-type integer matrix bitwise interfaces.  Each name has the form
+@code{__riscv_ztt_@var{operation}_ew_@var{T}_@var{S}(a, b)}:
+
+@table @code
+@item mand
+Compute @code{a & b} elementwise.
+@item mandnot
+Compute @code{a & ~b} elementwise, complementing only the second input.
+@item mor
+Compute @code{a | b} elementwise.
+@item mornot
+Compute @code{a | ~b} elementwise, complementing only the second input.
+@item mxor
+Compute @code{a ^ b} elementwise.
+@end table
+
+Operations act on the raw element bits, with complementation confined to
+the element width.  Inputs and result must have exactly the same datatype,
+rounding mode and shape.  Signedness does not change the raw-bit operation;
+it remains part of the type identity.  These operations do not round.
+
+The supported subset comprises existing 8-, 16- and 32-bit integer types
+with RNU/RNE/RDN/ROD and legal complete one-, two- and four-M values.
+Omitting the rounding suffix selects RNU.  Each narrow capability macro
+@code{__riscv_ztt_@var{operation}_ew_int_same} equals 1 with a valid typed
+profile.  This does not certify a hardware vendor's supported tuples.
+The compiler preserves live sources across datatype setup and emits one
+core operation per complete operand group, retaining source argument order.
+Runtime N, existing fixed/profile gates, sizeless and leaf restrictions
+are unchanged.  Scalar, mixed, custom, floating-point, 64-bit integer and
+partial-value forms are not enabled by these additions.  No new mode,
+instruction encoding, CSR or ordinary calling convention is introduced.
+
+@subsubheading Experimental Integer Matrix Shifts
+
+Intrinsic v0.2.4
+provides @code{msll}, @code{msrl} and @code{msra} with names
+@code{__riscv_ztt_@var{op}_ew_@var{T}_@var{S}(data, count)} and
+@code{__riscv_ztt_@var{op}_ew_x_@var{T}_@var{S}(data, count)}.
+The name selects the result type and shape.  Matrix data and count inputs
+can independently use supported 8-, 16- or 32-bit integer datatypes and
+RNU/RNE/RDN/ROD, but must have the same shape as the result.
+Arithmetic right shift requires signed data; the other operands may be
+signed or unsigned.  An omitted rounding suffix selects RNU.
+
+Matrix counts use the unsigned element bit pattern.  Scalar counts are
+converted to @code{size_t}, do not use @code{amestype}, and are not tensor
+operands.  Both forms reduce counts modulo the data source width, not the
+result width.  The ISA operation is converted once to the result integer
+datatype; it does not inherit C signed-shift undefined behavior.
+
+The destination participates in operand formation.  The compiler emits
+complete common-Square windows with independent source and result spans
+and preserves live source data during descriptor setup.  The macro
+@code{__riscv_ztt_shift_int_mixed} is 1 with a valid typed profile.
+This covers existing complete one-, two- and four-M values, not partial
+values, larger values, custom datatypes or vendor tuple certification.
+Existing sizeless, profile, leaf and raw-selector restrictions apply.
+No new opcode, CSR, machine mode or ordinary calling convention is added.
+
+@subsubheading Experimental Mixed Integer Elementwise Multiplication
+
+The intrinsic v0.2.4
+@code{__riscv_ztt_mmul_ew_@var{T}_@var{S}(lhs, rhs)} names the result
+datatype and shape.  Each source and the result independently selects
+@code{i8}, @code{u8}, @code{i16}, @code{u16}, @code{i32} or @code{u32}
+and one of the four integer rounding suffixes.  An omitted suffix means
+RNU.  All three logical shapes must match and form complete one-, two-
+or four-M values supported by the active profile, including legal Q32.
+
+The mathematical product interprets each source using its own signedness
+and converts once to the result integer type.  Non-saturating results
+retain the low destination-width bits; source-width intermediate
+truncation is not performed.  Integer multiplication has no fractional
+bits to round.  The three descriptors remain independent, and source
+payload is preserved across descriptor setup and register pressure.
+
+The macro @code{__riscv_ztt_mmul_ew_int_mixed} is 1 with a valid typed
+profile.  It describes compiler representation support, not hardware
+acceptance of every tuple.  Scalar @code{.ew.x}, floating-point,
+saturating and custom datatypes are not provided by this interface.
+Existing sizeless and function-boundary restrictions remain in force;
+no new mode, CSR, opcode or ordinary ABI is introduced.
+
+@subsubheading Experimental Matrix Concatenation and Extraction
+
+The intrinsic v0.2.4
+@code{__riscv_ztt_mconcat_m_@var{T}_@var{S}} returns two identical M input
+values concatenated along the result direction.  The result shape is
+exactly twice each input shape.  A @code{1x1} input can form either a
+@code{1x2} or @code{2x1} result.  Datatype, signedness and rounding mode
+must match exactly; there is no implicit element conversion or transpose.
+
+@code{__riscv_ztt_mextract_@var{T}_@var{S}(src, index)} returns half of an
+M source whose shape is exactly twice @var{S} in the same direction.
+The @code{size_t} index must be an integer compile-time constant 0 or 1,
+selecting the left/upper or right/lower half respectively.  A @code{1x1}
+result accepts either a @code{1x2} or @code{2x1} source of the same type.
+Default integer names omit the rounding suffix and select RNU.
+
+These functions require a runtime profile and independently supported
+source and result types.  Each value occupies a complete one-, two- or
+four-register M group.  A representable parent does not make a
+fractional-M half available.  They add no storage modes or ACC operations.
+The narrow capability macros @code{__riscv_ztt_mconcat_m} and
+@code{__riscv_ztt_mextract} equal 1 in runtime profiles, but do not make
+unavailable shape transitions legal.
+
+The compiler owns the complete contiguous concatenation.  Inputs and
+results remain independent values when later modified.  Coalescing may
+eliminate physical copies; otherwise existing complete-group move and
+spill paths preserve them.  No particular @code{mmov} or unconditional
+@code{msettyp} is required.  The sizeless, leaf, raw-selector and hardware
+tuple preconditions still apply; this is not a new calling convention.
+
+@subsubheading Experimental Typed Accumulator Subset
+
+This local prototype adds
+@code{__riscv_ztt_@var{T}_@var{RM}_accx1_t} to runtime UDS8, UDS16 and UDS32
+profiles.
+@var{T} is @code{i8}, @code{u8}, @code{i16}, @code{u16}, @code{i32} or
+@code{u32}, provided its element width is at least UDS;
+@var{RM} is @code{rnu}, @code{rne},
+@code{rdn} or @code{rod}.  The capability macro
+@code{__riscv_ztt_i32_u32_accx1_irm} has value 15 (the four integer RM bits).
+The original @code{__riscv_ztt_i32_rnu_accx1} macro remains available.
+The analogous @code{__riscv_ztt_i8_u8_accx1_irm} and
+@code{__riscv_ztt_i16_u16_accx1_irm} macros have value 15 only where
+their widths are available.  Thus UDS8, UDS16 and UDS32 provide 24, 16
+and 8 accumulator types, respectively.
+Omitting @code{_rnu} selects the default type alias.  One value
+occupies one physical accumulator, independent of N.  The configured
+accumulator count determines the available allocation pool; the compiler
+can spill additional live values.  Fixed P0, UDS64 and UDS128 profiles do not
+provide these types.
+
+The following i32/RNU example uses @code{A} for the accumulator type and
+@code{M} for @code{__riscv_ztt_i32_rnu_1x1_t}:
+
+@smallexample
+A __riscv_ztt_mclear_acc_i32_rnu_accx1 (void);
+A __riscv_ztt_mzero_acc_i32_rnu_accx1 (void);
+A __riscv_ztt_mcopy_m2a_i32_rnu_accx1 (M);
+M __riscv_ztt_mcopy_a2m_i32_rnu_1x1 (A);
+A __riscv_ztt_mmulacc_2d_i32_rnu_accx1 (A old_acc, M lhs, M rhs);
+@end smallexample
+
+These five families are provided for every available type/RM combination.
+The same @code{A(A, M, M)} signature is also available for
+@code{mmulaccneg_2d}, @code{mmulatacc_2d}, @code{mmulataccneg_2d},
+@code{mmulbtacc_2d} and @code{mmulbtaccneg_2d}, with the same type, shape
+and default-RNU rules.  They subtract the product, transpose A, or
+transpose B as specified by their names; negated variants subtract the
+corresponding product from @code{old_acc}.  All preserve a still-live old
+value.  The macro @code{__riscv_ztt_acc_matmul_variants=63} uses bits 0
+through 5 for plain add, plain subtract, transpose-A add, transpose-A
+subtract, transpose-B add and transpose-B subtract, respectively.
+It advertises only these same-type accx1 interfaces, not arbitrary tuples.
+The M and ACC operands must have identical element types and rounding
+modes; mixed-datatype multiply tuples are not provided.
+Omitting @code{_rnu} selects the same functions.  The clear operation
+uses @code{asettyp}; @code{mzero_acc} from intrinsic draft v0.2.4
+additionally uses @code{mzero.2d.acc}.  The multiply-accumulate returns
+a new value and preserves @code{old_acc} if it is still live.  Store an
+accumulator value by explicitly copying it to M, then using an M store.
+
+There is no direct accumulator-to-accumulator move or memory spill
+instruction.  Compiler-generated copies read the source descriptor with
+@code{agettyp} and use an allocated M scratch and GPR scratches.  Reload
+establishes Ad before copying the data back.  The private spill image is
+a 16-byte header (32-bit Ad at offset zero, remaining header bytes unused)
+followed by N squared elements of the value's datatype.  It is neither a public memory
+format nor a dump of the implementation's entire accumulator backing state.
+Different supported descriptors can remain live together without adding
+one machine mode per datatype or rounding mode.  The matching M value
+occupies an aligned group of D divided by UDS physical M registers,
+where D is the element width.  Private preservation transfers use
+one @code{mls.1r} or @code{mss.1r} per member, with a runtime stride of
+N squared times UDS divided by 8 bytes.  The complete ACC spill image
+occupies 16 plus D times N squared divided by 8 bytes.  Existing accumulator
+modes describe one, two or four M transfers plus the descriptor header;
+all occupy one ACC.  Different widths can remain live together.  Packed
+groups have a separate restricted copy interface described below;
+other element widths remain unsupported.
+
+All existing sizeless, leaf-after-inlining, profile and L0-mixing
+restrictions apply.  The platform must support the selected integer setup, move,
+memory and matrix-multiply tuples actually used, including compiler
+preservation operations.  This prototype defines neither an accumulator
+calling convention nor hardware execution conformance.
+
+@subsubheading Experimental nonpacked accumulator tuples
+
+The runtime profiles also provide @code{accx2} and @code{accx4} values for
+the integer types and four rounding modes above.  For a tuple of K Squares,
+the element width D must be at least UDS, K times D divided by UDS must be
+at most four, and the profile must provide at least K ACC registers.
+Thus the value uses K physical ACCs even when one Square needs two M registers.
+The compiler allocates the tuple as an indivisible, K-aligned consecutive group.
+
+The macro @code{__riscv_ztt_acc_tuple_copy=1} advertises this restricted copy
+family.  The per-width macros @code{__riscv_ztt_i8_u8_accx2_irm},
+@code{__riscv_ztt_i16_u16_accx2_irm}, @code{__riscv_ztt_i32_u32_accx2_irm},
+and their @code{accx4} counterparts have value 15 only when their complete
+groups are available.  Default type and function names without @code{_rnu}
+remain RNU aliases.
+
+These values support @code{mclear_acc}, @code{mzero_acc}, @code{mcopy_m2a},
+@code{mcopy_a2m}, assignment and compiler-generated copy/spill/reload.
+For example, with i16/RNU and K=2, use the following forms, where @code{A2},
+@code{MR} and @code{MC} denote the corresponding @code{accx2}, @code{1x2}
+and @code{2x1} builtin types:
+
+@smallexample
+A2 __riscv_ztt_mclear_acc_i16_rnu_accx2 (void);
+A2 __riscv_ztt_mzero_acc_i16_rnu_accx2 (void);
+A2 __riscv_ztt_mcopy_m2a_i16_rnu_accx2 (MR);
+A2 __riscv_ztt_mcopy_m2a_i16_rnu_accx2 (MC); /* Overload.  */
+MR __riscv_ztt_mcopy_a2m_i16_rnu_1x2 (A2);
+MC __riscv_ztt_mcopy_a2m_i16_rnu_2x1 (A2);
+@end smallexample
+
+The overloaded m2a name accepts exactly one of the matching row or column
+M types.  Width, signedness, rounding mode and Square count must match;
+this does not introduce implicit conversions between opaque types.
+The copy preserves the ordered sequence of Squares without transposing
+their elements.  Clear and numeric zero affect all K members.
+
+The private spill image concatenates K complete member images, each with
+its own 16-byte Ad header followed by one Square.  Its size is
+K times (16 plus N squared times D divided by 8) bytes.  Generic copies
+read and restore every member's actual Ad, using allocated M/GPR scratch
+registers.  No independent live ACC outside the group is modified.
+Source M values are fully saved before datatype setup and fully restored.
+The new modes distinguish ACC count from M transfer count and do not
+encode N as a compile-time constant.
+
+Packed D less than UDS transfers require the separate capability below;
+nonpacked accx8/accx16 and ordinary by-value calls remain unsupported.
+Mixed arithmetic has a separate capability below;
+the tuple-copy capability alone does not advertise it.
+The same sizeless, leaf-after-inlining and L0-mixing restrictions apply.
+
+@subsubheading Experimental complete packed accumulator copies
+
+The runtime profiles support complete packed ACC copy packets for the
+six integer types and four integer rounding modes above.  Let S be UDS
+divided by the datatype width D.  S and K must be two, four, eight or sixteen;
+K must be a multiple of S and the profile must provide at least K ACCs.
+K divided by S must be one, two or four, preserving the complete-M limit.
+The value owns a complete K-aligned group of K consecutive ACCs.  This
+alignment is a compiler allocation choice, not an additional ISA rule.
+The matching row or column M value uses K divided by S complete M registers.
+No partial packet or neighboring live accumulator is borrowed.
+
+The macro @code{__riscv_ztt_acc_packed_copy=1} advertises this subset.
+The macros @code{__riscv_ztt_i8_u8_accx2_packed_irm},
+@code{__riscv_ztt_i8_u8_accx4_packed_irm},
+@code{__riscv_ztt_i8_u8_accx8_packed_irm},
+@code{__riscv_ztt_i8_u8_accx16_packed_irm}, and the corresponding
+i16/u16 and i32/u32 names have value 15 only for supported complete groups.
+The nonpacked capability macros retain their previous meaning.
+These packed values support the same clear, zero, m2a, a2m row/column
+and default-RNU forms above, plus ordinary assignment and private reload.
+The copy capability alone does not advertise matrix accumulation overloads;
+packed accumulation has a separate capability described below.
+
+UDS16 admits D8/K2/K4/K8; UDS32 admits D8/K4/K8/K16 and D16/K2/K4/K8;
+UDS64 admits D8/K8/K16, D16/K4/K8/K16 and D32/K2/K4/K8;
+UDS128 admits D8/K16, D16/K8/K16 and D32/K4/K8/K16.
+Datatype, sign, RM and shape identity must still match exactly.
+All K descriptors are initialized before a typed transfer writes the group.
+Generic copies instead preserve every actual Ad, including non-base Ad
+values that are ignored by the ISA transfer itself.
+
+For each S-ACC packet, the private spill image contains S separate 16-byte
+Ad headers followed by one complete raw M payload of B bytes, where
+B is N squared times UDS divided by eight.  Its total size is
+16 times K plus (K divided by S) times B.  N remains runtime-dependent.
+Opaque modes describe the actual private size for each (S,K) geometry;
+neither ACC subregisters nor a public memory layout are implied.
+All scratch registers and memory effects are visible to allocation.
+A16/K16 owns the entire ACC pool.  Multiple live values are preserved
+through private memory rather than requiring two simultaneous groups.
+Values requiring more than four M payload registers
+and ordinary typed ABI remain unsupported.  The existing sizeless,
+profile and leaf restrictions apply.
+
+@subsubheading Experimental tuple matrix accumulation
+
+The admitted nonpacked @code{accx2}/@code{accx4} types also support the six
+matrix accumulation forms.  The old accumulator and result have identical
+datatype, rounding mode and tuple shape.  The same-type single-Square overloads take
+two @code{1x1} values of exactly the same datatype and rounding mode.
+Additional concatenated-input and mixed-integer overloads are described below.
+
+Only the first Square of the result is updated by the selected normal,
+negated, transpose-A or transpose-B accumulation.  All remaining Squares
+retain their old data and Ad.  The old tuple and both matrix inputs remain
+valid for subsequent use.  For example, with @code{A2} denoting i16/RNU
+@code{accx2} and @code{M1} denoting i16/RNU @code{1x1}:
+
+@smallexample
+A2 __riscv_ztt_mmulacc_2d_i16_rnu_accx2 (A2 old, M1 a, M1 b);
+A2 __riscv_ztt_mmulaccneg_2d_i16_rnu_accx2 (A2 old, M1 a, M1 b);
+A2 __riscv_ztt_mmulatacc_2d_i16_rnu_accx2 (A2 old, M1 a, M1 b);
+A2 __riscv_ztt_mmulataccneg_2d_i16_rnu_accx2 (A2 old, M1 a, M1 b);
+A2 __riscv_ztt_mmulbtacc_2d_i16_rnu_accx2 (A2 old, M1 a, M1 b);
+A2 __riscv_ztt_mmulbtaccneg_2d_i16_rnu_accx2 (A2 old, M1 a, M1 b);
+@end smallexample
+
+The macro @code{__riscv_ztt_acc_tuple_matmul_1x1=63} advertises this restricted
+family; bits 0 through 5 follow the same ordering as the accx1 variants.
+Per-width/shape capability macros still determine which tuple types exist.
+Default names without a rounding suffix remain RNU aliases.
+
+The compiler models the entire old tuple as a tied input/output, preserving
+all members when the old value remains live.  Matrix preparation saves only
+each 1x1 input's complete M group, independently of the output ACC count;
+it does not clear the old accumulator.  Source concatenation, mixed-datatype
+tuples, packed transfers and ordinary calls are not enabled by this macro.
+
+@subsubheading Experimental concatenated matrix accumulation
+
+The macro @code{__riscv_ztt_acc_matmul_concat=63} advertises same-datatype
+and same-rounding-mode source concatenation for the six accumulation forms.
+The existing public names, RNU aliases and output types are unchanged.
+
+The output may be any admitted @code{accx1}, @code{accx2} or @code{accx4}
+type.  Its count K is independent of the matching source Square count Q.
+The new overloads take Q=2 or Q=4, provided each source occupies at most
+four complete M registers: Q times D divided by UDS must be at most four.
+All existing output-type and profile requirements remain in force.
+
+Normal and negative accumulation take @code{1xQ} followed by @code{Qx1}.
+Transpose-A and transpose-B forms, including their negative variants,
+take either two @code{1xQ} values or two @code{Qx1} values.  This follows
+the draft's per-Square transpose rule; it does not transpose the entire
+concatenation into a different public shape.  Q, datatype and rounding
+mode must match exactly, and the old accumulator must match the result.
+For example, if @code{A} is an admitted i16/RNU @code{accx1}, @code{MR}
+is i16/RNU @code{1x2}, and @code{MC} is i16/RNU @code{2x1}:
+
+@smallexample
+A __riscv_ztt_mmulacc_2d_i16_rnu_accx1 (A old, MR a, MC b);
+A __riscv_ztt_mmulatacc_2d_i16_rnu_accx1 (A old, MR a, MR b);
+A __riscv_ztt_mmulatacc_2d_i16_rnu_accx1 (A old, MC a, MC b);
+@end smallexample
+
+The compiler accumulates Squares in ascending source order using Q
+existing one-Square operations.  Each step reads and writes the full old
+ACC value, modifying only its first member.  Other members, the original
+old value and both source concatenations retain their values.  Each
+instruction applies its own descriptor and architectural state effects;
+this is not a reassociated sum with one final rounding step.
+Parent M pseudos own the complete concatenation, and lowering selects
+only complete per-Square M groups from them.
+
+Internal typed overload targets are not additional public APIs.  This
+extension adds no modes, CSR addresses, mixed-datatype tuples, packed
+transfers, new datatypes or ordinary by-value calling convention.
+
+@subsubheading Experimental mixed integer matrix accumulation
+
+@code{__riscv_ztt_acc_matmul_mixed=63} advertises mixed integer inputs for
+the six accumulation forms in the same bit order as the other ACC macros.
+It is available only in the admitted runtime UDS8/16/32 ACC profiles.
+Existing public names and default RNU aliases are unchanged.
+
+The old accumulator and result must have exactly the same datatype,
+rounding mode and @code{accx1}/@code{accx2}/@code{accx4} shape.  Each input
+may independently select i8/u8/i16/u16/i32/u32 and RNU/RNE/RDN/ROD.
+All three widths must be at least UDS.  Both sources must have matching
+Q=1, 2 or 4 and the RC/RR/CC direction appropriate to the chosen form.
+Each source independently occupies at most four complete M registers;
+all existing output-type and register-pool limits continue to apply.
+This macro does not advertise packed source Squares.  Complete packed
+input windows have the separate capability below.
+
+For example, with UDS8, at least two ACC registers and the named types:
+
+@smallexample
+__riscv_ztt_i16_rnu_accx2_t result
+  = __riscv_ztt_mmulacc_2d_i16_rnu_accx2
+      (old_i16_rnu_accx2, lhs_i8_rne_1x2, rhs_u16_rod_2x1);
+@end smallexample
+
+Each step uses the left and right operand's own descriptor, M span and
+Square offset.  The old ACC supplies its descriptor and is not cleared
+as part of multiply preparation.  The full old value is tied to the
+result, with only the first member updated and all tails preserved.
+Both source values and the original old accumulator may remain live.
+The temporary state envelope owns max(Rleft,Rright) times B bytes, where
+B=N*N*UDS/8 and each R is that source width divided by UDS.  It saves
+and restores each source independently around destructive @code{msettyp}.
+
+The compiler creates internal exact-type overload declarations on demand
+and reconstructs their identities for LTO independently of call order.
+It does not register the complete datatype Cartesian product on header
+inclusion.  Internal builtin names and numeric codes are not a public API.
+This adds no new datatypes, storage modes, ISA instructions, CSR addresses,
+packed transfers, floating-point or i64 arithmetic, or ordinary typed ABI.
+Supported hardware compute and auxiliary setup/move/spill tuples remain
+the vendor's responsibility; a compiler profile is not such a capability list.
+
+@subsubheading Experimental packed integer matrix accumulation
+
+@code{__riscv_ztt_acc_matmul_packed=63} advertises the six accumulation forms
+with complete packed inputs or packed outputs.  It is defined for runtime
+UDS16/32/64/128 profiles that admit at least one complete ACC type.
+All existing output type/resource gates still apply; copy-only capability
+macros are not a promise of an arbitrary arithmetic tuple.
+
+The old/result types must match exactly, including datatype, rounding mode
+and ACC count K.  The two inputs independently select one of the six
+integer datatypes and four integer rounding modes, with equal Q of one,
+two, four, eight or sixteen Squares.  Each complete input must occupy one,
+two or four M registers.  Normal/negative forms use row/column inputs;
+transpose-A/B and negative variants use row/row or column/column inputs,
+with transposition within each paired Square.  No partial M value is formed.
+
+Let DL and DR be the two input widths.  P is the larger input packing factor,
+with factor UDS/D for D less than UDS and factor one otherwise.  Acc is
+excluded from P, regardless of its datatype or K.  Each instruction consumes
+P paired Squares, using P*DL/UDS and P*DR/UDS M registers.  Q must be a
+multiple of P.  Lowering emits Q/P instructions in ascending source order,
+with each instruction applying its own architectural fold/state effects.
+For example UDS64, DL16, DR32 and Q8 form two instructions, each using
+one M for the left and two M registers for the right, independently of
+the output ACC width and count.
+
+Every step ties the complete old ACC value to the result and modifies
+only its first member.  Tail data and every actual Ad survive; old and both
+source values can remain live.  A16/K16 retains the single-group allocation
+and private memory preservation protocol, not a borrowed neighboring ACC.
+State preparation saves complete formed input groups; its private scratch
+uses max(P*DL/UDS,P*DR/UDS) times B bytes, B=N*N*UDS/8.  N remains runtime.
+
+Public names and default RNU aliases are unchanged.  K8/16 output anchors
+are appended to the fixed catalog; exact input declarations are lazy.
+A separate bounded internal code domain represents packed/Q8/Q16 forms
+without changing prior fixed or mixed LTO codes.  Internal numbers are
+not public ABI.  This extension adds no storage modes, CSR addresses or
+instructions, and no FP/i64, ordinary typed ABI or vendor tuple guarantee.
+
 @node RISC-V Vector Intrinsics
 @subsection RISC-V Vector Intrinsics
 
