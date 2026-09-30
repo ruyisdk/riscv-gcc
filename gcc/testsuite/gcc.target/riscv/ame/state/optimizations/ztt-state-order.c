@@ -1,0 +1,26 @@
+/* { dg-do compile } */
+/* { dg-options "-march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u32-m16-a4" { target rv32 } } */
+/* { dg-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u32-m16-a4" { target rv64 } } */
+#include "../ztt-state-order.h"
+/* { dg-final { check-function-bodies "**" "" } } */
+/*
+** release_order:
+** ...
+** s[wd]\s+[^\n]*
+** ...
+** ame\.release
+** ...
+** s[wd]\s+[^\n]*
+** ...
+*/
+/*
+** acquire_order:
+** ...
+** s[wd]\s+[^\n]*
+** ...
+** ame\.acquire\s+[^\n]*
+** ...
+** s[wd]\s+[^\n]*
+** ...
+*/
+/* { dg-final { scan-assembler-not {amenlen|s11|msettyp|asettyp} } } */
