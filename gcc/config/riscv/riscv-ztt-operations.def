@@ -1,0 +1,104 @@
+/* Ztt operation catalog.
+   Define the entry macros for the sections to expand.  This file
+   is intentionally included more than once.  Keep section and row
+   order stable: it determines type or operation indices.  */
+
+#ifdef ZTT_WIDE_OP
+/* Append-only wide operation
+   ordinals.  BASIC restricts indexed operations to one logical Square.  */
+
+ZTT_WIDE_OP (MADD_EW, madd_ew, M_M_M, 0)
+ZTT_WIDE_OP (MSUB_EW, msub_ew, M_M_M, 0)
+ZTT_WIDE_OP (MMUL_EW, mmul_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MMULNEG_EW, mmulneg_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MABSDIFF_EW, mabsdiff_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MHDIFF_EW, mhdiff_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MMEAN_EW, mmean_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MCMPGE_EW, mcmpge_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MCMPLT_EW, mcmplt_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MSELGE_EW, mselge_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MSELLT_EW, msellt_ew, M_BINARY_M, 0)
+ZTT_WIDE_OP (MSLL_EW, msll_ew, M_SHIFT_M, 0)
+ZTT_WIDE_OP (MSLL_EW_X, msll_ew_x, M_SHIFT_X, 0)
+ZTT_WIDE_OP (MSRL_EW, msrl_ew, M_SHIFT_M, 0)
+ZTT_WIDE_OP (MSRL_EW_X, msrl_ew_x, M_SHIFT_X, 0)
+ZTT_WIDE_OP (MSRA_EW, msra_ew, M_SHIFT_M, 0)
+ZTT_WIDE_OP (MSRA_EW_X, msra_ew_x, M_SHIFT_X, 0)
+ZTT_WIDE_OP (MCONV_EW, mconv_ew, M_CONVERT, 0)
+ZTT_WIDE_OP (MABS_EW, mabs_ew, M_ABS, 0)
+ZTT_WIDE_OP (MREDUCEADD_COL, mreduceadd_col, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MREDUCEADD_ROW, mreduceadd_row, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MREDUCEMAX_COL, mreducemax_col, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MREDUCEMAX_ROW, mreducemax_row, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MREDUCEMIN_COL, mreducemin_col, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MREDUCEMIN_ROW, mreducemin_row, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MPREFIXADD_COL, mprefixadd_col, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MPREFIXADD_ROW, mprefixadd_row, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MPREFIXMAX_COL, mprefixmax_col, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MPREFIXMAX_ROW, mprefixmax_row, M_STRUCTURAL, 0)
+ZTT_WIDE_OP (MMULACC_EW, mmulacc_ew, M_TERNARY_M, 0)
+ZTT_WIDE_OP (MMULACCNEG_EW, mmulaccneg_ew, M_TERNARY_M, 0)
+ZTT_WIDE_OP (MMULADD_EW, mmuladd_ew, M_TERNARY_M, 0)
+ZTT_WIDE_OP (MMULSUB_EW, mmulsub_ew, M_TERNARY_M, 0)
+ZTT_WIDE_OP (MCMOVGE_EW, mcmovge_ew, M_TERNARY_M, 0)
+ZTT_WIDE_OP (MCMOVLT_EW, mcmovlt_ew, M_TERNARY_M, 0)
+ZTT_WIDE_OP (MCOLGATHER_EW, mcolgather_ew, M_GATHER, 1)
+ZTT_WIDE_OP (MROWGATHER_EW, mrowgather_ew, M_GATHER, 1)
+ZTT_WIDE_OP (MCOLSCATADD_EW, mcolscatadd_ew, M_SCATTER, 1)
+ZTT_WIDE_OP (MROWSCATADD_EW, mrowscatadd_ew, M_SCATTER, 1)
+ZTT_WIDE_OP (MCOLSCATMAX_EW, mcolscatmax_ew, M_SCATTER, 1)
+ZTT_WIDE_OP (MROWSCATMAX_EW, mrowscatmax_ew, M_SCATTER, 1)
+#endif /* ZTT_WIDE_OP */
+
+#ifdef ZTT_WIDE_SCALAR_OP
+/* Append-only wide scalar operation ordinals, following wide matrix ops.  */
+
+ZTT_WIDE_SCALAR_OP (MADD_EW_X, madd_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MSUB_EW_X, msub_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MMUL_EW_X, mmul_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MABSDIFF_EW_X, mabsdiff_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MHDIFF_EW_X, mhdiff_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MMEAN_EW_X, mmean_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MMULNEG_EW_X, mmulneg_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MMIN_EW_X, mmin_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MMAX_EW_X, mmax_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MAND_EW_X, mand_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MANDNOT_EW_X, mandnot_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MOR_EW_X, mor_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MORNOT_EW_X, mornot_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MXOR_EW_X, mxor_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MMULACC_EW_X, mmulacc_ew_x, TERNARY_X)
+ZTT_WIDE_SCALAR_OP (MMULACCNEG_EW_X, mmulaccneg_ew_x, TERNARY_X)
+ZTT_WIDE_SCALAR_OP (MMULADD_EW_X, mmuladd_ew_x, TERNARY_X)
+ZTT_WIDE_SCALAR_OP (MMULSUB_EW_X, mmulsub_ew_x, TERNARY_X)
+ZTT_WIDE_SCALAR_OP (MCMPGE_EW_X, mcmpge_ew_x, SCALAR)
+ZTT_WIDE_SCALAR_OP (MCMPLT_EW_X, mcmplt_ew_x, SCALAR)
+#endif /* ZTT_WIDE_SCALAR_OP */
+
+#ifdef ZTT_FP_UNARY
+/* Floating format/RM are type identity, not physical storage modes.  */
+
+ZTT_FP_UNARY (MFRINTM_EW, mfrintm_ew, "mfrintm.ew")
+ZTT_FP_UNARY (MFRINTN_EW, mfrintn_ew, "mfrintn.ew")
+ZTT_FP_UNARY (MFRINTP_EW, mfrintp_ew, "mfrintp.ew")
+ZTT_FP_UNARY (MFRINTZ_EW, mfrintz_ew, "mfrintz.ew")
+ZTT_FP_UNARY (MEXP2_EW, mexp2_ew, "mexp2.ew")
+ZTT_FP_UNARY (MLOG2_EW, mlog2_ew, "mlog2.ew")
+ZTT_FP_UNARY (MCOS_EW, mcos_ew, "mcos.ew")
+ZTT_FP_UNARY (MSIN_EW, msin_ew, "msin.ew")
+ZTT_FP_UNARY (MTANH_EW, mtanh_ew, "mtanh.ew")
+ZTT_FP_UNARY (MREC_EW, mrec_ew, "mrec.ew")
+ZTT_FP_UNARY (MRSQRT_EW, mrsqrt_ew, "mrsqrt.ew")
+ZTT_FP_UNARY (MSQRT_EW, msqrt_ew, "msqrt.ew")
+#endif /* ZTT_FP_UNARY */
+
+#ifdef ZTT_MATRIX_MATH
+/* Matrix exponents are integer; logarithm data and results are floating.  */
+
+ZTT_MATRIX_MATH (MLDEXP_EW, mldexp_ew, M_BINARY_M)
+ZTT_MATRIX_MATH (MRDEXP_EW, mrdexp_ew, M_BINARY_M)
+ZTT_MATRIX_MATH (MLDEXPACC_EW, mldexpacc_ew, M_TERNARY_M)
+ZTT_MATRIX_MATH (MRDEXPACC_EW, mrdexpacc_ew, M_TERNARY_M)
+ZTT_MATRIX_MATH (MLOG2SUB_EW, mlog2sub_ew, M_BINARY_M)
+ZTT_MATRIX_MATH (MSUBLOG2_EW, msublog2_ew, M_BINARY_M)
+#endif /* ZTT_MATRIX_MATH */

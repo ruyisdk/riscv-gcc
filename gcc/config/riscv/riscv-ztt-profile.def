@@ -1,0 +1,67 @@
+/* AME/Ztt v0.6 compiler-only profile metadata.    This is not a hardware or
+   psABI profile.  */
+
+ZTT_PROFILE (GCC_P0, "gcc-p0-n128-u8-m16-a4",
+	     16384, 128, 8, 16, 4)
+
+/* Experimental runtime-N implementation profile.  Zero N/NELEM means
+   unknown at compile time.  N >= 4 is checked before dynamic allocation;
+   it is an implementation restriction, not an ISA minimum.  */
+ZTT_PROFILE (GCC_RUNTIME, "gcc-runtime-u8-m16-a4",
+	     0, 0, 8, 16, 4)
+
+/* N stays runtime-sized;
+   selecting M/Acc counts does not establish operation tuple support.
+   ACC counts constrain L0 selectors; typed ACC allocation is not enabled.  */
+ZTT_PROFILE (GCC_RUNTIME_M16_A1, "gcc-runtime-u8-m16-a1", 0, 0, 8, 16, 1)
+ZTT_PROFILE (GCC_RUNTIME_M16_A2, "gcc-runtime-u8-m16-a2", 0, 0, 8, 16, 2)
+ZTT_PROFILE (GCC_RUNTIME_M16_A8, "gcc-runtime-u8-m16-a8", 0, 0, 8, 16, 8)
+ZTT_PROFILE (GCC_RUNTIME_M16_A16, "gcc-runtime-u8-m16-a16", 0, 0, 8, 16, 16)
+ZTT_PROFILE (GCC_RUNTIME_M32_A1, "gcc-runtime-u8-m32-a1", 0, 0, 8, 32, 1)
+ZTT_PROFILE (GCC_RUNTIME_M32_A2, "gcc-runtime-u8-m32-a2", 0, 0, 8, 32, 2)
+ZTT_PROFILE (GCC_RUNTIME_M32_A4, "gcc-runtime-u8-m32-a4", 0, 0, 8, 32, 4)
+ZTT_PROFILE (GCC_RUNTIME_M32_A8, "gcc-runtime-u8-m32-a8", 0, 0, 8, 32, 8)
+ZTT_PROFILE (GCC_RUNTIME_M32_A16, "gcc-runtime-u8-m32-a16", 0, 0, 8, 32, 16)
+
+/* These compiler-local names
+   do not allocate ISA extension names or promise hardware tuple support.  */
+ZTT_PROFILE (GCC_RUNTIME_U16_M16_A1, "gcc-runtime-u16-m16-a1", 0, 0, 16, 16, 1)
+ZTT_PROFILE (GCC_RUNTIME_U16_M16_A2, "gcc-runtime-u16-m16-a2", 0, 0, 16, 16, 2)
+ZTT_PROFILE (GCC_RUNTIME_U16_M16_A4, "gcc-runtime-u16-m16-a4", 0, 0, 16, 16, 4)
+ZTT_PROFILE (GCC_RUNTIME_U16_M16_A8, "gcc-runtime-u16-m16-a8", 0, 0, 16, 16, 8)
+ZTT_PROFILE (GCC_RUNTIME_U16_M16_A16, "gcc-runtime-u16-m16-a16", 0, 0, 16, 16, 16)
+ZTT_PROFILE (GCC_RUNTIME_U16_M32_A1, "gcc-runtime-u16-m32-a1", 0, 0, 16, 32, 1)
+ZTT_PROFILE (GCC_RUNTIME_U16_M32_A2, "gcc-runtime-u16-m32-a2", 0, 0, 16, 32, 2)
+ZTT_PROFILE (GCC_RUNTIME_U16_M32_A4, "gcc-runtime-u16-m32-a4", 0, 0, 16, 32, 4)
+ZTT_PROFILE (GCC_RUNTIME_U16_M32_A8, "gcc-runtime-u16-m32-a8", 0, 0, 16, 32, 8)
+ZTT_PROFILE (GCC_RUNTIME_U16_M32_A16, "gcc-runtime-u16-m32-a16", 0, 0, 16, 32, 16)
+ZTT_PROFILE (GCC_RUNTIME_U32_M16_A1, "gcc-runtime-u32-m16-a1", 0, 0, 32, 16, 1)
+ZTT_PROFILE (GCC_RUNTIME_U32_M16_A2, "gcc-runtime-u32-m16-a2", 0, 0, 32, 16, 2)
+ZTT_PROFILE (GCC_RUNTIME_U32_M16_A4, "gcc-runtime-u32-m16-a4", 0, 0, 32, 16, 4)
+ZTT_PROFILE (GCC_RUNTIME_U32_M16_A8, "gcc-runtime-u32-m16-a8", 0, 0, 32, 16, 8)
+ZTT_PROFILE (GCC_RUNTIME_U32_M16_A16, "gcc-runtime-u32-m16-a16", 0, 0, 32, 16, 16)
+ZTT_PROFILE (GCC_RUNTIME_U32_M32_A1, "gcc-runtime-u32-m32-a1", 0, 0, 32, 32, 1)
+ZTT_PROFILE (GCC_RUNTIME_U32_M32_A2, "gcc-runtime-u32-m32-a2", 0, 0, 32, 32, 2)
+ZTT_PROFILE (GCC_RUNTIME_U32_M32_A4, "gcc-runtime-u32-m32-a4", 0, 0, 32, 32, 4)
+ZTT_PROFILE (GCC_RUNTIME_U32_M32_A8, "gcc-runtime-u32-m32-a8", 0, 0, 32, 32, 8)
+ZTT_PROFILE (GCC_RUNTIME_U32_M32_A16, "gcc-runtime-u32-m32-a16", 0, 0, 32, 32, 16)
+ZTT_PROFILE (GCC_RUNTIME_U64_M16_A1, "gcc-runtime-u64-m16-a1", 0, 0, 64, 16, 1)
+ZTT_PROFILE (GCC_RUNTIME_U64_M16_A2, "gcc-runtime-u64-m16-a2", 0, 0, 64, 16, 2)
+ZTT_PROFILE (GCC_RUNTIME_U64_M16_A4, "gcc-runtime-u64-m16-a4", 0, 0, 64, 16, 4)
+ZTT_PROFILE (GCC_RUNTIME_U64_M16_A8, "gcc-runtime-u64-m16-a8", 0, 0, 64, 16, 8)
+ZTT_PROFILE (GCC_RUNTIME_U64_M16_A16, "gcc-runtime-u64-m16-a16", 0, 0, 64, 16, 16)
+ZTT_PROFILE (GCC_RUNTIME_U64_M32_A1, "gcc-runtime-u64-m32-a1", 0, 0, 64, 32, 1)
+ZTT_PROFILE (GCC_RUNTIME_U64_M32_A2, "gcc-runtime-u64-m32-a2", 0, 0, 64, 32, 2)
+ZTT_PROFILE (GCC_RUNTIME_U64_M32_A4, "gcc-runtime-u64-m32-a4", 0, 0, 64, 32, 4)
+ZTT_PROFILE (GCC_RUNTIME_U64_M32_A8, "gcc-runtime-u64-m32-a8", 0, 0, 64, 32, 8)
+ZTT_PROFILE (GCC_RUNTIME_U64_M32_A16, "gcc-runtime-u64-m32-a16", 0, 0, 64, 32, 16)
+ZTT_PROFILE (GCC_RUNTIME_U128_M16_A1, "gcc-runtime-u128-m16-a1", 0, 0, 128, 16, 1)
+ZTT_PROFILE (GCC_RUNTIME_U128_M16_A2, "gcc-runtime-u128-m16-a2", 0, 0, 128, 16, 2)
+ZTT_PROFILE (GCC_RUNTIME_U128_M16_A4, "gcc-runtime-u128-m16-a4", 0, 0, 128, 16, 4)
+ZTT_PROFILE (GCC_RUNTIME_U128_M16_A8, "gcc-runtime-u128-m16-a8", 0, 0, 128, 16, 8)
+ZTT_PROFILE (GCC_RUNTIME_U128_M16_A16, "gcc-runtime-u128-m16-a16", 0, 0, 128, 16, 16)
+ZTT_PROFILE (GCC_RUNTIME_U128_M32_A1, "gcc-runtime-u128-m32-a1", 0, 0, 128, 32, 1)
+ZTT_PROFILE (GCC_RUNTIME_U128_M32_A2, "gcc-runtime-u128-m32-a2", 0, 0, 128, 32, 2)
+ZTT_PROFILE (GCC_RUNTIME_U128_M32_A4, "gcc-runtime-u128-m32-a4", 0, 0, 128, 32, 4)
+ZTT_PROFILE (GCC_RUNTIME_U128_M32_A8, "gcc-runtime-u128-m32-a8", 0, 0, 128, 32, 8)
+ZTT_PROFILE (GCC_RUNTIME_U128_M32_A16, "gcc-runtime-u128-m32-a16", 0, 0, 128, 32, 16)
