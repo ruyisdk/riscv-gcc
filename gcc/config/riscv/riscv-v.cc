@@ -5238,7 +5238,8 @@ cmp_lmul_le_one (machine_mode mode)
   if (riscv_vla_mode_p (mode))
     return known_le (GET_MODE_SIZE (mode), BYTES_PER_RISCV_VECTOR);
   else if (riscv_vls_mode_p (mode))
-    return known_le (GET_MODE_BITSIZE (mode), TARGET_MIN_VLEN);
+    return known_le (GET_MODE_BITSIZE (mode),
+		     (unsigned int) TARGET_MIN_VLEN);
   return false;
 }
 
@@ -5249,7 +5250,8 @@ cmp_lmul_gt_one (machine_mode mode)
   if (riscv_vla_mode_p (mode))
     return known_gt (GET_MODE_SIZE (mode), BYTES_PER_RISCV_VECTOR);
   else if (riscv_vls_mode_p (mode))
-    return known_gt (GET_MODE_BITSIZE (mode), TARGET_MIN_VLEN);
+    return known_gt (GET_MODE_BITSIZE (mode),
+		     (unsigned int) TARGET_MIN_VLEN);
   return false;
 }
 
@@ -5348,8 +5350,8 @@ vls_mode_valid_p (machine_mode mode, bool allow_up_to_lmul_8)
   if (rvv_vector_bits == RVV_VECTOR_BITS_ZVL)
     {
       machine_mode inner_mode = GET_MODE_INNER (mode);
-      int precision = GET_MODE_PRECISION (inner_mode).to_constant ();
-      int min_vlmax_bitsize = TARGET_MIN_VLEN / (64 / precision);
+      unsigned int precision = GET_MODE_PRECISION (inner_mode).to_constant ();
+      unsigned int min_vlmax_bitsize = TARGET_MIN_VLEN / (64 / precision);
 
       return GET_MODE_PRECISION (mode).to_constant () < min_vlmax_bitsize;
     }

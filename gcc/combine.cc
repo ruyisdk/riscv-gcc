@@ -3951,9 +3951,9 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
 		 (REG_P (temp_expr)
 		  && reg_stat[REGNO (temp_expr)].nonzero_bits != 0
 		  && known_lt (GET_MODE_PRECISION (GET_MODE (temp_expr)),
-			       BITS_PER_WORD)
+			       (unsigned int) BITS_PER_WORD)
 		  && known_lt (GET_MODE_PRECISION (GET_MODE (temp_expr)),
-			       HOST_BITS_PER_INT)
+			       (unsigned int) HOST_BITS_PER_INT)
 		  && (reg_stat[REGNO (temp_expr)].nonzero_bits
 		      != GET_MODE_MASK (word_mode))))
 	   && ! (GET_CODE (SET_DEST (XVECEXP (newpat, 0, 1))) == SUBREG
@@ -3961,9 +3961,9 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
 		     (REG_P (temp_expr)
 		      && reg_stat[REGNO (temp_expr)].nonzero_bits != 0
 		      && known_lt (GET_MODE_PRECISION (GET_MODE (temp_expr)),
-				   BITS_PER_WORD)
+				   (unsigned int) BITS_PER_WORD)
 		      && known_lt (GET_MODE_PRECISION (GET_MODE (temp_expr)),
-				   HOST_BITS_PER_INT)
+				   (unsigned int) HOST_BITS_PER_INT)
 		      && (reg_stat[REGNO (temp_expr)].nonzero_bits
 			  != GET_MODE_MASK (word_mode)))))
 	   && ! reg_overlap_mentioned_p (SET_DEST (XVECEXP (newpat, 0, 1)),
@@ -7465,6 +7465,7 @@ expand_field_assignment (const_rtx x)
   rtx inner;
   rtx pos;			/* Always counts from low bit.  */
   int len, inner_len;
+  unsigned int mode_len;
   rtx mask, cleared, masked;
   scalar_int_mode compute_mode;
 
@@ -7475,8 +7476,10 @@ expand_field_assignment (const_rtx x)
 	  && GET_CODE (XEXP (SET_DEST (x), 0)) == SUBREG)
 	{
 	  rtx x0 = XEXP (SET_DEST (x), 0);
-	  if (!GET_MODE_PRECISION (GET_MODE (x0)).is_constant (&len))
+	  if (!GET_MODE_PRECISION (GET_MODE (x0)).is_constant (&mode_len)
+	      || mode_len > INT_MAX)
 	    break;
+	  len = mode_len;
 	  inner = SUBREG_REG (XEXP (SET_DEST (x), 0));
 	  pos = gen_int_mode (subreg_lsb (XEXP (SET_DEST (x), 0)),
 			      MAX_MODE_INT);
@@ -7485,8 +7488,10 @@ expand_field_assignment (const_rtx x)
 	       && CONST_INT_P (XEXP (SET_DEST (x), 1)))
 	{
 	  inner = XEXP (SET_DEST (x), 0);
-	  if (!GET_MODE_PRECISION (GET_MODE (inner)).is_constant (&inner_len))
+	  if (!GET_MODE_PRECISION (GET_MODE (inner)).is_constant (&mode_len)
+	      || mode_len > INT_MAX)
 	    break;
+	  inner_len = mode_len;
 
 	  len = INTVAL (XEXP (SET_DEST (x), 1));
 	  pos = XEXP (SET_DEST (x), 2);
@@ -7884,10 +7889,16 @@ make_extraction (machine_mode mode, rtx inner, HOST_WIDE_INT pos,
 	 However, if we're extracting from (or inserting into) a register,
 	 we want to recompute POS relative to wanted_inner_mode.  */
       int width;
+      unsigned int mode_width;
       if (!MEM_P (inner))
 	width = GET_MODE_BITSIZE (wanted_inner_mode);
-      else if (!GET_MODE_BITSIZE (is_mode).is_constant (&width))
-	return NULL_RTX;
+      else
+	{
+	  if (!GET_MODE_BITSIZE (is_mode).is_constant (&mode_width)
+	      || mode_width > INT_MAX)
+	    return NULL_RTX;
+	  width = mode_width;
+	}
 
       if (pos_rtx == 0)
 	pos = width - len - pos;
@@ -8265,10 +8276,10 @@ make_compound_operation_int (scalar_int_mode mode, rtx *x_ptr,
 
 	  sub = XEXP (XEXP (x, 0), 0);
 	  machine_mode sub_mode = GET_MODE (sub);
-	  int sub_width;
+	  unsigned int sub_width;
 	  if ((REG_P (sub) || MEM_P (sub))
 	      && GET_MODE_PRECISION (sub_mode).is_constant (&sub_width)
-	      && sub_width < mode_width
+	      && sub_width < (unsigned int) mode_width
 	      && (!WORD_REGISTER_OPERATIONS
 		  || sub_width >= BITS_PER_WORD
 		  /* On WORD_REGISTER_OPERATIONS targets the bits
@@ -13510,7 +13521,7 @@ record_dead_and_set_regs_1 (rtx dest, const_rtx setter, void *data)
 	       && GET_CODE (SET_DEST (setter)) == SUBREG
 	       && SUBREG_REG (SET_DEST (setter)) == dest
 	       && known_le (GET_MODE_PRECISION (GET_MODE (dest)),
-			    BITS_PER_WORD)
+			    (unsigned int) BITS_PER_WORD)
 	       && subreg_lowpart_p (SET_DEST (setter)))
 	{
 	  if (WORD_REGISTER_OPERATIONS

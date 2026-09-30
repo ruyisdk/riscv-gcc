@@ -14686,7 +14686,8 @@ static dw_loc_descr_ref
 multiple_reg_loc_descriptor (rtx rtl, rtx regs,
 			     enum var_init_status initialized)
 {
-  int size, i;
+  unsigned int size;
+  int i;
   dw_loc_descr_ref loc_result = NULL;
 
   /* Simple, contiguous registers.  */
@@ -16994,9 +16995,9 @@ mem_loc_descriptor (rtx rtl, machine_mode mode,
 	     the constant requires 2 HWIs to be adequately represented.
 	     We output CONST_DOUBLEs as blocks.  */
 	  if (mode == VOIDmode
-	      || (GET_MODE (rtl) == VOIDmode
-		  && maybe_ne (GET_MODE_BITSIZE (mode),
-			       HOST_BITS_PER_DOUBLE_INT)))
+	  || (GET_MODE (rtl) == VOIDmode
+	      && maybe_ne (GET_MODE_BITSIZE (mode),
+			   (unsigned int) HOST_BITS_PER_DOUBLE_INT)))
 	    break;
 	  type_die = base_type_for_mode (mode, SCALAR_INT_MODE_P (mode));
 	  if (type_die == NULL)
@@ -17532,7 +17533,8 @@ loc_descriptor (rtx rtl, machine_mode mode,
 	rtvec par_elems = XVEC (rtl, 0);
 	int num_elem = GET_NUM_ELEM (par_elems);
 	machine_mode mode;
-	int i, size;
+	int i;
+	unsigned int size;
 
 	/* Create the first one, so we have something to add to.  */
 	loc_result = loc_descriptor (XEXP (RTVEC_ELT (par_elems, 0), 0),

@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
 #define HAVE_POLY_INT_TYPES_H
 
 typedef poly_int<NUM_POLY_INT_COEFFS, unsigned short> poly_uint16;
+typedef poly_int<NUM_POLY_INT_COEFFS, unsigned int> poly_uint32;
 typedef poly_int<NUM_POLY_INT_COEFFS, HOST_WIDE_INT> poly_int64;
 typedef poly_int<NUM_POLY_INT_COEFFS, unsigned HOST_WIDE_INT> poly_uint64;
 typedef poly_int<NUM_POLY_INT_COEFFS, offset_int> poly_offset_int;

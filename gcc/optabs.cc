@@ -5920,7 +5920,7 @@ expand_float (rtx to, rtx from, int unsignedp)
 
 	if (fmode != GET_MODE (to)
 	    && (significand_size (fmode)
-		< GET_MODE_UNIT_PRECISION (GET_MODE (from))))
+		< (int) GET_MODE_UNIT_PRECISION (GET_MODE (from))))
 	  continue;
 
 	icode = can_float_p (fmode, imode, unsignedp);
@@ -7807,7 +7807,7 @@ expand_atomic_load (rtx target, rtx mem, enum memmodel model)
      emulate a load with a compare-and-swap operation, but the store that
      doing this could result in would be incorrect if this is a volatile
      atomic load or targeting read-only-mapped memory.  */
-  if (maybe_gt (GET_MODE_PRECISION (mode), BITS_PER_WORD))
+  if (maybe_gt (GET_MODE_PRECISION (mode), (unsigned int) BITS_PER_WORD))
     /* If there is no atomic load, leave the library call.  */
     return NULL_RTX;
 
@@ -7881,7 +7881,7 @@ expand_atomic_store (rtx mem, rtx val, enum memmodel model, bool use_release)
 
   /* If the size of the object is greater than word size on this target,
      a default store will not be atomic.  */
-  if (maybe_gt (GET_MODE_PRECISION (mode), BITS_PER_WORD))
+  if (maybe_gt (GET_MODE_PRECISION (mode), (unsigned int) BITS_PER_WORD))
     {
       /* If loads are atomic or we are called to provide a __sync builtin,
 	 we can try a atomic_exchange and throw away the result.  Otherwise,
@@ -8357,7 +8357,7 @@ bool
 valid_multiword_target_p (rtx target)
 {
   machine_mode mode;
-  int i, size;
+  unsigned int i, size;
 
   mode = GET_MODE (target);
   if (!GET_MODE_SIZE (mode).is_constant (&size))

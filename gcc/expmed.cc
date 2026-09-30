@@ -2195,9 +2195,9 @@ extract_bit_field (rtx str_rtx, poly_uint64 bitsize, poly_uint64 bitnum,
   machine_mode mode1;
 
   /* Handle -fstrict-volatile-bitfields in the cases where it applies.  */
-  if (maybe_ne (GET_MODE_BITSIZE (GET_MODE (str_rtx)), 0))
+  if (maybe_ne (GET_MODE_BITSIZE (GET_MODE (str_rtx)), 0U))
     mode1 = GET_MODE (str_rtx);
-  else if (target && maybe_ne (GET_MODE_BITSIZE (GET_MODE (target)), 0))
+  else if (target && maybe_ne (GET_MODE_BITSIZE (GET_MODE (target)), 0U))
     mode1 = GET_MODE (target);
   else
     mode1 = tmode;

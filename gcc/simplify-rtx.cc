@@ -1578,7 +1578,7 @@ simplify_context::simplify_unary_operation_1 (rtx_code code, machine_mode mode,
 
 	      /* We can only widen multiplies if the result is mathematiclly
 		 equivalent.  I.e. if overflow was impossible.  */
-	      if (bits <= GET_MODE_UNIT_PRECISION (GET_MODE (op)))
+	      if (bits <= (int) GET_MODE_UNIT_PRECISION (GET_MODE (op)))
 		return simplify_gen_binary
 			 (MULT, mode,
 			  simplify_gen_unary (SIGN_EXTEND, mode, lhs, lmode),
@@ -1815,7 +1815,7 @@ simplify_context::simplify_unary_operation_1 (rtx_code code, machine_mode mode,
 
 	      /* We can only widen multiplies if the result is mathematiclly
 		 equivalent.  I.e. if overflow was impossible.  */
-	      if (bits <= GET_MODE_UNIT_PRECISION (GET_MODE (op)))
+	      if (bits <= (int) GET_MODE_UNIT_PRECISION (GET_MODE (op)))
 		return simplify_gen_binary
 			 (MULT, mode,
 			  simplify_gen_unary (ZERO_EXTEND, mode, lhs, lmode),
@@ -9352,7 +9352,8 @@ test_scalar_int_ext_ops (machine_mode bmode, machine_mode smode)
 				 bmode),
 		 sreg);
 
-  if (known_le (GET_MODE_PRECISION (bmode), BITS_PER_WORD))
+  if (known_le (GET_MODE_PRECISION (bmode),
+		(unsigned int) BITS_PER_WORD))
     {
       rtx breg1 = make_test_reg (bmode);
       rtx breg2 = make_test_reg (bmode);
@@ -9906,7 +9907,7 @@ test_vector_subregs_modes (rtx x, poly_uint64 elt_bias = 0,
 		   || known_eq (GET_MODE_BITSIZE (outer_mode),
 				GET_MODE_NUNITS (outer_mode)))
 	       && (!FLOAT_MODE_P (outer_mode)
-		   || (FLOAT_MODE_FORMAT (outer_mode)->ieee_bits
+		   || ((unsigned int) FLOAT_MODE_FORMAT (outer_mode)->ieee_bits
 		       == GET_MODE_UNIT_PRECISION (outer_mode)))
 	       && (GET_MODE_SIZE (inner_mode).is_constant ()
 		   || !CONST_VECTOR_STEPPED_P (x)))

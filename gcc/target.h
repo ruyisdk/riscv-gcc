@@ -361,8 +361,9 @@ mode_can_transfer_bits (machine_mode mode)
 {
   if (mode == BLKmode)
     return true;
-  if (maybe_ne (GET_MODE_BITSIZE (mode),
-		GET_MODE_UNIT_PRECISION (mode) * GET_MODE_NUNITS (mode)))
+  poly_uint64 unit_bits
+    = GET_MODE_UNIT_PRECISION (mode) * GET_MODE_NUNITS (mode);
+  if (maybe_ne (GET_MODE_BITSIZE (mode), unit_bits))
     return false;
   if (targetm.mode_can_transfer_bits)
     return targetm.mode_can_transfer_bits (mode);

@@ -4629,7 +4629,8 @@ emit_move_insn_1 (rtx x, rtx y)
      constants.  At present, it can only do this reliably if the value
      fits within a HOST_WIDE_INT.  */
   if (!CONSTANT_P (y)
-      || known_le (GET_MODE_BITSIZE (mode), HOST_BITS_PER_WIDE_INT))
+      || known_le (GET_MODE_BITSIZE (mode),
+		   (unsigned int) HOST_BITS_PER_WIDE_INT))
     {
       rtx_insn *ret = emit_move_via_integer (mode, x, y, lra_in_progress);
 

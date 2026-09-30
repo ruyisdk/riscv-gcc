@@ -986,6 +986,8 @@ calc_wider_mode (void)
 #define ZERO_COEFFS ""
 #elif NUM_POLY_INT_COEFFS == 2
 #define ZERO_COEFFS ", 0"
+#elif NUM_POLY_INT_COEFFS == 3
+#define ZERO_COEFFS ", 0, 0"
 #else
 #error "Unknown value of NUM_POLY_INT_COEFFS"
 #endif
@@ -1077,10 +1079,10 @@ inline __attribute__((__always_inline__))\n\
 #else\n\
 extern __inline__ __attribute__((__always_inline__, __gnu_inline__))\n\
 #endif\n\
-poly_uint16\n\
+poly_uint32\n\
 mode_size_inline (machine_mode mode)\n\
 {\n\
-  extern %spoly_uint16 mode_size[NUM_MACHINE_MODES];\n\
+  extern %spoly_uint32 mode_size[NUM_MACHINE_MODES];\n\
   gcc_assert (mode >= 0 && mode < NUM_MACHINE_MODES);\n\
   switch (mode)\n\
     {\n", adj_nunits || adj_bytesize ? "" : "const ");
@@ -1173,10 +1175,10 @@ inline __attribute__((__always_inline__))\n\
 #else\n\
 extern __inline__ __attribute__((__always_inline__, __gnu_inline__))\n\
 #endif\n\
-unsigned char\n\
+unsigned short\n\
 mode_unit_size_inline (machine_mode mode)\n\
 {\n\
-  extern CONST_MODE_UNIT_SIZE unsigned char mode_unit_size[NUM_MACHINE_MODES];\
+  extern CONST_MODE_UNIT_SIZE unsigned short mode_unit_size[NUM_MACHINE_MODES];\
 \n\
   gcc_assert (mode >= 0 && mode < NUM_MACHINE_MODES);\n\
   switch (mode)\n\
@@ -1211,10 +1213,10 @@ inline __attribute__((__always_inline__))\n\
 #else\n\
 extern __inline__ __attribute__((__always_inline__, __gnu_inline__))\n\
 #endif\n\
-unsigned short\n\
+unsigned int\n\
 mode_unit_precision_inline (machine_mode mode)\n\
 {\n\
-  extern const unsigned short mode_unit_precision[NUM_MACHINE_MODES];\n\
+  extern const unsigned int mode_unit_precision[NUM_MACHINE_MODES];\n\
   gcc_assert (mode >= 0 && mode < NUM_MACHINE_MODES);\n\
   switch (mode)\n\
     {");
@@ -1480,7 +1482,7 @@ emit_mode_precision (void)
   int c;
   struct mode_data *m;
 
-  print_maybe_const_decl ("%spoly_uint16", "mode_precision",
+  print_maybe_const_decl ("%spoly_uint32", "mode_precision",
 			  "NUM_MACHINE_MODES", adj_nunits);
 
   for_all_modes (c, m)
@@ -1499,7 +1501,7 @@ emit_mode_size (void)
   int c;
   struct mode_data *m;
 
-  print_maybe_const_decl ("%spoly_uint16", "mode_size",
+  print_maybe_const_decl ("%spoly_uint32", "mode_size",
 			  "NUM_MACHINE_MODES", adj_nunits || adj_bytesize);
 
   for_all_modes (c, m)
@@ -1683,7 +1685,7 @@ emit_mode_unit_size (void)
   int c;
   struct mode_data *m;
 
-  print_maybe_const_decl ("%sunsigned char", "mode_unit_size",
+  print_maybe_const_decl ("%sunsigned short", "mode_unit_size",
 			  "NUM_MACHINE_MODES", adj_bytesize);
 
   for_all_modes (c, m)
@@ -1701,7 +1703,8 @@ emit_mode_unit_precision (void)
   int c;
   struct mode_data *m;
 
-  print_decl ("unsigned short", "mode_unit_precision", "NUM_MACHINE_MODES");
+  print_decl ("unsigned int", "mode_unit_precision",
+	      "NUM_MACHINE_MODES");
 
   for_all_modes (c, m)
     {
@@ -1818,7 +1821,7 @@ emit_mode_adjustments (void)
 \nvoid\
 \ninit_adjust_machine_modes (void)\
 \n{\
-\n  poly_uint16 ps ATTRIBUTE_UNUSED;\n\
+\n  poly_uint32 ps ATTRIBUTE_UNUSED;\n\
   size_t s ATTRIBUTE_UNUSED;");
 
   for (a = adj_nunits; a; a = a->next)
