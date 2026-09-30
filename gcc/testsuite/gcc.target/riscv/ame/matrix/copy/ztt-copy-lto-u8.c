@@ -1,0 +1,6 @@
+/* M copy.  */
+/* { dg-do link } */
+/* { dg-options "-O2 -flto -nostdlib -Wl,--export-dynamic -Wl,-e,copy_pressure -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u8-m16-a4" { target rv32 } } */
+/* { dg-options "-O2 -flto -nostdlib -Wl,--export-dynamic -Wl,-e,copy_pressure -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u8-m16-a4" { target rv64 } } */
+#include "ztt-copy-body.h"
+#include "ztt-copy-pressure.h"
