@@ -1,0 +1,7 @@
+AME/Ztt C++ tests
+================
+
+See ../../../gcc.target/riscv/ame/README for grouping and execution rules.
+ame.exp uses g++-dg.exp and dg-runtest, with no default ISA/profile flags.
+Headers are shared with the corresponding C group; auxiliary/ translation
+units are compiled only through dg-additional-sources.

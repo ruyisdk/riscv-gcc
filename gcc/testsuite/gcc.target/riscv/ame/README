@@ -1,0 +1,16 @@
+AME/Ztt compiler regression tests
+================================
+
+The specification baseline and experimental limitations are recorded once
+in gcc/config/riscv/README.ztt. They apply to this directory and the matching
+g++.target/riscv/ame suite. Individual tests document the rule under test
+rather than repeating the specification commit.
+
+Run these tests with RUNTESTFLAGS="ame.exp". Rule directories contain
+independent test sources; shared headers and auxiliary translation units
+are not separate test cases. Each test selects its own extension, profile
+and relevant optimization options, including negative feature tests.
+
+These are compiler tests, not SAIL/Spike joint-execution programs. Compile,
+assembly and diagnostic PASS results alone do not establish numerical,
+hardware or ABI conformance.

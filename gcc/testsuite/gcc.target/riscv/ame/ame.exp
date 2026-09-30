@@ -1,0 +1,135 @@
+# Copyright (C) 2026 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with GCC; see the file COPYING3.  If not see
+# <http://www.gnu.org/licenses/>.
+
+# AME/Ztt tests, grouped by the rule under test.
+if ![istarget riscv*-*-*] then {
+    return
+}
+
+# Match riscv.exp before the first load of the shared library, which is
+# cached.  A later riscv.exp must also see the two RISC-V torture options.
+foreach option {{-Og -g} {-Oz}} {
+    if {![info exists ADDITIONAL_TORTURE_OPTIONS]
+        || [lsearch -exact $ADDITIONAL_TORTURE_OPTIONS $option] < 0} {
+        lappend ADDITIONAL_TORTURE_OPTIONS $option
+    }
+}
+
+load_lib gcc-dg.exp
+
+global DEFAULT_CFLAGS
+if ![info exists DEFAULT_CFLAGS] then {
+    set DEFAULT_CFLAGS " -ansi -pedantic-errors"
+}
+
+# Keep the riscv.exp torture coverage without changing other drivers.
+set ame_saved_torture_options $DG_TORTURE_OPTIONS
+foreach option {{-Og -g} {-Oz}} {
+    if {[lsearch -exact $DG_TORTURE_OPTIONS $option] < 0} {
+        lappend DG_TORTURE_OPTIONS $option
+    }
+}
+
+# Each test selects its own ISA, profile, and optimization options.
+# In particular, do not enable Ztt for the negative feature tests here.
+dg-init
+
+# Start the forced-GC tests early so parallel workers can overlap them.
+foreach group {
+    typed
+    types/floating
+    matrix/floating
+    matrix/math
+    acc/base
+    acc/concat
+    acc/matmul
+    acc/mixed
+    acc/packed
+    acc/packed-large
+    acc/packed-matmul
+    acc/state
+    acc/tuple
+    acc/tuple-matmul
+    acc/width
+    acc/wide-matmul
+    acc/integer-matmul
+    acc/floating-matmul
+    acc/large-groups
+    base
+    frame
+    matrix/abs
+    matrix/ternary
+    matrix/arithmetic
+    matrix/bitwise
+    matrix/broadcast
+    matrix/clear-zero
+    matrix/compare
+    matrix/construct
+    matrix/convert
+    matrix/copy
+    matrix/indexed
+    matrix/minmax
+    matrix/memory
+    matrix/mul
+    matrix/permute
+    matrix/reduce
+    matrix/scalar-arithmetic
+    matrix/scalar-bitwise
+    matrix/scalar-ternary
+    matrix/shift
+    matrix/sub
+    matrix/utils
+    matrix/wide
+    matrix/integer-kinds
+    scalar/wide
+    scalar/integer-broadcast
+    scalar/integer-kinds
+    scalar/floating
+    scalar/floating-broadcast
+    scalar/exponent
+    memory/floating
+    memory/alignment
+    memory/wide128
+    matrix/zip
+    profile
+    rounding
+    runtime-n
+    state
+    types
+    types/wide
+    types/integer-kinds
+    types/large-groups
+    uds
+} {
+    gcc-dg-runtest [lsort [glob -nocomplain $srcdir/$subdir/$group/*.\[cS\]]] \
+        "" $DEFAULT_CFLAGS
+}
+
+# These tests have identical checks at -O0 and -O2.  Keep a single source
+# per profile, with no -O option in dg-options.  Unlike the tests above,
+# do not multiply this explicit matrix by the torture options.
+foreach group {acc/packed matrix/mul matrix/permute calls state} {
+    foreach flags {{-O0} {-O2}} {
+	dg-runtest [lsort [glob -nocomplain \
+	    $srcdir/$subdir/$group/optimizations/*.\[cS\]]] \
+	    $flags $DEFAULT_CFLAGS
+    }
+}
+
+dg-finish
+
+set DG_TORTURE_OPTIONS $ame_saved_torture_options
+unset ame_saved_torture_options
