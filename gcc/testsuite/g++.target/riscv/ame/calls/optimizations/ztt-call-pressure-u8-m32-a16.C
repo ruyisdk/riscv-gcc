@@ -1,0 +1,36 @@
+/* { dg-do compile } */
+/* { dg-options "-g -std=gnu++11 -march=rv32gc_ztt0p6 -mabi=ilp32d -mztt-profile=gcc-runtime-u8-m32-a16" { target rv32 } } */
+/* { dg-options "-g -std=gnu++11 -march=rv64gc_ztt0p6 -mabi=lp64d -mztt-profile=gcc-runtime-u8-m32-a16" { target rv64 } } */
+#define CALL_M_TC i128_rod
+#define CALL_M_SHAPE 1x2
+#define CALL_A_TC i128_rnu_sat
+#define CALL_A_SHAPE accx16
+#include "../../../../../gcc.target/riscv/ame/calls/ztt-call-pressure.h"
+/* { dg-final { check-function-bodies "**" "" } } */
+/*
+** matrix_pressure:
+** ...
+** mss\.1r\s+.*
+** ...
+** call\s+call_boundary
+** ...
+** mls\.1r\s+.*
+** ...
+*/
+/*
+** accumulator_pressure:
+** ...
+** agettyp\s+.*
+** ...
+** mss\.1r\s+.*
+** ...
+** call\s+call_boundary
+** ...
+** mls\.1r\s+.*
+** ...
+** asettyp\s+.*
+** ...
+** mmov\.a\.m\s+.*
+** ...
+*/
+/* { dg-final { scan-assembler {\.cfi_offset 1,} } } */
