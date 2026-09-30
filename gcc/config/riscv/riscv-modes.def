@@ -21,6 +21,168 @@ along with GCC; see the file COPYING3.  If not see
 
 INT_MODE (OI, 32);
 
+/* AME/Ztt v0.6 compiler-only P0 profile matrix register.  This draft mode
+   models one 128 x 128 matrix register at UDS=8.  */
+OPAQUE_MODE (ZTTM1, 16384);
+ADJUST_ALIGNMENT (ZTTM1, 16);
+
+/* Invariant 2 is
+   M-register bytes / 16 - 1, independent of the RVV VLEN invariant.  */
+OPAQUE_MODE (ZTTMR1, 16);
+ADJUST_NUNITS (ZTTMR1, poly_uint16 (1, 0, 1));
+ADJUST_ALIGNMENT (ZTTMR1, 16);
+
+/* UDS=8 needs 2 M for
+   16-bit elements and 4 M for 32-bit elements, independently of N.  */
+OPAQUE_MODE (ZTTM2, 32);
+ADJUST_NUNITS (ZTTM2, 1024);
+ADJUST_ALIGNMENT (ZTTM2, 16);
+OPAQUE_MODE (ZTTM4, 64);
+ADJUST_NUNITS (ZTTM4, 1024);
+ADJUST_ALIGNMENT (ZTTM4, 16);
+OPAQUE_MODE (ZTTMR2, 32);
+ADJUST_NUNITS (ZTTMR2, poly_uint16 (1, 0, 1));
+ADJUST_ALIGNMENT (ZTTMR2, 16);
+OPAQUE_MODE (ZTTMR4, 64);
+ADJUST_NUNITS (ZTTMR4, poly_uint16 (1, 0, 1));
+ADJUST_ALIGNMENT (ZTTMR4, 16);
+
+/* Register occupancy is
+   fixed; byte size uses the independent runtime-N invariant.  */
+OPAQUE_MODE (ZTTMR8, 128);
+ADJUST_NUNITS (ZTTMR8, poly_uint16 (1, 0, 1));
+ADJUST_ALIGNMENT (ZTTMR8, 16);
+OPAQUE_MODE (ZTTMR16, 256);
+ADJUST_NUNITS (ZTTMR16, poly_uint16 (1, 0, 1));
+ADJUST_ALIGNMENT (ZTTMR16, 16);
+OPAQUE_MODE (ZTTMR32, 512);
+ADJUST_NUNITS (ZTTMR32, poly_uint16 (1, 0, 1));
+ADJUST_ALIGNMENT (ZTTMR32, 16);
+
+/* Private spill image: a 32-bit Ad in a 16-byte header, then one Square.
+   This is not physical ACC backing size and still occupies one ACC.  */
+OPAQUE_MODE (ZTTAR1, 16);
+ADJUST_NUNITS (ZTTAR1, poly_uint16 (2, 0, 1));
+ADJUST_ALIGNMENT (ZTTAR1, 16);
+
+/* One physical ACC each:
+   D/UDS=2/4 needs two/four M transfers plus the Ad header.  */
+OPAQUE_MODE (ZTTAR2, 16);
+ADJUST_NUNITS (ZTTAR2, poly_uint16 (3, 0, 2));
+ADJUST_ALIGNMENT (ZTTAR2, 16);
+OPAQUE_MODE (ZTTAR4, 16);
+ADJUST_NUNITS (ZTTAR4, poly_uint16 (5, 0, 4));
+ADJUST_ALIGNMENT (ZTTAR4, 16);
+
+/* ARrXk owns k physical
+   ACCs, each with r M transfers and its own 16-byte Ad header.  Keep
+   these values indivisible; private image offsets are not reg offsets.  */
+OPAQUE_MODE (ZTTAR1X2, 16);
+ADJUST_NUNITS (ZTTAR1X2, poly_uint16 (4, 0, 2));
+ADJUST_ALIGNMENT (ZTTAR1X2, 16);
+OPAQUE_MODE (ZTTAR1X4, 16);
+ADJUST_NUNITS (ZTTAR1X4, poly_uint16 (8, 0, 4));
+ADJUST_ALIGNMENT (ZTTAR1X4, 16);
+OPAQUE_MODE (ZTTAR2X2, 16);
+ADJUST_NUNITS (ZTTAR2X2, poly_uint16 (6, 0, 4));
+ADJUST_ALIGNMENT (ZTTAR2X2, 16);
+
+/* APsXk owns k ACCs;
+   each packet saves s independent Ad headers and one full M payload.  */
+OPAQUE_MODE (ZTTAP2X2, 16);
+ADJUST_NUNITS (ZTTAP2X2, poly_uint16 (3, 0, 1));
+ADJUST_ALIGNMENT (ZTTAP2X2, 16);
+OPAQUE_MODE (ZTTAP4X4, 16);
+ADJUST_NUNITS (ZTTAP4X4, poly_uint16 (5, 0, 1));
+ADJUST_ALIGNMENT (ZTTAP4X4, 16);
+OPAQUE_MODE (ZTTAP2X4, 16);
+ADJUST_NUNITS (ZTTAP2X4, poly_uint16 (6, 0, 2));
+ADJUST_ALIGNMENT (ZTTAP2X4, 16);
+
+/* Keep all k actual Ads
+   and k/s complete M payloads; these modes still use at most four M.  */
+OPAQUE_MODE (ZTTAP2X8, 16);
+ADJUST_NUNITS (ZTTAP2X8, poly_uint16 (12, 0, 4));
+ADJUST_ALIGNMENT (ZTTAP2X8, 16);
+OPAQUE_MODE (ZTTAP4X8, 16);
+ADJUST_NUNITS (ZTTAP4X8, poly_uint16 (10, 0, 2));
+ADJUST_ALIGNMENT (ZTTAP4X8, 16);
+OPAQUE_MODE (ZTTAP4X16, 16);
+ADJUST_NUNITS (ZTTAP4X16, poly_uint16 (20, 0, 4));
+ADJUST_ALIGNMENT (ZTTAP4X16, 16);
+OPAQUE_MODE (ZTTAP8X8, 16);
+ADJUST_NUNITS (ZTTAP8X8, poly_uint16 (9, 0, 1));
+ADJUST_ALIGNMENT (ZTTAP8X8, 16);
+OPAQUE_MODE (ZTTAP8X16, 16);
+ADJUST_NUNITS (ZTTAP8X16, poly_uint16 (18, 0, 2));
+ADJUST_ALIGNMENT (ZTTAP8X16, 16);
+OPAQUE_MODE (ZTTAP16X16, 16);
+ADJUST_NUNITS (ZTTAP16X16, poly_uint16 (17, 0, 1));
+ADJUST_ALIGNMENT (ZTTAP16X16, 16);
+
+/* Register occupancy is K,
+   not the total M-equivalent payload.  Each physical ACC retains Ad.  */
+OPAQUE_MODE (ZTTAR1X8, 16);
+ADJUST_NUNITS (ZTTAR1X8, poly_uint16 (16, 0, 8));
+ADJUST_ALIGNMENT (ZTTAR1X8, 16);
+OPAQUE_MODE (ZTTAR1X16, 16);
+ADJUST_NUNITS (ZTTAR1X16, poly_uint16 (32, 0, 16));
+ADJUST_ALIGNMENT (ZTTAR1X16, 16);
+OPAQUE_MODE (ZTTAR2X4, 16);
+ADJUST_NUNITS (ZTTAR2X4, poly_uint16 (12, 0, 8));
+ADJUST_ALIGNMENT (ZTTAR2X4, 16);
+OPAQUE_MODE (ZTTAR2X8, 16);
+ADJUST_NUNITS (ZTTAR2X8, poly_uint16 (24, 0, 16));
+ADJUST_ALIGNMENT (ZTTAR2X8, 16);
+OPAQUE_MODE (ZTTAR2X16, 16);
+ADJUST_NUNITS (ZTTAR2X16, poly_uint16 (48, 0, 32));
+ADJUST_ALIGNMENT (ZTTAR2X16, 16);
+OPAQUE_MODE (ZTTAR4X2, 16);
+ADJUST_NUNITS (ZTTAR4X2, poly_uint16 (10, 0, 8));
+ADJUST_ALIGNMENT (ZTTAR4X2, 16);
+OPAQUE_MODE (ZTTAR4X4, 16);
+ADJUST_NUNITS (ZTTAR4X4, poly_uint16 (20, 0, 16));
+ADJUST_ALIGNMENT (ZTTAR4X4, 16);
+OPAQUE_MODE (ZTTAR4X8, 16);
+ADJUST_NUNITS (ZTTAR4X8, poly_uint16 (40, 0, 32));
+ADJUST_ALIGNMENT (ZTTAR4X8, 16);
+OPAQUE_MODE (ZTTAR4X16, 16);
+ADJUST_NUNITS (ZTTAR4X16, poly_uint16 (80, 0, 64));
+ADJUST_ALIGNMENT (ZTTAR4X16, 16);
+OPAQUE_MODE (ZTTAR8, 16);
+ADJUST_NUNITS (ZTTAR8, poly_uint16 (9, 0, 8));
+ADJUST_ALIGNMENT (ZTTAR8, 16);
+OPAQUE_MODE (ZTTAR8X2, 16);
+ADJUST_NUNITS (ZTTAR8X2, poly_uint16 (18, 0, 16));
+ADJUST_ALIGNMENT (ZTTAR8X2, 16);
+OPAQUE_MODE (ZTTAR8X4, 16);
+ADJUST_NUNITS (ZTTAR8X4, poly_uint16 (36, 0, 32));
+ADJUST_ALIGNMENT (ZTTAR8X4, 16);
+OPAQUE_MODE (ZTTAR8X8, 16);
+ADJUST_NUNITS (ZTTAR8X8, poly_uint16 (72, 0, 64));
+ADJUST_ALIGNMENT (ZTTAR8X8, 16);
+OPAQUE_MODE (ZTTAR8X16, 16);
+ADJUST_NUNITS (ZTTAR8X16, poly_uint16 (144, 0, 128));
+ADJUST_ALIGNMENT (ZTTAR8X16, 16);
+OPAQUE_MODE (ZTTAR16, 16);
+ADJUST_NUNITS (ZTTAR16, poly_uint16 (17, 0, 16));
+ADJUST_ALIGNMENT (ZTTAR16, 16);
+OPAQUE_MODE (ZTTAR16X2, 16);
+ADJUST_NUNITS (ZTTAR16X2, poly_uint16 (34, 0, 32));
+ADJUST_ALIGNMENT (ZTTAR16X2, 16);
+OPAQUE_MODE (ZTTAR16X4, 16);
+ADJUST_NUNITS (ZTTAR16X4, poly_uint16 (68, 0, 64));
+ADJUST_ALIGNMENT (ZTTAR16X4, 16);
+OPAQUE_MODE (ZTTAR16X8, 16);
+ADJUST_NUNITS (ZTTAR16X8, poly_uint16 (136, 0, 128));
+ADJUST_ALIGNMENT (ZTTAR16X8, 16);
+OPAQUE_MODE (ZTTAR16X16, 16);
+ADJUST_NUNITS (ZTTAR16X16, poly_uint16 (272, 0, 256));
+ADJUST_ALIGNMENT (ZTTAR16X16, 16);
+OPAQUE_MODE (ZTTAP2X16, 16);
+ADJUST_NUNITS (ZTTAP2X16, poly_uint16 (24, 0, 8));
+ADJUST_ALIGNMENT (ZTTAP2X16, 16);
+
 FLOAT_MODE (HF, 2, ieee_half_format);
 FLOAT_MODE (TF, 16, ieee_quad_format);
 FLOAT_MODE (BF, 2, 0);
@@ -342,10 +504,9 @@ RVV_NF4_MODES (4)
 
 RVV_NF2_MODES (2)
 
-/* VLS modes used as SIMD auto-vectorization for epilogue.  We know the
-   return type of GET_MODE_BITSIZE is poly_uint16 or unsigned short.
-   The maximum bitsize of all vector modes is 65536 = (8192 (LMUL1) * 8),
-   even though RISC-V 'V' ISA spec allow maximum bitsize = 65536 * 8.
+/* VLS modes used as SIMD auto-vectorization for epilogue.  The maximum
+   bitsize of all vector modes is 65536 = (8192 (LMUL1) * 8), even though
+   RISC-V 'V' ISA spec allow maximum bitsize = 65536 * 8.
 
    Note: We don't enable of vector modes of TI/TF.  */
 
@@ -433,12 +594,11 @@ VLS_MODES (4096); /* V4096QI V2048HI V1024SI V512DI V2048HF V2048BF V1024SF V512
 /* TODO: According to RISC-V 'V' ISA spec, the maximum vector length can
    be 65536 for a single vector register which means the vector mode in
    GCC can be maximum = 65536 * 8 bits (LMUL=8).
-   However, 'GET_MODE_SIZE' is using poly_uint16/unsigned short which will
-   overflow if we specify vector-length = 65536.  To support this feature,
-   we need to change the codes outside the RISC-V port.  We will support it in
-   the future.  */
-#define MAX_BITSIZE_MODE_ANY_MODE (4096 * 8)
+   However, GET_MODE_SIZE still uses poly_uint16 and will overflow if we
+   specify vector-length = 65536.  Supporting that size requires a separate
+   audit of byte-size consumers outside the RISC-V port.  */
+#define MAX_BITSIZE_MODE_ANY_MODE (16384 * 8)
 
 /* Coefficient 1 is multiplied by the number of 64-bit/32-bit chunks in a vector
    minus one.  */
-#define NUM_POLY_INT_COEFFS 2
+#define NUM_POLY_INT_COEFFS 3

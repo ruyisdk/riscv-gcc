@@ -58,6 +58,18 @@ enum riscv_function_type {
   RISCV_MAX_FTYPE_MAX
 };
 
+/* Instruction selectors shared by the Ztt built-in descriptions and the
+   assembly output helper.  */
+enum riscv_ztt_insn {
+#define ZTT_BUILTIN(NAME, MNEMONIC, PATTERN, FUNCTION_TYPE) \
+  RISCV_ZTT_INSN_ ## NAME,
+#define ZTT_BUILTIN_X ZTT_BUILTIN
+#include "config/riscv/riscv-ztt-builtins.def"
+#undef ZTT_BUILTIN_X
+#undef ZTT_BUILTIN
+  RISCV_ZTT_INSN_MAX
+};
+
 /* Declare an availability predicate for built-in functions.  */
 #define AVAIL(NAME, COND)		\
  static unsigned int			\
@@ -74,6 +86,9 @@ struct riscv_builtin_description {
   /* The code of the main .md file instruction.  See riscv_builtin_type
      for more information.  */
   enum insn_code icode;
+
+  /* A riscv_ztt_insn selector, or -1 for a normal direct built-in.  */
+  int ztt_insn;
 
   /* The function's prototype.  */
   enum riscv_function_type prototype : 24;
@@ -121,6 +136,11 @@ AVAIL (zbb64, TARGET_ZBB && TARGET_64BIT)
 AVAIL (zbb64_or_zbkb64, (TARGET_ZBKB || TARGET_ZBB) && TARGET_64BIT)
 AVAIL (zbb_or_zbkb, (TARGET_ZBKB || TARGET_ZBB))
 AVAIL (hint_pause, (!0))
+AVAIL (ztt, TARGET_ZTT)
+AVAIL (ztt32, TARGET_ZTT && !TARGET_64BIT)
+AVAIL (ztt64, TARGET_ZTT && TARGET_64BIT)
+AVAIL (ztt_csr32, TARGET_ZTT && TARGET_ZICSR && !TARGET_64BIT)
+AVAIL (ztt_csr64, TARGET_ZTT && TARGET_ZICSR && TARGET_64BIT)
 
 // CORE-V AVAIL
 AVAIL (cvmac, TARGET_XCVMAC && !TARGET_64BIT)
@@ -147,7 +167,7 @@ AVAIL (andesbfhcvt, TARGET_XANDESBFHCVT)
    riscv_builtin_avail_.  */
 #define RISCV_BUILTIN_NO_PREFIX(INSN, NAME, FUNCTION_TYPE, AVAIL)	\
   { "__builtin_riscv_" NAME, CODE_FOR_ ## INSN,				\
-      FUNCTION_TYPE, false, riscv_builtin_avail_ ## AVAIL }
+      -1, FUNCTION_TYPE, false, riscv_builtin_avail_ ## AVAIL }
 
 /* Like RISCV_BUiLTIN_NO_PREFIX but with a 'riscv_' prefix added to the
    instruction code.  */
@@ -167,6 +187,8 @@ AVAIL (andesbfhcvt, TARGET_XANDESBFHCVT)
 #define RISCV_ATYPE_UHI unsigned_intHI_type_node
 #define RISCV_ATYPE_USI unsigned_intSI_type_node
 #define RISCV_ATYPE_UDI unsigned_intDI_type_node
+#define RISCV_ATYPE_UWORD long_unsigned_type_node
+#define RISCV_ATYPE_SIZE size_type_node
 #define RISCV_ATYPE_QI intQI_type_node
 #define RISCV_ATYPE_HI intHI_type_node
 #define RISCV_ATYPE_SI intSI_type_node
@@ -196,9 +218,56 @@ static struct riscv_builtin_description riscv_builtins[] = {
   #include "corev.def"
   #include "andes.def"
 
+#define ZTT_BUILTIN(NAME, MNEMONIC, PATTERN, FUNCTION_TYPE) \
+	  { "__builtin_riscv_ztt_" #NAME, \
+	    CODE_FOR_riscv_ztt_ ## PATTERN, RISCV_ZTT_INSN_ ## NAME, \
+	    FUNCTION_TYPE, false, riscv_builtin_avail_ztt },
+#define ZTT_BUILTIN_X(NAME, MNEMONIC, PATTERN, FUNCTION_TYPE) \
+	  { "__builtin_riscv_ztt_" #NAME, \
+	    CODE_FOR_riscv_ztt_ ## PATTERN ## _si, RISCV_ZTT_INSN_ ## NAME, \
+	    FUNCTION_TYPE, false, riscv_builtin_avail_ztt32 }, \
+	  { "__builtin_riscv_ztt_" #NAME, \
+	    CODE_FOR_riscv_ztt_ ## PATTERN ## _di, RISCV_ZTT_INSN_ ## NAME, \
+	    FUNCTION_TYPE, false, riscv_builtin_avail_ztt64 },
+#include "riscv-ztt-builtins.def"
+#undef ZTT_BUILTIN_X
+#undef ZTT_BUILTIN
+
+  /* These observers do not modify M/Acc state and need no typed profile.  */
+#define ZTT_READ_CSR(NAME) \
+  RISCV_BUILTIN (ztt_read_ ## NAME ## _si, "ztt_read_" #NAME, \
+		 RISCV_UWORD_FTYPE, ztt_csr32), \
+  RISCV_BUILTIN (ztt_read_ ## NAME ## _di, "ztt_read_" #NAME, \
+		 RISCV_UWORD_FTYPE, ztt_csr64),
+  ZTT_READ_CSR (amenlen)
+  ZTT_READ_CSR (ameudsz)
+#undef ZTT_READ_CSR
+
   DIRECT_BUILTIN (frflags, RISCV_USI_FTYPE, hard_float),
   DIRECT_BUILTIN (fsflags, RISCV_VOID_FTYPE_USI, hard_float),
   RISCV_BUILTIN (pause, "pause", RISCV_VOID_FTYPE, hint_pause),
+
+  /* Append public state helpers without renumbering existing builtins.
+     Unlike selector operations, CSR observers may accompany typed values.  */
+#define ZTT_GET_CSR(NAME) \
+  RISCV_BUILTIN (ztt_read_ ## NAME ## _si, "ztt_get_" #NAME, \
+		 RISCV_SIZE_FTYPE, ztt_csr32), \
+  RISCV_BUILTIN (ztt_read_ ## NAME ## _di, "ztt_get_" #NAME, \
+		 RISCV_SIZE_FTYPE, ztt_csr64),
+  ZTT_GET_CSR (ameown)
+  ZTT_GET_CSR (amestype)
+  ZTT_GET_CSR (amenlen)
+  ZTT_GET_CSR (ameudsz)
+  ZTT_GET_CSR (amefflags)
+  ZTT_GET_CSR (amexsat)
+  ZTT_GET_CSR (amestatus)
+#undef ZTT_GET_CSR
+  { "__builtin_riscv_ztt_acquire", CODE_FOR_riscv_ztt_x_x_si,
+    RISCV_ZTT_INSN_ame_acquire, RISCV_SIZE_FTYPE_SIZE, false,
+    riscv_builtin_avail_ztt32 },
+  { "__builtin_riscv_ztt_acquire", CODE_FOR_riscv_ztt_x_x_di,
+    RISCV_ZTT_INSN_ame_acquire, RISCV_SIZE_FTYPE_SIZE, false,
+    riscv_builtin_avail_ztt64 },
 };
 
 /* Index I is the function declaration for riscv_builtins[I], or null if the
@@ -280,6 +349,7 @@ void
 riscv_init_builtins (void)
 {
   riscv_init_builtin_types ();
+  riscv_ztt::init_builtins ();
   riscv_vector::init_builtins ();
 
   for (size_t i = 0; i < ARRAY_SIZE (riscv_builtins); i++)
@@ -295,7 +365,8 @@ riscv_init_builtins (void)
 				    (i << RISCV_BUILTIN_SHIFT)
 				      + RISCV_BUILTIN_GENERAL,
 				    BUILT_IN_MD, NULL, NULL);
-	  riscv_builtin_decl_index[d->icode] = i;
+	  if (d->ztt_insn < 0)
+	    riscv_builtin_decl_index[d->icode] = i;
 	}
     }
 }
@@ -315,6 +386,9 @@ riscv_builtin_decl (unsigned int code, bool initialize_p ATTRIBUTE_UNUSED)
 
     case RISCV_BUILTIN_VECTOR:
       return riscv_vector::builtin_decl (subcode, initialize_p);
+
+    case RISCV_BUILTIN_ZTT:
+      return riscv_ztt::builtin_decl (subcode, initialize_p);
     }
   return error_mark_node;
 }
@@ -374,6 +448,72 @@ riscv_expand_builtin_direct (enum insn_code icode, rtx target, tree exp,
   return riscv_expand_builtin_insn (icode, opno, ops, has_target_p);
 }
 
+/* Expand a Ztt built-in.  The instruction selector is an internal operand;
+   all remaining operands correspond directly to arguments in EXP.  */
+
+static rtx
+riscv_expand_builtin_ztt (const struct riscv_builtin_description *d,
+			  rtx target, tree exp, bool has_target_p)
+{
+  if (d->ztt_insn == RISCV_ZTT_INSN_ame_acquire
+      || d->ztt_insn == RISCV_ZTT_INSN_ame_release)
+    {
+      riscv_ztt_note_ownership_builtin (EXPR_LOCATION (exp));
+      insn_code icode = d->ztt_insn == RISCV_ZTT_INSN_ame_release
+	? CODE_FOR_riscv_ztt_release
+	: TARGET_64BIT ? CODE_FOR_riscv_ztt_acquire_di
+	: CODE_FOR_riscv_ztt_acquire_si;
+      return riscv_expand_builtin_direct (icode, target, exp, has_target_p);
+    }
+  else
+    riscv_ztt_note_raw_builtin ();
+
+  struct expand_operand ops[MAX_RECOG_OPERANDS];
+  int opno = 0;
+
+  if (has_target_p)
+    create_output_operand (&ops[opno++], target, TYPE_MODE (TREE_TYPE (exp)));
+
+  create_integer_operand (&ops[opno++], d->ztt_insn);
+
+  gcc_assert (opno + call_expr_nargs (exp)
+	      == insn_data[d->icode].n_generator_args);
+  const riscv_ztt::profile_info *profile = riscv_ztt::active_profile ();
+  for (int argno = 0; argno < call_expr_nargs (exp); argno++, opno++)
+    {
+      riscv_prepare_builtin_arg (&ops[opno], exp, argno);
+
+      /* The L0 patterns use these predicates only for M and Acc selectors,
+	 not for control scalars.  Preserve architectural limits without a
+	 profile; a selected profile also bounds explicit register indices.  */
+      if (profile && CONST_INT_P (ops[opno].value))
+	{
+	  auto predicate = insn_data[d->icode].operand[opno].predicate;
+	  unsigned int limit = 0;
+	  const char *kind = nullptr;
+	  if (predicate == const_int5_operand)
+	    {
+	      limit = profile->mregs;
+	      kind = "M";
+	    }
+	  else if (predicate == const_0_15_operand)
+	    {
+	      limit = profile->accregs;
+	      kind = "ACC";
+	    }
+	  if (limit && !IN_RANGE (INTVAL (ops[opno].value), 0, limit - 1))
+	    {
+	      error_at (EXPR_LOCATION (exp),
+			"AME/Ztt %s selector must be in [0, %u] for profile %qs",
+			kind, limit - 1, profile->name);
+	      return has_target_p ? gen_reg_rtx (ops[0].mode) : const0_rtx;
+	    }
+	}
+    }
+
+  return riscv_expand_builtin_insn (d->icode, opno, ops, has_target_p);
+}
+
 /* Implement TARGET_GIMPLE_FOLD_BUILTIN.  */
 
 bool
@@ -392,6 +532,10 @@ riscv_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 
     case RISCV_BUILTIN_VECTOR:
       new_stmt = riscv_vector::gimple_fold_builtin (subcode, gsi, stmt);
+      break;
+
+    case RISCV_BUILTIN_ZTT:
+      new_stmt = NULL;
       break;
     }
 
@@ -416,8 +560,19 @@ riscv_expand_builtin (tree exp, rtx target, rtx subtarget ATTRIBUTE_UNUSED,
     {
       case RISCV_BUILTIN_VECTOR:
 	return riscv_vector::expand_builtin (subcode, exp, target);
+      case RISCV_BUILTIN_ZTT:
+	return riscv_ztt::expand_builtin (subcode, exp, target);
       case RISCV_BUILTIN_GENERAL: {
 	const struct riscv_builtin_description *d = &riscv_builtins[subcode];
+
+	if (d->ztt_insn >= 0)
+	  return riscv_expand_builtin_ztt (d, target, exp, !d->no_target);
+
+	/* An ownership observation can guard typed uses even when this
+	   function does not acquire or release the backend itself.  */
+	if (d->icode == CODE_FOR_riscv_ztt_read_ameown_di
+	    || d->icode == CODE_FOR_riscv_ztt_read_ameown_si)
+	  riscv_ztt_note_ownership_query ();
 
 	return riscv_expand_builtin_direct (d->icode, target, exp, !d->no_target);
       }

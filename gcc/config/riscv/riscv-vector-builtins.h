@@ -176,12 +176,12 @@ enum rvv_builtin_partition
 };
 
 /* Partition encoding for builtin function codes.
-     Bit 0:       RISCV_BUILTIN_VECTOR (class bit)
-     Bits 1-8:    Partition (rvv_builtin_partition enum)
-     Bits 9+:     Index within partition.
+     Bits 0-1:    riscv_builtin_class
+     Bits 2-9:    Partition (rvv_builtin_partition enum)
+     Bits 10+:    Index within partition.
      */
 const unsigned int RVV_EXT_PARTITION_BITS = 8;
-const unsigned int RVV_EXT_PARTITION_SHIFT = 1; /* Class Bit.  */
+const unsigned int RVV_EXT_PARTITION_SHIFT = RISCV_BUILTIN_SHIFT;
 const unsigned int RVV_SUBCODE_SHIFT = RVV_EXT_PARTITION_SHIFT
 				       + RVV_EXT_PARTITION_BITS;
 

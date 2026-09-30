@@ -212,6 +212,30 @@ struct GTY(())  machine_function {
   /* True if RA must be saved because of a far jump.  */
   bool far_jump_used;
 
+  /* True if the function expands an L0 Ztt selector builtin.  */
+  bool ztt_raw_builtin_p;
+
+  /* Ownership queries and changes are not explicit register selectors.  */
+  bool ztt_ownership_builtin_p;
+  location_t ztt_ownership_location;
+  bool ztt_ownership_query_p;
+  bool ztt_ownership_regions_p;
+  bool ztt_regions_caller_owned_p;
+
+  /* Ordinary callees may change every M/ACC datatype descriptor.  */
+  bool ztt_call_boundary_p;
+
+  /* ACC reloads around typed M asm cannot assume a free M scratch group.  */
+  bool ztt_acc_reload_p;
+  rtx ztt_acc_reload_slot;
+
+  /* Latched runtime frame need, including queries made before IRA.  */
+  bool ztt_runtime_frame_p;
+
+  /* Integer descriptor modes used by typed intrinsic expansion.  */
+  unsigned int ztt_rm_mask;
+  bool ztt_non_i8_p;
+
   /* The current frame information, calculated by riscv_compute_frame_info.  */
   struct riscv_frame_info frame;
 
@@ -389,6 +413,18 @@ const enum reg_class riscv_regno_to_class[FIRST_PSEUDO_REGISTER] = {
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
   VD_REGS,	VD_REGS,	VD_REGS,	VD_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  M_REGS,	M_REGS,	M_REGS,	M_REGS,
+  ACC_REGS,	ACC_REGS,	ACC_REGS,	ACC_REGS,
+  ACC_REGS,	ACC_REGS,	ACC_REGS,	ACC_REGS,
+  ACC_REGS,	ACC_REGS,	ACC_REGS,	ACC_REGS,
+  ACC_REGS,	ACC_REGS,	ACC_REGS,	ACC_REGS,
 };
 
 /* RVV costs for VLS vector operations.   */
@@ -1113,6 +1149,8 @@ static const attribute_spec riscv_gnu_attributes[] =
      and are not used externally */
   {"RVV sizeless type", 4, 4, false, true, false, true, NULL, NULL},
   {"RVV type", 0, 0, false, true, false, true, NULL, NULL},
+  {"Ztt sizeless type", 0, 0, false, true, false, true, NULL, NULL},
+  {"Ztt type", 0, 0, false, true, false, true, NULL, NULL},
   /* This attribute is used to declare a function, forcing it to use the
     standard vector calling convention variant.  Syntax:
     __attribute__((riscv_vector_cc)). */
@@ -2764,6 +2802,15 @@ static bool
 riscv_classify_address (struct riscv_address_info *info, rtx x,
 			machine_mode mode, bool strict_p)
 {
+  /* AME memory instructions take a base register without an offset.  */
+  if (riscv_ztt::value_mode_p (mode))
+    {
+      info->type = ADDRESS_REG;
+      info->reg = x;
+      info->offset = const0_rtx;
+      return riscv_valid_base_register_p (x, mode, strict_p);
+    }
+
   if (th_classify_address (info, x, mode, strict_p))
     return true;
 
@@ -2918,7 +2965,8 @@ riscv_address_insns (rtx x, machine_mode mode, bool might_split_p)
 
   /* BLKmode is used for single unaligned loads and stores and should
      not count as a multiword mode. */
-  if (!riscv_vla_mode_p (mode) && mode != BLKmode && might_split_p)
+  if (!riscv_vla_mode_p (mode) && !riscv_ztt::value_mode_p (mode)
+      && mode != BLKmode && might_split_p)
     n += (GET_MODE_SIZE (mode).to_constant () + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
 
   if (addr.type == ADDRESS_LO_SUM)
@@ -3976,6 +4024,35 @@ void
 riscv_legitimize_poly_move (machine_mode mode, rtx dest, rtx tmp, rtx src)
 {
   poly_int64 value = rtx_to_poly_int64 (src);
+  HOST_WIDE_INT ame_factor = value.coeffs[2];
+  if (ame_factor != 0)
+    {
+      gcc_assert (riscv_ztt::runtime_profile_p ());
+      /* a + b*Xv + c*Xm = (a-c) + b*Xv + c*(M_BYTES/16).
+	 The saved size cache is immutable while this frame is active.  */
+      value.coeffs[0] -= ame_factor;
+      value.coeffs[2] = 0;
+      if (value.is_constant ())
+	riscv_emit_move (dest, gen_int_mode (value, mode));
+      else
+	riscv_legitimize_poly_move (mode, dest, tmp,
+				    gen_int_mode (value, mode));
+      rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
+      if (mode != Pmode)
+	{
+	  gcc_assert (can_create_pseudo_p ());
+	  scale = convert_to_mode (mode, scale, 1);
+	  scale = force_reg (mode, scale);
+	}
+      riscv_expand_mult_with_const_int (mode, tmp, scale, ame_factor);
+      riscv_expand_op (PLUS, mode, dest, dest, tmp);
+      return;
+    }
+  if (value.is_constant ())
+    {
+      riscv_emit_move (dest, gen_int_mode (value, mode));
+      return;
+    }
   /* It use HOST_WIDE_INT instead of int since 32bit type is not enough
      for e.g. (const_poly_int:DI [549755813888, 549755813888]).  */
   HOST_WIDE_INT offset = value.coeffs[0];
@@ -4146,7 +4223,7 @@ riscv_legitimize_move (machine_mode mode, rtx dest, rtx src)
 	  return true;
 	}
       poly_int64 value = rtx_to_poly_int64 (src);
-      if (!value.is_constant () && !TARGET_VECTOR)
+      if (value.coeffs[1] != 0 && !TARGET_VECTOR)
 	{
 	  riscv_report_v_required ();
 	  return false;
@@ -5699,6 +5776,75 @@ riscv_split_sum_of_two_s12 (HOST_WIDE_INT val, HOST_WIDE_INT *base,
 }
 
 
+/* Encodings are
+   provisional and are emitted by the assembler rather than by GCC.  */
+/* Keep these templates as immutable strings: final output can retain a
+   returned template while preparing a later instruction.  */
+#define ZTT_ARGS_none ""
+#define ZTT_ARGS_m "\tm%1"
+#define ZTT_ARGS_a "\tacc%1"
+#define ZTT_ARGS_mm "\tm%1,m%2"
+#define ZTT_ARGS_ma "\tm%1,acc%2"
+#define ZTT_ARGS_am "\tacc%1,m%2"
+#define ZTT_ARGS_mmm "\tm%1,m%2,m%3"
+#define ZTT_ARGS_amm "\tacc%1,m%2,m%3"
+#define ZTT_ARGS_mxm "\tm%1,%2,m%3"
+#define ZTT_ARGS_mxx "\tm%1,%2,%3"
+#define ZTT_ARGS_mx "\tm%1,%2"
+#define ZTT_ARGS_ax "\tacc%1,%2"
+#define ZTT_ARGS_x_a "\t%0,acc%2"
+#define ZTT_ARGS_x_m "\t%0,m%2"
+#define ZTT_ARGS_x_m_x "\t%0,m%2,%3"
+#define ZTT_ARGS_x_x "\t%0,%2"
+#define ZTT_ARGS_load "\tm%1,%2"
+#define ZTT_ARGS_store "\tm%1,%2"
+#define ZTT_ARGS_load_strided "\tm%1,(%2),%3"
+#define ZTT_ARGS_store_strided "\tm%1,(%2),%3"
+
+static const char *const riscv_ztt_asm_templates[] = {
+#define ZTT_BUILTIN(NAME, MNEMONIC, PATTERN, FUNCTION_TYPE) \
+  MNEMONIC ZTT_ARGS_ ## PATTERN,
+#define ZTT_BUILTIN_X ZTT_BUILTIN
+#include "riscv-ztt-builtins.def"
+#undef ZTT_BUILTIN_X
+#undef ZTT_BUILTIN
+};
+
+#undef ZTT_ARGS_none
+#undef ZTT_ARGS_m
+#undef ZTT_ARGS_a
+#undef ZTT_ARGS_mm
+#undef ZTT_ARGS_ma
+#undef ZTT_ARGS_am
+#undef ZTT_ARGS_mmm
+#undef ZTT_ARGS_amm
+#undef ZTT_ARGS_mxm
+#undef ZTT_ARGS_mxx
+#undef ZTT_ARGS_mx
+#undef ZTT_ARGS_ax
+#undef ZTT_ARGS_x_a
+#undef ZTT_ARGS_x_m
+#undef ZTT_ARGS_x_m_x
+#undef ZTT_ARGS_x_x
+#undef ZTT_ARGS_load
+#undef ZTT_ARGS_store
+#undef ZTT_ARGS_load_strided
+#undef ZTT_ARGS_store_strided
+
+/* Return the assembly template for a Ztt instruction selected by operand
+   OPCODE_OPERAND.  */
+
+const char *
+riscv_output_ztt_insn (rtx *operands, unsigned int opcode_operand)
+{
+  gcc_assert (CONST_INT_P (operands[opcode_operand]));
+  HOST_WIDE_INT selector = INTVAL (operands[opcode_operand]);
+  gcc_assert (selector >= 0
+	      && (unsigned HOST_WIDE_INT) selector
+		   < ARRAY_SIZE (riscv_ztt_asm_templates));
+  return riscv_ztt_asm_templates[selector];
+}
+
 /* Return the appropriate instructions to move SRC into DEST.  Assume
    that SRC is operand 1 and DEST is operand 0.  */
 
@@ -7773,6 +7919,15 @@ riscv_libcall_value (machine_mode mode, const_rtx fun ATTRIBUTE_UNUSED)
 static bool
 riscv_pass_by_reference (cumulative_args_t cum_v, const function_arg_info &arg)
 {
+  /* The function type checked by riscv_fntype_abi_1 excludes varargs.
+     Do not silently pass a sizeless AME value by address.  */
+  if (!arg.named && arg.type && riscv_ztt::builtin_type_p (arg.type))
+    {
+      error_at (input_location,
+		"AME/Ztt typed values cannot be passed as variadic arguments; "
+		"no AME psABI is defined");
+      return true;
+    }
   HOST_WIDE_INT size = arg.type_size_in_bytes ().to_constant ();
   struct riscv_arg_info info;
   CUMULATIVE_ARGS *cum = get_cumulative_args (cum_v);
@@ -8166,12 +8321,36 @@ riscv_vls_cc_function_abi (const_tree fntype, bool check_only)
   return riscv_get_vls_cc_attr (args);
 }
 
+/* Return true when FNTYPE exposes a typed AME/Ztt value through an ordinary
+   function interface.  No such calling convention is defined for P0.  */
+static bool
+riscv_ztt_function_type_p (const_tree fntype)
+{
+  if (riscv_ztt::builtin_type_p (TREE_TYPE (fntype)))
+    return true;
+
+  for (tree chain = TYPE_ARG_TYPES (fntype);
+       chain && chain != void_list_node; chain = TREE_CHAIN (chain))
+    if (riscv_ztt::builtin_type_p (TREE_VALUE (chain)))
+      return true;
+  return false;
+}
+
 /* Implementation of TARGET_FNTYPE_ABI, but one extra parameter `check_only`
    to suppress warning message.  */
 
 static const predefined_function_abi &
 riscv_fntype_abi_1 (const_tree fntype, bool check_only)
 {
+  if (riscv_ztt_function_type_p (fntype))
+    {
+      if (!check_only)
+	error_at (input_location,
+		  "AME/Ztt typed values cannot be passed to or returned from "
+		  "ordinary functions; no AME psABI is defined");
+      return default_function_abi;
+    }
+
   /* Implement the vector calling convention.  For more details please
      reference the below link.
      https://github.com/riscv-non-isa/riscv-elf-psabi-doc/pull/389  */
@@ -8619,6 +8798,7 @@ riscv_asm_output_opcode (FILE *asm_out_file, const char *p)
    '~'	Print w if TARGET_64BIT is true; otherwise not print anything.
    'N'  Print register encoding as integer (0-31).
    'H'  Print the name of the next register for integer.
+   'q'  Print the register address of an AME whole-register memory operand.
 
    Note please keep this list and the list in riscv.md in sync.  */
 
@@ -8935,6 +9115,15 @@ riscv_print_operand (FILE *file, rtx op, int letter)
 	fputs (reg_names[REGNO (op) + 1], file);
 	break;
       }
+    case 'q':
+      {
+	if (!MEM_P (op) || !REG_P (XEXP (op, 0)))
+	  output_operand_lossage ("invalid AME memory operand for '%%%c'",
+				  letter);
+	else
+	  riscv_print_operand (file, XEXP (op, 0), 0);
+	break;
+      }
     default:
       switch (code)
 	{
@@ -9242,11 +9431,43 @@ riscv_save_return_addr_reg_p (void)
   return false;
 }
 
+/* Scheduling can ask for a
+   frame before hard-register allocation and before the Ztt state pass.
+   Once required, retain the frame through reload and CFI emission.  */
+
+static bool
+riscv_ztt_runtime_frame_p ()
+{
+  if (!riscv_ztt::runtime_profile_p ())
+    return false;
+  if (cfun->machine->ztt_runtime_frame_p)
+    return true;
+
+  bool needed = cfun->machine->ztt_rm_mask != 0
+		|| get_frame_size ().coeffs[2] != 0;
+  for (unsigned int regno = M_REG_FIRST;
+	 !needed && regno <= ACC_REG_LAST; ++regno)
+    needed = df_regs_ever_live_p (regno);
+  for (int regno = FIRST_PSEUDO_REGISTER;
+	 !needed && regno < max_reg_num (); ++regno)
+    if (regno_reg_rtx[regno])
+      needed = riscv_ztt::value_mode_p (GET_MODE (regno_reg_rtx[regno]));
+
+  cfun->machine->ztt_runtime_frame_p = needed;
+  return needed;
+}
+
 /* Return true if the current function must save register REGNO.  */
 
 static bool
 riscv_save_reg_p (unsigned int regno)
 {
+  if (regno == RISCV_ZTT_SCALE_REGNUM && riscv_ztt::runtime_profile_p ()
+      && (riscv_ztt_runtime_frame_p ()
+	  || (!global_regs[regno] && !call_used_regs[regno]
+	      && df_regs_ever_live_p (regno))))
+    return true;
+
   bool call_saved = !global_regs[regno] && !call_used_or_fixed_reg_p (regno);
   bool might_clobber = crtl->saves_all_registers
 		       || df_regs_ever_live_p (regno);
@@ -9616,6 +9837,14 @@ riscv_can_inline_p (tree caller, tree callee)
 
   struct cl_target_option *callee_opts = TREE_TARGET_OPTION (callee_tree);
   struct cl_target_option *caller_opts = TREE_TARGET_OPTION (caller_tree);
+
+  /* Profiles affect opaque
+     layouts and register availability, even for always_inline functions.  */
+  const char *callee_profile = callee_opts->x_riscv_ztt_profile_string;
+  const char *caller_profile = caller_opts->x_riscv_ztt_profile_string;
+  if ((callee_profile == nullptr) != (caller_profile == nullptr)
+      || (callee_profile && strcmp (callee_profile, caller_profile) != 0))
+    return false;
 
   /* Callee and caller should have the same target options.  */
   int callee_target_flags = callee_opts->x_target_flags;
@@ -10030,10 +10259,13 @@ static HOST_WIDE_INT
 riscv_first_stack_step (struct riscv_frame_info *frame, poly_int64 remaining_size)
 {
   HOST_WIDE_INT remaining_const_size;
+  /* Both independent scalable contributions include their constant
+     minimum in coefficient zero.  */
   if (!remaining_size.is_constant ())
     remaining_const_size
       = riscv_stack_align (remaining_size.coeffs[0])
-	- riscv_stack_align (remaining_size.coeffs[1]);
+	- riscv_stack_align (remaining_size.coeffs[1])
+	- riscv_stack_align (remaining_size.coeffs[2]);
   else
     remaining_const_size = remaining_size.to_constant ();
 
@@ -10305,6 +10537,11 @@ riscv_v_adjust_scalable_frame (rtx target, poly_int64 offset, bool epilogue)
 
   insn = emit_insn (insn);
 
+  /* Runtime-N frames keep the CFA in s0; no SP-based polynomial CFA is
+     needed while the private scale cache is live.  */
+  if (offset.coeffs[2] != 0 && frame_pointer_needed)
+    return;
+
   RTX_FRAME_RELATED_P (insn) = 1;
 
   adjust_frame_rtx
@@ -10519,6 +10756,106 @@ riscv_allocate_and_probe_stack_space (rtx temp1, HOST_WIDE_INT size)
 
 /* Expand the "prologue" pattern.  */
 
+static void
+riscv_ztt_initialize_m_registers (void)
+{
+  if (!TARGET_ZTT || !riscv_ztt::typed_profile_p ())
+    return;
+
+  const riscv_ztt::profile_info *profile = riscv_ztt::active_profile ();
+  gcc_assert (profile != nullptr);
+
+  bool any_live = false;
+  for (unsigned int regno = M_REG_FIRST;
+	 regno < M_REG_FIRST + profile->mregs; ++regno)
+    any_live |= df_regs_ever_live_p (regno);
+  for (unsigned int regno = ACC_REG_FIRST; regno <= ACC_REG_LAST; ++regno)
+    any_live |= df_regs_ever_live_p (regno);
+  if (!any_live)
+    return;
+
+  if (cfun->machine->interrupt_handler_p)
+    error_at (DECL_SOURCE_LOCATION (current_function_decl),
+	      "AME/Ztt typed values are not supported in interrupt functions");
+  if (cfun->machine->ztt_raw_builtin_p)
+    error_at (DECL_SOURCE_LOCATION (current_function_decl),
+	      "functions using AME/Ztt typed values cannot mix L0 selector "
+	      "builtins");
+  if (cfun->machine->ztt_ownership_builtin_p
+      && !cfun->machine->ztt_ownership_regions_p)
+    error_at (cfun->machine->ztt_ownership_location,
+	      "AME/Ztt ownership changes in a function using typed values "
+	      "require ownership-region support");
+
+  /* Mixed-RM and non-i8 operations establish their datatype and retain inputs.
+     Generic copies use whole-register memory transfers in that case.  */
+  if (riscv_ztt_explicit_state_p ())
+    return;
+  unsigned int mask = cfun->machine->ztt_rm_mask;
+  unsigned int rm = mask ? ctz_hwi (mask) : 1;
+  rtx descriptor = gen_rtx_REG (Pmode, RISCV_PROLOGUE_TEMP_REGNUM);
+  emit_move_insn (descriptor, GEN_INT (0x40000008U | (rm << 27)));
+  for (unsigned int regno = M_REG_FIRST;
+	 regno < M_REG_FIRST + profile->mregs; ++regno)
+    if (df_regs_ever_live_p (regno))
+      emit_insn (gen_ztt_typed_msettyp_p0
+		 (riscv_ztt::matrix_mode (), Pmode,
+		  gen_rtx_REG (riscv_ztt::matrix_mode (), regno), descriptor));
+  emit_insn (gen_blockage ());
+}
+
+/* Initialize the independent AME size after saving s11 and establishing
+   the fixed CFA.  The experimental runtime profiles require N >= 4.  */
+static void
+riscv_ztt_initialize_runtime_size ()
+{
+  if (!riscv_ztt::runtime_profile_p ())
+    return;
+  bool needed = cfun->machine->frame.total_size.coeffs[2] != 0;
+  for (unsigned int regno = M_REG_FIRST; regno <= ACC_REG_LAST; ++regno)
+    needed |= df_regs_ever_live_p (regno);
+  if (!needed)
+    return;
+
+  unsigned int max_log2
+    = riscv_ztt::runtime_n_max_log2 (TARGET_64BIT ? 64 : 32,
+				   cfun->machine->frame.total_size,
+				   riscv_ztt::active_profile ()->uds);
+  if (max_log2 < 2)
+    {
+      emit_insn (gen_trap ());
+      emit_insn (gen_blockage ());
+      return;
+    }
+
+  /* Validate N before multiplication or dynamic frame allocation.  A
+     non-power-of-two N could otherwise silently round down the footprint.
+     Use an existing prologue scratch: reload has already completed.  */
+  rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
+  rtx temp = RISCV_PROLOGUE_TEMP (Pmode);
+  rtx temp2 = RISCV_PROLOGUE_TEMP2 (Pmode);
+  rtx_code_label *valid = gen_label_rtx ();
+  emit_insn (TARGET_64BIT ? gen_riscv_ztt_read_amenlen_di (scale)
+			: gen_riscv_ztt_read_amenlen_si (scale));
+  riscv_expand_op (PLUS, Pmode, temp, scale, constm1_rtx);
+  riscv_expand_op (AND, Pmode, temp, temp, scale);
+  riscv_expand_op (LSHIFTRT, Pmode, temp2, scale, GEN_INT (2));
+  riscv_expand_op (LTU, Pmode, temp2, temp2, const1_rtx);
+  riscv_expand_op (IOR, Pmode, temp, temp, temp2);
+  riscv_expand_op (LSHIFTRT, Pmode, temp2, scale, GEN_INT (max_log2 + 1));
+  riscv_expand_op (IOR, Pmode, temp, temp, temp2);
+  riscv_expand_conditional_branch (valid, EQ, temp, const0_rtx);
+  JUMP_LABEL (get_last_insn ()) = valid;
+  emit_insn (gen_trap ());
+  emit_label (valid);
+  riscv_expand_op (MULT, Pmode, scale, scale, scale);
+  /* Cache one physical M in 16-byte units, independently of RVV.  */
+  unsigned int shift = 7 - exact_log2 (riscv_ztt::active_profile ()->uds);
+  if (shift != 0)
+    riscv_expand_op (LSHIFTRT, Pmode, scale, scale, GEN_INT (shift));
+  emit_insn (gen_blockage ());
+}
+
 void
 riscv_expand_prologue (void)
 {
@@ -10535,6 +10872,8 @@ riscv_expand_prologue (void)
 
   if (cfun->machine->naked_p)
     return;
+
+  riscv_ztt_initialize_m_registers ();
 
   if (need_shadow_stack_push_pop_p ())
     emit_insn (gen_sspush (Pmode, gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)));
@@ -10652,6 +10991,8 @@ riscv_expand_prologue (void)
     }
 
   /* Save the V registers.  */
+  riscv_ztt_initialize_runtime_size ();
+
   if (frame->vmask != 0)
     riscv_for_each_saved_v_reg (remaining_size, riscv_save_reg, true);
 
@@ -10665,7 +11006,8 @@ riscv_expand_prologue (void)
 	{
 	  /* First for scalable frame.  */
 	  poly_int64 scalable_frame = remaining_size;
-	  scalable_frame.coeffs[0] = remaining_size.coeffs[1];
+	  scalable_frame.coeffs[0]
+	    = remaining_size.coeffs[1] + remaining_size.coeffs[2];
 	  riscv_v_adjust_scalable_frame (stack_pointer_rtx, scalable_frame, false);
 	  remaining_size -= scalable_frame;
 	}
@@ -10870,15 +11212,21 @@ riscv_expand_epilogue (int style)
 	       gen_add3_insn (stack_pointer_rtx, hard_frame_pointer_rtx,
 			      adjust));
 
-      rtx dwarf = NULL_RTX;
-      rtx cfa_adjust_value = gen_rtx_PLUS (Pmode, hard_frame_pointer_rtx,
-					   dwarf_adj);
-      rtx cfa_adjust_rtx = gen_rtx_SET (stack_pointer_rtx, cfa_adjust_value);
-      dwarf = alloc_reg_note (REG_CFA_ADJUST_CFA, cfa_adjust_rtx, dwarf);
+      /* Keep the fixed CFA through the AME and vector-area pops, just as
+	 on the non-alloca path.  Switching to SP here would retain the AME
+	 contribution after its unannotated scalable deallocation.  */
+      if (!riscv_ztt_runtime_frame_p () || !frame_pointer_needed)
+	{
+	  rtx dwarf = NULL_RTX;
+	  rtx cfa_adjust_value = gen_rtx_PLUS (Pmode, hard_frame_pointer_rtx,
+					       dwarf_adj);
+	  rtx cfa_adjust_rtx
+	    = gen_rtx_SET (stack_pointer_rtx, cfa_adjust_value);
+	  dwarf = alloc_reg_note (REG_CFA_ADJUST_CFA, cfa_adjust_rtx, dwarf);
+	  RTX_FRAME_RELATED_P (insn) = 1;
 
-      RTX_FRAME_RELATED_P (insn) = 1;
-
-      REG_NOTES (insn) = dwarf;
+	  REG_NOTES (insn) = dwarf;
+	}
 
       if (sum_of_two_s12)
 	{
@@ -10929,7 +11277,7 @@ riscv_expand_epilogue (int style)
       if (!step1.is_constant ())
 	{
 	  poly_int64 scalable_frame = step1;
-	  scalable_frame.coeffs[0] = step1.coeffs[1];
+	  scalable_frame.coeffs[0] = step1.coeffs[1] + step1.coeffs[2];
 	  riscv_v_adjust_scalable_frame (stack_pointer_rtx, scalable_frame,
 					 true);
 	  step1 -= scalable_frame;
@@ -10960,16 +11308,21 @@ riscv_expand_epilogue (int style)
 	  insn = emit_insn (gen_add3_insn (stack_pointer_rtx,
 					   stack_pointer_rtx,
 					   adjust));
-	  rtx dwarf = NULL_RTX;
-	  rtx cfa_adjust_rtx
-	    = gen_rtx_PLUS (Pmode, stack_pointer_rtx,
-			    gen_int_mode (step2 + libcall_size + multipop_size,
-					  Pmode));
+	  /* Runtime-N frames retain the fixed CFA until s0 is restored,
+	     including while popping a vector callee-save area.  */
+	  if (!riscv_ztt_runtime_frame_p () || !frame_pointer_needed)
+	    {
+	      rtx dwarf = NULL_RTX;
+	      rtx cfa_adjust_rtx
+		= gen_rtx_PLUS (Pmode, stack_pointer_rtx,
+				gen_int_mode (step2 + libcall_size
+					      + multipop_size, Pmode));
 
-	  dwarf = alloc_reg_note (REG_CFA_DEF_CFA, cfa_adjust_rtx, dwarf);
-	  RTX_FRAME_RELATED_P (insn) = 1;
+	      dwarf = alloc_reg_note (REG_CFA_DEF_CFA, cfa_adjust_rtx, dwarf);
+	      RTX_FRAME_RELATED_P (insn) = 1;
 
-	  REG_NOTES (insn) = dwarf;
+	      REG_NOTES (insn) = dwarf;
+	    }
 	}
     }
   else if (frame_pointer_needed)
@@ -11006,6 +11359,11 @@ riscv_expand_epilogue (int style)
 
   /* Restore the registers.  */
   riscv_for_each_saved_v_reg (step2, riscv_restore_reg, false);
+  /* A purely scalable Ztt frame keeps CFA based on s0.  Switch to SP
+     when restoring s0, after STEP2 excludes the restored vector area.  */
+  if (riscv_ztt_runtime_frame_p () && frame_pointer_needed)
+    epilogue_cfa_sp_offset = step2;
+
   riscv_for_each_saved_reg (frame->total_size - step2 - libcall_size
 			      - multipop_size,
 			    riscv_restore_reg, true, style == EXCEPTION_RETURN,
@@ -11474,9 +11832,14 @@ static bool
 riscv_secondary_memory_needed (machine_mode mode, reg_class_t class1,
 			       reg_class_t class2)
 {
+  if (riscv_ztt::m_mode_p (mode)
+      && class1 == M_REGS && class2 == M_REGS
+      && (riscv_ztt::m_nregs (mode) > 1 || riscv_ztt_explicit_state_p ()))
+    return true;
   bool class1_is_fpr = reg_class_subset_p (class1, FP_REGS);
   bool class2_is_fpr = reg_class_subset_p (class2, FP_REGS);
   return (!riscv_vector_mode_p (mode)
+	  && !riscv_ztt::value_mode_p (mode)
 	  && GET_MODE_SIZE (mode).to_constant () > UNITS_PER_WORD
 	  && (class1_is_fpr != class2_is_fpr)
 	  && !TARGET_XTHEADFMV
@@ -11489,6 +11852,11 @@ int
 riscv_register_move_cost (machine_mode mode,
 			  reg_class_t from, reg_class_t to)
 {
+  /* ACC copies need early-clobber scratches, including borrowed-bank moves.
+     A cost of 2 tells LRA to skip their constraint and reload processing.  */
+  if (riscv_ztt::acc_mode_p (mode))
+    return 8;
+
   bool from_is_fpr = reg_class_subset_p (from, FP_REGS);
   bool from_is_gpr = reg_class_subset_p (from, GR_REGS);
   bool to_is_fpr = reg_class_subset_p (to, FP_REGS);
@@ -11524,6 +11892,16 @@ riscv_register_move_cost (machine_mode mode,
 unsigned int
 riscv_hard_regno_nregs (unsigned int regno, machine_mode mode)
 {
+  /* The runtime byte scale cancels here.  Other register banks reject
+     these opaque modes in hard_regno_mode_ok.  */
+  if (riscv_ztt::m_mode_p (mode))
+    return riscv_ztt::m_nregs (mode);
+  if (riscv_ztt::acc_mode_p (mode))
+    return riscv_ztt::acc_nregs (mode);
+
+  if (M_REG_P (regno) || ACC_REG_P (regno))
+    return 1;
+
   if (riscv_vla_mode_p (mode))
     {
       /* Handle fractional LMUL, it only occupy part of vector register but
@@ -11584,7 +11962,21 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
 {
   unsigned int nregs = riscv_hard_regno_nregs (regno, mode);
 
-  if (GP_REG_P (regno))
+  if (M_REG_P (regno))
+    return (riscv_ztt::m_mode_p (mode)
+	    && riscv_ztt::typed_profile_p ()
+	    && mode == riscv_ztt::matrix_mode (nregs)
+	    && (regno - M_REG_FIRST) % nregs == 0
+	    && regno + nregs <= M_REG_FIRST
+				+ riscv_ztt::active_profile ()->mregs);
+  else if (ACC_REG_P (regno))
+    return (riscv_ztt::acc_mode_supported_p (mode)
+	    && (regno - ACC_REG_FIRST) % nregs == 0
+	    && regno + nregs <= ACC_REG_FIRST
+				+ riscv_ztt::active_profile ()->accregs);
+  else if (riscv_ztt::value_mode_p (mode))
+    return false;
+  else if (GP_REG_P (regno))
     {
       if (riscv_vector_mode_p (mode))
 	return false;
@@ -11655,6 +12047,9 @@ riscv_hard_regno_mode_ok (unsigned int regno, machine_mode mode)
 static bool
 riscv_modes_tieable_p (machine_mode mode1, machine_mode mode2)
 {
+  if (riscv_ztt::value_mode_p (mode1) || riscv_ztt::value_mode_p (mode2))
+    return mode1 == mode2;
+
   /* We don't allow different REG_CLASS modes tieable since it
      will cause ICE in register allocation (RA).
      E.g. V2SI and DI are not tieable.  */
@@ -11705,6 +12100,12 @@ riscv_class_max_nregs (reg_class_t rclass, machine_mode mode)
 
   if (reg_class_subset_p (rclass, V_REGS))
     return riscv_hard_regno_nregs (V_REG_FIRST, mode);
+
+  if (reg_class_subset_p (rclass, M_REGS))
+    return riscv_ztt::m_nregs (mode);
+
+  if (reg_class_subset_p (rclass, ACC_REGS))
+    return riscv_ztt::acc_nregs (mode);
 
   return 0;
 }
@@ -12284,6 +12685,127 @@ riscv_init_machine_status (void)
   return ggc_cleared_alloc<machine_function> ();
 }
 
+/* Record that the current function contains an L0 selector builtin.  Those
+   patterns hide explicit AME register effects and therefore cannot be
+   mixed with compiler-managed typed values in P0.  */
+
+void
+riscv_ztt_note_raw_builtin (void)
+{
+  gcc_assert (cfun && cfun->machine);
+  cfun->machine->ztt_raw_builtin_p = true;
+}
+
+/* Keep ownership transitions separate from register-selector operations,
+   including legacy and size_t entry points.  Recomputed in RTL expansion
+   after inlining and LTO; the region passes prove access separately.  */
+void
+riscv_ztt_note_ownership_builtin (location_t loc)
+{
+  gcc_assert (cfun && cfun->machine);
+  if (!cfun->machine->ztt_ownership_builtin_p)
+    cfun->machine->ztt_ownership_location
+      = loc == UNKNOWN_LOCATION
+      ? DECL_SOURCE_LOCATION (current_function_decl) : loc;
+  cfun->machine->ztt_ownership_builtin_p = true;
+}
+
+bool
+riscv_ztt_ownership_p ()
+{
+  return cfun && cfun->machine->ztt_ownership_builtin_p;
+}
+
+void
+riscv_ztt_note_ownership_query ()
+{
+  cfun->machine->ztt_ownership_query_p = true;
+}
+
+bool
+riscv_ztt_ownership_query_p ()
+{
+  return cfun && cfun->machine->ztt_ownership_query_p;
+}
+
+bool
+riscv_ztt_ownership_regions_p ()
+{
+  return cfun && cfun->machine->ztt_ownership_regions_p;
+}
+
+bool
+riscv_ztt_regions_caller_owned_p ()
+{
+  return cfun && cfun->machine->ztt_regions_caller_owned_p;
+}
+
+void
+riscv_ztt_note_ownership_regions (bool caller_owned)
+{
+  cfun->machine->ztt_ownership_regions_p = true;
+  cfun->machine->ztt_regions_caller_owned_p = caller_owned;
+}
+
+/* Recomputed during RTL expansion,
+   including LTO and inlined bodies; not a translation-unit mode switch.  */
+void
+riscv_ztt_note_descriptor (unsigned int descriptor)
+{
+  gcc_assert (cfun);
+  cfun->machine->ztt_rm_mask |= 1U << ((descriptor >> 27) & 3);
+  cfun->machine->ztt_non_i8_p |= (descriptor & ~(3U << 27)) != 0x40000008U;
+}
+
+bool
+riscv_ztt_explicit_state_p ()
+{
+  if (!cfun)
+    return false;
+  unsigned int mask = cfun->machine->ztt_rm_mask;
+  return (riscv_ztt::typed_profile_p ()
+	  && riscv_ztt::active_profile ()->uds != 8)
+	 || cfun->machine->ztt_non_i8_p || (mask & (mask - 1)) != 0
+	 || cfun->machine->ztt_call_boundary_p
+	 || cfun->machine->ztt_acc_reload_p
+	 || cfun->machine->ztt_ownership_builtin_p
+	 || cfun->machine->ztt_ownership_query_p;
+}
+
+void
+riscv_ztt_note_call_boundary ()
+{
+  cfun->machine->ztt_call_boundary_p = true;
+}
+
+void
+riscv_ztt_note_acc_reload ()
+{
+  cfun->machine->ztt_acc_reload_p = true;
+}
+
+bool
+riscv_ztt_acc_reload_p ()
+{
+  return cfun && cfun->machine->ztt_acc_reload_p;
+}
+
+/* Allocate only if LRA actually needs the preservation path.  The slot is
+   private to this function and reusable between indivisible ACC moves.  */
+rtx
+riscv_ztt_acc_reload_slot ()
+{
+  gcc_assert (riscv_ztt_acc_reload_p ());
+  rtx &slot = cfun->machine->ztt_acc_reload_slot;
+  if (!slot)
+    {
+      machine_mode mode
+	= riscv_ztt::matrix_mode (riscv_ztt::active_profile ()->mregs);
+      slot = assign_stack_local (mode, GET_MODE_SIZE (mode), 128);
+    }
+  return slot;
+}
+
 /* Return the VLEN value associated with -march and -mrvv-vector-bits.
    TODO: So far we only support length-agnostic value. */
 static poly_uint16
@@ -12352,6 +12874,8 @@ void
 riscv_override_options_internal (struct gcc_options *opts)
 {
   const struct riscv_tune_info *cpu;
+
+  riscv_ztt::validate_profile (opts);
 
   /* The presence of the M extension implies that division instructions
      are present, so include them unless explicitly disabled.
@@ -12428,10 +12952,8 @@ riscv_override_options_internal (struct gcc_options *opts)
   if (opts->x_riscv_branch_cost == 0)
     opts->x_riscv_branch_cost = tune_param->branch_cost;
 
-  /* FIXME: We don't allow TARGET_MIN_VLEN > 4096 since the datatypes of
-     both GET_MODE_SIZE and GET_MODE_BITSIZE are poly_uint16.
-
-     We can only allow TARGET_MIN_VLEN * 8 (LMUL) < 65535.  */
+  /* Keep the existing VLEN limit until GET_MODE_SIZE and RVV byte-size
+     consumers have been audited independently of the wider bit-size type.  */
   if (TARGET_MIN_VLEN_OPTS (opts) > 4096)
     sorry ("Current RISC-V GCC does not support VLEN greater than 4096bit for "
 	   "'V' Extension");
@@ -12805,6 +13327,26 @@ riscv_conditional_register_usage (void)
       fixed_regs[VXRM_REGNUM] = call_used_regs[VXRM_REGNUM] = 1;
       fixed_regs[FRM_REGNUM] = call_used_regs[FRM_REGNUM] = 1;
     }
+
+  for (int regno = M_REG_FIRST; regno <= ACC_REG_LAST; ++regno)
+    fixed_regs[regno] = call_used_regs[regno] = 1;
+
+  if (riscv_ztt::runtime_profile_p ())
+    fixed_regs[RISCV_ZTT_SCALE_REGNUM] = 1;
+
+  if (TARGET_ZTT && riscv_ztt::typed_profile_p ())
+    for (int regno = M_REG_FIRST;
+	 regno < M_REG_FIRST
+		 + (int) riscv_ztt::active_profile ()->mregs; ++regno)
+      fixed_regs[regno] = 0;
+
+  /* Free the pool only
+     when at least one supported copy/reload mode fits the profile;
+     hard_regno_mode_ok still checks each complete value's span.  */
+  if (TARGET_ZTT && riscv_ztt::acc_profile_p ())
+    for (unsigned int regno = ACC_REG_FIRST;
+	 regno < ACC_REG_FIRST + riscv_ztt::active_profile ()->accregs; ++regno)
+      fixed_regs[regno] = 0;
 }
 
 /* Return a register priority for hard reg REGNO.  */
@@ -13310,9 +13852,16 @@ riscv_reorg (void)
    TO_REGNO.  */
 
 bool
-riscv_hard_regno_rename_ok (unsigned from_regno ATTRIBUTE_UNUSED,
-			    unsigned to_regno)
+riscv_hard_regno_rename_ok (unsigned from_regno, unsigned to_regno)
 {
+  /* The typed Ztt prologue initializes the datatype state associated with
+     each allocated M register.  Register renaming happens after prologue
+     expansion, so moving an M value to a previously unused hard register
+     would bypass that register's msettyp.  */
+  if (M_REG_P (from_regno) || M_REG_P (to_regno)
+      || ACC_REG_P (from_regno) || ACC_REG_P (to_regno))
+    return false;
+
   /* Interrupt functions can only use registers that have already been
      saved by the prologue, even if they would normally be
      call-clobbered.  */
@@ -13467,7 +14016,11 @@ riscv_mangle_type (const_tree type)
      that is "u" + length of (abi_name) + abi_name. */
   if (TYPE_NAME (type) != NULL)
     {
-      const char *res = riscv_vector::mangle_builtin_type (type);
+      const char *res = riscv_ztt::mangle_builtin_type (type);
+      if (res)
+	return res;
+
+      res = riscv_vector::mangle_builtin_type (type);
       if (res)
 	return res;
     }
@@ -13643,6 +14196,8 @@ static bool
 riscv_verify_type_context (location_t loc, type_context_kind context,
 			   const_tree type, bool silent_p)
 {
+  if (!riscv_ztt::verify_type_context (loc, context, type, silent_p))
+    return false;
   return riscv_vector::verify_type_context (loc, context, type, silent_p);
 }
 
@@ -13669,6 +14224,14 @@ riscv_vector_alignment (const_tree type)
 poly_uint64
 riscv_regmode_natural_size (machine_mode mode)
 {
+  if (riscv_ztt::acc_mode_p (mode))
+    return GET_MODE_SIZE (mode);
+  if (riscv_ztt::m_mode_p (mode))
+    /* A concatenated value
+       can be defined one complete hardware operand at a time.  A subreg
+       write must not implicitly clobber the remaining physical M slots.  */
+    return exact_div (GET_MODE_SIZE (mode), riscv_ztt::m_nregs (mode));
+
   /* The natural size for RVV data modes is one RVV data vector,
      and similarly for predicates.  We can't independently modify
      anything smaller than that.  */
@@ -13695,6 +14258,12 @@ static unsigned int
 riscv_dwarf_poly_indeterminate_value (unsigned int i, unsigned int *factor,
 				      int *offset)
 {
+  if (i == 2)
+    {
+      *factor = 1;
+      *offset = 1;
+      return RISCV_ZTT_SCALE_REGNUM;
+    }
   /* Polynomial invariant 1 == (VLENB / BYTES_PER_RISCV_VECTOR) - 1.
      1. TARGET_MIN_VLEN == 32, polynomial invariant 1 == (VLENB / 4) - 1.
      2. TARGET_MIN_VLEN > 32, polynomial invariant 1 == (VLENB / 8) - 1.
@@ -13718,9 +14287,12 @@ static HOST_WIDE_INT
 riscv_estimated_poly_value (poly_int64 val,
 			    poly_value_estimate_kind kind = POLY_VALUE_LIKELY)
 {
+  /* N=32 is a cost heuristic only; it never determines actual storage.  */
+  HOST_WIDE_INT ame = val.coeffs[2] * (kind == POLY_VALUE_MIN ? 0 : 63);
+  val.coeffs[2] = 0;
   if (TARGET_VECTOR)
-    return riscv_vector::estimated_poly_value (val, kind);
-  return default_estimated_poly_value (val, kind);
+    return ame + riscv_vector::estimated_poly_value (val, kind);
+  return ame + default_estimated_poly_value (val, kind);
 }
 
 /* Return true if the vector misalignment factor is supported by the
@@ -14346,7 +14918,8 @@ riscv_vectorize_vec_perm_const (machine_mode vmode, machine_mode op_mode,
 static bool
 riscv_frame_pointer_required (void)
 {
-  return riscv_save_frame_pointer && !crtl->is_leaf;
+  return riscv_ztt_runtime_frame_p ()
+	 || (riscv_save_frame_pointer && !crtl->is_leaf);
 }
 
 /* Return the appropriate common costs according to VECTYPE from COSTS.  */

@@ -126,6 +126,25 @@ extern bool riscv_split_64bit_move_p (rtx, rtx);
 extern void riscv_split_doubleword_move (rtx, rtx);
 extern void riscv_split_quadword_move (rtx, rtx);
 extern const char *riscv_output_move (rtx, rtx);
+extern const char *riscv_output_ztt_insn (rtx *, unsigned int);
+extern void riscv_ztt_note_raw_builtin (void);
+extern void riscv_ztt_note_call_boundary (void);
+extern void riscv_ztt_note_acc_reload (void);
+extern bool riscv_ztt_acc_reload_p (void);
+extern rtx riscv_ztt_acc_reload_slot (void);
+extern void riscv_ztt_note_ownership_builtin (location_t);
+extern void riscv_ztt_note_ownership_query (void);
+extern bool riscv_ztt_ownership_p (void);
+extern bool riscv_ztt_ownership_query_p (void);
+extern bool riscv_ztt_ownership_regions_p (void);
+extern bool riscv_ztt_regions_caller_owned_p (void);
+extern void riscv_ztt_note_ownership_regions (bool);
+extern bool riscv_ztt_ownership_operation_p (rtx);
+extern rtl_opt_pass *make_pass_ztt_regions (gcc::context *);
+extern rtl_opt_pass *make_pass_ztt_verify_regions (gcc::context *);
+extern void riscv_ztt_note_descriptor (unsigned int);
+extern bool riscv_ztt_explicit_state_p ();
+extern rtl_opt_pass *make_pass_ztt_state (gcc::context *);
 extern const char *riscv_output_return ();
 extern void riscv_declare_function_name (FILE *, const char *, tree);
 extern void riscv_declare_function_size (FILE *, const char *, tree);
@@ -832,20 +851,127 @@ bool riscv_v_widen_non_overlap_constraint_ok (unsigned int, machine_mode,
 					      unsigned int, machine_mode);
 }
 
-/* We classify builtin types into two classes:
-   1. General builtin class which is defined in riscv_builtins.
-   2. Vector builtin class which is a special builtin architecture
-      that implement intrinsic short into "pragma".  */
+/* We classify builtin types into three classes:
+   1.  General builtin class which is defined in riscv_builtins.
+   2.  Vector builtin class which is a special builtin architecture
+      that implements intrinsic shorthand through a pragma.
+   3.  AME/Ztt typed builtins registered by the experimental Ztt pragma.  */
 enum riscv_builtin_class
 {
   RISCV_BUILTIN_GENERAL,
-  RISCV_BUILTIN_VECTOR
+  RISCV_BUILTIN_VECTOR,
+  RISCV_BUILTIN_ZTT
 };
 
-const unsigned int RISCV_BUILTIN_SHIFT = 1;
+const unsigned int RISCV_BUILTIN_SHIFT = 2;
 
 /* Mask that selects the riscv_builtin_class part of a function code.  */
 const unsigned int RISCV_BUILTIN_CLASS = (1 << RISCV_BUILTIN_SHIFT) - 1;
+
+namespace riscv_ztt {
+struct profile_info
+{
+  const char *name;
+  unsigned int nelem;
+  unsigned int n;
+  unsigned int uds;
+  unsigned int mregs;
+  unsigned int accregs;
+};
+
+bool profile_selected_p ();
+bool p0_profile_p ();
+bool runtime_profile_p ();
+bool typed_profile_p ();
+machine_mode matrix_mode (unsigned int = 1);
+unsigned int m_nregs (machine_mode);
+void split_group_move (rtx *);
+const char *output_group_state (rtx *, const char *);
+const char *output_memory_store (rtx *);
+unsigned int memory_store_length (machine_mode);
+bool m_mode_p (machine_mode);
+bool acc_profile_p ();
+bool acc_mode_supported_p (machine_mode);
+unsigned int acc_m_nregs (machine_mode);
+unsigned int acc_transfer_accs (machine_mode);
+unsigned int acc_full_m_nregs (machine_mode);
+bool acc_shape_supported_p (unsigned int, unsigned int, unsigned int,
+			    unsigned int);
+unsigned int acc_nregs (machine_mode);
+bool acc_mode_p (machine_mode);
+const char *output_acc_move (rtx *);
+const char *output_acc_borrowed_move (rtx *);
+unsigned int acc_borrowed_move_length (rtx *);
+const char *output_acc_state (rtx *, bool, bool = false);
+unsigned int acc_mmul_length (rtx *);
+const char *output_acc_clear (rtx *, bool);
+const char *output_acc_to_m (rtx *);
+bool value_mode_p (machine_mode);
+const profile_info *active_profile ();
+void validate_profile (struct gcc_options *);
+unsigned int runtime_n_max_log2 (unsigned int, poly_int64, unsigned int = 8);
+unsigned int m_shape_nregs (unsigned int, unsigned int, unsigned int,
+			   unsigned int);
+unsigned int shape_nregs (unsigned int, unsigned int, unsigned int);
+unsigned int pack_datatype_steps (unsigned int, unsigned int, unsigned int = 0);
+unsigned int datatype_step (unsigned int, unsigned int);
+/* Acc is excluded from
+   instruction operand formation; whole inputs and one step differ.  */
+struct matmul_formation
+{
+  unsigned int squares_per_insn;
+  unsigned int insns;
+  unsigned int lhs_nregs;
+  unsigned int rhs_nregs;
+  unsigned int lhs_step;
+  unsigned int rhs_step;
+};
+bool form_matmul (unsigned int, unsigned int, unsigned int, unsigned int,
+		  matmul_formation &);
+/* Unlike matmul, the M
+   destination participates in elementwise operand formation.  */
+struct elementwise_formation
+{
+  unsigned int squares_per_insn;
+  unsigned int insns;
+  unsigned int nregs[3];
+  unsigned int step[3];
+};
+bool form_elementwise (unsigned int, unsigned int, unsigned int, unsigned int,
+		       unsigned int, elementwise_formation &);
+#if CHECKING_P
+void run_wide_signature_selftests ();
+#endif
+const char *output_elementwise_state (rtx *, bool);
+unsigned int elementwise_length (rtx *, bool);
+const char *output_indexed_state (rtx *);
+const char *output_zip_state (rtx *);
+unsigned int zip_length (rtx *);
+const char *output_zip_value_state (rtx *);
+unsigned int zip_value_length (rtx *);
+unsigned int indexed_length (rtx *);
+const char *output_ternary_state (rtx *);
+unsigned int ternary_length (rtx *);
+const char *output_scalar_ternary_state (rtx *);
+unsigned int scalar_ternary_length (rtx *);
+const char *output_conversion_state (rtx *);
+const char *output_structural_state (rtx *);
+unsigned int conversion_length (rtx *);
+const char *output_rowcol_state (rtx *);
+unsigned int rowcol_length (rtx *);
+void init_builtins ();
+void handle_pragma_ztt ();
+tree builtin_decl (unsigned int, bool);
+tree resolve_overloaded_builtin (location_t, unsigned int, vec<tree, va_gc> *);
+rtx expand_builtin (unsigned int, tree, rtx);
+bool check_builtin_arguments (location_t, unsigned int, vec<tree, va_gc> *);
+bool check_builtin_call (location_t, unsigned int, tree, unsigned int, tree *);
+const char *mangle_builtin_type (const_tree);
+bool builtin_type_p (const_tree);
+#ifdef GCC_TARGET_H
+bool verify_type_context (location_t, type_context_kind, const_tree, bool);
+#endif
+}
 
 /* Routines implemented in riscv-string.cc.  */
 extern bool riscv_expand_strcmp (rtx, rtx, rtx, rtx, rtx);

@@ -18,6 +18,34 @@ riscv-builtins.o: $(srcdir)/config/riscv/riscv-builtins.cc $(CONFIG_H) \
 	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
 		$(srcdir)/config/riscv/riscv-builtins.cc
 
+riscv-ztt-regions.o: $(srcdir)/config/riscv/riscv-ztt-regions.cc \
+  $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(RTL_H) $(TREE_H) \
+  $(TM_P_H) $(BASIC_BLOCK_H) $(FUNCTION_H) $(REGS_H) $(RECOG_H) \
+  $(EMIT_RTL_H) insn-config.h rtl-iter.h tree-pass.h df.h cfgrtl.h \
+  diagnostic-core.h
+	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+		$(srcdir)/config/riscv/riscv-ztt-regions.cc
+
+riscv-ztt-builtins.o: $(srcdir)/config/riscv/riscv-ztt-builtins.cc \
+  $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(RTL_H) $(TREE_H) \
+  memmodel.h insn-codes.h $(OPTABS_H) $(RECOG_H) $(DIAGNOSTIC_CORE_H) \
+  $(EXPR_H) $(BASIC_BLOCK_H) $(FUNCTION_H) builtins.h fold-const.h explow.h \
+  $(EMIT_RTL_H) stor-layout.h stringpool.h langhooks.h attribs.h $(TM_P_H) \
+  backend.h regs.h \
+  $(srcdir)/config/riscv/riscv-ztt-profile.def \
+  $(srcdir)/config/riscv/riscv-ztt-types.def \
+  $(srcdir)/config/riscv/riscv-ztt-operations.def \
+  $(srcdir)/config/riscv/riscv-ztt-intrinsics.def \
+  $(srcdir)/config/riscv/riscv-ztt-wide-intrinsics.def \
+  $(srcdir)/config/riscv/riscv-ztt-int-intrinsics.def \
+  $(srcdir)/config/riscv/riscv-ztt-fp-intrinsics.def \
+  $(srcdir)/config/riscv/riscv-ztt-exponent-scalar.def \
+  $(srcdir)/config/riscv/riscv-ztt-memory128.def \
+  $(srcdir)/config/riscv/riscv-ztt-zip-value.def \
+  $(srcdir)/config/riscv/riscv-ztt-catalog-iterators.h
+	$(COMPILER) -c $(ALL_COMPILERFLAGS) $(ALL_CPPFLAGS) $(INCLUDES) \
+		$(srcdir)/config/riscv/riscv-ztt-builtins.cc
+
 riscv-vector-builtins.o: $(srcdir)/config/riscv/riscv-vector-builtins.cc \
   $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(TREE_H) $(RTL_H) $(TM_P_H) \
   memmodel.h insn-codes.h $(OPTABS_H) $(RECOG_H) $(DIAGNOSTIC_H) $(EXPR_H) \

@@ -149,6 +149,274 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
     builtin_define_with_int_value ("__riscv_th_v_intrinsic",
 				   riscv_ext_version_value (0, 11));
 
+  if (TARGET_ZTT && TARGET_ZICSR)
+    builtin_define ("__riscv_ztt_runtime_queries");
+
+  if (TARGET_ZTT && riscv_ztt::typed_profile_p ())
+    {
+      const riscv_ztt::profile_info *profile = riscv_ztt::active_profile ();
+      gcc_assert (profile != nullptr);
+
+      /* Experimental interface version 0.2.2: major * 1000000
+	 + minor * 1000 + patch.  */
+      builtin_define_with_int_value ("__riscv_ztt_intrinsic", 2002);
+      /* Provisional v0.2.4 clear/zero names for the single-M i8_rne
+	 subset, not a claim of complete v0.2.4 interface support.  */
+      if (profile->uds == 8)
+	{
+	  builtin_define_with_int_value ("__riscv_ztt_i8_rne_1x1_clear_zero", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_i8_1x1_irm", 15);
+	  builtin_define_with_int_value ("__riscv_ztt_u8_1x1_irm", 15);
+	}
+      if (profile->uds <= 16)
+	builtin_define_with_int_value ("__riscv_ztt_i16_u16_1x1_irm", 15);
+      if (profile->uds <= 32)
+	builtin_define_with_int_value ("__riscv_ztt_i32_u32_1x1_irm", 15);
+      /* Bits 0..10
+	 describe 1x1, 1x2, 2x1, 1x4, 4x1, 1x8, 8x1, 1x16, 16x1,
+	 1x32, 32x1 for all four integer RMs.  */
+      const unsigned int squares[] = { 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32 };
+      for (unsigned int bits : { 8U, 16U, 32U })
+	{
+	  unsigned int mask = 0;
+	  for (unsigned int i = 0; i < ARRAY_SIZE (squares); ++i)
+	    if ((riscv_ztt::runtime_profile_p () || i == 0)
+		&& riscv_ztt::m_shape_nregs
+		     (bits, squares[i], profile->uds,
+		      riscv_ztt::runtime_profile_p () ? profile->mregs : 4))
+	      mask |= 1U << i;
+	  char name[64];
+	  snprintf (name, sizeof (name), "__riscv_ztt_i%u_u%u_shapes", bits, bits);
+	  builtin_define_with_int_value (name, mask);
+	}
+      builtin_define_with_int_value ("__riscv_ztt_profile",
+				     riscv_ztt::runtime_profile_p () ? 2 : 1);
+      /* legal M types only.  */
+      builtin_define_with_int_value ("__riscv_ztt_mcopy_m2m", 1);
+      /* same integer T/RM/shape.  */
+      builtin_define_with_int_value ("__riscv_ztt_msub_ew_int_same", 1);
+      /* identical integer Md.  */
+      builtin_define_with_int_value ("__riscv_ztt_mmin_ew_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmax_ew_int_same", 1);
+      /* identical integer Md.  */
+      builtin_define_with_int_value ("__riscv_ztt_mand_ew_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mandnot_ew_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mor_ew_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mornot_ew_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mxor_ew_int_same", 1);
+      /* independent integer
+	 types, complete M shapes and size_t scalar shift controls.  */
+      builtin_define_with_int_value ("__riscv_ztt_shift_int_mixed", 1);
+      /* independent integer
+	 M sources and destination, identical logical shape.  */
+      builtin_define_with_int_value ("__riscv_ztt_mmul_ew_int_mixed", 1);
+      /* independent integer
+	 matrix datatypes, one final destination conversion.  */
+      builtin_define_with_int_value ("__riscv_ztt_madd_ew_int_mixed", 1);
+      builtin_define_with_int_value ("__riscv_ztt_msub_ew_int_mixed", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mabsdiff_ew_int_mixed", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mhdiff_ew_int_mixed", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmean_ew_int_mixed", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmulneg_ew_int_mixed", 1);
+      /* explicit integer TC,
+	 scalar conversion to TB, and compiler-managed amestype.  */
+      builtin_define_with_int_value ("__riscv_ztt_madd_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_msub_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mabsdiff_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mhdiff_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmean_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmul_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmulneg_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmin_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmax_ew_x_int", 1);
+      /* scalar TC converts
+	 to the identical integer matrix source/result datatype.  */
+      builtin_define_with_int_value ("__riscv_ztt_mand_ew_x_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mandnot_ew_x_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mor_ew_x_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mornot_ew_x_int_same", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mxor_ew_x_int_same", 1);
+      /* source and result
+	 have independent integer datatypes, but identical logical shape.  */
+      builtin_define_with_int_value ("__riscv_ztt_mconv_ew_int", 1);
+      /* magnitude before
+	 destination conversion, with independently typed integer sources.  */
+      builtin_define_with_int_value ("__riscv_ztt_mabs_ew_int", 1);
+      /* old destination
+	 is an exact-type input to each complete integer expression.  */
+      builtin_define_with_int_value ("__riscv_ztt_mmulacc_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmulaccneg_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmuladd_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmulsub_ew_int", 1);
+      /* scalar old-D forms.  */
+      builtin_define_with_int_value ("__riscv_ztt_mmulacc_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmulaccneg_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmuladd_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mmulsub_ew_x_int", 1);
+      /* ordered comparison
+	 and representation-preserving conditional selection.  */
+      builtin_define_with_int_value ("__riscv_ztt_mcmovge_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcmovlt_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcmpge_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcmpge_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcmplt_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcmplt_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mselge_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_msellt_ew_int", 1);
+      /* These flags cover
+	 value management, not wide arithmetic or every logical shape.  */
+      if (riscv_ztt::active_profile ()->uds >= 16)
+	builtin_define_with_int_value ("__riscv_ztt_wide64_values", 1);
+      if (riscv_ztt::active_profile ()->uds >= 32)
+	builtin_define_with_int_value ("__riscv_ztt_wide128_values", 1);
+      /* Matrix arithmetic
+	 only: data-scalar and matmul signatures have separate gates.  */
+      if (riscv_ztt::active_profile ()->uds >= 16)
+	builtin_define_with_int_value ("__riscv_ztt_wide_matrix_int", 1);
+      /* Wide TC needs no
+	 wide M value; destination/source formation is checked separately.  */
+      builtin_define_with_int_value ("__riscv_ztt_wide_scalar_int", 1);
+      /* Six matmul variants;
+	 complete input and output values must each fit the active profile.  */
+      if (riscv_ztt::runtime_profile_p ()
+	  && riscv_ztt::active_profile ()->uds >= 16)
+	builtin_define_with_int_value ("__riscv_ztt_wide_matmul_int", 63);
+      /* Complete values and
+	 unary and matrix operations; no i4 C scalar or memory interfaces.  */
+      if (riscv_ztt::runtime_profile_p ())
+	{
+	  builtin_define_with_int_value ("__riscv_ztt_integer_kinds_values", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_integer_kinds_unary", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_integer_kinds_matrix", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_integer_kinds_matmul", 63);
+	  builtin_define_with_int_value ("__riscv_ztt_integer_kinds_broadcast", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_integer_kinds_scalar", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_floating_unary", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_floating_matrix", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_matrix_math", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_exponent_scalar", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_floating_scalar", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_floating_memory", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_memory128", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_zip_value", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_floating_broadcast", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_floating_matmul", 63);
+	}
+      /* explicit integer
+	 scalar datatype in the name, independent of the result type.  */
+      builtin_define_with_int_value ("__riscv_ztt_mbcast_m_x_int", 1);
+      /* integer basic 1x1
+	 row/column controls, subject to each type's profile availability.  */
+      builtin_define_with_int_value ("__riscv_ztt_mcolbcast_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mrowbcast_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcolshift_ew_x_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mrowshift_ew_x_int", 1);
+      /* Integer structural
+	 unary operations on complete groups, independently per Square.  */
+      builtin_define_with_int_value ("__riscv_ztt_mreduceadd_col_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mreduceadd_row_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mreducemax_col_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mreducemax_row_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mreducemin_col_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mreducemin_row_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mprefixadd_col_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mprefixadd_row_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mprefixmax_col_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mprefixmax_row_int", 1);
+      /* Integer matrix-indexed
+	 operations require complete basic 1x1 groups for every operand.  */
+      builtin_define_with_int_value ("__riscv_ztt_mcolgather_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mrowgather_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcolscatadd_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mrowscatadd_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mcolscatmax_ew_int", 1);
+      builtin_define_with_int_value ("__riscv_ztt_mrowscatmax_ew_int", 1);
+      /* Retired pointer zip APIs have no availability macros.  Runtime
+	 profiles advertise the new interface with __riscv_ztt_zip_value.  */
+      /* Integer index
+	 constructors need complete basic Squares and representable N-1.  */
+      if (profile->uds <= 32)
+	{
+	  builtin_define_with_int_value ("__riscv_ztt_mrowid_ew_int", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_mcolid_ew_int", 1);
+	}
+      if (riscv_ztt::runtime_profile_p ())
+	{
+	  builtin_define ("__riscv_ztt_runtime_n");
+	  /* Both
+	     source and result must have supported complete-group shapes.  */
+	  builtin_define_with_int_value ("__riscv_ztt_mconcat_m", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_mextract", 1);
+	}
+      else
+	{
+	  builtin_define_with_int_value ("__riscv_ztt_nelem", profile->nelem);
+	  builtin_define_with_int_value ("__riscv_ztt_n", profile->n);
+	}
+
+      if (riscv_ztt::acc_profile_p () && profile->uds <= 32)
+	{
+	  builtin_define_with_int_value ("__riscv_ztt_i32_rnu_accx1", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_i32_u32_accx1_irm", 15);
+	  builtin_define_with_int_value ("__riscv_ztt_acc_matmul_variants", 63);
+	  /* Same-type Q=2/4
+	     inputs only when each complete M value occupies at most 4 regs.  */
+	  builtin_define_with_int_value ("__riscv_ztt_acc_matmul_concat", 63);
+	  /* Mixed integer inputs
+	     require complete nonpacked Squares and independently legal spans.  */
+	  builtin_define_with_int_value ("__riscv_ztt_acc_matmul_mixed", 63);
+	  if (profile->uds <= 16)
+	    builtin_define_with_int_value ("__riscv_ztt_i16_u16_accx1_irm", 15);
+	  if (profile->uds == 8)
+	    builtin_define_with_int_value ("__riscv_ztt_i8_u8_accx1_irm", 15);
+
+	  if (profile->accregs >= 2)
+	    {
+	      builtin_define_with_int_value ("__riscv_ztt_acc_tuple_copy", 1);
+	      /* Matching
+		 1x1 inputs, with the rest of the old tuple preserved.  */
+	      builtin_define_with_int_value ("__riscv_ztt_acc_tuple_matmul_1x1", 63);
+	      for (unsigned int bits : { 8U, 16U, 32U })
+		for (unsigned int count : { 2U, 4U })
+		  if (bits >= profile->uds && count <= profile->accregs
+		      && riscv_ztt::acc_shape_supported_p
+			   (bits, count, profile->uds, profile->accregs))
+		    {
+		      char name[64];
+		      snprintf (name, sizeof (name),
+				"__riscv_ztt_i%u_u%u_accx%u_irm",
+				bits, bits, count);
+		      builtin_define_with_int_value (name, 15);
+		    }
+	    }
+	}
+      /* These capabilities
+	 deliberately do not advertise the nonpacked matmul families.  */
+      if (riscv_ztt::runtime_profile_p ())
+	for (unsigned int bits : { 8U, 16U, 32U })
+	  for (unsigned int count : { 2U, 4U, 8U, 16U })
+	    if (bits < profile->uds
+		&& riscv_ztt::acc_shape_supported_p (bits, count, profile->uds,
+						  profile->accregs))
+	      {
+		char name[64];
+		snprintf (name, sizeof (name),
+			  "__riscv_ztt_i%u_u%u_accx%u_packed_irm",
+			  bits, bits, count);
+		builtin_define_with_int_value (name, 15);
+		builtin_define_with_int_value ("__riscv_ztt_acc_packed_copy", 1);
+	      }
+      /* Input packing and
+	 complete output availability are separate from the copy gate.  */
+      if (riscv_ztt::acc_profile_p () && profile->uds > 8
+	  && (profile->uds <= 32 || profile->accregs >= profile->uds / 32))
+	builtin_define_with_int_value ("__riscv_ztt_acc_matmul_packed", 63);
+      builtin_define_with_int_value ("__riscv_ztt_uds", profile->uds);
+      builtin_define_with_int_value ("__riscv_ztt_mregs", profile->mregs);
+      builtin_define_with_int_value ("__riscv_ztt_accregs",
+				     profile->accregs);
+    }
+
   /* Define architecture extension test macros.  */
   builtin_define_with_int_value ("__riscv_arch_test", 1);
 
@@ -209,6 +477,8 @@ riscv_pragma_intrinsic (cpp_reader *)
     {
       riscv_vector::handle_pragma_vector ();
     }
+  else if (strcmp (name, "ztt") == 0)
+    riscv_ztt::handle_pragma_ztt ();
   else
     error ("unknown %<#pragma riscv intrinsic%> option %qs", name);
 }
@@ -271,6 +541,10 @@ riscv_check_builtin_call (location_t loc, vec<location_t> arg_loc, tree fndecl,
     case RISCV_BUILTIN_VECTOR:
       return riscv_vector::check_builtin_call (loc, arg_loc, subcode,
 					       fndecl, nargs, args);
+
+    case RISCV_BUILTIN_ZTT:
+      return riscv_ztt::check_builtin_call (loc, subcode, fndecl, nargs,
+					    args);
     }
   gcc_unreachable ();
 }
@@ -295,7 +569,23 @@ riscv_resolve_overloaded_builtin (location_t loc, tree fndecl,
       break;
     case RISCV_BUILTIN_VECTOR:
       new_fndecl = riscv_vector::resolve_overloaded_builtin (loc, subcode,
-							     fndecl, arglist);
+						     fndecl, arglist);
+      break;
+    case RISCV_BUILTIN_ZTT:
+      /* A resolved Ztt expression can bypass normal call construction.
+	 Fold C arguments first, before hiding language-specific nodes inside
+	 a generated CALL_EXPR or TARGET_EXPR.  Leave C++ template trees to
+	 their frontend; neither path performs scalar carrier conversions here.  */
+      if (!c_dialect_cxx ())
+	for (tree &arg : *arglist)
+	  if (arg != error_mark_node)
+	    arg = c_fully_fold (arg, false, NULL);
+      if (!riscv_ztt::check_builtin_arguments (loc, subcode, arglist))
+	return error_mark_node;
+      new_fndecl = riscv_ztt::resolve_overloaded_builtin (loc, subcode, arglist);
+      /* Ztt can retain type metadata in a fully formed internal call.  */
+      if (new_fndecl && TREE_CODE (new_fndecl) != FUNCTION_DECL)
+	return new_fndecl;
       break;
     default:
       gcc_unreachable ();

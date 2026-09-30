@@ -259,6 +259,14 @@
   "Vector reg not overlapping the operand 4 register group"
   "riscv_vector::riscv_v_widen_non_overlap_constraint_ok (regno, mode, ref_regno, ref_mode)"
   "4")
+;; AME matrix and accumulator register constraints.
+(define_register_constraint "Wmr"
+  "(TARGET_ZTT && riscv_ztt::typed_profile_p ()) ? M_REGS : NO_REGS"
+  "An AME matrix register")
+
+(define_register_constraint "War"
+  "(TARGET_ZTT && riscv_ztt::acc_profile_p ()) ? ACC_REGS : NO_REGS"
+  "An experimental AME accumulator register")
 
 ;; This constraint is used to match instruction "csrr %0, vlenb" which is generated in "mov<mode>".
 ;; VLENB is a run-time constant which represent the vector register length in bytes.

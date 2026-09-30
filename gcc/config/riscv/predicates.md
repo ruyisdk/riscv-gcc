@@ -79,6 +79,10 @@
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 3)")))
 
+(define_predicate "const_0_15_operand"
+  (and (match_code "const_int")
+       (match_test "IN_RANGE (INTVAL (op), 0, 15)")))
+
 (define_predicate "const_0_10_operand"
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 10)")))
@@ -414,6 +418,12 @@
   (match_code "parallel")
 {
   return riscv_gpr_save_operation_p (op);
+})
+
+(define_special_predicate "ztt_ownership_operation"
+  (match_code "parallel")
+{
+  return riscv_ztt_ownership_operation_p (op);
 })
 
 ;; Predicates for the ZBS extension.

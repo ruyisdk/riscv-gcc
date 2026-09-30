@@ -90,6 +90,10 @@ march=help
 Target RejectNegative
 -march=help	Print supported -march extensions.
 
+mztt-profile=
+Target RejectNegative Joined Var(riscv_ztt_profile_string) Save
+Select an experimental AME/Ztt target profile.
+
 ; -print-supported-extensions and --print-supported-extensions are added for
 ; clang compatibility.
 print-supported-extensions

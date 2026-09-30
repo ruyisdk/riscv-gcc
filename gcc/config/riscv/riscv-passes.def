@@ -18,10 +18,12 @@
    <http://www.gnu.org/licenses/>.  */
 
 INSERT_PASS_AFTER (pass_combine, 1, pass_bclr_lowest_set_bit);
+INSERT_PASS_AFTER (pass_instantiate_virtual_regs, 1, pass_ztt_regions);
+INSERT_PASS_BEFORE (pass_ira, 1, pass_ztt_state);
+INSERT_PASS_BEFORE (pass_free_cfg, 1, pass_ztt_verify_regions);
 INSERT_PASS_AFTER (pass_rtl_store_motion, 1, pass_shorten_memrefs);
 INSERT_PASS_AFTER (pass_split_all_insns, 1, pass_avlprop);
 INSERT_PASS_BEFORE (pass_fast_rtl_dce, 1, pass_vsetvl);
 INSERT_PASS_BEFORE (pass_shorten_branches, 1, pass_insert_landing_pad);
 INSERT_PASS_BEFORE (pass_shorten_branches, 1, pass_combine_popretz);
 INSERT_PASS_AFTER (pass_cse2, 1, pass_vector_permconst);
-

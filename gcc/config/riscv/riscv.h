@@ -346,9 +346,11 @@ ARCH_UNSET_CLEANUP_SPECS \
    - 1 vl register
    - 1 vtype register
    - 28 unused registers for future expansion
-   - 32 vector registers  */
+   - 32 vector registers
+   - 32 AME matrix registers
+   - 16 AME accumulator registers.  */
 
-#define FIRST_PSEUDO_REGISTER 128
+#define FIRST_PSEUDO_REGISTER 176
 
 /* x0, ra, sp, gp, and tp are fixed.  */
 
@@ -364,7 +366,12 @@ ARCH_UNSET_CLEANUP_SPECS \
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   /* Vector registers.  */						\
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0			\
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,			\
+  /* AME matrix registers.  */					\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  /* AME accumulator registers.  */					\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1			\
 }
 
 /* a0-a7, t0-t6, fa0-fa7, and ft0-ft11 are volatile across calls.
@@ -382,6 +389,11 @@ ARCH_UNSET_CLEANUP_SPECS \
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
   /* Vector registers.  */						\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  /* AME matrix registers.  */					\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,			\
+  /* AME accumulator registers.  */					\
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1			\
 }
 
@@ -406,6 +418,16 @@ ARCH_UNSET_CLEANUP_SPECS \
 #define V_REG_LAST  127
 #define V_REG_NUM   (V_REG_LAST - V_REG_FIRST + 1)
 
+/* AME/Ztt v0.6 architectural register maxima.  A selected target profile
+   controls which of these GCC hard registers are allocatable.  */
+#define M_REG_FIRST 128
+#define M_REG_LAST  159
+#define M_REG_NUM   (M_REG_LAST - M_REG_FIRST + 1)
+
+#define ACC_REG_FIRST 160
+#define ACC_REG_LAST  175
+#define ACC_REG_NUM   (ACC_REG_LAST - ACC_REG_FIRST + 1)
+
 /* The DWARF 2 CFA column which tracks the return address from a
    signal handler context.  This means that to maintain backwards
    compatibility, no hard register can be assigned this column if it
@@ -420,6 +442,10 @@ ARCH_UNSET_CLEANUP_SPECS \
   ((REGNO) >= FP_REG_FIRST && (REGNO) <= FP_REG_LAST)
 #define V_REG_P(REGNO)  \
   ((unsigned int) ((int) (REGNO) - V_REG_FIRST) < V_REG_NUM)
+#define M_REG_P(REGNO)  \
+  ((unsigned int) ((int) (REGNO) - M_REG_FIRST) < M_REG_NUM)
+#define ACC_REG_P(REGNO)  \
+  ((unsigned int) ((int) (REGNO) - ACC_REG_FIRST) < ACC_REG_NUM)
 #define VL_REG_P(REGNO) ((REGNO) == VL_REGNUM)
 #define VTYPE_REG_P(REGNO) ((REGNO) == VTYPE_REGNUM)
 #define VXRM_REG_P(REGNO) ((REGNO) == VXRM_REGNUM)
@@ -447,6 +473,10 @@ ARCH_UNSET_CLEANUP_SPECS \
 #define RISCV_DWARF_VL (4096 + 0xc20)
 #define RISCV_DWARF_VTYPE (4096 + 0xc21)
 #define RISCV_DWARF_VLENB (4096 + 0xc22)
+
+/* Private runtime-N implementation cache: M bytes / 16 in s11.
+   This is a saved GPR, not a new CSR or a matrix calling convention.  */
+#define RISCV_ZTT_SCALE_REGNUM 27
 
 /* Register in which static-chain is passed to a function.  */
 #define STATIC_CHAIN_REGNUM \
@@ -555,6 +585,8 @@ enum reg_class
   VM_REGS,			/* v0.t registers */
   VD_REGS,			/* vector registers except v0.t */
   V_REGS,			/* vector registers */
+  M_REGS,			/* AME matrix registers.  */
+  ACC_REGS,			/* AME accumulator registers.  */
   ALL_REGS,			/* all registers */
   LIM_REG_CLASSES		/* max value + 1 */
 };
@@ -580,6 +612,8 @@ enum reg_class
   "VM_REGS",								\
   "VD_REGS",								\
   "V_REGS",								\
+  "M_REGS",								\
+  "ACC_REGS",							\
   "ALL_REGS"								\
 }
 
@@ -596,18 +630,34 @@ enum reg_class
 
 #define REG_CLASS_CONTENTS						\
 {									\
-  { 0x00000000, 0x00000000, 0x00000000, 0x00000000 },	/* NO_REGS */		\
-  { 0xf003fc80, 0x00000000, 0x00000000, 0x00000000 },	/* SIBCALL_REGS */	\
-  { 0x0000ff00, 0x00000000, 0x00000000, 0x00000000 },	/* RVC_GR_REGS */	\
-  { 0xffffffc0, 0x00000000, 0x00000000, 0x00000000 },	/* JALR_REGS */		\
-  { 0xffffffff, 0x00000000, 0x00000000, 0x00000000 },	/* GR_REGS */		\
-  { 0x00000000, 0x0000ff00, 0x00000000, 0x00000000 },	/* RVC_FP_REGS */	\
-  { 0x00000000, 0xffffffff, 0x00000000, 0x00000000 },	/* FP_REGS */		\
-  { 0x00000000, 0x00000000, 0x00000003, 0x00000000 },	/* FRAME_REGS */	\
-  { 0x00000000, 0x00000000, 0x00000000, 0x00000001 },	/* V0_REGS */		\
-  { 0x00000000, 0x00000000, 0x00000000, 0xfffffffe },	/* VNoV0_REGS */	\
-  { 0x00000000, 0x00000000, 0x00000000, 0xffffffff },	/* V_REGS */		\
-  { 0xffffffff, 0xffffffff, 0x00000003, 0xffffffff }	/* ALL_REGS */		\
+  { 0x00000000, 0x00000000, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* NO_REGS.  */ \
+  { 0xf003fc80, 0x00000000, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* SIBCALL_REGS.  */ \
+  { 0x0000ff00, 0x00000000, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* RVC_GR_REGS.  */ \
+  { 0xffffffc0, 0x00000000, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* JALR_REGS.  */ \
+  { 0xffffffff, 0x00000000, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* GR_REGS.  */ \
+  { 0x00000000, 0x0000ff00, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* RVC_FP_REGS.  */ \
+  { 0x00000000, 0xffffffff, 0x00000000, \
+    0x00000000, 0x00000000, 0x00000000 }, /* FP_REGS.  */ \
+  { 0x00000000, 0x00000000, 0x00000003, \
+    0x00000000, 0x00000000, 0x00000000 }, /* FRAME_REGS.  */ \
+  { 0x00000000, 0x00000000, 0x00000000, \
+    0x00000001, 0x00000000, 0x00000000 }, /* VM_REGS.  */ \
+  { 0x00000000, 0x00000000, 0x00000000, \
+    0xfffffffe, 0x00000000, 0x00000000 }, /* VD_REGS.  */ \
+  { 0x00000000, 0x00000000, 0x00000000, \
+    0xffffffff, 0x00000000, 0x00000000 }, /* V_REGS.  */ \
+  { 0x00000000, 0x00000000, 0x00000000, \
+    0x00000000, 0xffffffff, 0x00000000 }, /* M_REGS.  */ \
+  { 0x00000000, 0x00000000, 0x00000000, \
+    0x00000000, 0x00000000, 0x0000ffff }, /* ACC_REGS.  */ \
+  { 0xffffffff, 0xffffffff, 0x00000003, \
+    0xffffffff, 0xffffffff, 0x0000ffff } /* ALL_REGS.  */ \
 }
 
 /* A C expression whose value is a register class containing hard
@@ -653,6 +703,13 @@ enum reg_class
   124, 125, 126, 127,							\
   /* The vector mask register.  */					\
   96,									\
+  /* AME registers; profile-disabled entries are fixed.  */		\
+  128, 129, 130, 131, 132, 133, 134, 135,				\
+  136, 137, 138, 139, 140, 141, 142, 143,				\
+  144, 145, 146, 147, 148, 149, 150, 151,				\
+  152, 153, 154, 155, 156, 157, 158, 159,				\
+  160, 161, 162, 163, 164, 165, 166, 167,				\
+  168, 169, 170, 171, 172, 173, 174, 175,				\
   /* None of the remaining classes have defined call-saved		\
      registers.  */							\
   64, 65, 66, 67							\
@@ -1038,7 +1095,13 @@ extern enum riscv_cc get_riscv_cc (const rtx use);
   "v0",  "v1",  "v2",  "v3",  "v4",  "v5",  "v6",  "v7",	\
   "v8",  "v9",  "v10", "v11", "v12", "v13", "v14", "v15",	\
   "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23",	\
-  "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",}
+  "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31",	\
+  "m0",  "m1",  "m2",  "m3",  "m4",  "m5",  "m6",  "m7",	\
+  "m8",  "m9",  "m10", "m11", "m12", "m13", "m14", "m15",	\
+  "m16", "m17", "m18", "m19", "m20", "m21", "m22", "m23",	\
+  "m24", "m25", "m26", "m27", "m28", "m29", "m30", "m31",	\
+  "acc0", "acc1", "acc2", "acc3", "acc4", "acc5", "acc6", "acc7", \
+  "acc8", "acc9", "acc10", "acc11", "acc12", "acc13", "acc14", "acc15",}
 
 #define ADDITIONAL_REGISTER_NAMES					\
 {									\
