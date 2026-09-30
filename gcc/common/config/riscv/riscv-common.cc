@@ -1164,6 +1164,15 @@ riscv_subset_list::check_conflict_ext ()
   if (!m_loc)
     return;
 
+  /* Earlier Ztt drafts reuse instruction encodings with different names,
+     so they must not select the v0.6 built-in and output tables.  */
+  riscv_subset_t *ztt = lookup ("ztt");
+  if (ztt && (ztt->major_version != 0 || ztt->minor_version != 6))
+    error_at (*m_loc,
+	      "%<-march=%s%>: unsupported version %d.%d of %<ztt%> "
+	      "extension; expected 0.6",
+	      m_arch, ztt->major_version, ztt->minor_version);
+
   if (lookup ("zcf") && m_xlen == 64)
     error_at (*m_loc, "%<-march=%s%>: zcf extension supports in rv32 only",
 	      m_arch);

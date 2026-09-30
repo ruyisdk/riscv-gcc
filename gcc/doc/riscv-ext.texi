@@ -314,6 +314,10 @@
 @tab 1.0
 @tab Total store ordering extension
 
+@item @samp{ztt}
+@tab 0.6
+@tab Attached Matrix Extension, Draft/provisional AME version 0.6.
+
 @item @samp{zvbb}
 @tab 1.0
 @tab Vector basic bit-manipulation extension

@@ -257,6 +257,8 @@ Mask(ZKT) Var(riscv_zk_subext)
 
 Mask(ZTSO) Var(riscv_zt_subext)
 
+Mask(ZTT) Var(riscv_zt_subext)
+
 Mask(ZVBB) Var(riscv_zvb_subext)
 
 Mask(ZVBC) Var(riscv_zvb_subext)
