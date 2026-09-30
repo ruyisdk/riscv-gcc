@@ -1,0 +1,19 @@
+/* scalar bitwise.  */
+/* { dg-do preprocess } */
+/* { dg-options "-march=rv32im_zicsr_ztt0p6 -mabi=ilp32" { target rv32 } } */
+/* { dg-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
+#ifdef __riscv_ztt_mand_ew_x_int_same
+#error scalar bitwise capability requires Ztt and a typed profile
+#endif
+#ifdef __riscv_ztt_mandnot_ew_x_int_same
+#error scalar bitwise capability requires Ztt and a typed profile
+#endif
+#ifdef __riscv_ztt_mor_ew_x_int_same
+#error scalar bitwise capability requires Ztt and a typed profile
+#endif
+#ifdef __riscv_ztt_mornot_ew_x_int_same
+#error scalar bitwise capability requires Ztt and a typed profile
+#endif
+#ifdef __riscv_ztt_mxor_ew_x_int_same
+#error scalar bitwise capability requires Ztt and a typed profile
+#endif
