@@ -4449,9 +4449,8 @@ id_equal (const char *str, const_tree id)
 inline poly_uint64
 TYPE_VECTOR_SUBPARTS (const_tree node)
 {
-  STATIC_ASSERT (NUM_POLY_INT_COEFFS <= 2);
   unsigned int precision = VECTOR_TYPE_CHECK (node)->type_common.precision;
-  if (NUM_POLY_INT_COEFFS == 2)
+  if (NUM_POLY_INT_COEFFS >= 2)
     {
       /* See the corresponding code in SET_TYPE_VECTOR_SUBPARTS for a
 	 description of the encoding.  */
@@ -4471,11 +4470,13 @@ TYPE_VECTOR_SUBPARTS (const_tree node)
 inline void
 SET_TYPE_VECTOR_SUBPARTS (tree node, poly_uint64 subparts)
 {
-  STATIC_ASSERT (NUM_POLY_INT_COEFFS <= 2);
+  /* Additional target scales are permitted for non-vector types only.  */
+  for (unsigned int i = 2; i < NUM_POLY_INT_COEFFS; ++i)
+    gcc_assert (subparts.coeffs[i] == 0);
   unsigned HOST_WIDE_INT coeff0 = subparts.coeffs[0];
   int index = exact_log2 (coeff0);
   gcc_assert (index >= 0);
-  if (NUM_POLY_INT_COEFFS == 2)
+  if (NUM_POLY_INT_COEFFS >= 2)
     {
       /* We have two coefficients that are each in the range 1 << [0, 63],
 	 so supporting all combinations would require 6 bits per coefficient
@@ -4507,10 +4508,13 @@ SET_TYPE_VECTOR_SUBPARTS (tree node, poly_uint64 subparts)
 inline bool
 valid_vector_subparts_p (poly_uint64 subparts)
 {
+  for (unsigned int i = 2; i < NUM_POLY_INT_COEFFS; ++i)
+    if (subparts.coeffs[i] != 0)
+      return false;
   unsigned HOST_WIDE_INT coeff0 = subparts.coeffs[0];
   if (!pow2p_hwi (coeff0))
     return false;
-  if (NUM_POLY_INT_COEFFS == 2)
+  if (NUM_POLY_INT_COEFFS >= 2)
     {
       unsigned HOST_WIDE_INT coeff1 = subparts.coeffs[1];
       if (coeff1 != 0 && coeff1 != coeff0)

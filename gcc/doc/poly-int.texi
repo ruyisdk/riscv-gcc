@@ -108,6 +108,9 @@ most common forms of @code{poly_int}, all having
 @item poly_uint16
 a @samp{poly_int} with @code{unsigned short} coefficients.
 
+@item poly_uint32
+a @samp{poly_int} with @code{unsigned int} coefficients.
+
 @item poly_int64
 a @samp{poly_int} with @code{HOST_WIDE_INT} coefficients.
 

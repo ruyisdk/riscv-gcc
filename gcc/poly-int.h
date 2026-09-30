@@ -1169,7 +1169,28 @@ template<unsigned int N, typename Ca, typename Cb>
 inline bool
 maybe_eq (const poly_int<N, Ca> &a, const poly_int<N, Cb> &b)
 {
-  STATIC_ASSERT (N <= 2);
+  if (N > 2)
+    {
+      if (a.coeffs[0] == b.coeffs[0])
+	return true;
+      unsigned int varying = 0, index = 0;
+      bool increase = false, decrease = false;
+      for (unsigned int i = 1; i < N; ++i)
+	if (a.coeffs[i] != b.coeffs[i])
+	  {
+	    ++varying;
+	    index = i;
+	    increase |= a.coeffs[i] > b.coeffs[i];
+	    decrease |= a.coeffs[i] < b.coeffs[i];
+	  }
+      if (varying == 1)
+	return maybe_eq_2 (a.coeffs[0], a.coeffs[index],
+			   b.coeffs[0], b.coeffs[index]);
+      /* With multiple independent variables, conservatively allow an
+	 intersection unless monotonicity rules it out.  This is not an
+	 assertion that a nonnegative integral solution exists.  */
+      return a.coeffs[0] < b.coeffs[0] ? increase : decrease;
+    }
   if (N == 2)
     return maybe_eq_2 (a.coeffs[0], a.coeffs[1], b.coeffs[0], b.coeffs[1]);
   return a.coeffs[0] == b.coeffs[0];
@@ -1179,7 +1200,8 @@ template<unsigned int N, typename Ca, typename Cb>
 inline typename if_nonpoly<Cb, bool>::type
 maybe_eq (const poly_int<N, Ca> &a, const Cb &b)
 {
-  STATIC_ASSERT (N <= 2);
+  if (N > 2)
+    return maybe_eq (a, poly_int<N, Cb> (b));
   if (N == 2)
     return maybe_eq_2 (a.coeffs[0], a.coeffs[1], b);
   return a.coeffs[0] == b;
@@ -1189,7 +1211,8 @@ template<unsigned int N, typename Ca, typename Cb>
 inline typename if_nonpoly<Ca, bool>::type
 maybe_eq (const Ca &a, const poly_int<N, Cb> &b)
 {
-  STATIC_ASSERT (N <= 2);
+  if (N > 2)
+    return maybe_eq (poly_int<N, Ca> (a), b);
   if (N == 2)
     return maybe_eq_2 (b.coeffs[0], b.coeffs[1], a);
   return a == b.coeffs[0];
