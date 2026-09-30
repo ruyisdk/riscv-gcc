@@ -3025,8 +3025,8 @@
 ;; pabd.<w> rs1, x0 computes the absolute value.  The 8-byte modes are
 ;; register pairs on RV32.
 (define_insn "abs<mode>2"
-  [(set (match_operand:PVQIH 0 "register_operand" "=r")
-	(abs:PVQIH (match_operand:PVQIH 1 "register_operand" "r")))]
+  [(set (match_operand:QIH_PABD 0 "register_operand" "=r")
+	(abs:QIH_PABD (match_operand:QIH_PABD 1 "register_operand" "r")))]
   "TARGET_RVP"
 {
   if (!TARGET_64BIT

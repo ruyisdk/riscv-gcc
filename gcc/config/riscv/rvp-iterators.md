@@ -55,9 +55,10 @@
   (PV2HI "6") (PV4HI "6")
   (PV2SI "22")])
 
-;; PVQIH: Scalar and packed byte/halfword modes, unconditionally; the
-;; 8-byte modes are register pairs on RV32 and single registers on RV64.
-(define_mode_iterator PVQIH [QI HI PV4QI PV2HI PV8QI PV4HI])
+;; QIH_PABD: Scalar and packed byte/halfword modes with a PABD form, used
+;; by abs<mode>2 (pabd rd, rs, x0 for the scalars, pabd.db/dh over the
+;; RV32 register pairs).
+(define_mode_iterator QIH_PABD [QI HI PV4QI PV2HI PV8QI PV4HI])
 
 ;; PVQIHI: Packed vector modes for byte and halfword elements only
 ;; On RV64, we support both 4-byte (PV4QI, PV2HI) and 8-byte (PV8QI, PV4HI) vectors
