@@ -1,0 +1,8 @@
+/* integer subtraction.  */
+/* { dg-do compile } */
+/* { dg-options "-O2 -fno-ipa-icf  -march=rv32im_zicsr -mabi=ilp32" { target rv32 } } */
+/* { dg-options "-O2 -fno-ipa-icf  -march=rv64im_zicsr -mabi=lp64" { target rv64 } } */
+#ifdef __riscv_ztt_msub_ew_int_same
+#error "subtraction needs Ztt and a typed profile"
+#endif
+int unused;
