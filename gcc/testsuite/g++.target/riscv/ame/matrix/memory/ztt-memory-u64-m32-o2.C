@@ -1,0 +1,12 @@
+/* { dg-do compile } */
+/* { dg-options "-O2 -fno-ipa-icf -std=gnu++11 -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u64-m32-a4" { target rv32 } } */
+/* { dg-options "-O2 -fno-ipa-icf -std=gnu++11 -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u64-m32-a4" { target rv64 } } */
+#define MEMORY_UDS 64
+#include "../../../../../gcc.target/riscv/ame/matrix/memory/ztt-memory-body.h"
+/* { dg-final { scan-assembler {\tmls\.cm\t} } } */
+/* { dg-final { scan-assembler {\tmls\.st\t} } } */
+/* { dg-final { scan-assembler {\tmls\.tst\t} } } */
+/* { dg-final { scan-assembler {\tmss\.cm\t} } } */
+/* { dg-final { scan-assembler {\tmss\.st\t} } } */
+/* { dg-final { scan-assembler {\tmss\.tst\t} } } */
+/* { dg-final { scan-assembler-not {\tcall\t} } } */
