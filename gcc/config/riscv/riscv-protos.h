@@ -903,7 +903,7 @@ const char *output_acc_move (rtx *);
 const char *output_acc_borrowed_move (rtx *);
 unsigned int acc_borrowed_move_length (rtx *);
 const char *output_acc_state (rtx *, bool, bool = false);
-unsigned int acc_mmul_length (rtx *);
+unsigned int acc_mmul_length (rtx *, bool);
 const char *output_acc_clear (rtx *, bool);
 const char *output_acc_to_m (rtx *);
 bool value_mode_p (machine_mode);

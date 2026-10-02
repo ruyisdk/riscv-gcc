@@ -1197,32 +1197,6 @@
   (ZTTAR16 "268")
   (ZTTAR16X2 "536")
   (ZTTAP2X16 "256")])
-(define_mode_attr ztt_acc_mul_length [
-  (ZTTAR1 "28")
-  (ZTTAR2 "76")
-  (ZTTAR4 "140")
-  (ZTTAR1X2 "28")
-  (ZTTAR1X4 "28")
-  (ZTTAR2X2 "76")
-  (ZTTAR1X8 "28")
-  (ZTTAR1X16 "28")
-  (ZTTAR2X4 "76")
-  (ZTTAR2X8 "76")
-  (ZTTAR2X16 "76")
-  (ZTTAR4X2 "140")
-  (ZTTAR4X4 "140")
-  (ZTTAR4X8 "140")
-  (ZTTAR4X16 "140")
-  (ZTTAR8 "268")
-  (ZTTAR8X2 "268")
-  (ZTTAR8X4 "268")
-  (ZTTAR8X8 "268")
-  (ZTTAR8X16 "268")
-  (ZTTAR16 "524")
-  (ZTTAR16X2 "524")
-  (ZTTAR16X4 "524")
-  (ZTTAR16X8 "524")
-  (ZTTAR16X16 "524")])
 (define_mode_attr ztt_acc_mul_state_c [
   (ZTTAR1 "=X")
   (ZTTAR2 "=&r")
@@ -1486,7 +1460,8 @@
   return riscv_ztt::output_acc_state (operands, true);
 }
   [(set_attr "type" "multi")
-   (set_attr "length" "<ztt_acc_mul_length>")])
+   (set (attr "length")
+	(symbol_ref "riscv_ztt::acc_mmul_length (operands, false)"))])
 
 ;; Each source carries its own
 ;; complete runtime M mode and descriptor.  Do not infer either from ACC.
@@ -1550,4 +1525,5 @@
   return riscv_ztt::output_acc_state (operands, true, true);
 }
   [(set_attr "type" "multi")
-   (set (attr "length") (symbol_ref "riscv_ztt::acc_mmul_length (operands)"))])
+   (set (attr "length")
+	(symbol_ref "riscv_ztt::acc_mmul_length (operands, true)"))])

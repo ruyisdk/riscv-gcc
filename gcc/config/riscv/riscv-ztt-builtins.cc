@@ -911,13 +911,65 @@ struct builtin_description
   type_index type;
 };
 
-static constexpr builtin_description builtin_descriptions[] =
+/* Shared type axis for the exponent families.  */
+static constexpr type_index exponent_types[] =
 {
+#define ZTT_EXPONENT_TYPE(TYPE, NAME, ...) TYPE_##TYPE,
+#define ZTT_EXPONENT_SHAPES(TYPE, NAME, ...) \
+  ZTT_CATALOG_M_SHAPES (ZTT_EXPONENT_TYPE, TYPE, NAME)
+  ZTT_CATALOG_ALL_TYPES (ZTT_EXPONENT_SHAPES)
+#undef ZTT_EXPONENT_SHAPES
+#undef ZTT_EXPONENT_TYPE
+};
+
+static constexpr builtin_description exponent_families[] =
+{
+#define ZTT_EXPONENT_FAMILY(OP, SPELLING, PROTO) \
+  { "__riscv_ztt_" #SPELLING, PROTO_##PROTO, EXPAND_##OP, TYPE_MAX },
+#include "riscv-ztt-exponent-scalar.def"
+#undef ZTT_EXPONENT_FAMILY
+};
+
+static constexpr unsigned int exponent_first
+  = ZTT_BUILTIN_MLDEXP_EW_X_I4_RNU_1X1;
+static constexpr unsigned int exponent_type_count = ARRAY_SIZE (exponent_types);
+static constexpr unsigned int exponent_count
+  = ARRAY_SIZE (exponent_families) * exponent_type_count;
+static_assert (exponent_first == 454804 && exponent_type_count == 1320);
+static_assert (ZTT_BUILTIN_MLDEXPACC_EW_X_I4_RNU_1X1
+	       == exponent_first + exponent_type_count);
+static_assert (ZTT_BUILTIN_MLDEXPACC_EW_X_F64_RNO_32X1
+	       == exponent_first + exponent_count - 1);
+static_assert (ZTT_BUILTIN_MLS_RM_I128_RNU_1X1
+	       == exponent_first + exponent_count);
+
+static constexpr builtin_description stored_builtin_descriptions[] =
+{
+#define ZTT_EXPONENT_FAMILY(OP, SPELLING, PROTO)
 #define ZTT_INTRINSIC(ID, NAME, PROTO, EXPAND, TYPE) \
   { NAME, PROTO_##PROTO, EXPAND_##EXPAND, TYPE_##TYPE },
 #include "riscv-ztt-intrinsics.def"
 #undef ZTT_INTRINSIC
+#undef ZTT_EXPONENT_FAMILY
 };
+static_assert (ARRAY_SIZE (stored_builtin_descriptions) + exponent_count
+	       == ZTT_BUILTIN_MAX);
+
+/* Map stable builtin codes to stored metadata or compact family entries.
+   Family names are completed at declaration time.  */
+static constexpr builtin_description
+builtin_description_for (unsigned int code)
+{
+  if (code >= exponent_first && code < exponent_first + exponent_count)
+    {
+      unsigned int offset = code - exponent_first;
+      builtin_description d = exponent_families[offset / exponent_type_count];
+      d.type = exponent_types[offset % exponent_type_count];
+      return d;
+    }
+  return stored_builtin_descriptions
+    [code < exponent_first ? code : code - exponent_count];
+}
 
 /* Keep the original RM
    dispatch ID and append the other memory families.  */
@@ -1018,12 +1070,12 @@ matmul_code_limit ()
   for (unsigned int base = 0; base < ZTT_BUILTIN_MAX; base += 1024)
     for (unsigned int i = base; i < ZTT_BUILTIN_MAX && i < base + 1024; ++i)
       {
-	expansion_index e = builtin_descriptions[i].expansion;
+	expansion_index e = builtin_description_for (i).expansion;
 	if ((e == EXPAND_A_MMUL
 	     || (e >= EXPAND_A_MMULNEG && e <= EXPAND_A_MMULBTNEG))
-	    && (types[builtin_descriptions[i].type].descriptor & 0xff) >= 8
-	    && (types[builtin_descriptions[i].type].descriptor & 0xff) <= 32
-	    && !(types[builtin_descriptions[i].type].descriptor
+	    && (types[builtin_description_for (i).type].descriptor & 0xff) >= 8
+	    && (types[builtin_description_for (i).type].descriptor & 0xff) <= 32
+	    && !(types[builtin_description_for (i).type].descriptor
 		 & ((1U << 8) | (1U << 29))))
 	  limit = i + 1;
       }
@@ -1062,7 +1114,7 @@ static constexpr unsigned int elementwise_code_base = 1U << 28;
 static constexpr bool
 legacy_elementwise_anchor_p (unsigned int i)
 {
-  const auto &d = builtin_descriptions[i];
+  const auto &d = builtin_description_for (i);
   if (d.expansion >= EXPAND_MFRINTM_EW)
     return false;
   switch (d.prototype)
@@ -2462,6 +2514,19 @@ integer_scalar_name (char *name, size_t size, const char *operation,
 	    types[dst].rows, types[dst].columns, ctype);
 }
 
+static const char *
+canonical_builtin_name (const builtin_description &d, char (&name)[160])
+{
+  if (!exponent_p (d.expansion))
+    return d.name;
+  char dtype[32];
+  scalar_datatype_name (dtype, sizeof (dtype), types[d.type].descriptor, false);
+  int length = snprintf (name, sizeof (name), "%s_%s_%ux%u", d.name, dtype,
+			 types[d.type].rows, types[d.type].columns);
+  gcc_assert (length >= 0 && static_cast<size_t> (length) < sizeof (name));
+  return name;
+}
+
 static tree
 integer_broadcast_builtin_decl (unsigned int code, bool initialize_p)
 {
@@ -2785,7 +2850,7 @@ integer_unary_operation_p (unsigned int op)
 static unsigned int
 encode_integer_unary_builtin (unsigned int canonical, type_index source)
 {
-  const auto &d = builtin_descriptions[canonical];
+  const auto &d = builtin_description_for (canonical);
   const auto &t = types[d.type];
   unsigned int op = wide_operation (d.expansion);
   gcc_assert (integer_unary_operation_p (op));
@@ -2820,7 +2885,7 @@ decode_integer_unary_builtin (unsigned int code, unsigned int &canonical,
     {
       for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
 	{
-	  const auto &d = builtin_descriptions[i];
+	  const auto &d = builtin_description_for (i);
 	  unsigned int operation = wide_operation (d.expansion);
 	  if (!integer_unary_operation_p (operation) || types[d.type].accumulator
 	      || floating_descriptor_p (types[d.type].descriptor))
@@ -2864,7 +2929,7 @@ decode_wide_builtin (unsigned int code, unsigned int &canonical,
     {
       for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
 	{
-	  const auto &d = builtin_descriptions[i];
+	  const auto &d = builtin_description_for (i);
 	  int operation = wide_operation (d.expansion);
 	  if (operation < 0 || d.prototype != wide_operations[operation].prototype
 	      || types[d.type].accumulator
@@ -2895,7 +2960,7 @@ static unsigned int
 encode_extended_builtin (unsigned int canonical, type_index data,
 			 type_index count)
 {
-  const auto &d = builtin_descriptions[canonical];
+  const auto &d = builtin_description_for (canonical);
   const auto &t = types[d.type];
   int operation = wide_operation (d.expansion);
   gcc_assert (operation >= 0);
@@ -2915,7 +2980,7 @@ static unsigned int
 encode_elementwise_builtin (unsigned int canonical, type_index data,
 			    type_index count)
 {
-  if ((types[builtin_descriptions[canonical].type].descriptor & 0xff) > 32
+  if ((types[builtin_description_for (canonical).type].descriptor & 0xff) > 32
       || (types[data].descriptor & 0xff) > 32
       || (count != TYPE_MAX && (types[count].descriptor & 0xff) > 32))
     return encode_extended_builtin (canonical, data, count);
@@ -2929,10 +2994,11 @@ encode_elementwise_builtin (unsigned int canonical, type_index data,
 static unsigned int
 encode_conversion_builtin (unsigned int canonical, type_index source)
 {
-  if (extended_integer_p (types[builtin_descriptions[canonical].type].descriptor)
+  if (extended_integer_p
+	(types[builtin_description_for (canonical).type].descriptor)
       || extended_integer_p (types[source].descriptor))
     return encode_integer_unary_builtin (canonical, source);
-  if ((types[builtin_descriptions[canonical].type].descriptor & 0xff) > 32
+  if ((types[builtin_description_for (canonical).type].descriptor & 0xff) > 32
       || (types[source].descriptor & 0xff) > 32)
     return encode_extended_builtin (canonical, source, TYPE_MAX);
   return conversion_code_base + canonical * 24
@@ -2941,11 +3007,41 @@ encode_conversion_builtin (unsigned int canonical, type_index source)
 
 #if CHECKING_P
 static void run_large_matrix_signature_selftests ();
+static void run_acc_shared_source_selftests ();
 
 void
 run_wide_signature_selftests ()
 {
   using namespace selftest;
+  run_acc_shared_source_selftests ();
+  for (unsigned int i = 0; i < exponent_type_count; ++i)
+    {
+      auto d = builtin_description_for (exponent_first + i);
+      auto a = builtin_description_for
+	(exponent_first + exponent_type_count + i);
+      ASSERT_EQ (d.prototype, PROTO_M_EXPONENT_X);
+      ASSERT_EQ (a.prototype, PROTO_M_EXPONENT_ACC_X);
+      ASSERT_EQ (d.expansion, EXPAND_MLDEXP_EW_X);
+      ASSERT_EQ (a.expansion, EXPAND_MLDEXPACC_EW_X);
+      ASSERT_EQ (d.type, a.type);
+      ASSERT_FALSE (types[d.type].accumulator);
+    }
+  ASSERT_EQ (builtin_description_for (exponent_first).type, TYPE_I4_RNU_1X1);
+  ASSERT_EQ (builtin_description_for (exponent_first + exponent_count - 1).type,
+	     TYPE_F64_RNO_32X1);
+  auto after = builtin_description_for (exponent_first + exponent_count);
+  ASSERT_EQ (after.type, TYPE_I128_RNU_1X1);
+  ASSERT_EQ (after.expansion, EXPAND_MLS_RM);
+  char name[160];
+  ASSERT_STREQ (canonical_builtin_name
+		 (builtin_description_for (exponent_first), name),
+		 "__riscv_ztt_mldexp_ew_x_i4_rnu_1x1");
+  ASSERT_STREQ (canonical_builtin_name
+		 (builtin_description_for (ZTT_BUILTIN_MLDEXP_EW_X_BF16_RMM_2X1),
+		  name), "__riscv_ztt_mldexp_ew_x_bf16_rmm_2x1");
+  ASSERT_STREQ (canonical_builtin_name
+		 (builtin_description_for (ZTT_BUILTIN_MLDEXPACC_EW_X_U128_ROD_SAT_1X2),
+		  name), "__riscv_ztt_mldexpacc_ew_x_u128_rod_sat_1x2");
   ASSERT_FALSE (exponent_code_p (exponent_code_base - 1));
   ASSERT_FALSE (exponent_code_p (exponent_code_base + exponent_code_count));
   for (unsigned int op = 0; op < 2; ++op)
@@ -3100,7 +3196,7 @@ run_wide_signature_selftests ()
 		(integer_unary_code_limit, canonical, source));
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
-      const auto &d = builtin_descriptions[i];
+      const auto &d = builtin_description_for (i);
       if (legacy_elementwise_anchor_p (i))
 	ASSERT_TRUE (i < elementwise_anchor_limit);
       if (d.prototype != PROTO_M_CONVERT
@@ -3119,8 +3215,8 @@ run_wide_signature_selftests ()
 	  if (extended)
 	    {
 	      ASSERT_EQ (source, src);
-	      ASSERT_EQ (builtin_descriptions[canonical].type, d.type);
-	      ASSERT_EQ (builtin_descriptions[canonical].expansion, d.expansion);
+	      ASSERT_EQ (builtin_description_for (canonical).type, d.type);
+	      ASSERT_EQ (builtin_description_for (canonical).expansion, d.expansion);
 	    }
 	}
     }
@@ -3199,7 +3295,7 @@ decode_mixed_builtin (unsigned int code, mixed_description &result)
 	{
 	  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
 	    {
-	      const auto &d = builtin_descriptions[i];
+	      const auto &d = builtin_description_for (i);
 	      int variant = matmul_variant (d.expansion);
 	      if (variant < 0 || d.prototype != PROTO_A_A_M_M
 		  || extended_integer_p (types[d.type].descriptor)
@@ -3241,7 +3337,7 @@ decode_mixed_builtin (unsigned int code, mixed_description &result)
     }
   if (result.canonical >= ZTT_BUILTIN_MAX)
     return false;
-  const auto &d = builtin_descriptions[result.canonical];
+  const auto &d = builtin_description_for (result.canonical);
   if (d.prototype != PROTO_A_A_M_M
       || !matmul_shape_allowed_p (shape, d.expansion)
       || (!packed_p && (types[d.type].descriptor & 0xff) < active_profile ()->uds)
@@ -3287,7 +3383,7 @@ decode_elementwise_builtin (unsigned int code, elementwise_description &result)
     }
   if (result.canonical >= ZTT_BUILTIN_MAX)
     return false;
-  const auto &d = builtin_descriptions[result.canonical];
+  const auto &d = builtin_description_for (result.canonical);
   bool scalar = d.prototype == PROTO_M_SHIFT_X;
   bool indexed = indexed_variant (d.expansion) >= 0;
   if ((!scalar && d.prototype != PROTO_M_SHIFT_M
@@ -4551,7 +4647,7 @@ decode_conversion_builtin (unsigned int code, conversion_description &result)
     }
   if (result.canonical >= ZTT_BUILTIN_MAX)
     return false;
-  const auto &d = builtin_descriptions[result.canonical];
+  const auto &d = builtin_description_for (result.canonical);
   if ((d.prototype != PROTO_M_CONVERT && d.prototype != PROTO_M_STRUCTURAL
        && d.prototype != PROTO_M_ABS)
       || !ztt_m_type_nodes[d.type]
@@ -4582,13 +4678,13 @@ conversion_builtin_decl (unsigned int code, bool initialize_p)
   if (!initialize_p)
     return error_mark_node;
   tree ftype = build_function_type_list
-    (ztt_m_type_nodes[builtin_descriptions[d.canonical].type],
+    (ztt_m_type_nodes[builtin_description_for (d.canonical).type],
      ztt_m_type_nodes[d.source], NULL_TREE);
   char name[64];
   snprintf (name, sizeof (name), "__builtin_riscv_ztt_%s_%u",
-	    builtin_descriptions[d.canonical].prototype == PROTO_M_ABS
+	    builtin_description_for (d.canonical).prototype == PROTO_M_ABS
 	    ? "abs"
-	    : builtin_descriptions[d.canonical].prototype == PROTO_M_STRUCTURAL
+	    : builtin_description_for (d.canonical).prototype == PROTO_M_STRUCTURAL
 	    ? "structural" : "convert", code);
   tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
@@ -4620,7 +4716,7 @@ decode_scalar_builtin (unsigned int code, scalar_description &result)
     }
   if (result.canonical >= ZTT_BUILTIN_MAX)
     return false;
-  const auto &d = builtin_descriptions[result.canonical];
+  const auto &d = builtin_description_for (result.canonical);
   bool ternary = scalar_ternary_variant (d.expansion) >= 0;
   if ((!ternary && scalar_arithmetic_variant (d.expansion) < 0)
       || !scalar_prototype_p (d.prototype, ternary)
@@ -4656,7 +4752,7 @@ scalar_builtin_decl (unsigned int code, bool initialize_p)
       return (*scalar_builtin_decls)[i].decl;
   if (!initialize_p)
     return error_mark_node;
-  const auto &canonical = builtin_descriptions[d.canonical];
+  const auto &canonical = builtin_description_for (d.canonical);
   bool ternary = scalar_ternary_variant (canonical.expansion) >= 0;
   tree dst = ztt_m_type_nodes[canonical.type];
   tree ftype = ternary
@@ -4688,7 +4784,7 @@ elementwise_builtin_decl (unsigned int code, bool initialize_p)
       return (*elementwise_builtin_decls)[i].decl;
   if (!initialize_p)
     return error_mark_node;
-  const auto &canonical = builtin_descriptions[d.canonical];
+  const auto &canonical = builtin_description_for (d.canonical);
   tree dst = ztt_m_type_nodes[canonical.type];
   tree data = ztt_m_type_nodes[d.data];
   tree count = d.count == TYPE_MAX ? size_type_node : ztt_m_type_nodes[d.count];
@@ -4715,7 +4811,7 @@ static unsigned int
 encode_mixed_builtin (unsigned int canonical, unsigned int shape,
 		      unsigned int lhs, unsigned int rhs)
 {
-  const auto &d = builtin_descriptions[canonical];
+  const auto &d = builtin_description_for (canonical);
   const auto &t = types[d.type];
   if ((t.descriptor & 0xff) > 32 || (lhs & 0xff) > 32 || (rhs & 0xff) > 32)
     {
@@ -4730,7 +4826,7 @@ encode_mixed_builtin (unsigned int canonical, unsigned int shape,
   unsigned int uds = active_profile ()->uds;
   bool packed_p = shape >= mixed_shape_count || (lhs & 0xff) < uds
     || (rhs & 0xff) < uds
-    || (types[builtin_descriptions[canonical].type].descriptor & 0xff) < uds;
+    || (types[builtin_description_for (canonical).type].descriptor & 0xff) < uds;
   bool q32_p = shape >= packed_shape_count;
   unsigned int radix = q32_p ? q32_shape_count
     : packed_p ? packed_shape_count : mixed_shape_count;
@@ -4759,7 +4855,7 @@ mixed_builtin_decl (unsigned int code, bool initialize_p)
       return (*mixed_builtin_decls)[i].decl;
   if (!initialize_p)
     return error_mark_node;
-  tree result = ztt_m_type_nodes[builtin_descriptions[d.canonical].type];
+  tree result = ztt_m_type_nodes[builtin_description_for (d.canonical).type];
   tree ftype = build_function_type_list
     (result, result, ztt_m_type_nodes[d.lhs], ztt_m_type_nodes[d.rhs], NULL_TREE);
   char name[64];
@@ -4778,10 +4874,12 @@ mixed_builtin_decl (unsigned int code, bool initialize_p)
 /* Build the default spelling from an eligible public catalog entry.  The
    descriptor and prototype, rather than the spelling alone, decide RM.  */
 static bool
-default_builtin_alias (const builtin_description &d, char (&name)[160])
+default_builtin_alias (const builtin_description &d, const char *canonical_name,
+		       char (&name)[160])
 {
   unsigned int desc = types[d.type].descriptor;
-  if (!startswith (d.name, "__riscv_ztt_") || !default_scalar_rm_p (desc))
+  if (!startswith (canonical_name, "__riscv_ztt_")
+      || !default_scalar_rm_p (desc))
     return false;
   if (broadcast_prototype_p (d.prototype)
       && !default_scalar_rm_p
@@ -4811,10 +4909,10 @@ default_builtin_alias (const builtin_description &d, char (&name)[160])
       && (desc & 0xff) >= active_profile ()->uds)
     return false;
 
-  gcc_assert (strlen (d.name) < sizeof (name));
+  gcc_assert (strlen (canonical_name) < sizeof (name));
   char *out = name;
   bool changed = false;
-  for (const char *in = d.name; *in;)
+  for (const char *in = canonical_name; *in;)
     if ((strncmp (in, "_rnu", 4) == 0 || strncmp (in, "_rne", 4) == 0)
 	&& (in[4] == '_' || in[4] == '\0'))
       {
@@ -4851,7 +4949,7 @@ register_functions ()
     }
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
-      const builtin_description &d = builtin_descriptions[i];
+      const builtin_description &d = builtin_description_for (i);
       if (exponent_p (d.expansion) && !runtime_profile_p ())
 	continue;
       type_index type = d.type;
@@ -4906,13 +5004,16 @@ register_functions ()
 	    continue;
 	}
       unsigned int code = (i << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
+      char name[160];
+      const char *canonical_name = in_lto_p ? nullptr
+	: canonical_builtin_name (d, name);
       builtin_decls[i] = (in_lto_p
 	? integer_zero_node
-	: simulate_builtin_function_decl (input_location, d.name,
+	: simulate_builtin_function_decl (input_location, canonical_name,
 					  registration_function_type (prototype, type),
 					  code, NULL, function_attributes ()));
       char alias[160];
-      if (!in_lto_p && default_builtin_alias (d, alias))
+      if (!in_lto_p && default_builtin_alias (d, canonical_name, alias))
 	simulate_builtin_function_decl (input_location, alias,
 					TREE_TYPE (builtin_decls[i]), code,
 					NULL, function_attributes ());
@@ -5477,7 +5578,7 @@ public_data_scalar (unsigned int code, unsigned int &op,
     return decode_integer_broadcast (code, dst, tc);
   if (code >= ZTT_BUILTIN_MAX)
     return false;
-  const auto &d = builtin_descriptions[code];
+  const auto &d = builtin_description_for (code);
   dst = d.type;
   if (d.expansion == EXPAND_MBCAST_M_X)
     {
@@ -5540,7 +5641,7 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
     }
   if (code >= ZTT_BUILTIN_MAX)
     return NULL_TREE;
-  const auto &d = builtin_descriptions[code];
+  const auto &d = builtin_description_for (code);
   if (exponent_p (d.expansion))
     return resolve_exponent (loc, d, args);
   if (matrix_math_operation (d.expansion) >= 0)
@@ -5837,8 +5938,8 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
       if (type_for_tree (TREE_TYPE (arg))
 	  == m_utility_source_type (PROTO_M_EXTRACT_COLUMN, d.type))
 	for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
-	  if (builtin_descriptions[i].type == d.type
-	      && builtin_descriptions[i].prototype == PROTO_M_EXTRACT_COLUMN)
+	  if (builtin_description_for (i).type == d.type
+	      && builtin_description_for (i).prototype == PROTO_M_EXTRACT_COLUMN)
 	    return builtin_decl (i, true);
       return NULL_TREE;
     }
@@ -5892,7 +5993,7 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
 	return NULL_TREE;
       for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
 	{
-	  const auto &candidate = builtin_descriptions[i];
+	  const auto &candidate = builtin_description_for (i);
 	  if (candidate.type != d.type || candidate.expansion != d.expansion)
 	    continue;
 	  const auto *shape = matmul_shape (candidate.prototype);
@@ -5917,8 +6018,8 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
 	  && types[actual].rows == types[d.type].columns
 	  && types[actual].columns == 1)
 	for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
-	  if (builtin_descriptions[i].type == d.type
-	      && builtin_descriptions[i].prototype == PROTO_A_M_COLUMN)
+	  if (builtin_description_for (i).type == d.type
+	      && builtin_description_for (i).prototype == PROTO_A_M_COLUMN)
 	    return builtin_decl (i, true);
       return NULL_TREE;
     }
@@ -5944,8 +6045,8 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
       return error_mark_node;
     }
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
-    if (builtin_descriptions[i].expansion == d.expansion
-	&& builtin_descriptions[i].type == type
+    if (builtin_description_for (i).expansion == d.expansion
+	&& builtin_description_for (i).type == type
 	&& (i == ZTT_BUILTIN_MSS_RM_I8_RNE_1X1 || !store_dispatch_p (i)))
       return builtin_decl (i, true);
   gcc_unreachable ();
@@ -6091,7 +6192,7 @@ check_builtin_arguments (location_t loc, unsigned int code,
   if (code >= ZTT_BUILTIN_MAX)
     return false;
 
-  const builtin_description &d = builtin_descriptions[code];
+  const builtin_description &d = builtin_description_for (code);
   if (d.prototype == PROTO_VOID_MPTR_MPTR && args->length () == 2)
     return reject_pointer_zip (loc, d);
   if (rowcol_variant (d.expansion) >= 0 && args->length () == 2)
@@ -6348,15 +6449,15 @@ check_builtin_call (location_t loc, unsigned int code, tree,
 		"a supported %<-mztt-profile=gcc-runtime-uU-mM-aA%>");
       return false;
     }
-  if (builtin_descriptions[code].expansion == EXPAND_MEXTRACT && nargs == 2
+  if (builtin_description_for (code).expansion == EXPAND_MEXTRACT && nargs == 2
       && (!tree_fits_uhwi_p (args[1]) || tree_to_uhwi (args[1]) > 1))
     {
       error_at (loc, "AME/Ztt mextract index must be an integer constant 0 or 1");
       return false;
     }
-  if (builtin_descriptions[code].prototype == PROTO_VOID_MPTR_MPTR
+  if (builtin_description_for (code).prototype == PROTO_VOID_MPTR_MPTR
       && nargs == 2)
-    return reject_pointer_zip (loc, builtin_descriptions[code]);
+    return reject_pointer_zip (loc, builtin_description_for (code));
   return true;
 }
 
@@ -6510,7 +6611,8 @@ expand_elementwise (unsigned int code, tree exp)
   elementwise_description operation;
   bool valid = decode_elementwise_builtin (code, operation);
   gcc_assert (valid);
-  return expand_elementwise (builtin_descriptions[operation.canonical], operation, exp);
+  return expand_elementwise (builtin_description_for (operation.canonical),
+			     operation, exp);
 }
 
 static rtx
@@ -6561,7 +6663,8 @@ expand_conversion (unsigned int code, tree exp)
   conversion_description operation;
   bool valid = decode_conversion_builtin (code, operation);
   gcc_assert (valid);
-  return expand_conversion (builtin_descriptions[operation.canonical], operation, exp);
+  return expand_conversion (builtin_description_for (operation.canonical),
+			    operation, exp);
 }
 
 /* C first converts to the
@@ -6641,7 +6744,8 @@ expand_scalar (unsigned int code, tree exp)
   scalar_description operation;
   bool valid = decode_scalar_builtin (code, operation);
   gcc_assert (valid);
-  return expand_scalar (builtin_descriptions[operation.canonical], operation, exp);
+  return expand_scalar (builtin_description_for (operation.canonical),
+			operation, exp);
 }
 
 /* Copy the four 32-byte
@@ -7078,7 +7182,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
   else
     gcc_assert (code < ZTT_BUILTIN_MAX);
   builtin_description d
-    = builtin_descriptions[mixed_p ? mixed.canonical : code];
+    = builtin_description_for (mixed_p ? mixed.canonical : code);
   if (mixed_p)
     d.prototype = mixed.prototype;
   unsigned int dtype = types[d.type].descriptor;
@@ -7086,8 +7190,10 @@ expand_builtin (unsigned int code, tree exp, rtx target)
   unsigned int nregs = type_nregs (d.type);
   if (!nregs)
     {
+      char name[160];
       error_at (EXPR_LOCATION (exp), "%qs has an unsupported AME/Ztt shape "
-		"for UDS=%u", d.name, active_profile ()->uds);
+		"for UDS=%u", canonical_builtin_name (d, name),
+		active_profile ()->uds);
       return const0_rtx;
     }
   machine_mode mode = type_mode (d.type);
@@ -8230,6 +8336,51 @@ acc_borrowed_move_length (rtx *operands)
     core = 2 * r + 4 + (r > 1);
   return 4 * (core + 4 * active_profile ()->mregs + 1);
 }
+/* Reuse requires identical complete hard-register groups and Md.  */
+static bool
+acc_shared_source_p (rtx *operands, bool mixed_p)
+{
+  return reload_completed
+    && REG_P (operands[2]) && M_REG_P (REGNO (operands[2]))
+    && rtx_equal_p (operands[2], operands[3])
+    && REG_P (operands[4]) && GP_REG_P (REGNO (operands[4]))
+    && (!mixed_p || rtx_equal_p (operands[4], operands[8]));
+}
+
+#if CHECKING_P
+static void
+run_acc_shared_source_selftests ()
+{
+  using namespace selftest;
+  int saved_reload_completed = reload_completed;
+  rtx operands[10] = {};
+  operands[2] = operands[3] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
+  operands[4] = operands[8] = gen_rtx_REG (SImode, 10);
+  reload_completed = 0;
+  ASSERT_FALSE (acc_shared_source_p (operands, false));
+  ASSERT_EQ (acc_mmul_length (operands, false), 76U);
+  reload_completed = 1;
+  ASSERT_TRUE (acc_shared_source_p (operands, false));
+  ASSERT_TRUE (acc_shared_source_p (operands, true));
+  ASSERT_EQ (acc_mmul_length (operands, true), 40U);
+  operands[8] = gen_rtx_REG (SImode, 11);
+  ASSERT_FALSE (acc_shared_source_p (operands, true));
+  ASSERT_EQ (acc_mmul_length (operands, true), 76U);
+  operands[8] = operands[4];
+  operands[3] = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+  ASSERT_FALSE (acc_shared_source_p (operands, true));
+  operands[3] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 1);
+  ASSERT_FALSE (acc_shared_source_p (operands, true));
+  operands[2] = operands[3] = gen_rtx_REG (ZTTMR2mode, FIRST_PSEUDO_REGISTER);
+  ASSERT_FALSE (acc_shared_source_p (operands, true));
+  operands[2] = operands[3] = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+  ASSERT_EQ (acc_mmul_length (operands, true), 16U);
+  operands[4] = operands[8] = gen_rtx_REG (SImode, FIRST_PSEUDO_REGISTER);
+  ASSERT_FALSE (acc_shared_source_p (operands, true));
+  reload_completed = saved_reload_completed;
+}
+#endif
+
 /* The private MEM owns the complete wide M group.  Save every member
    before msettyp clears it, then restore every member before arithmetic.  */
 const char *
@@ -8270,7 +8421,8 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
   preserve (source, descriptor);
   if (mul_p)
     {
-      preserve (operands[3], mixed_p ? operands[8] : descriptor);
+      if (!acc_shared_source_p (operands, mixed_p))
+	preserve (operands[3], mixed_p ? operands[8] : descriptor);
       /* The selector is
 	 internal and constant; every variant retains the tied old ACC.  */
       static const char *const templates[] = {
@@ -8301,10 +8453,11 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
 }
 
 unsigned int
-acc_mmul_length (rtx *operands)
+acc_mmul_length (rtx *operands, bool mixed_p)
 {
   unsigned int length = 1;
-  for (unsigned int i = 2; i <= 3; ++i)
+  unsigned int last = acc_shared_source_p (operands, mixed_p) ? 2 : 3;
+  for (unsigned int i = 2; i <= last; ++i)
     {
       unsigned int r = m_nregs (GET_MODE (operands[i]));
       length += r == 1 ? 3 : 4 * r + 1;
