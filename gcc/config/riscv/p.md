@@ -65,8 +65,6 @@
   UNSPEC_PSSHLR
   UNSPEC_PUSATI
   UNSPEC_PSABS
-  UNSPEC_PABD
-  UNSPEC_PABDU
   UNSPEC_PSATI
   UNSPEC_SATI
   UNSPEC_USATI
@@ -1145,129 +1143,6 @@
          RVP_EXCHANGE_I32X2))]
   "TARGET_RVP && TARGET_64BIT"
   "<rvp_exchange_insn>.wx\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-;Packed Absolute Value and Absolute Difference
-;
-; pabs is a pseudo-operation: pabs(rs1) = pabd(rs1, x0), so it is emitted as
-; "pabd.<suffix> %0,%1,x0" per the P-ext proposal.
-(define_insn "riscv_pabs_<SAT_NAME>"
-  [(set (match_operand:ABD32 0 "register_operand" "=r")
-        (unspec:ABD32 [(match_operand:ABD32 1 "register_operand" "r")]
-         UNSPEC_PABD))]
-  "TARGET_RVP"
-  "pabd.<SAT_SUFFIX>\t%0,%1,x0"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_pabd_<SAT_NAME>"
-  [(set (match_operand:ABD32 0 "register_operand" "=r")
-        (unspec:ABD32 [(match_operand:ABD32 1 "register_operand" "r")
-                       (match_operand:ABD32 2 "register_operand" "r")]
-         UNSPEC_PABD))]
-  "TARGET_RVP"
-  "pabd.<SAT_SUFFIX>\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_pabdu_<USAT_NAME>"
-  [(set (match_operand:ABD32 0 "register_operand" "=r")
-        (unspec:ABD32 [(match_operand:ABD32 1 "register_operand" "r")
-                       (match_operand:ABD32 2 "register_operand" "r")]
-         UNSPEC_PABDU))]
-  "TARGET_RVP"
-  "pabdu.<SAT_SUFFIX>\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_expand "riscv_pabs_<SAT_NAME>"
-  [(set (match_operand:ABD64 0 "register_operand")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand")]
-         UNSPEC_PABD))]
-  "TARGET_RVP"
-{
-  if (TARGET_64BIT)
-    emit_insn (gen_riscv_pabs_<SAT_NAME>_rv64 (operands[0], operands[1]));
-  else
-    emit_insn (gen_riscv_pabs_<SAT_NAME>_rv32 (operands[0], operands[1]));
-  DONE;
-})
-
-(define_insn "riscv_pabs_<SAT_NAME>_rv32"
-  [(set (match_operand:ABD64 0 "register_operand" "=R")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand" "r")]
-         UNSPEC_PABD))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "pabd.<DSAT_SUFFIX>\t%0,%1,x0"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_pabs_<SAT_NAME>_rv64"
-  [(set (match_operand:ABD64 0 "register_operand" "=r")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand" "r")]
-         UNSPEC_PABD))]
-  "TARGET_RVP && TARGET_64BIT"
-  "pabd.<SAT_SUFFIX>\t%0,%1,x0"
-  [(set_attr "type" "simd")])
-
-(define_expand "riscv_pabd_<SAT_NAME>"
-  [(set (match_operand:ABD64 0 "register_operand")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand")
-                       (match_operand:ABD64 2 "register_operand")]
-         UNSPEC_PABD))]
-  "TARGET_RVP"
-{
-  if (TARGET_64BIT)
-    emit_insn (gen_riscv_pabd_<SAT_NAME>_rv64 (operands[0], operands[1], operands[2]));
-  else
-    emit_insn (gen_riscv_pabd_<SAT_NAME>_rv32 (operands[0], operands[1], operands[2]));
-  DONE;
-})
-
-(define_insn "riscv_pabd_<SAT_NAME>_rv32"
-  [(set (match_operand:ABD64 0 "register_operand" "=R")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand" "r")
-                       (match_operand:ABD64 2 "register_operand" "r")]
-         UNSPEC_PABD))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "pabd.<DSAT_SUFFIX>\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_pabd_<SAT_NAME>_rv64"
-  [(set (match_operand:ABD64 0 "register_operand" "=r")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand" "r")
-                       (match_operand:ABD64 2 "register_operand" "r")]
-         UNSPEC_PABD))]
-  "TARGET_RVP && TARGET_64BIT"
-  "pabd.<SAT_SUFFIX>\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_expand "riscv_pabdu_<USAT_NAME>"
-  [(set (match_operand:ABD64 0 "register_operand")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand")
-                       (match_operand:ABD64 2 "register_operand")]
-         UNSPEC_PABDU))]
-  "TARGET_RVP"
-{
-  if (TARGET_64BIT)
-    emit_insn (gen_riscv_pabdu_<USAT_NAME>_rv64 (operands[0], operands[1], operands[2]));
-  else
-    emit_insn (gen_riscv_pabdu_<USAT_NAME>_rv32 (operands[0], operands[1], operands[2]));
-  DONE;
-})
-
-(define_insn "riscv_pabdu_<USAT_NAME>_rv32"
-  [(set (match_operand:ABD64 0 "register_operand" "=R")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand" "r")
-                       (match_operand:ABD64 2 "register_operand" "r")]
-         UNSPEC_PABDU))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "pabdu.<DSAT_SUFFIX>\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_pabdu_<USAT_NAME>_rv64"
-  [(set (match_operand:ABD64 0 "register_operand" "=r")
-        (unspec:ABD64 [(match_operand:ABD64 1 "register_operand" "r")
-                       (match_operand:ABD64 2 "register_operand" "r")]
-         UNSPEC_PABDU))]
-  "TARGET_RVP && TARGET_64BIT"
-  "pabdu.<SAT_SUFFIX>\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
 ;Packed Absolute Difference Sum

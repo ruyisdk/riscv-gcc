@@ -72,21 +72,17 @@ riscv_p_expand_vec_cmp (rtx *operands)
     case LE:
     case LEU:
       {
-	/* result = ~(op2 < op1) */
-	enum rtx_code base_code = (code == LE) ? LT : LTU;
+	/* result = ~(op1 > op2) */
+	enum rtx_code base_code = (code == LE) ? GT : GTU;
 	tmp = gen_reg_rtx (mode);
-	emit_move_insn (tmp, gen_rtx_fmt_ee (base_code, mode, op2, op1));
+	emit_move_insn (tmp, gen_rtx_fmt_ee (base_code, mode, op1, op2));
 	emit_insn (gen_rtx_SET (result, gen_rtx_NOT (mode, tmp)));
       }
       break;
 
     case GT:
     case GTU:
-      {
-	/* result = (op2 < op1) */
-	enum rtx_code base_code = (code == GT) ? LT : LTU;
-	emit_move_insn (result, gen_rtx_fmt_ee (base_code, mode, op2, op1));
-      }
+      emit_move_insn (result, gen_rtx_fmt_ee (code, mode, op1, op2));
       break;
 
     case GE:

@@ -55,6 +55,11 @@
   (PV2HI "6") (PV4HI "6")
   (PV2SI "22")])
 
+;; QIH_PABD: Scalar and packed byte/halfword modes with a PABD form, used
+;; by abs<mode>2 (pabd rd, rs, x0 for the scalars, pabd.db/dh over the
+;; RV32 register pairs).
+(define_mode_iterator QIH_PABD [QI HI PV4QI PV2HI PV8QI PV4HI])
+
 ;; PVQIHI: Packed vector modes for byte and halfword elements only
 ;; On RV64, we support both 4-byte (PV4QI, PV2HI) and 8-byte (PV8QI, PV4HI) vectors
 (define_mode_iterator PVQIHI [PV4QI PV2HI
@@ -142,7 +147,7 @@
 (define_code_iterator rvp_binop
   [plus ss_plus us_plus
    minus ss_minus us_minus
-   smax umax smin umin eq lt ltu])
+   smax umax smin umin eq lt ltu gt gtu])
 
 (define_code_iterator rvp_widen_op
   [plus minus])
@@ -165,13 +170,13 @@
   [(plus "add") (ss_plus "ssadd") (us_plus "usadd")
    (minus "sub") (ss_minus "sssub") (us_minus "ussub")
    (smax "smax") (umax "umax") (smin "smin") (umin "umin")
-   (eq "eq") (lt "lt") (ltu "ltu")])
+   (eq "eq") (lt "lt") (ltu "ltu") (gt "gt") (gtu "gtu")])
 
 (define_code_attr rvp_insn
   [(plus "padd") (ss_plus "psadd") (us_plus "psaddu")
    (minus "psub") (ss_minus "pssub") (us_minus "pssubu")
    (smax "pmax") (umax "pmaxu") (smin "pmin") (umin "pminu")
-   (eq "pmseq") (lt "pmslt") (ltu "pmsltu")])
+   (eq "pmseq") (lt "pmslt") (ltu "pmsltu") (gt "pmsgt") (gtu "pmsgtu")])
 
 ;; Standard optab name prefix for packed multiply-high (smul.../umul...).
 (define_code_attr mulh_prefix [(smul_highpart "s") (umul_highpart "u")])
