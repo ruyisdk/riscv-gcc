@@ -217,17 +217,6 @@
    (lshiftrt "psrl")
    (ashiftrt "psra")])
 
-;; PAS/PSA: alternating add-subtract operations
-;; pas: even lanes add, odd lanes subtract
-;; psa: even lanes subtract, odd lanes add
-(define_code_iterator pas_even_op [plus minus])
-
-(define_code_attr pas_odd_op
-  [(plus "minus") (minus "plus")])
-
-(define_code_attr pas_insn
-  [(plus "pas") (minus "psa")])
-
 ;; Absolute difference operations
 (define_code_iterator abd_maxop [smax umax])
 
