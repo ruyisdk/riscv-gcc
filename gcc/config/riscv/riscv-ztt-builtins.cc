@@ -3008,12 +3008,14 @@ encode_conversion_builtin (unsigned int canonical, type_index source)
 #if CHECKING_P
 static void run_large_matrix_signature_selftests ();
 static void run_acc_shared_source_selftests ();
+static void run_md_reuse_selftests ();
 
 void
 run_wide_signature_selftests ()
 {
   using namespace selftest;
   run_acc_shared_source_selftests ();
+  run_md_reuse_selftests ();
   for (unsigned int i = 0; i < exponent_type_count; ++i)
     {
       auto d = builtin_description_for (exponent_first + i);
@@ -8353,13 +8355,15 @@ run_acc_shared_source_selftests ()
 {
   using namespace selftest;
   int saved_reload_completed = reload_completed;
-  rtx operands[10] = {};
+  rtx operands[11] = {};
   operands[2] = operands[3] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
-  operands[4] = operands[8] = gen_rtx_REG (SImode, 10);
+  operands[4] = gen_rtx_REG (SImode, 10);
+  operands[8] = operands[9] = const0_rtx;
   reload_completed = 0;
   ASSERT_FALSE (acc_shared_source_p (operands, false));
   ASSERT_EQ (acc_mmul_length (operands, false), 76U);
   reload_completed = 1;
+  operands[8] = operands[4];
   ASSERT_TRUE (acc_shared_source_p (operands, false));
   ASSERT_TRUE (acc_shared_source_p (operands, true));
   ASSERT_EQ (acc_mmul_length (operands, true), 40U);
@@ -8394,7 +8398,8 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
   rtx descriptor = operands[mul_p ? 4 : 2];
   rtx base = XEXP (operands[mul_p ? 5 : 3], 0);
   rtx stride = operands[mul_p ? 6 : 4];
-  rtx address = operands[mul_p ? (mixed_p ? 9 : 8) : 5];
+  rtx address = operands[mul_p ? (mixed_p ? 10 : 9) : 5];
+  unsigned int prepared = mul_p ? UINTVAL (operands[mixed_p ? 9 : 8]) : 0;
   auto transfer = [&] (rtx group, bool load_p)
     {
       bool group_p = m_nregs (GET_MODE (group)) > 1;
@@ -8418,10 +8423,11 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
 	}
       transfer (group, true);
     };
-  preserve (source, descriptor);
+  if (!(prepared & 1))
+    preserve (source, descriptor);
   if (mul_p)
     {
-      if (!acc_shared_source_p (operands, mixed_p))
+      if (!(prepared & 2) && !acc_shared_source_p (operands, mixed_p))
 	preserve (operands[3], mixed_p ? operands[8] : descriptor);
       /* The selector is
 	 internal and constant; every variant retains the tied old ACC.  */
@@ -8456,9 +8462,12 @@ unsigned int
 acc_mmul_length (rtx *operands, bool mixed_p)
 {
   unsigned int length = 1;
+  unsigned int prepared = UINTVAL (operands[mixed_p ? 9 : 8]);
   unsigned int last = acc_shared_source_p (operands, mixed_p) ? 2 : 3;
   for (unsigned int i = 2; i <= last; ++i)
     {
+      if (prepared & (1U << (i - 2)))
+	continue;
       unsigned int r = m_nregs (GET_MODE (operands[i]));
       length += r == 1 ? 3 : 4 * r + 1;
     }
@@ -8865,12 +8874,13 @@ lower_explicit_state ()
 		       (mode, Pmode, dest, XVECEXP (src, 0, 0), XVECEXP (src, 0, 1),
 			XVECEXP (src, 0, 2), descriptor, scratch,
 			stride ? stride : const0_rtx, XVECEXP (src, 0, 3),
-			force_reg (Pmode, XVECEXP (src, 0, 5))));
+			force_reg (Pmode, XVECEXP (src, 0, 5)), const0_rtx));
 	  else
 	    emit_insn (gen_ztt_acc_mmul
 		       (mode, Pmode, dest, XVECEXP (src, 0, 0), XVECEXP (src, 0, 1),
 			XVECEXP (src, 0, 2), descriptor, scratch,
-			stride ? stride : const0_rtx, XVECEXP (src, 0, 3)));
+			stride ? stride : const0_rtx, XVECEXP (src, 0, 3),
+			const0_rtx));
 	  break;
 	case UNSPEC_ZTT_MZERO_2D_M:
 	  emit_insn (gen_ztt_state_zero (mode, Pmode, dest, descriptor));
@@ -8985,6 +8995,203 @@ public:
 	}
     return lower_explicit_state ();
   }
+};
+
+/* Track complete physical M groups and their descriptor operands.  */
+class local_md_state
+{
+  struct fact { rtx group; rtx descriptor; } facts[M_REG_NUM] = {};
+
+public:
+  void clear () { memset (facts, 0, sizeof (facts)); }
+
+  void invalidate (rtx reg)
+  {
+    for (auto &f : facts)
+      if (f.group && (reg_overlap_mentioned_p (reg, f.group)
+		      || reg_overlap_mentioned_p (reg, f.descriptor)))
+	f.group = nullptr;
+  }
+
+  bool matches (rtx group, rtx descriptor) const
+  {
+    if (!REG_P (group) || !M_REG_P (REGNO (group)))
+      return false;
+    const auto &f = facts[REGNO (group) - M_REG_FIRST];
+    return f.group && rtx_equal_p (f.group, group)
+      && rtx_equal_p (f.descriptor, descriptor);
+  }
+
+  void remember (rtx group, rtx descriptor)
+  {
+    gcc_assert (REG_P (group) && M_REG_P (REGNO (group))
+		&& REG_P (descriptor) && GP_REG_P (REGNO (descriptor)));
+    invalidate (group);
+    facts[REGNO (group) - M_REG_FIRST] = { group, descriptor };
+  }
+};
+
+static void
+invalidate_md_store (rtx reg, const_rtx, void *data)
+{
+  if (!MEM_P (reg))
+    static_cast<local_md_state *> (data)->invalidate (reg);
+}
+
+static bool
+md_scalar_insn_p (rtx pattern)
+{
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, pattern, NONCONST)
+    if (GET_CODE (*iter) == UNSPEC || GET_CODE (*iter) == UNSPEC_VOLATILE
+	|| GET_CODE (*iter) == ASM_INPUT || GET_CODE (*iter) == ASM_OPERANDS
+	|| GET_CODE (*iter) == COND_EXEC || GET_CODE (*iter) == PRE_INC
+	|| GET_CODE (*iter) == POST_INC || GET_CODE (*iter) == PRE_DEC
+	|| GET_CODE (*iter) == POST_DEC || GET_CODE (*iter) == PRE_MODIFY
+	|| GET_CODE (*iter) == POST_MODIFY
+	|| (REG_P (*iter) && (M_REG_P (REGNO (*iter))
+			     || ACC_REG_P (REGNO (*iter)))))
+      return false;
+  return true;
+}
+
+/* Reuse Md within each block after scheduling and register allocation.  */
+static unsigned int
+reuse_local_md ()
+{
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      local_md_state state;
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (CALL_P (insn) || JUMP_P (insn))
+	    {
+	      state.clear ();
+	      continue;
+	    }
+	  rtx set = single_set (insn);
+	  rtx src = set ? SET_SRC (set) : NULL_RTX;
+	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
+	    {
+	      rtx group = NULL_RTX, descriptor = NULL_RTX;
+	      switch (XINT (src, 1))
+		{
+		case UNSPECV_ZTT_STATE_LOAD:
+		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 1);
+		  break;
+		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
+		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 3);
+		  break;
+		case UNSPECV_ZTT_SETTYP_P0:
+		case UNSPECV_ZTT_STATE_ZERO:
+		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
+		  break;
+		case UNSPECV_ZTT_ACC_FROM_M:
+		  if (acc_nregs (GET_MODE (SET_DEST (set))) == 1)
+		    {
+		      group = XVECEXP (src, 0, 0);
+		      descriptor = XVECEXP (src, 0, 1);
+		    }
+		  break;
+		case UNSPECV_ZTT_ACC_CLEAR:
+		case UNSPECV_ZTT_ACC_ZERO:
+		  note_stores (insn, invalidate_md_store, &state);
+		  continue;
+		case UNSPECV_ZTT_ACC_MMUL:
+		  {
+		    bool mixed = XVECLEN (src, 0) == 8;
+		    rtx lhs = XVECEXP (src, 0, 1), rhs = XVECEXP (src, 0, 2);
+		    rtx ld = XVECEXP (src, 0, 3);
+		    rtx rd = mixed ? XVECEXP (src, 0, 6) : ld;
+		    if (reg_overlap_mentioned_p (lhs, rhs)
+			&& (!rtx_equal_p (lhs, rhs) || !rtx_equal_p (ld, rd)))
+		      break;
+		    unsigned int mask = state.matches (lhs, ld)
+		      | (state.matches (rhs, rd) << 1);
+		    rtx *where = &XVECEXP (src, 0, mixed ? 7 : 6);
+		    if (mask)
+		      {
+			bool changed = validate_change (insn, where, GEN_INT (mask), false);
+			gcc_assert (changed);
+			if (dump_file)
+			  fprintf (dump_file, "Reuse Md at insn %d: sources %u\n",
+				   INSN_UID (insn), mask);
+		      }
+		    note_stores (insn, invalidate_md_store, &state);
+		    state.remember (lhs, ld);
+		    state.remember (rhs, rd);
+		    continue;
+		  }
+		default: break;
+		}
+	      if (group)
+		{
+		  note_stores (insn, invalidate_md_store, &state);
+		  state.remember (group, descriptor);
+		  continue;
+		}
+	    }
+	  if (md_scalar_insn_p (PATTERN (insn)))
+	    note_stores (insn, invalidate_md_store, &state);
+	  else
+	    state.clear ();
+	}
+    }
+  return 0;
+}
+
+#if CHECKING_P
+static void
+run_md_reuse_selftests ()
+{
+  using namespace selftest;
+  local_md_state state;
+  rtx group = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
+  rtx desc = gen_rtx_REG (SImode, 10);
+  state.remember (group, desc);
+  ASSERT_TRUE (state.matches (group, desc));
+  ASSERT_FALSE (state.matches (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST), desc));
+  ASSERT_FALSE (state.matches (group, gen_rtx_REG (SImode, 11)));
+  state.invalidate (gen_rtx_REG (SImode, 11));
+  ASSERT_TRUE (state.matches (group, desc));
+  state.invalidate (desc);
+  ASSERT_FALSE (state.matches (group, desc));
+  state.remember (group, desc);
+  state.invalidate (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1));
+  ASSERT_FALSE (state.matches (group, desc));
+  state.remember (group, desc);
+  state.remember (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1), desc);
+  ASSERT_FALSE (state.matches (group, desc));
+  state.clear ();
+  ASSERT_FALSE (state.matches (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1), desc));
+  ASSERT_FALSE (md_scalar_insn_p (gen_rtx_ASM_INPUT (VOIDmode, "")));
+  ASSERT_FALSE (md_scalar_insn_p (gen_rtx_POST_INC (SImode, desc)));
+  ASSERT_FALSE (md_scalar_insn_p
+    (gen_rtx_COND_EXEC (VOIDmode, const1_rtx, gen_rtx_SET (desc, const0_rtx))));
+}
+#endif
+
+const pass_data pass_data_ztt_md_reuse =
+{
+  RTL_PASS, "ztt_md_reuse", OPTGROUP_NONE, TV_MACH_DEP,
+  0, 0, 0, 0, 0
+};
+
+class pass_ztt_md_reuse : public rtl_opt_pass
+{
+public:
+  pass_ztt_md_reuse (gcc::context *ctxt)
+    : rtl_opt_pass (pass_data_ztt_md_reuse, ctxt)
+  {}
+  bool gate (function *) final override
+  {
+    return optimize && TARGET_ZTT && typed_profile_p () && reload_completed;
+  }
+  unsigned int execute (function *) final override { return reuse_local_md (); }
 };
 
 const char *
@@ -9111,6 +9318,12 @@ rtl_opt_pass *
 make_pass_ztt_state (gcc::context *ctxt)
 {
   return new riscv_ztt::pass_ztt_state (ctxt);
+}
+
+rtl_opt_pass *
+make_pass_ztt_md_reuse (gcc::context *ctxt)
+{
+  return new riscv_ztt::pass_ztt_md_reuse (ctxt);
 }
 
 using namespace riscv_ztt;

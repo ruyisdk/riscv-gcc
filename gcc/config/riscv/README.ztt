@@ -94,3 +94,13 @@ Private MEM and scratch operands remain in RTL.
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and
 retains ACC updates and arithmetic side effects.
+
+ztt_md_reuse runs after allocation and scheduling, before CFG teardown.
+It tracks complete M groups and unchanged descriptor GPRs within each block.
+Matching matmul sources skip save/set/reload; a source mask controls output
+and instruction length.
+
+Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
+Register definitions invalidate dependent descriptors and overlapping groups.
+The pass leaves Ad, explicit clears and arithmetic effects unchanged.
+It is disabled at O0 and retains private slots and scratch constraints.

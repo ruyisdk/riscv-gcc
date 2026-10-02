@@ -145,6 +145,7 @@ extern rtl_opt_pass *make_pass_ztt_verify_regions (gcc::context *);
 extern void riscv_ztt_note_descriptor (unsigned int);
 extern bool riscv_ztt_explicit_state_p ();
 extern rtl_opt_pass *make_pass_ztt_state (gcc::context *);
+extern rtl_opt_pass *make_pass_ztt_md_reuse (gcc::context *);
 extern const char *riscv_output_return ();
 extern void riscv_declare_function_name (FILE *, const char *, tree);
 extern void riscv_declare_function_size (FILE *, const char *, tree);
