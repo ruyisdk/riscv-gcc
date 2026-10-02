@@ -8385,8 +8385,8 @@ run_acc_shared_source_selftests ()
 }
 #endif
 
-/* The private MEM owns the complete wide M group.  Save every member
-   before msettyp clears it, then restore every member before arithmetic.  */
+/* Private MEM preserves the M group across msettyp; reused sources still
+   require destination Ad setup.  */
 const char *
 output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
 {
@@ -8398,8 +8398,10 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
   rtx descriptor = operands[mul_p ? 4 : 2];
   rtx base = XEXP (operands[mul_p ? 5 : 3], 0);
   rtx stride = operands[mul_p ? 6 : 4];
-  rtx address = operands[mul_p ? (mixed_p ? 10 : 9) : 5];
-  unsigned int prepared = mul_p ? UINTVAL (operands[mixed_p ? 9 : 8]) : 0;
+  rtx address = operands[mul_p ? (mixed_p ? 10 : 9) : 6];
+  unsigned int prepared = UINTVAL (operands[mul_p ? (mixed_p ? 9 : 8) : 5]);
+  gcc_assert (mul_p || !prepared
+	      || (prepared == 1 && acc_nregs (mode) == 1));
   auto transfer = [&] (rtx group, bool load_p)
     {
       bool group_p = m_nregs (GET_MODE (group)) > 1;
@@ -8866,7 +8868,7 @@ lower_explicit_state ()
 	case UNSPEC_ZTT_ACC_FROM_M:
 	  emit_insn (gen_ztt_acc_from_m
 		     (mode, Pmode, dest, XVECEXP (src, 0, 0), descriptor, scratch,
-		      stride ? stride : const0_rtx));
+		      stride ? stride : const0_rtx, const0_rtx));
 	  break;
 	case UNSPEC_ZTT_ACC_MMUL:
 	  if (mixed_mul)
@@ -9147,6 +9149,15 @@ reuse_local_md ()
 		    {
 		      group = XVECEXP (src, 0, 0);
 		      descriptor = XVECEXP (src, 0, 1);
+		      if (state.matches (group, descriptor))
+			{
+			  bool changed = validate_change
+			    (insn, &XVECEXP (src, 0, 3), const1_rtx, false);
+			  gcc_assert (changed);
+			  if (dump_file)
+			    fprintf (dump_file, "Reuse Md for ACC move at insn %d\n",
+				     INSN_UID (insn));
+			}
 		    }
 		  break;
 		case UNSPECV_ZTT_ACC_CLEAR:

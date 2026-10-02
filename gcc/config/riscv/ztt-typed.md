@@ -1413,17 +1413,21 @@
   [(set (match_operand:ZTT_XA 0 "register_operand" "=War")
         (unspec_volatile:ZTT_XA
           [(match_operand:<ztt_acc_full_m> 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
-           (match_operand:P 4 "reg_or_0_operand" "rJ")]
+          (match_operand:P 2 "register_operand" "r")
+           (match_operand:P 4 "reg_or_0_operand" "rJ")
+           (match_operand 5 "const_int_operand" "n")]
           UNSPECV_ZTT_ACC_FROM_M))
    (clobber (match_operand:<ztt_acc_full_m> 3 "memory_operand" "=A"))
-   (clobber (match_scratch:P 5 "<ztt_acc_state_c>"))]
+   (clobber (match_scratch:P 6 "<ztt_acc_state_c>"))]
   "TARGET_ZTT && riscv_ztt::acc_mode_supported_p (<ZTT_XA:MODE>mode)"
 {
   return riscv_ztt::output_acc_state (operands, false);
 }
   [(set_attr "type" "multi")
-   (set_attr "length" "<ztt_acc_from_length>")])
+   (set (attr "length")
+        (if_then_else (match_test "INTVAL (operands[5]) != 0")
+                      (const_int 8)
+                      (const_int <ztt_acc_from_length>)))])
 
 ;; A tied accumulator input enforces read/modify/write.  When old_acc
 ;; remains live, ordinary ACC moves preserve it before the destructive

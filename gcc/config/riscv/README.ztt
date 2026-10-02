@@ -97,8 +97,10 @@ retains ACC updates and arithmetic side effects.
 
 ztt_md_reuse runs after allocation and scheduling, before CFG teardown.
 It tracks complete M groups and descriptor values within each block.
-Matching matmul sources skip save/set/reload; a source mask controls output
-and instruction length.
+Matching matmul and single-ACC M-to-ACC sources skip save/set/reload;
+internal operands control output and instruction length.  M-to-ACC still
+sets Ad and moves the source.  Multiple-ACC and packed constructions keep
+full preparation.
 
 Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
 Register definitions invalidate dependent descriptors and overlapping groups.
