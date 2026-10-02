@@ -8997,13 +8997,55 @@ public:
   }
 };
 
-/* Track complete physical M groups and their descriptor operands.  */
+/* Track complete physical M groups and their descriptor values.  */
 class local_md_state
 {
   struct fact { rtx group; rtx descriptor; } facts[M_REG_NUM] = {};
+  rtx constants[32] = {}; /* GP_REG_NUM depends on the active RVE option.  */
+
+  static rtx substitute (rtx x, const_rtx, void *data)
+  {
+    return REG_P (x)
+      ? static_cast<local_md_state *> (data)->descriptor_value (x) : NULL_RTX;
+  }
 
 public:
-  void clear () { memset (facts, 0, sizeof (facts)); }
+  void clear ()
+  {
+    memset (facts, 0, sizeof (facts));
+    memset (constants, 0, sizeof (constants));
+  }
+
+  static bool full_gpr_p (rtx reg)
+  {
+    return REG_P (reg) && GP_REG_P (REGNO (reg)) && GET_MODE (reg) == Pmode;
+  }
+
+  rtx descriptor_value (rtx reg) const
+  {
+    if (full_gpr_p (reg))
+      {
+	if (REGNO (reg) == GP_REG_FIRST)
+	  return const0_rtx;
+	if (rtx value = constants[REGNO (reg) - GP_REG_FIRST])
+	  return value;
+      }
+    return reg;
+  }
+
+  rtx constant_value (rtx src)
+  {
+    if (contains_mem_rtx_p (src) || side_effects_p (src))
+      return NULL_RTX;
+    rtx value = simplify_replace_fn_rtx (src, NULL_RTX, substitute, this);
+    return CONST_INT_P (value) ? gen_int_mode (INTVAL (value), Pmode) : NULL_RTX;
+  }
+
+  void record_constant (rtx reg, rtx value)
+  {
+    gcc_assert (full_gpr_p (reg) && CONST_INT_P (value));
+    constants[REGNO (reg) - GP_REG_FIRST] = value;
+  }
 
   void invalidate (rtx reg)
   {
@@ -9011,6 +9053,10 @@ public:
       if (f.group && (reg_overlap_mentioned_p (reg, f.group)
 		      || reg_overlap_mentioned_p (reg, f.descriptor)))
 	f.group = nullptr;
+    for (unsigned int i = 0; i < GP_REG_NUM; ++i)
+      if (constants[i]
+	  && reg_overlap_mentioned_p (reg, gen_rtx_REG (Pmode, GP_REG_FIRST + i)))
+	constants[i] = NULL_RTX;
   }
 
   bool matches (rtx group, rtx descriptor) const
@@ -9019,7 +9065,7 @@ public:
       return false;
     const auto &f = facts[REGNO (group) - M_REG_FIRST];
     return f.group && rtx_equal_p (f.group, group)
-      && rtx_equal_p (f.descriptor, descriptor);
+      && rtx_equal_p (f.descriptor, descriptor_value (descriptor));
   }
 
   void remember (rtx group, rtx descriptor)
@@ -9027,7 +9073,8 @@ public:
     gcc_assert (REG_P (group) && M_REG_P (REGNO (group))
 		&& REG_P (descriptor) && GP_REG_P (REGNO (descriptor)));
     invalidate (group);
-    facts[REGNO (group) - M_REG_FIRST] = { group, descriptor };
+    facts[REGNO (group) - M_REG_FIRST]
+      = { group, descriptor_value (descriptor) };
   }
 };
 
@@ -9073,6 +9120,11 @@ reuse_local_md ()
 	      state.clear ();
 	      continue;
 	    }
+	  /* These zero-length scheduling barriers do not alter Md or GPRs.  */
+	  int code = recog_memoized (insn);
+	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
+	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
+	    continue;
 	  rtx set = single_set (insn);
 	  rtx src = set ? SET_SRC (set) : NULL_RTX;
 	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
@@ -9136,7 +9188,15 @@ reuse_local_md ()
 		}
 	    }
 	  if (md_scalar_insn_p (PATTERN (insn)))
-	    note_stores (insn, invalidate_md_store, &state);
+	    {
+	      /* Evaluate the SET before invalidating its inputs.  */
+	      rtx value = GET_CODE (PATTERN (insn)) == SET
+		&& local_md_state::full_gpr_p (SET_DEST (set))
+		? state.constant_value (SET_SRC (set)) : NULL_RTX;
+	      note_stores (insn, invalidate_md_store, &state);
+	      if (value)
+		state.record_constant (SET_DEST (set), value);
+	    }
 	  else
 	    state.clear ();
 	}
@@ -9172,6 +9232,43 @@ run_md_reuse_selftests ()
   ASSERT_FALSE (md_scalar_insn_p (gen_rtx_POST_INC (SImode, desc)));
   ASSERT_FALSE (md_scalar_insn_p
     (gen_rtx_COND_EXEC (VOIDmode, const1_rtx, gen_rtx_SET (desc, const0_rtx))));
+
+  rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+  rtx base = GEN_INT (0x40000000), dtype = GEN_INT (0x40000020);
+  state.record_constant (a, base);
+  rtx sum = state.constant_value (gen_rtx_PLUS (Pmode, a, GEN_INT (32)));
+  ASSERT_TRUE (rtx_equal_p (sum, dtype));
+  state.invalidate (a);
+  state.record_constant (a, sum);
+  state.remember (group, a);
+  state.record_constant (b, state.constant_value (a));
+  ASSERT_TRUE (state.matches (group, b));
+  state.invalidate (a);
+  ASSERT_TRUE (state.matches (group, b));
+  ASSERT_FALSE (state.matches (group, a));
+  state.record_constant (a, GEN_INT (0x40000021));
+  ASSERT_FALSE (state.matches (group, a));
+  state.invalidate (b);
+  ASSERT_FALSE (state.matches (group, b));
+  ASSERT_EQ (state.constant_value (gen_rtx_MEM (Pmode, a)), NULL_RTX);
+  ASSERT_EQ (state.constant_value (b), NULL_RTX);
+  state.record_constant (b, constm1_rtx);
+  ASSERT_EQ (state.constant_value (gen_rtx_PLUS (Pmode, b, const1_rtx)), const0_rtx);
+  state.invalidate (gen_rtx_SUBREG (QImode, b, 0));
+  ASSERT_EQ (state.constant_value (b), NULL_RTX);
+  if (TARGET_64BIT)
+    {
+      state.record_constant (b, GEN_INT (HOST_WIDE_INT_C (0x180000000)));
+      rtx low = gen_rtx_SUBREG (SImode, b, 0);
+      ASSERT_TRUE (rtx_equal_p
+	(state.constant_value (gen_rtx_SIGN_EXTEND (DImode, low)),
+	 GEN_INT (-HOST_WIDE_INT_C (0x80000000))));
+      state.invalidate (gen_rtx_REG (SImode, REGNO (b)));
+      ASSERT_EQ (state.constant_value (b), NULL_RTX);
+    }
+  state.clear ();
+  ASSERT_EQ (state.constant_value (a), NULL_RTX);
+  ASSERT_FALSE (state.matches (group, a));
 }
 #endif
 
