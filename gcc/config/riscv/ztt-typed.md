@@ -156,6 +156,26 @@
    (set (attr "length")
         (symbol_ref "riscv_ztt::memory_store_length (<ZTT_M:MODE>mode)"))])
 
+(define_insn "@ztt_state_memory_store_prepared_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:BLK 0 "memory_operand" "=A")
+        (unspec_volatile:BLK
+          [(match_operand:ZTT_M 1 "register_operand" "Wmr")
+           (match_operand:P 2 "reg_or_0_operand" "rJ")
+           (match_operand 3 "const_int_operand" "n")]
+          UNSPECV_ZTT_STATE_MEMORY_STORE))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p () && reload_completed"
+{
+  switch (INTVAL (operands[3]))
+    {
+    case 1: return "mss.cm\t%1,%q0";
+    case 2: return "mss.st\t%1,(%q0),%z2";
+    case 3: return "mss.tst\t%1,(%q0),%z2";
+    default: gcc_unreachable ();
+    }
+}
+  [(set_attr "type" "multi")
+   (set_attr "length" "4")])
+
 (define_insn "@ztt_typed_mss_rm_<mode>"
   [(set (match_operand:ZTT_M 0 "memory_operand" "=A")
 	(unspec:ZTT_M
@@ -277,6 +297,16 @@
   "mss.1r\t%1,%q3\;msettyp\t%1,%2\;mls.1r\t%1,%q3\;mss.rm\t%1,%q0"
   [(set_attr "type" "multi")
    (set_attr "length" "16")])
+
+(define_insn "@ztt_state_store_prepared_<mode>"
+  [(set (match_operand:ZTT_M 0 "memory_operand" "=A")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "Wmr")]
+          UNSPECV_ZTT_STATE_STORE))]
+  "TARGET_ZTT && riscv_ztt_explicit_state_p () && reload_completed"
+  "mss.rm\t%1,%q0"
+  [(set_attr "type" "multi")
+   (set_attr "length" "4")])
 
 (define_insn "@ztt_state_<ztt_state_binary_op>_<ZTT_M1:mode>_<P:mode>"
   [(set (match_operand:ZTT_M1 0 "register_operand" "=&Wmr")

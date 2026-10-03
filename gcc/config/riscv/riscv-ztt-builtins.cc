@@ -9157,9 +9157,13 @@ reuse_local_md ()
 		  break;
 		/* Typed stores leave the complete source group prepared.  */
 		case UNSPECV_ZTT_STATE_STORE:
+		  if (XVECLEN (src, 0) < 2)
+		    break;
 		  group = XVECEXP (src, 0, 0); descriptor = XVECEXP (src, 0, 1);
 		  break;
 		case UNSPECV_ZTT_STATE_MEMORY_STORE:
+		  if (XVECLEN (src, 0) != 4)
+		    break;
 		  group = XVECEXP (src, 0, 0); descriptor = XVECEXP (src, 0, 2);
 		  break;
 		case UNSPECV_ZTT_SETTYP_P0:
@@ -9248,6 +9252,26 @@ reuse_local_md ()
 		}
 	      if (group)
 		{
+		  bool store = XINT (src, 1) == UNSPECV_ZTT_STATE_STORE;
+		  bool memory_store
+		    = XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE;
+		  if ((store || memory_store) && state.matches (group, descriptor))
+		    {
+		      rtx prepared = store
+			? gen_ztt_state_store_prepared
+			    (GET_MODE (group), SET_DEST (set), group)
+			: gen_ztt_state_memory_store_prepared
+			    (GET_MODE (group), Pmode, SET_DEST (set), group,
+			     XVECEXP (src, 0, 1), XVECEXP (src, 0, 3));
+		      bool changed = validate_change
+			(insn, &PATTERN (insn), prepared, false);
+		      gcc_assert (changed);
+		      df_insn_rescan (insn);
+		      cleanup = true;
+		      if (dump_file)
+			fprintf (dump_file, "Reuse Md for typed store at insn %d\n",
+				 INSN_UID (insn));
+		    }
 		  note_stores (insn, invalidate_md_store, &state);
 		  state.remember (group, descriptor);
 		  continue;
