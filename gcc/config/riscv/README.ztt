@@ -120,3 +120,6 @@ For mixed matmul, a prepared side's unused descriptor is replaced with zero
 after allocation.  The mask prevents its use; the other side retains its
 descriptor and full save/set/reload sequence.  DCE can then remove the dead
 descriptor computation without adding another family of RTL patterns.
+Typed row-major, column-major and strided stores establish the source
+group's Md after their complete save/set/reload sequence.  Track that fact
+for subsequent consumers without removing or moving the store itself.

@@ -9155,6 +9155,13 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 3);
 		  break;
+		/* Typed stores leave the complete source group prepared.  */
+		case UNSPECV_ZTT_STATE_STORE:
+		  group = XVECEXP (src, 0, 0); descriptor = XVECEXP (src, 0, 1);
+		  break;
+		case UNSPECV_ZTT_STATE_MEMORY_STORE:
+		  group = XVECEXP (src, 0, 0); descriptor = XVECEXP (src, 0, 2);
+		  break;
 		case UNSPECV_ZTT_SETTYP_P0:
 		case UNSPECV_ZTT_STATE_ZERO:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
