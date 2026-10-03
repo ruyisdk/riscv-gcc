@@ -116,3 +116,7 @@ but no longer needs source descriptor GPRs.  Fast RTL DCE removes their dead
 address calculations before debug locations are computed.  Frame layout
 and runtime-N validation remain unchanged; partly prepared matmul and
 other composites keep their private operands.
+For mixed matmul, a prepared side's unused descriptor is replaced with zero
+after allocation.  The mask prevents its use; the other side retains its
+descriptor and full save/set/reload sequence.  DCE can then remove the dead
+descriptor computation without adding another family of RTL patterns.

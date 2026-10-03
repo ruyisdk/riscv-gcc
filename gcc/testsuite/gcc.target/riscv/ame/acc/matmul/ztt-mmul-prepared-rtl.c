@@ -5,6 +5,7 @@
 /* { dg-final { scan-rtl-dump-times {Reuse Md at insn [0-9]+: sources 1} 2 "ztt_md_reuse" } } */
 /* { dg-final { scan-rtl-dump-times {Reuse Md at insn [0-9]+: sources 2} 2 "ztt_md_reuse" } } */
 /* { dg-final { scan-rtl-dump-times {Reuse Md at insn [0-9]+: sources 3} 2 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times {Drop unused Md descriptor at insn [0-9]+} 2 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times { l=4\]  ztt_acc_mmul_prepared_} 2 } } */
 /* { dg-final { scan-assembler-times { l=72\]  ztt_acc_mmul_} 4 } } */
 /* { dg-final { scan-assembler-times { l=140\]  ztt_acc_mmul_} 2 } } */

@@ -1550,10 +1550,10 @@
           [(match_operand:ZTT_A 1 "register_operand" "0")
            (match_operand 2 "register_operand" "Wmr")
            (match_operand 3 "register_operand" "Wmr")
-           (match_operand:P 4 "register_operand" "r")
+           (match_operand:P 4 "reg_or_0_operand" "rJ")
            (match_operand 7 "const_int_operand" "n")
            (match_operand:P 6 "reg_or_0_operand" "rJ")
-           (match_operand:P 8 "register_operand" "r")
+           (match_operand:P 8 "reg_or_0_operand" "rJ")
            (match_operand 9 "const_int_operand" "n")]
           UNSPECV_ZTT_ACC_MMUL))
    (clobber (match_operand 5 "memory_operand" "=A"))
@@ -1562,7 +1562,11 @@
    && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[3]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[5]))
-   && IN_RANGE (INTVAL (operands[9]), 0, 3)"
+   && IN_RANGE (INTVAL (operands[9]), 0, 3)
+   && (REG_P (operands[4])
+       || (reload_completed && (INTVAL (operands[9]) & 1)))
+   && (REG_P (operands[8])
+       || (reload_completed && (INTVAL (operands[9]) & 2)))"
 {
   return riscv_ztt::output_acc_state (operands, true, true);
 }

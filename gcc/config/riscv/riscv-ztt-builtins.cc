@@ -8382,6 +8382,16 @@ run_acc_shared_source_selftests ()
   ASSERT_EQ (acc_mmul_length (operands, true), 16U);
   operands[4] = operands[8] = gen_rtx_REG (SImode, FIRST_PSEUDO_REGISTER);
   ASSERT_FALSE (acc_shared_source_p (operands, true));
+  operands[2] = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+  operands[3] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 2);
+  operands[4] = const0_rtx;
+  operands[8] = gen_rtx_REG (SImode, 10);
+  operands[9] = const1_rtx;
+  ASSERT_EQ (acc_mmul_length (operands, true), 40U);
+  operands[4] = operands[8];
+  operands[8] = const0_rtx;
+  operands[9] = GEN_INT (2);
+  ASSERT_EQ (acc_mmul_length (operands, true), 16U);
   reload_completed = saved_reload_completed;
 }
 #endif
@@ -9183,6 +9193,8 @@ reuse_local_md ()
 		    rtx lhs = XVECEXP (src, 0, 1), rhs = XVECEXP (src, 0, 2);
 		    rtx ld = XVECEXP (src, 0, 3);
 		    rtx rd = mixed ? XVECEXP (src, 0, 6) : ld;
+		    if (!REG_P (ld) || !REG_P (rd))
+		      break;
 		    if (reg_overlap_mentioned_p (lhs, rhs)
 			&& (!rtx_equal_p (lhs, rhs) || !rtx_equal_p (ld, rd)))
 		      break;
@@ -9204,6 +9216,18 @@ reuse_local_md ()
 		      {
 			bool changed = validate_change (insn, where, GEN_INT (mask), false);
 			gcc_assert (changed);
+			if (mixed)
+			  {
+			    /* The prepared side no longer consumes a descriptor.  */
+			    rtx *unused = &XVECEXP (src, 0, mask == 1 ? 3 : 6);
+			    changed = validate_change (insn, unused, const0_rtx, false);
+			    gcc_assert (changed);
+			    df_insn_rescan (insn);
+			    cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file, "Drop unused Md descriptor at insn %d\n",
+				       INSN_UID (insn));
+			  }
 		      }
 		    if (mask && dump_file)
 		      fprintf (dump_file, "Reuse Md at insn %d: sources %u\n",
