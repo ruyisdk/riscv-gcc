@@ -109,8 +109,10 @@ Prepared groups retain constant snapshots after the original GPR changes;
 unknown descriptors require unchanged GPRs.  Partial/parallel definitions
 invalidate constants, and memory contents are not tracked.
 The pass leaves Ad, explicit clears and arithmetic effects unchanged.
-It is disabled at O0.  Prepared single-ACC moves use a pattern without
-private MEM, stride or scratch operands.  Fast RTL DCE removes their dead
+It is disabled at O0.  Prepared single-ACC moves and matmul with both
+sources prepared use patterns without private MEM, stride or scratch
+operands.  Prepared matmul retains the tied old ACC and arithmetic effects,
+but no longer needs source descriptor GPRs.  Fast RTL DCE removes their dead
 address calculations before debug locations are computed.  Frame layout
-and runtime-N validation remain unchanged; other composites keep their
-private operands.
+and runtime-N validation remain unchanged; partly prepared matmul and
+other composites keep their private operands.

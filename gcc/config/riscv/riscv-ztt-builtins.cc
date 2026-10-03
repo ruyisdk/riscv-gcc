@@ -8386,6 +8386,18 @@ run_acc_shared_source_selftests ()
 }
 #endif
 
+const char *
+acc_mmul_template (unsigned int variant)
+{
+  static const char *const templates[] = {
+    "mmulacc.2d\t%0,%2,%3", "mmulaccneg.2d\t%0,%2,%3",
+    "mmulatacc.2d\t%0,%2,%3", "mmulataccneg.2d\t%0,%2,%3",
+    "mmulbtacc.2d\t%0,%2,%3", "mmulbtaccneg.2d\t%0,%2,%3"
+  };
+  gcc_assert (variant < ARRAY_SIZE (templates));
+  return templates[variant];
+}
+
 /* Private MEM preserves the M group across msettyp; reused sources still
    require destination Ad setup.  */
 const char *
@@ -8432,16 +8444,7 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
     {
       if (!(prepared & 2) && !acc_shared_source_p (operands, mixed_p))
 	preserve (operands[3], mixed_p ? operands[8] : descriptor);
-      /* The selector is
-	 internal and constant; every variant retains the tied old ACC.  */
-      static const char *const templates[] = {
-	"mmulacc.2d\t%0,%2,%3", "mmulaccneg.2d\t%0,%2,%3",
-	"mmulatacc.2d\t%0,%2,%3", "mmulataccneg.2d\t%0,%2,%3",
-	"mmulbtacc.2d\t%0,%2,%3", "mmulbtaccneg.2d\t%0,%2,%3"
-      };
-      unsigned int variant = UINTVAL (operands[7]);
-      gcc_assert (variant < ARRAY_SIZE (templates));
-      output_asm_insn (templates[variant], operands);
+      output_asm_insn (acc_mmul_template (UINTVAL (operands[7])), operands);
     }
   else
     {
@@ -9174,6 +9177,8 @@ reuse_local_md ()
 		  continue;
 		case UNSPECV_ZTT_ACC_MMUL:
 		  {
+		    if (XVECLEN (src, 0) != 7 && XVECLEN (src, 0) != 8)
+		      break;
 		    bool mixed = XVECLEN (src, 0) == 8;
 		    rtx lhs = XVECEXP (src, 0, 1), rhs = XVECEXP (src, 0, 2);
 		    rtx ld = XVECEXP (src, 0, 3);
@@ -9184,14 +9189,25 @@ reuse_local_md ()
 		    unsigned int mask = state.matches (lhs, ld)
 		      | (state.matches (rhs, rd) << 1);
 		    rtx *where = &XVECEXP (src, 0, mixed ? 7 : 6);
-		    if (mask)
+		    if (mask == 3)
+		      {
+			rtx prepared = gen_ztt_acc_mmul_prepared
+			  (GET_MODE (SET_DEST (set)), SET_DEST (set),
+			   XVECEXP (src, 0, 0), lhs, rhs, XVECEXP (src, 0, 4));
+			bool changed = validate_change
+			  (insn, &PATTERN (insn), prepared, false);
+			gcc_assert (changed);
+			df_insn_rescan (insn);
+			cleanup = true;
+		      }
+		    else if (mask)
 		      {
 			bool changed = validate_change (insn, where, GEN_INT (mask), false);
 			gcc_assert (changed);
-			if (dump_file)
-			  fprintf (dump_file, "Reuse Md at insn %d: sources %u\n",
-				   INSN_UID (insn), mask);
 		      }
+		    if (mask && dump_file)
+		      fprintf (dump_file, "Reuse Md at insn %d: sources %u\n",
+			       INSN_UID (insn), mask);
 		    note_stores (insn, invalidate_md_store, &state);
 		    state.remember (lhs, ld);
 		    state.remember (rhs, rd);

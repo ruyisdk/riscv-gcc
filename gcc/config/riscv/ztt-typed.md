@@ -1483,6 +1483,26 @@
    (set (attr "length")
 	(symbol_ref "riscv_ztt::acc_mmul_length (operands, false)"))])
 
+;; Both source groups have their required Md; retain the complete old ACC.
+(define_insn "@ztt_acc_mmul_prepared_<mode>"
+  [(set (match_operand:ZTT_A 0 "register_operand" "=War")
+        (unspec_volatile:ZTT_A
+          [(match_operand:ZTT_A 1 "register_operand" "0")
+           (match_operand 2 "register_operand" "Wmr")
+           (match_operand 3 "register_operand" "Wmr")
+           (match_operand 4 "const_int_operand" "n")]
+          UNSPECV_ZTT_ACC_MMUL))]
+  "TARGET_ZTT && reload_completed
+   && riscv_ztt::acc_mode_supported_p (<ZTT_A:MODE>mode)
+   && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
+   && riscv_ztt::m_mode_p (GET_MODE (operands[3]))
+   && IN_RANGE (INTVAL (operands[4]), 0, 5)"
+{
+  return riscv_ztt::acc_mmul_template (UINTVAL (operands[4]));
+}
+  [(set_attr "type" "multi")
+   (set_attr "length" "4")])
+
 ;; Each source carries its own
 ;; complete runtime M mode and descriptor.  Do not infer either from ACC.
 ;; Packed formation uses one complete P-Square window of each source;
