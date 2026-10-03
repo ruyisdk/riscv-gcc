@@ -95,7 +95,7 @@ msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and
 retains ACC updates and arithmetic side effects.
 
-ztt_md_reuse runs after allocation and scheduling, before CFG teardown.
+ztt_md_reuse runs after allocation and scheduling, before variable tracking.
 It tracks complete M groups and descriptor values within each block.
 Matching matmul and single-ACC M-to-ACC sources skip save/set/reload;
 internal operands control output and instruction length.  M-to-ACC still
@@ -109,4 +109,8 @@ Prepared groups retain constant snapshots after the original GPR changes;
 unknown descriptors require unchanged GPRs.  Partial/parallel definitions
 invalidate constants, and memory contents are not tracked.
 The pass leaves Ad, explicit clears and arithmetic effects unchanged.
-It is disabled at O0 and retains private slots and scratch constraints.
+It is disabled at O0.  Prepared single-ACC moves use a pattern without
+private MEM, stride or scratch operands.  Fast RTL DCE removes their dead
+address calculations before debug locations are computed.  Frame layout
+and runtime-N validation remain unchanged; other composites keep their
+private operands.

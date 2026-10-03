@@ -50,6 +50,7 @@ with GCC; see the file COPYING3.  If not see
 #include "tree-pass.h"
 #include "cfgrtl.h"
 #include "df.h"
+#include "dce.h"
 #include "output.h"
 #include "selftest.h"
 
@@ -9108,6 +9109,7 @@ md_scalar_insn_p (rtx pattern)
 static unsigned int
 reuse_local_md ()
 {
+  bool cleanup = false;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
@@ -9145,15 +9147,21 @@ reuse_local_md ()
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
 		case UNSPECV_ZTT_ACC_FROM_M:
-		  if (acc_nregs (GET_MODE (SET_DEST (set))) == 1)
+		  if (XVECLEN (src, 0) == 4
+		      && acc_nregs (GET_MODE (SET_DEST (set))) == 1)
 		    {
 		      group = XVECEXP (src, 0, 0);
 		      descriptor = XVECEXP (src, 0, 1);
 		      if (state.matches (group, descriptor))
 			{
+			  rtx prepared = gen_ztt_acc_from_m_prepared
+			    (GET_MODE (SET_DEST (set)), Pmode, SET_DEST (set),
+			     group, descriptor);
 			  bool changed = validate_change
-			    (insn, &XVECEXP (src, 0, 3), const1_rtx, false);
+			    (insn, &PATTERN (insn), prepared, false);
 			  gcc_assert (changed);
+			  df_insn_rescan (insn);
+			  cleanup = true;
 			  if (dump_file)
 			    fprintf (dump_file, "Reuse Md for ACC move at insn %d\n",
 				     INSN_UID (insn));
@@ -9211,6 +9219,12 @@ reuse_local_md ()
 	  else
 	    state.clear ();
 	}
+    }
+  /* Dropping private operands exposes dead address and stride calculations.  */
+  if (cleanup)
+    {
+      run_fast_dce ();
+      return TODO_df_finish;
     }
   return 0;
 }
