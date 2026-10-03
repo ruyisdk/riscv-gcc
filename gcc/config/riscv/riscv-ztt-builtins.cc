@@ -9170,6 +9170,21 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ZERO:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
+		case UNSPECV_ZTT_ACC_TO_M:
+		  {
+		    machine_mode mode = GET_MODE (XVECEXP (src, 0, 0));
+		    unsigned int step = acc_m_nregs (mode);
+		    unsigned int count = acc_full_m_nregs (mode);
+		    rtx dest = SET_DEST (set);
+		    gcc_assert (m_nregs (GET_MODE (dest)) == count);
+		    note_stores (insn, invalidate_md_store, &state);
+		    /* Each transfer packet establishes its own base Md.  */
+		    for (unsigned int i = 0; i < count; i += step)
+		      state.remember
+			(gen_rtx_REG (matrix_mode (step), REGNO (dest) + i),
+			 XVECEXP (src, 0, 1));
+		    continue;
+		  }
 		case UNSPECV_ZTT_ACC_FROM_M:
 		  if (XVECLEN (src, 0) == 4
 		      && acc_nregs (GET_MODE (SET_DEST (set))) == 1)

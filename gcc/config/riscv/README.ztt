@@ -125,3 +125,6 @@ group's Md for subsequent consumers.  When the complete source group is
 already prepared, the store drops its own save/set/reload and private
 operands.  The prepared pattern retains the destination MEM, user stride,
 store kind and volatile state operation; the store itself stays in place.
+ACC-to-M moves establish Md separately for each transfer packet.  Track
+those subgroups independently, including packed ACC packets, rather than
+treating a multiple-packet destination as one larger prepared group.
