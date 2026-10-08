@@ -9571,6 +9571,17 @@ md_scalar_insn_p (rtx pattern)
   return true;
 }
 
+/* Standard integer zero has an all-zero representation.  */
+static unsigned int
+integer_zero_width (rtx descriptor)
+{
+  if (!CONST_INT_P (descriptor)
+      || (UINTVAL (descriptor) & ~HOST_WIDE_INT_UC (0x780000ff)))
+    return 0;
+  unsigned int width = UINTVAL (descriptor) & 0xff;
+  return width >= 4 && width <= 128 && pow2p_hwi (width) ? width : 0;
+}
+
 /* Reuse Md within each block after scheduling and register allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -9607,6 +9618,30 @@ reuse_local_md ()
 	  rtx src = set ? SET_SRC (set) : NULL_RTX;
 	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
 	    {
+	      if (explicit_state && XINT (src, 1) == UNSPECV_ZTT_STATE_ZERO)
+		{
+		  rtx descriptor = XVECEXP (src, 0, 0);
+		  unsigned int width
+		    = integer_zero_width (state.descriptor_value (descriptor));
+		  machine_mode mode = GET_MODE (SET_DEST (set));
+		  if (width
+		      && m_nregs (mode) == MAX (1U, width / active_profile ()->uds))
+		    {
+		      /* The setter already clears this complete integer group.  */
+		      rtx clear = gen_ztt_typed_msettyp_p0
+			(mode, Pmode, SET_DEST (set), descriptor);
+		      if (validate_change (insn, &PATTERN (insn), clear, false))
+			{
+			  df_insn_rescan (insn);
+			  cleanup = true;
+			  set = single_set (insn);
+			  src = SET_SRC (set);
+			  if (dump_file)
+			    fprintf (dump_file, "Reuse integer clear at insn %d\n",
+				     INSN_UID (insn));
+			}
+		    }
+		}
 	      if (XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD
 		  || XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_LOAD)
 		{
@@ -9943,6 +9978,17 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  for (unsigned int width = 4; width <= 128; width *= 2)
+    for (unsigned int properties = 0; properties < 16; ++properties)
+      ASSERT_EQ (integer_zero_width
+	(GEN_INT ((HOST_WIDE_INT) properties << 27 | width)), width);
+  for (unsigned int width : { 0U, 1U, 2U, 3U, 5U, 7U, 12U, 129U, 255U })
+    ASSERT_EQ (integer_zero_width (GEN_INT (width)), 0U);
+  for (unsigned int bit = 8; bit < 64; ++bit)
+    if (bit < 27 || bit > 30)
+      ASSERT_EQ (integer_zero_width
+	(GEN_INT ((HOST_WIDE_INT_1U << bit) | 32)), 0U);
+  ASSERT_EQ (integer_zero_width (gen_rtx_REG (Pmode, 10)), 0U);
   int saved_reload_completed = reload_completed;
   rtx operands[] = { gen_rtx_REG (ZTTMR1mode, M_REG_FIRST),
 		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1),

@@ -162,7 +162,9 @@ Typed loads can use an earlier-defined ordinary GPR holding the same full
 descriptor already consumed by a typed load.  Fixed/global registers and
 instruction clobbers are excluded;
 dead materialization and register notes are updated after substitution.
-The pass leaves Ad, explicit clears and arithmetic effects unchanged.
+Typed integer zero construction reuses the bit clear performed by msettyp
+for a known standard descriptor and a complete group.  Floating, ACC and
+raw zeros retain their instructions.  Setters and arithmetic effects remain.
 It is disabled at O0.  Prepared single-ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch
 operands.  Prepared matmul retains the tied old ACC and arithmetic effects,
