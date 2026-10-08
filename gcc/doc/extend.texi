@@ -28074,18 +28074,22 @@ intrinsic draft v0.2.3 support.
 The intrinsic v0.2.4
 @code{__riscv_ztt_mcopy_m2m_@var{T}_@var{S}} interface copies an existing
 typed M value.  Its argument and result have exactly the same datatype,
-rounding mode and shape.  It is available for every currently supported
-integer M type in the selected fixed or runtime profile, including legal
-one-, two- and four-register values.  Omitting the integer rounding suffix
-selects RNU.  The capability macro @code{__riscv_ztt_mcopy_m2m} has value 1;
+rounding mode and shape.  It is available for supported integer and
+floating M types, including complete register groups that fit the selected
+profile.  Omitting the rounding suffix selects RNU for integers and RNE
+for floating types.  The capability macro @code{__riscv_ztt_mcopy_m2m} has value 1;
 it does not make unavailable datatypes or shapes legal.
 
+Initialization @code{M b = a} and assignment @code{b = a}, where both
+objects have the same M type, use the same complete-value move machinery
+as @code{mcopy_m2m}.  They do not create references to the source object.
 The operation has ordinary value-copy semantics.  Modifying the source
 later does not change the copied value.  The compiler may coalesce copies
 or use its existing complete-group copy and spill machinery; the interface
 does not force a particular physical register or an unconditional
 @code{msettyp} or @code{mmov.m.m} instruction.  It neither converts values
-nor accepts an accumulator.  The existing sizeless, profile, leaf and
+nor accepts an accumulator.  Live copies are saved and restored across
+ordinary scalar/pointer calls.  The existing sizeless, profile and
 raw-selector restrictions still apply.  This addition does not change
 the ISA encoding or claim complete intrinsic v0.2.4 support.
 
