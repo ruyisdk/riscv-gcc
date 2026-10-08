@@ -313,13 +313,34 @@
         (unspec_volatile:ZTT_M1
           [(match_operand:ZTT_M1 1 "register_operand" "Wmr")
            (match_operand:ZTT_M1 2 "register_operand" "Wmr")
-           (match_operand:P 3 "register_operand" "r")]
+           (match_operand:P 3 "register_operand" "r")
+           (match_operand 5 "const_int_operand" "n")]
           ZTT_STATE_BINARY))
    (clobber (match_operand:ZTT_M1 4 "memory_operand" "=A"))]
   "TARGET_ZTT && riscv_ztt_explicit_state_p ()"
-  "mss.1r\t%1,%q4\;msettyp\t%1,%3\;mls.1r\t%1,%q4\;mss.1r\t%2,%q4\;msettyp\t%2,%3\;mls.1r\t%2,%q4\;msettyp\t%0,%3\;m<ztt_state_binary_op>.ew\t%0,%1,%2"
+{
+  return riscv_ztt::output_group_state
+    (operands, "m<ztt_state_binary_op>.ew\t%0,%1,%2", UINTVAL (operands[5]));
+}
   [(set_attr "type" "multi")
-   (set_attr "length" "32")])
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::binary_state_length (operands, UINTVAL (operands[5]))"))])
+
+(define_insn "@ztt_state_<ztt_state_binary_op>_prepared_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "Wmr")
+           (match_operand:ZTT_M 2 "register_operand" "Wmr")
+           (match_operand:P 3 "register_operand" "r")]
+          ZTT_STATE_BINARY))]
+  "TARGET_ZTT && riscv_ztt_explicit_state_p () && reload_completed"
+{
+  return riscv_ztt::output_group_state
+    (operands, "m<ztt_state_binary_op>.ew\t%0,%1,%2", 3);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::binary_state_length (operands, 3)"))])
 
 ;; Each .1r instruction transfers one M, never a whole typed group.
 
@@ -375,19 +396,19 @@
           [(match_operand:ZTT_G 1 "register_operand" "Wmr")
            (match_operand:ZTT_G 2 "register_operand" "Wmr")
            (match_operand:P 3 "register_operand" "r")
-           (match_operand:P 5 "register_operand" "r")]
+           (match_operand:P 5 "register_operand" "r")
+           (match_operand 7 "const_int_operand" "n")]
           ZTT_STATE_BINARY))
    (clobber (match_operand:ZTT_G 4 "memory_operand" "=A"))
    (clobber (match_scratch:P 6 "=&r"))]
   "TARGET_ZTT && riscv_ztt_explicit_state_p ()"
 {
-  return riscv_ztt::output_group_state (operands, "m<ztt_state_binary_op>.ew\t%0,%1,%2");
+  return riscv_ztt::output_group_state
+    (operands, "m<ztt_state_binary_op>.ew\t%0,%1,%2", UINTVAL (operands[7]));
 }
   [(set_attr "type" "multi")
    (set (attr "length")
-        (symbol_ref "4 * (8 * riscv_ztt::m_nregs (GET_MODE (operands[0]))
-                          + 4 - (rtx_equal_p (operands[0], operands[1])
-                                 || rtx_equal_p (operands[0], operands[2])))"))])
+        (symbol_ref "riscv_ztt::binary_state_length (operands, UINTVAL (operands[7]))"))])
 
 
 ;; Tensor operands have

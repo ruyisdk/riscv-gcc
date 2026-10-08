@@ -134,3 +134,6 @@ these subgroups, retaining facts for disjoint M registers.
 Same-datatype binary operations establish Md for both complete source
 groups and the result.  Record all three after explicit clobbers so later
 stores and ACC consumers can reuse their preparation.
+Binary operations also reuse matching incoming source Md independently.
+When both sources match, a prepared form drops the private memory and
+address operands while retaining any required destination setup.

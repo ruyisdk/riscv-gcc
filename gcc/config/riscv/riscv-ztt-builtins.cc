@@ -7532,19 +7532,45 @@ split_group_move (rtx *operands)
 
 /* Preserve ALL source registers before settyp clears their group.  These
    envelopes stay indivisible, with explicit private memory and GPR scratch.  */
+static bool
+binary_dest_setup_p (rtx *operands)
+{
+  return !reload_completed
+    || (!rtx_equal_p (operands[0], operands[1])
+	&& !rtx_equal_p (operands[0], operands[2]));
+}
+
+unsigned int
+binary_state_length (rtx *operands, unsigned int prepared)
+{
+  gcc_assert (prepared <= 3);
+  unsigned int nregs = m_nregs (GET_MODE (operands[1]));
+  unsigned int sources = !(prepared & 1) + !(prepared & 2);
+  return 4 * (sources * (nregs == 1 ? 3 : 4 * nregs + 1)
+	      + binary_dest_setup_p (operands) + 1);
+}
+
 const char *
-output_group_state (rtx *operands, const char *binary_format)
+output_group_state (rtx *operands, const char *binary_format,
+		    unsigned int prepared)
 {
   bool binary_p = binary_format != nullptr;
+  if (binary_p && prepared == 3)
+    {
+      if (binary_dest_setup_p (operands))
+	output_asm_insn ("msettyp\t%0,%3", operands);
+      return binary_format;
+    }
   rtx base = XEXP (operands[binary_p ? 4 : 3], 0);
-  rtx stride = operands[binary_p ? 5 : 4];
-  rtx address = operands[binary_p ? 6 : 5];
-  rtx descriptor = operands[binary_p ? 3 : 2];
   unsigned int nregs = m_nregs (GET_MODE (operands[1]));
+  rtx stride = nregs == 1 ? NULL_RTX : operands[binary_p ? 5 : 4];
+  rtx address = nregs == 1 ? base : operands[binary_p ? 6 : 5];
+  rtx descriptor = operands[binary_p ? 3 : 2];
   auto transfer = [&] (rtx group, bool load_p)
     {
       rtx args[] = { address, base, stride, NULL_RTX };
-      output_asm_insn ("mv\t%0,%1", args);
+      if (nregs > 1)
+	output_asm_insn ("mv\t%0,%1", args);
       for (unsigned int i = 0; i < nregs; ++i)
 	{
 	  args[3] = gen_rtx_REG (matrix_mode (), REGNO (group) + i);
@@ -7561,15 +7587,16 @@ output_group_state (rtx *operands, const char *binary_format)
       output_asm_insn ("msettyp\t%0,%1", args);
       transfer (group, true);
     };
-  preserve (operands[1]);
+  if (!(prepared & 1))
+    preserve (operands[1]);
   if (binary_p)
     {
-      preserve (operands[2]);
+      if (!(prepared & 2))
+	preserve (operands[2]);
       /* Same-mode aligned groups can only overlap completely.  Both sources
 	 now have the required Md and their original payload.  A repeated
 	 destination msettyp would erase an overlapping source before use.  */
-      if (!rtx_equal_p (operands[0], operands[1])
-	  && !rtx_equal_p (operands[0], operands[2]))
+      if (binary_dest_setup_p (operands))
 	{
 	  rtx args[] = { operands[0], descriptor };
 	  output_asm_insn ("msettyp\t%0,%1", args);
@@ -8927,11 +8954,12 @@ lower_explicit_state ()
 	  if (nregs == 1)
 	    emit_insn (gen_ztt_state
 		       (binary_code, mode, Pmode, dest, XVECEXP (src, 0, 0),
-			XVECEXP (src, 0, 1), descriptor, scratch));
+			XVECEXP (src, 0, 1), descriptor, scratch, const0_rtx));
 	  else
 	    emit_insn (gen_ztt_group_state
 		       (binary_code, mode, Pmode, dest, XVECEXP (src, 0, 0),
-			XVECEXP (src, 0, 1), descriptor, scratch, stride));
+			XVECEXP (src, 0, 1), descriptor, scratch, stride,
+			gen_rtx_SCRATCH (Pmode), const0_rtx));
 	  break;
 	default:
 	  gcc_unreachable ();
@@ -9179,13 +9207,41 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_OR:
 		case UNSPECV_ZTT_STATE_ORNOT:
 		case UNSPECV_ZTT_STATE_XOR:
-		  /* The complete sources and result have the same Md.  */
-		  descriptor = XVECEXP (src, 0, 2);
-		  note_stores (insn, invalidate_md_store, &state);
-		  state.remember (XVECEXP (src, 0, 0), descriptor);
-		  state.remember (XVECEXP (src, 0, 1), descriptor);
-		  state.remember (SET_DEST (set), descriptor);
-		  continue;
+		  {
+		    /* The complete sources and result have the same Md.  */
+		    descriptor = XVECEXP (src, 0, 2);
+		    rtx lhs = XVECEXP (src, 0, 0), rhs = XVECEXP (src, 0, 1);
+		    unsigned int mask = state.matches (lhs, descriptor)
+		      | (state.matches (rhs, descriptor) << 1);
+		    if (mask && XVECLEN (src, 0) > 3)
+		      {
+			bool changed;
+			if (mask == 3)
+			  {
+			    rtx prepared = gen_ztt_state_prepared
+			      (XINT (src, 1), GET_MODE (SET_DEST (set)), Pmode,
+			       SET_DEST (set), lhs, rhs, descriptor);
+			    changed = validate_change
+			      (insn, &PATTERN (insn), prepared, false);
+			  }
+			else
+			  changed = validate_change
+			    (insn, &XVECEXP (src, 0, XVECLEN (src, 0) - 1),
+			     GEN_INT (mask), false);
+			gcc_assert (changed);
+			df_insn_rescan (insn);
+			cleanup = true;
+			if (dump_file)
+			  fprintf (dump_file,
+				   "Reuse Md for binary at insn %d: sources %u\n",
+				   INSN_UID (insn), mask);
+		      }
+		    note_stores (insn, invalidate_md_store, &state);
+		    state.remember (lhs, descriptor);
+		    state.remember (rhs, descriptor);
+		    state.remember (SET_DEST (set), descriptor);
+		    continue;
+		  }
 		case UNSPECV_ZTT_ACC_TO_M:
 		  {
 		    machine_mode mode = GET_MODE (XVECEXP (src, 0, 0));
@@ -9352,6 +9408,26 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  int saved_reload_completed = reload_completed;
+  rtx operands[] = { gen_rtx_REG (ZTTMR1mode, M_REG_FIRST),
+		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1),
+		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 2) };
+  reload_completed = 1;
+  ASSERT_EQ (binary_state_length (operands, 0), 32U);
+  ASSERT_EQ (binary_state_length (operands, 1), 20U);
+  ASSERT_EQ (binary_state_length (operands, 2), 20U);
+  ASSERT_EQ (binary_state_length (operands, 3), 8U);
+  operands[0] = operands[1] = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST);
+  operands[2] = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST + 8);
+  ASSERT_EQ (binary_state_length (operands, 0), 268U);
+  ASSERT_EQ (binary_state_length (operands, 1), 136U);
+  ASSERT_EQ (binary_state_length (operands, 2), 136U);
+  ASSERT_EQ (binary_state_length (operands, 3), 4U);
+  operands[0] = operands[2];
+  ASSERT_EQ (binary_state_length (operands, 3), 4U);
+  reload_completed = 0;
+  ASSERT_EQ (binary_state_length (operands, 3), 8U);
+  reload_completed = saved_reload_completed;
   local_md_state state;
   rtx group = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
   rtx desc = gen_rtx_REG (SImode, 10);
