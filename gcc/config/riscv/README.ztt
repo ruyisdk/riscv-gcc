@@ -133,6 +133,11 @@ A resultless same-type M copy can also be a witness.  An extract or zip
 result may have one use by such a copy; both calls join the bounded window
 and retain their arguments.  The check does not follow further copies.
 
+Zero-offset row/column shifts of basic Squares expand to complete-mode
+copies on optimized runtime profiles.  The move stays visible to early
+ownership checking even for an unused result.  Nonzero and dynamic offsets,
+row/column broadcasts and O0 retain their existing lowering.
+
 Local datatype preparation
 --------------------------
 

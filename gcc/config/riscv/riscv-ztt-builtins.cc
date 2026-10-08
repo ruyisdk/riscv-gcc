@@ -7623,6 +7623,14 @@ expand_builtin (unsigned int code, tree exp, rtx target)
       gcc_assert (types[d.type].rows == 1 && types[d.type].columns == 1
 		  && (dtype & 0xff) >= active_profile ()->uds);
       tree arg = CALL_EXPR_ARG (exp, 1);
+      if (optimize && runtime_profile_p ()
+	  && d.prototype == PROTO_M_ROWCOL_OFFSET && integer_zerop (arg))
+	{
+	  /* Keep a full-mode move for the early ownership check.  */
+	  rtx result = gen_reg_rtx (mode);
+	  emit_move_insn (result, matrix_register (mode, exp, 0));
+	  return result;
+	}
       rtx control = expand_normal (arg);
       control = force_reg (Pmode, convert_modes
 	(Pmode, TYPE_MODE (TREE_TYPE (arg)), control,
