@@ -9861,8 +9861,25 @@ reuse_local_md ()
 		      continue;
 		    }
 		  break;
-		case UNSPECV_ZTT_ACC_CLEAR:
 		case UNSPECV_ZTT_ACC_ZERO:
+		  {
+		    rtx descriptor = XVECEXP (src, 0, 0);
+		    if (integer_zero_width (state.descriptor_value (descriptor)))
+		      {
+			rtx clear = gen_ztt_acc_clear
+			  (GET_MODE (SET_DEST (set)), Pmode,
+			   SET_DEST (set), descriptor);
+			if (validate_change (insn, &PATTERN (insn), clear, false))
+			  {
+			    df_insn_rescan (insn);
+			    if (dump_file)
+			      fprintf (dump_file, "Reuse integer ACC clear at insn %d\n",
+				       INSN_UID (insn));
+			  }
+		      }
+		  }
+		  gcc_fallthrough ();
+		case UNSPECV_ZTT_ACC_CLEAR:
 		  note_stores (insn, invalidate_md_store, &state);
 		  continue;
 		case UNSPECV_ZTT_ACC_MMUL:
