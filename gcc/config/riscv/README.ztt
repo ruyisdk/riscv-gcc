@@ -100,6 +100,12 @@ two extraction uses.  The same local boundaries apply; extraction calls
 remain as ownership witnesses.  Reversed indices and extra live values
 keep their existing lowering.
 
+Same-axis zip/unzip pairs can reuse their input in either order.  They
+require the same complete 1x2 type, single-use input and intermediate,
+and the same local boundaries.  The inner call remains for ownership
+checking.  Different axes, repeated permutations and packed types do not
+match.
+
 Local datatype preparation
 --------------------------
 

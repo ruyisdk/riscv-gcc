@@ -777,8 +777,7 @@ data_scalar_variant_p (unsigned int variant)
     || IN_RANGE (variant, 39, 40);
 }
 
-/* Zip operations update
-   two distinct complete M objects through the v0.2.4 pointer interface.  */
+/* Column and row zip, followed by their respective inverses.  */
 static int
 zip_variant (expansion_index expansion)
 {
@@ -6502,9 +6501,9 @@ local_structure_producer_p (gimple_stmt_iterator *gsi, gimple *producer,
 }
 
 static unsigned int
-structure_builtin_code (gimple *stmt)
+structure_builtin_code (gimple *stmt, unsigned int nargs = 2)
 {
-  if (!is_gimple_call (stmt) || gimple_call_num_args (stmt) != 2)
+  if (!is_gimple_call (stmt) || gimple_call_num_args (stmt) != nargs)
     return ZTT_BUILTIN_MAX;
   tree decl = gimple_call_fndecl (stmt);
   if (!decl || !fndecl_built_in_p (decl, BUILT_IN_MD))
@@ -6591,21 +6590,51 @@ rebuilt_pair_value (const builtin_description &d,
   return parent;
 }
 
+static tree
+inverse_zip_value (const builtin_description &d,
+		   gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  if (d.type == TYPE_MAX || types[d.type].accumulator
+      || types[d.type].rows != 1 || types[d.type].columns != 2
+      || (types[d.type].descriptor & 0xff) < active_profile ()->uds)
+    return NULL_TREE;
+  tree middle = gimple_call_arg (stmt, 0);
+  if (TREE_CODE (middle) != SSA_NAME || !has_single_use (middle)
+      || type_for_tree (TREE_TYPE (middle)) != d.type)
+    return NULL_TREE;
+  gimple *producer = SSA_NAME_DEF_STMT (middle);
+  unsigned int code = structure_builtin_code (producer, 1);
+  if (code == ZTT_BUILTIN_MAX)
+    return NULL_TREE;
+  const auto source = builtin_description_for (code);
+  int variant = zip_variant (source.expansion);
+  if (source.prototype != PROTO_M_M || source.type != d.type
+      || variant < 0 || (variant ^ 2) != zip_variant (d.expansion))
+    return NULL_TREE;
+  tree parent = gimple_call_arg (producer, 0);
+  if (TREE_CODE (parent) != SSA_NAME || !has_single_use (parent)
+      || type_for_tree (TREE_TYPE (parent)) != d.type
+      || !local_structure_producer_p (gsi, producer))
+    return NULL_TREE;
+  return parent;
+}
+
 gimple *
 gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
   if (!optimize || code >= ZTT_BUILTIN_MAX)
     return nullptr;
   const auto d = builtin_description_for (code);
-  if ((d.expansion != EXPAND_MEXTRACT && d.expansion != EXPAND_MCONCAT)
-      || gimple_call_num_args (stmt) != 2 || !gimple_call_lhs (stmt)
+  bool zip = d.prototype == PROTO_M_M && zip_variant (d.expansion) >= 0;
+  if ((!zip && d.expansion != EXPAND_MEXTRACT && d.expansion != EXPAND_MCONCAT)
+      || gimple_call_num_args (stmt) != (zip ? 1 : 2) || !gimple_call_lhs (stmt)
       || !TARGET_ZTT || !runtime_profile_p ())
     return nullptr;
   tree lhs = gimple_call_lhs (stmt);
   if (type_for_tree (TREE_TYPE (lhs)) != d.type)
     return nullptr;
-  tree value = d.expansion == EXPAND_MEXTRACT
-    ? extracted_concat_value (d, gsi, stmt)
+  tree value = zip ? inverse_zip_value (d, gsi, stmt)
+    : d.expansion == EXPAND_MEXTRACT ? extracted_concat_value (d, gsi, stmt)
     : rebuilt_pair_value (d, gsi, stmt);
   if (!value)
     return nullptr;
