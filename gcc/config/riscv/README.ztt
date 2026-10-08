@@ -106,6 +106,11 @@ intermediate, and the same local boundaries.  The inner call remains for
 ownership checking.  Different axes, repeated permutations and packed
 types do not match.
 
+One same-type M-to-M copy may occur between the inverse operations.  Both
+intermediate values must have one use, and the copy joins the same bounded
+window.  Inner layout and copy calls keep their operands for ownership
+checking.  Copy chains and extra live intermediate values do not match.
+
 Resultless typed extract and zip calls can remain as ownership witnesses
 without counting as parent value uses.  Every use and witness must occur
 in the same bounded local window.  The calls are retained; numeric, raw,

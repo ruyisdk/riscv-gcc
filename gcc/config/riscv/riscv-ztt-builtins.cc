@@ -6547,9 +6547,10 @@ structure_witness_p (gimple *stmt, tree parent)
 /* Ignore only witnesses found with every real use in the same local window.  */
 static bool
 local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
-			  gimple *producer, gimple *other = nullptr)
+			  gimple *producer, gimple *other = nullptr,
+			  gimple *copy = nullptr)
 {
-  gimple *uses[16];
+  gimple *uses[17];
   unsigned int nuses = 0, values = 0, visits = 0;
   unsigned int wanted = other ? 2 : 1;
   imm_use_iterator iter;
@@ -6572,8 +6573,11 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
     }
   if (values != wanted)
     return false;
-  if (nuses == wanted)
+  if (nuses == wanted && !copy)
     return local_structure_producer_p (gsi, producer, other);
+  /* The matched copy does not use PARENT directly.  */
+  if (copy)
+    uses[nuses++] = copy;
 
   unsigned int seen = 0;
   gimple_stmt_iterator prev = *gsi;
@@ -6680,7 +6684,23 @@ inverse_zip_value (const builtin_description &d,
   unsigned int code = structure_builtin_code (producer, 1);
   if (code == ZTT_BUILTIN_MAX)
     return NULL_TREE;
-  const auto source = builtin_description_for (code);
+  auto source = builtin_description_for (code);
+  gimple *copy = nullptr;
+  if (source.expansion == EXPAND_MCOPY_M2M)
+    {
+      if (source.prototype != PROTO_M_M || source.type != d.type)
+	return NULL_TREE;
+      copy = producer;
+      middle = gimple_call_arg (copy, 0);
+      if (TREE_CODE (middle) != SSA_NAME || !has_single_use (middle)
+	  || type_for_tree (TREE_TYPE (middle)) != d.type)
+	return NULL_TREE;
+      producer = SSA_NAME_DEF_STMT (middle);
+      code = structure_builtin_code (producer, 1);
+      if (code == ZTT_BUILTIN_MAX)
+	return NULL_TREE;
+      source = builtin_description_for (code);
+    }
   int variant = zip_variant (source.expansion);
   if (source.prototype != PROTO_M_M || source.type != d.type
       || variant < 0 || (variant ^ 2) != zip_variant (d.expansion))
@@ -6688,7 +6708,7 @@ inverse_zip_value (const builtin_description &d,
   tree parent = gimple_call_arg (producer, 0);
   if (TREE_CODE (parent) != SSA_NAME
       || type_for_tree (TREE_TYPE (parent)) != d.type
-      || !local_structure_parent_p (parent, gsi, producer))
+      || !local_structure_parent_p (parent, gsi, producer, nullptr, copy))
     return NULL_TREE;
   return parent;
 }
