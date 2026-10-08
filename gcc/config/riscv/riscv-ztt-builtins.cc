@@ -9206,6 +9206,22 @@ reuse_local_md ()
 				     INSN_UID (insn));
 			}
 		    }
+		  else if (XVECLEN (src, 0) == 4)
+		    {
+		      machine_mode mode = GET_MODE (SET_DEST (set));
+		      unsigned int step = acc_m_nregs (mode);
+		      rtx source = XVECEXP (src, 0, 0);
+		      unsigned int count = m_nregs (GET_MODE (source));
+		      gcc_assert (count == acc_full_m_nregs (mode));
+		      note_stores (insn, invalidate_md_store, &state);
+		      state.invalidate (source);
+		      /* Preparation establishes Md for each source packet.  */
+		      for (unsigned int i = 0; i < count; i += step)
+			state.remember
+			  (gen_rtx_REG (matrix_mode (step), REGNO (source) + i),
+			   XVECEXP (src, 0, 1));
+		      continue;
+		    }
 		  break;
 		case UNSPECV_ZTT_ACC_CLEAR:
 		case UNSPECV_ZTT_ACC_ZERO:

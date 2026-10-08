@@ -128,3 +128,6 @@ store kind and volatile state operation; the store itself stays in place.
 ACC-to-M moves establish Md separately for each transfer packet.  Track
 those subgroups independently, including packed ACC packets, rather than
 treating a multiple-packet destination as one larger prepared group.
+Grouped M-to-ACC moves also establish source Md per transfer packet.
+Discard old source metadata and explicit scratch clobbers before recording
+these subgroups, retaining facts for disjoint M registers.
