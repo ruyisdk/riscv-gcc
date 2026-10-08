@@ -9582,6 +9582,27 @@ integer_zero_width (rtx descriptor)
   return width >= 4 && width <= 128 && pow2p_hwi (width) ? width : 0;
 }
 
+/* Canonical FP16, BF16, FP32 and FP64 positive zero is all-zero bits.  */
+static unsigned int
+floating_zero_width (rtx descriptor)
+{
+  if (!CONST_INT_P (descriptor)
+      || ((UINTVAL (descriptor) >> 22) & 15) > 5)
+    return 0;
+  switch (UINTVAL (descriptor) & ~HOST_WIDE_INT_UC (0x03c00000))
+    {
+    case 0x14300110: /* FP16.  */
+    case 0x20300110: /* BF16.  */
+      return 16;
+    case 0x20300120:
+      return 32;
+    case 0x2c300140:
+      return 64;
+    default:
+      return 0;
+    }
+}
+
 /* Reuse Md within each block after scheduling and register allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -9628,11 +9649,14 @@ reuse_local_md ()
 		  rtx descriptor = XVECEXP (src, 0, zero_broadcast ? 2 : 0);
 		  unsigned int width
 		    = integer_zero_width (state.descriptor_value (descriptor));
+		  bool floating_zero = !width && !zero_broadcast;
+		  if (floating_zero)
+		    width = floating_zero_width (state.descriptor_value (descriptor));
 		  machine_mode mode = GET_MODE (SET_DEST (set));
 		  if (width
 		      && m_nregs (mode) == MAX (1U, width / active_profile ()->uds))
 		    {
-		      /* The setter already clears this complete integer group.  */
+		      /* The setter already clears this complete group.  */
 		      rtx clear = gen_ztt_typed_msettyp_p0
 			(mode, Pmode, SET_DEST (set), descriptor);
 		      if (validate_change (insn, &PATTERN (insn), clear, false))
@@ -9643,7 +9667,8 @@ reuse_local_md ()
 			  set = single_set (insn);
 			  src = SET_SRC (set);
 			  if (dump_file)
-			    fprintf (dump_file, "Reuse integer %sclear at insn %d\n",
+			    fprintf (dump_file, "Reuse %s %sclear at insn %d\n",
+				     floating_zero ? "floating" : "integer",
 				     zero_broadcast ? "broadcast " : "",
 				     INSN_UID (insn));
 			}
@@ -9864,7 +9889,12 @@ reuse_local_md ()
 		case UNSPECV_ZTT_ACC_ZERO:
 		  {
 		    rtx descriptor = XVECEXP (src, 0, 0);
-		    if (integer_zero_width (state.descriptor_value (descriptor)))
+		    unsigned int width
+		      = integer_zero_width (state.descriptor_value (descriptor));
+		    bool floating_zero = !width;
+		    if (floating_zero)
+		      width = floating_zero_width (state.descriptor_value (descriptor));
+		    if (width)
 		      {
 			rtx clear = gen_ztt_acc_clear
 			  (GET_MODE (SET_DEST (set)), Pmode,
@@ -9873,7 +9903,8 @@ reuse_local_md ()
 			  {
 			    df_insn_rescan (insn);
 			    if (dump_file)
-			      fprintf (dump_file, "Reuse integer ACC clear at insn %d\n",
+			      fprintf (dump_file, "Reuse %s ACC clear at insn %d\n",
+				       floating_zero ? "floating" : "integer",
 				       INSN_UID (insn));
 			  }
 		      }
@@ -10013,6 +10044,24 @@ run_md_reuse_selftests ()
       ASSERT_EQ (integer_zero_width
 	(GEN_INT ((HOST_WIDE_INT_1U << bit) | 32)), 0U);
   ASSERT_EQ (integer_zero_width (gen_rtx_REG (Pmode, 10)), 0U);
+  for (unsigned int base : { 0x14300110U, 0x20300110U,
+			    0x20300120U, 0x2c300140U })
+    for (unsigned int rm = 0; rm < 16; ++rm)
+      {
+	unsigned HOST_WIDE_INT descriptor = base | (rm << 22);
+	ASSERT_EQ (floating_zero_width (GEN_INT (descriptor)),
+		   rm < 6 ? base & 0xff : 0U);
+	ASSERT_EQ (integer_zero_width (GEN_INT (descriptor)), 0U);
+	for (unsigned int bit = 0; bit < 64; ++bit)
+	  if (bit < 22 || bit > 25)
+	    ASSERT_EQ (floating_zero_width
+	      (GEN_INT (descriptor ^ (HOST_WIDE_INT_1U << bit))), 0U);
+      }
+  for (unsigned int width = 4; width <= 128; width *= 2)
+    for (unsigned int properties = 0; properties < 16; ++properties)
+      ASSERT_EQ (floating_zero_width
+	(GEN_INT ((HOST_WIDE_INT) properties << 27 | width)), 0U);
+  ASSERT_EQ (floating_zero_width (gen_rtx_REG (Pmode, 10)), 0U);
   int saved_reload_completed = reload_completed;
   rtx operands[] = { gen_rtx_REG (ZTTMR1mode, M_REG_FIRST),
 		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1),

@@ -162,14 +162,16 @@ Typed loads can use an earlier-defined ordinary GPR holding the same full
 descriptor already consumed by a typed load.  Fixed/global registers and
 instruction clobbers are excluded;
 dead materialization and register notes are updated after substitution.
-Typed integer zero construction reuses the bit clear performed by msettyp
-for a known standard descriptor and a complete group.  Floating and raw
-zeros retain their instructions.  Setters and arithmetic effects remain.
+Typed integer and canonical FP16/BF16/FP32/FP64 zero construction reuses
+the bit clear performed by msettyp for a known descriptor and a complete
+group.  Other descriptors and raw zeros retain their instructions.
+Setters and arithmetic effects remain.
 Typed zero broadcasts between known standard integer descriptors also reuse
 the complete-group setter.  The whole scalar carrier must be zero; its dead
 setup is removed and register notes are refreshed.  Argument effects remain.
-Integer ACC zero construction reuses asettyp for every member; the complete
-ACC mode and Ad writes remain.
+Integer and canonical floating ACC zero construction reuses asettyp for
+every member; the complete ACC mode and Ad writes remain.  Floating
+broadcasts are unchanged.
 It is disabled at O0.  Prepared single-ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch
 operands.  Prepared matmul retains the tied old ACC and arithmetic effects,
