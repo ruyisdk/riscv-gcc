@@ -9235,11 +9235,17 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
 		  {
+		    bool scalar = XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X
+		      || XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE;
 		    note_stores (insn, invalidate_md_store, &state);
 		    /* Follow packet setup order; overlapping facts cannot coexist.  */
 		    for (unsigned int i : { 1U, 2U, 0U })
 		      {
+			if (scalar && i == 2)
+			  continue;
 			rtx reg = i ? XVECEXP (src, 0, i - 1) : SET_DEST (set);
 			unsigned int count = m_nregs (GET_MODE (reg));
 			unsigned int step = datatype_step
