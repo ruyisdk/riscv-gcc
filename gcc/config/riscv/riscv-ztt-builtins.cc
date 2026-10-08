@@ -9202,6 +9202,13 @@ reuse_local_md ()
 		case UNSPECV_ZTT_INDEX_CONSTRUCT:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
+		case UNSPECV_ZTT_STATE_ROWCOL:
+		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
+		  note_stores (insn, invalidate_md_store, &state);
+		  descriptor = XVECEXP (src, 0, 2);
+		  state.remember (XVECEXP (src, 0, 0), descriptor);
+		  state.remember (SET_DEST (set), descriptor);
+		  continue;
 		case UNSPECV_ZTT_STATE_CONVERT:
 		case UNSPECV_ZTT_STATE_CONVERT_REUSE:
 		case UNSPECV_ZTT_STATE_STRUCTURAL:

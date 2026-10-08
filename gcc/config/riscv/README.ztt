@@ -143,3 +143,5 @@ Typed broadcast and index constructors establish their complete result
 group's Md for later consumers in the same block.
 Conversions and structural unary operations establish source and result Md
 per datatype packet.  Do not combine adjacent packets into a larger fact.
+Row/column broadcasts and shifts establish the same Md for the complete
+source and result basic Squares, including an in-place result.
