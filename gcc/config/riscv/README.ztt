@@ -165,6 +165,9 @@ dead materialization and register notes are updated after substitution.
 Typed integer zero construction reuses the bit clear performed by msettyp
 for a known standard descriptor and a complete group.  Floating, ACC and
 raw zeros retain their instructions.  Setters and arithmetic effects remain.
+Typed zero broadcasts between known standard integer descriptors also reuse
+the complete-group setter.  The whole scalar carrier must be zero; its dead
+setup is removed and register notes are refreshed.  Argument effects remain.
 It is disabled at O0.  Prepared single-ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch
 operands.  Prepared matmul retains the tied old ACC and arithmetic effects,

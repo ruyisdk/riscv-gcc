@@ -9618,9 +9618,14 @@ reuse_local_md ()
 	  rtx src = set ? SET_SRC (set) : NULL_RTX;
 	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
 	    {
-	      if (explicit_state && XINT (src, 1) == UNSPECV_ZTT_STATE_ZERO)
+	      bool zero_broadcast = XINT (src, 1) == UNSPECV_ZTT_BROADCAST
+		&& state.descriptor_value (XVECEXP (src, 0, 0)) == const0_rtx
+		&& integer_zero_width
+		     (state.descriptor_value (XVECEXP (src, 0, 1)));
+	      if ((explicit_state && XINT (src, 1) == UNSPECV_ZTT_STATE_ZERO)
+		  || zero_broadcast)
 		{
-		  rtx descriptor = XVECEXP (src, 0, 0);
+		  rtx descriptor = XVECEXP (src, 0, zero_broadcast ? 2 : 0);
 		  unsigned int width
 		    = integer_zero_width (state.descriptor_value (descriptor));
 		  machine_mode mode = GET_MODE (SET_DEST (set));
@@ -9634,10 +9639,12 @@ reuse_local_md ()
 			{
 			  df_insn_rescan (insn);
 			  cleanup = true;
+			  descriptor_cleanup |= zero_broadcast;
 			  set = single_set (insn);
 			  src = SET_SRC (set);
 			  if (dump_file)
-			    fprintf (dump_file, "Reuse integer clear at insn %d\n",
+			    fprintf (dump_file, "Reuse integer %sclear at insn %d\n",
+				     zero_broadcast ? "broadcast " : "",
 				     INSN_UID (insn));
 			}
 		    }
