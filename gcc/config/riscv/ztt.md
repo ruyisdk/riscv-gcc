@@ -92,7 +92,7 @@
   [(unspec_volatile
      [(match_operand 0 "const_int_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_none)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -101,7 +101,7 @@
      [(match_operand 0 "const_int_operand" "n")
       (match_operand 1 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_m)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -110,7 +110,7 @@
      [(match_operand 0 "const_int_operand" "n")
       (match_operand 1 "const_0_15_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_a)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -120,7 +120,7 @@
       (match_operand 1 "const_int5_operand" "n")
       (match_operand 2 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_mm)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -130,7 +130,7 @@
       (match_operand 1 "const_int5_operand" "n")
       (match_operand 2 "const_0_15_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_ma)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -140,7 +140,7 @@
       (match_operand 1 "const_0_15_operand" "n")
       (match_operand 2 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_am)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -151,7 +151,7 @@
       (match_operand 2 "const_int5_operand" "n")
       (match_operand 3 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_mmm)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -162,7 +162,7 @@
       (match_operand 2 "const_int5_operand" "n")
       (match_operand 3 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_amm)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -173,7 +173,7 @@
       (match_operand:X 2 "register_operand" "r")
       (match_operand 3 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_mxm)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -184,7 +184,7 @@
       (match_operand:X 2 "register_operand" "r")
       (match_operand:X 3 "register_operand" "r")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_mxx)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -194,7 +194,7 @@
       (match_operand 1 "const_int5_operand" "n")
       (match_operand:X 2 "register_operand" "r")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_mx)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -204,7 +204,7 @@
       (match_operand 1 "const_0_15_operand" "n")
       (match_operand:X 2 "register_operand" "r")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_ax)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -214,7 +214,7 @@
 	  [(match_operand 1 "const_int_operand" "n")
 	   (match_operand 2 "const_0_15_operand" "n")]
 	  UNSPECV_ZTT))]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[1], ZTT_FORMAT_x_a)"
   { return riscv_output_ztt_insn (operands, 1); }
   [(set_attr "type" "multi")])
 
@@ -224,7 +224,7 @@
 	  [(match_operand 1 "const_int_operand" "n")
 	   (match_operand 2 "const_int5_operand" "n")]
 	  UNSPECV_ZTT))]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[1], ZTT_FORMAT_x_m)"
   { return riscv_output_ztt_insn (operands, 1); }
   [(set_attr "type" "multi")])
 
@@ -235,7 +235,7 @@
 	   (match_operand 2 "const_int5_operand" "n")
 	   (match_operand:X 3 "register_operand" "r")]
 	  UNSPECV_ZTT))]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[1], ZTT_FORMAT_x_m_x)"
   { return riscv_output_ztt_insn (operands, 1); }
   [(set_attr "type" "multi")])
 
@@ -245,7 +245,7 @@
 	  [(match_operand 1 "const_int_operand" "n")
 	   (match_operand:X 2 "register_operand" "r")]
 	  UNSPECV_ZTT))]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[1], ZTT_FORMAT_x_x)"
   { return riscv_output_ztt_insn (operands, 1); }
   [(set_attr "type" "multi")])
 
@@ -255,7 +255,7 @@
       (match_operand 1 "const_int5_operand" "n")
       (mem:BLK (match_operand:X 2 "register_operand" "r"))]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_load)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -266,7 +266,7 @@
       (match_operand:X 2 "register_operand" "r")]
      UNSPECV_ZTT)
    (clobber (mem:BLK (match_dup 2)))]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_store)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -277,7 +277,7 @@
       (mem:BLK (match_operand:X 2 "register_operand" "r"))
       (match_operand:X 3 "register_operand" "r")]
      UNSPECV_ZTT)]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_load_strided)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])
 
@@ -289,6 +289,6 @@
       (match_operand:X 3 "register_operand" "r")]
      UNSPECV_ZTT)
    (clobber (mem:BLK (match_dup 2)))]
-  "TARGET_ZTT"
+  "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_store_strided)"
   { return riscv_output_ztt_insn (operands, 0); }
   [(set_attr "type" "multi")])

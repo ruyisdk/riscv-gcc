@@ -126,6 +126,16 @@ extern bool riscv_split_64bit_move_p (rtx, rtx);
 extern void riscv_split_doubleword_move (rtx, rtx);
 extern void riscv_split_quadword_move (rtx, rtx);
 extern const char *riscv_output_move (rtx, rtx);
+enum riscv_ztt_insn_format
+{
+  ZTT_FORMAT_none, ZTT_FORMAT_m, ZTT_FORMAT_a,
+  ZTT_FORMAT_mm, ZTT_FORMAT_ma, ZTT_FORMAT_am,
+  ZTT_FORMAT_mmm, ZTT_FORMAT_amm, ZTT_FORMAT_mxm, ZTT_FORMAT_mxx,
+  ZTT_FORMAT_mx, ZTT_FORMAT_ax, ZTT_FORMAT_x_a, ZTT_FORMAT_x_m,
+  ZTT_FORMAT_x_m_x, ZTT_FORMAT_x_x, ZTT_FORMAT_load, ZTT_FORMAT_store,
+  ZTT_FORMAT_load_strided, ZTT_FORMAT_store_strided
+};
+extern bool riscv_ztt_insn_format_p (rtx, riscv_ztt_insn_format);
 extern const char *riscv_output_ztt_insn (rtx *, unsigned int);
 extern void riscv_ztt_note_raw_builtin (void);
 extern void riscv_ztt_note_call_boundary (void);

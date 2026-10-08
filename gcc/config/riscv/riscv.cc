@@ -5801,9 +5801,13 @@ riscv_split_sum_of_two_s12 (HOST_WIDE_INT val, HOST_WIDE_INT *base,
 #define ZTT_ARGS_load_strided "\tm%1,(%2),%3"
 #define ZTT_ARGS_store_strided "\tm%1,(%2),%3"
 
-static const char *const riscv_ztt_asm_templates[] = {
+static const struct
+{
+  const char *asm_template;
+  riscv_ztt_insn_format format;
+} riscv_ztt_insns[] = {
 #define ZTT_BUILTIN(NAME, MNEMONIC, PATTERN, FUNCTION_TYPE) \
-  MNEMONIC ZTT_ARGS_ ## PATTERN,
+  { MNEMONIC ZTT_ARGS_ ## PATTERN, ZTT_FORMAT_ ## PATTERN },
 #define ZTT_BUILTIN_X ZTT_BUILTIN
 #include "riscv-ztt-builtins.def"
 #undef ZTT_BUILTIN_X
@@ -5831,6 +5835,17 @@ static const char *const riscv_ztt_asm_templates[] = {
 #undef ZTT_ARGS_load_strided
 #undef ZTT_ARGS_store_strided
 
+/* Keep scalar constants from matching encoded register-number operands.  */
+
+bool
+riscv_ztt_insn_format_p (rtx opcode, riscv_ztt_insn_format format)
+{
+  gcc_assert (CONST_INT_P (opcode));
+  unsigned HOST_WIDE_INT selector = UINTVAL (opcode);
+  return (selector < ARRAY_SIZE (riscv_ztt_insns)
+	  && riscv_ztt_insns[selector].format == format);
+}
+
 /* Return the assembly template for a Ztt instruction selected by operand
    OPCODE_OPERAND.  */
 
@@ -5841,8 +5856,8 @@ riscv_output_ztt_insn (rtx *operands, unsigned int opcode_operand)
   HOST_WIDE_INT selector = INTVAL (operands[opcode_operand]);
   gcc_assert (selector >= 0
 	      && (unsigned HOST_WIDE_INT) selector
-		   < ARRAY_SIZE (riscv_ztt_asm_templates));
-  return riscv_ztt_asm_templates[selector];
+		   < ARRAY_SIZE (riscv_ztt_insns));
+  return riscv_ztt_insns[selector].asm_template;
 }
 
 /* Return the appropriate instructions to move SRC into DEST.  Assume
