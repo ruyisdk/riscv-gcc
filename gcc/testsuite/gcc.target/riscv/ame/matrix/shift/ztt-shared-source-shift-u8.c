@@ -8,6 +8,6 @@
 /* { dg-final { scan-assembler-times {\tmsrl\.ew\t} 4 } } */
 /* { dg-final { scan-assembler-times {\tmsra\.ew\t} 4 } } */
 /* { dg-final { scan-assembler-times {\tmsll\.ew\.x\t} 1 } } */
-/* { dg-final { scan-assembler-times {\tmsettyp\t} 74 } } */
-/* { dg-final { scan-assembler-times {\tmss\.1r\t} 69 } } */
-/* { dg-final { scan-assembler-times {\tmls\.1r\t} 69 } } */
+/* { dg-final { scan-assembler-times {\tmsettyp\t} 47 } } */
+/* { dg-final { scan-assembler-times {\tmss\.1r\t} 30 } } */
+/* { dg-final { scan-assembler-times {\tmls\.1r\t} 30 } } */

@@ -9231,6 +9231,28 @@ reuse_local_md ()
 		      }
 		    continue;
 		  }
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE:
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT:
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
+		  {
+		    note_stores (insn, invalidate_md_store, &state);
+		    /* Follow packet setup order; overlapping facts cannot coexist.  */
+		    for (unsigned int i : { 1U, 2U, 0U })
+		      {
+			rtx reg = i ? XVECEXP (src, 0, i - 1) : SET_DEST (set);
+			unsigned int count = m_nregs (GET_MODE (reg));
+			unsigned int step = datatype_step
+			  (UINTVAL (XVECEXP (src, 0, 7)), i);
+			gcc_assert (step && count % step == 0);
+			state.invalidate (reg);
+			for (unsigned int r = 0; r < count; r += step)
+			  state.remember
+			    (gen_rtx_REG (matrix_mode (step), REGNO (reg) + r),
+			     XVECEXP (src, 0, 2 + i));
+		      }
+		    continue;
+		  }
 		case UNSPECV_ZTT_STATE_ADD:
 		case UNSPECV_ZTT_STATE_SUB:
 		case UNSPECV_ZTT_STATE_MIN:
