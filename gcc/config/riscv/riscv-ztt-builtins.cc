@@ -9165,6 +9165,9 @@ static unsigned int
 reuse_local_md ()
 {
   bool cleanup = false;
+  const bool explicit_state = riscv_ztt_explicit_state_p ();
+  if (dump_file)
+    fprintf (dump_file, "Explicit Md state: %d\n", explicit_state);
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
@@ -9185,7 +9188,7 @@ reuse_local_md ()
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
 	  /* Whole-register transfers change payload, not the physical Md.  */
-	  if (code >= 0 && riscv_ztt_explicit_state_p ()
+	  if (code >= 0 && explicit_state
 	      && md_raw_transfer_p (PATTERN (insn)))
 	    continue;
 	  rtx set = single_set (insn);
