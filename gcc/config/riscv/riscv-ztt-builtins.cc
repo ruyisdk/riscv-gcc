@@ -2336,11 +2336,19 @@ registration_function_type (prototype_index prototype, type_index type)
   return result;
 }
 
+/* decl_attributes copies these argument-free inputs into each declaration.  */
+static GTY (()) tree builtin_function_attributes;
+
 static tree
 function_attributes ()
 {
-  tree attrs = tree_cons (get_identifier ("leaf"), NULL_TREE, NULL_TREE);
-  return tree_cons (get_identifier ("nothrow"), NULL_TREE, attrs);
+  if (!builtin_function_attributes)
+    {
+      tree attrs = tree_cons (get_identifier ("leaf"), NULL_TREE, NULL_TREE);
+      builtin_function_attributes
+	= tree_cons (get_identifier ("nothrow"), NULL_TREE, attrs);
+    }
+  return builtin_function_attributes;
 }
 
 static int

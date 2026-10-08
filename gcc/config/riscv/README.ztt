@@ -78,6 +78,10 @@ records, not just names or counts.  It does not reduce the number of
 interfaces or change the lazy-registration rules.  Update t-riscv whenever
 the include graph changes so incremental builds track every catalog.
 
+Registration reuses a GC-rooted leaf/nothrow input list.  Each declaration
+receives its own attribute nodes; option pragmas and declaration-specific
+attributes must not modify the shared inputs.
+
 The exponent Scalar catalog uses ZTT_EXPONENT_FAMILY to store family
 descriptors and a shared type axis.  Expansion remains operation-major,
 type-minor to preserve builtin codes and LTO identities.  Names are built
