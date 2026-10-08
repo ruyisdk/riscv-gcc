@@ -9457,6 +9457,154 @@ riscv_ztt_runtime_frame_p ()
   return needed;
 }
 
+/* Resolve a bounded multiple of the AME scale through full-width definitions
+   in BEFORE's block.  Zero is the only accepted constant term.  */
+static bool
+riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
+			    unsigned int &budget, HOST_WIDE_INT &factor)
+{
+  if (budget == 0)
+    return false;
+  --budget;
+  if (x == const0_rtx)
+    {
+      factor = 0;
+      return true;
+    }
+  if (REG_P (x) && GET_MODE (x) == Pmode && GP_REG_P (REGNO (x)))
+    {
+      if (REGNO (x) == RISCV_ZTT_SCALE_REGNUM)
+	{
+	  factor = 1;
+	  return true;
+	}
+      basic_block bb = BLOCK_FOR_INSN (before);
+      for (rtx_insn *def = PREV_INSN (before); def; def = PREV_INSN (def))
+	{
+	  if (NOTE_P (def) || DEBUG_INSN_P (def))
+	    continue;
+	  if (!NONJUMP_INSN_P (def) || BLOCK_FOR_INSN (def) != bb)
+	    break;
+	  if (!modified_in_p (x, def))
+	    continue;
+	  rtx set = PATTERN (def);
+	  return GET_CODE (set) == SET && rtx_equal_p (SET_DEST (set), x)
+	    && riscv_ztt_workspace_factor (SET_SRC (set), def, limit,
+					   budget, factor);
+	}
+      return false;
+    }
+  if (GET_MODE (x) != Pmode)
+    return false;
+  HOST_WIDE_INT left, right;
+  if (GET_CODE (x) == PLUS
+      && riscv_ztt_workspace_factor (XEXP (x, 0), before, limit, budget, left)
+      && riscv_ztt_workspace_factor (XEXP (x, 1), before, limit, budget, right)
+      && left <= limit - right)
+    {
+      factor = left + right;
+      return true;
+    }
+  if (GET_CODE (x) == ASHIFT && CONST_INT_P (XEXP (x, 1))
+      && IN_RANGE (INTVAL (XEXP (x, 1)), 0, HOST_BITS_PER_WIDE_INT - 2)
+      && riscv_ztt_workspace_factor (XEXP (x, 0), before, limit, budget, left)
+      && left <= (limit >> INTVAL (XEXP (x, 1))))
+    {
+      factor = left << INTVAL (XEXP (x, 1));
+      return true;
+    }
+  return false;
+}
+
+/* Local Md reuse can make every private slot dead after frame expansion.
+   Keep the fixed CFA and N checks, and remove only an unused scalable pair.  */
+bool
+riscv_ztt_remove_unused_workspace ()
+{
+  const riscv_frame_info &frame = cfun->machine->frame;
+  poly_int64 locals = get_frame_size ();
+  if (!riscv_ztt::runtime_profile_p () || !riscv_ztt_explicit_state_p ()
+      || !frame_pointer_needed || !crtl->is_leaf || cfun->calls_alloca
+      || cfun->calls_setjmp || cfun->has_nonlocal_label || crtl->calls_eh_return
+      || crtl->stack_realign_needed || flag_non_call_exceptions
+      || flag_stack_clash_protection || flag_stack_check || flag_stack_protect
+      || cfun->machine->naked_p || cfun->machine->interrupt_handler_p
+      || cfun->machine->varargs_size || crtl->args.pretend_args_size
+      || known_ne (crtl->outgoing_args_size, 0) || frame.vmask
+      || frame.total_size.coeffs[1] || locals.coeffs[1]
+      || locals.coeffs[2] <= 0 || locals.coeffs[0] != locals.coeffs[2]
+      || frame.total_size.coeffs[2] != locals.coeffs[2])
+    return false;
+
+  rtx_insn *allocate = nullptr, *release = nullptr;
+  for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    {
+      if (!INSN_P (insn))
+	continue;
+      rtx pat = PATTERN (insn);
+      if (CALL_P (insn) || asm_noperands (pat) >= 0
+	  || GET_CODE (pat) == ASM_INPUT)
+	return false;
+      if (!prologue_epilogue_contains (insn)
+	  && (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
+	      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat)
+	      || reg_overlap_mentioned_p (frame_pointer_rtx, pat)
+	      || reg_overlap_mentioned_p (arg_pointer_rtx, pat)))
+	return false;
+      if (DEBUG_INSN_P (insn) || !modified_in_p (stack_pointer_rtx, insn))
+	continue;
+      if (GET_CODE (pat) != SET
+	  || !rtx_equal_p (SET_DEST (pat), stack_pointer_rtx))
+	return false;
+      rtx src = SET_SRC (pat);
+      if ((GET_CODE (src) != PLUS && GET_CODE (src) != MINUS)
+	  || !rtx_equal_p (XEXP (src, 0), stack_pointer_rtx))
+	return false;
+      if (GET_CODE (src) == PLUS && CONST_INT_P (XEXP (src, 1))
+	  && RTX_FRAME_RELATED_P (insn))
+	continue;
+      if (RTX_FRAME_RELATED_P (insn))
+	return false;
+      unsigned int budget = 32;
+      HOST_WIDE_INT factor;
+      if (!riscv_ztt_workspace_factor (XEXP (src, 1), insn, locals.coeffs[2],
+				       budget, factor)
+	  || factor != locals.coeffs[2])
+	return false;
+      if (GET_CODE (src) == MINUS && prologue_contains (insn) && !allocate)
+	allocate = insn;
+      else if (GET_CODE (src) == PLUS && epilogue_contains (insn) && !release)
+	release = insn;
+      else
+	return false;
+    }
+  if (!allocate || !release
+      || BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
+    return false;
+  rtx_insn *insn;
+  for (insn = NEXT_INSN (allocate); insn && insn != release;
+       insn = NEXT_INSN (insn))
+    if (INSN_P (insn))
+      {
+	rtx pat = PATTERN (insn);
+	if (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
+	    && XINT (SET_SRC (pat), 1) == UNSPEC_TIE)
+	  continue;
+	if (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
+	    || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat))
+	  return false;
+      }
+  if (!insn)
+    return false;
+  if (dump_file)
+    fprintf (dump_file, "Remove unused AME workspace: " HOST_WIDE_INT_PRINT_DEC
+	     " * scale, insns %d and %d\n", locals.coeffs[2],
+	     INSN_UID (allocate), INSN_UID (release));
+  delete_insn (allocate);
+  delete_insn (release);
+  return true;
+}
+
 /* Return true if the current function must save register REGNO.  */
 
 static bool

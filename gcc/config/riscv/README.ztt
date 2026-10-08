@@ -170,6 +170,11 @@ but no longer needs source descriptor GPRs.  Fast RTL DCE removes their dead
 address calculations before debug locations are computed.  Frame layout
 and runtime-N validation remain unchanged.  Partly prepared matmul keeps
 its private operands.
+After DCE, straight-line leaf functions with no live stack references can
+drop an unused AME workspace allocation/release pair.  Both adjustments
+must be in one block and use the proven frame-size coefficient.  Fixed
+frames, N checks and CFA rules remain; calls, asm, real stack storage,
+probing, alloca and RVV save areas exclude this cleanup.
 For mixed matmul, a prepared side's unused descriptor is replaced with zero
 after allocation.  The mask prevents its use; the other side retains its
 descriptor and full save/set/reload sequence.  DCE can then remove the dead

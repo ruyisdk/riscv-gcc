@@ -144,6 +144,7 @@ extern rtl_opt_pass *make_pass_ztt_regions (gcc::context *);
 extern rtl_opt_pass *make_pass_ztt_verify_regions (gcc::context *);
 extern void riscv_ztt_note_descriptor (unsigned int);
 extern bool riscv_ztt_explicit_state_p ();
+extern bool riscv_ztt_remove_unused_workspace ();
 extern rtl_opt_pass *make_pass_ztt_state (gcc::context *);
 extern rtl_opt_pass *make_pass_ztt_md_reuse (gcc::context *);
 extern const char *riscv_output_return ();
