@@ -158,6 +158,10 @@ Full Pmode GPR single SETs establish constants through RTL simplification.
 Prepared groups retain constant snapshots after the original GPR changes;
 unknown descriptors require unchanged GPRs.  Partial/parallel definitions
 invalidate constants, and memory contents are not tracked.
+Typed loads can use an earlier-defined ordinary GPR holding the same full
+descriptor already consumed by a typed load.  Fixed/global registers and
+instruction clobbers are excluded;
+dead materialization and register notes are updated after substitution.
 The pass leaves Ad, explicit clears and arithmetic effects unchanged.
 It is disabled at O0.  Prepared single-ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch

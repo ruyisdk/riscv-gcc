@@ -9413,6 +9413,9 @@ class local_md_state
 {
   struct fact { rtx group; rtx descriptor; } facts[M_REG_NUM] = {};
   rtx constants[32] = {}; /* GP_REG_NUM depends on the active RVE option.  */
+  unsigned int definition[32] = {};
+  bool load_used[32] = {};
+  unsigned int next_definition = 0;
 
   static rtx substitute (rtx x, const_rtx, void *data)
   {
@@ -9425,6 +9428,8 @@ public:
   {
     memset (facts, 0, sizeof (facts));
     memset (constants, 0, sizeof (constants));
+    memset (load_used, 0, sizeof (load_used));
+    next_definition = 0;
   }
 
   static bool full_gpr_p (rtx reg)
@@ -9456,6 +9461,42 @@ public:
   {
     gcc_assert (full_gpr_p (reg) && CONST_INT_P (value));
     constants[REGNO (reg) - GP_REG_FIRST] = value;
+    definition[REGNO (reg) - GP_REG_FIRST] = ++next_definition;
+    load_used[REGNO (reg) - GP_REG_FIRST] = false;
+  }
+
+  void note_load_descriptor (rtx reg)
+  {
+    if (full_gpr_p (reg) && CONST_INT_P (descriptor_value (reg)))
+      load_used[REGNO (reg) - GP_REG_FIRST] = true;
+  }
+
+  rtx descriptor_register (rtx reg, const_rtx insn) const
+  {
+    if (!full_gpr_p (reg) || fixed_regs[REGNO (reg)]
+	|| global_regs[REGNO (reg)] || reg_set_p (reg, insn))
+      return reg;
+    rtx value = descriptor_value (reg);
+    if (!CONST_INT_P (value))
+      return reg;
+    rtx best = reg;
+    unsigned int oldest = definition[REGNO (reg) - GP_REG_FIRST];
+    /* Prefer the earliest value, not a newer copy that DCE could remove.  */
+    for (unsigned int r = GP_REG_FIRST; r < GP_REG_FIRST + GP_REG_NUM; ++r)
+      if (!fixed_regs[r] && !global_regs[r]
+	  && constants[r - GP_REG_FIRST]
+	  && load_used[r - GP_REG_FIRST]
+	  && definition[r - GP_REG_FIRST] < oldest
+	  && rtx_equal_p (value, constants[r - GP_REG_FIRST]))
+	{
+	  rtx candidate = gen_rtx_REG (Pmode, r);
+	  if (!reg_set_p (candidate, insn))
+	    {
+	      best = candidate;
+	      oldest = definition[r - GP_REG_FIRST];
+	    }
+	}
+    return best;
   }
 
   void invalidate (rtx reg)
@@ -9467,7 +9508,10 @@ public:
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
       if (constants[i]
 	  && reg_overlap_mentioned_p (reg, gen_rtx_REG (Pmode, GP_REG_FIRST + i)))
-	constants[i] = NULL_RTX;
+	{
+	  constants[i] = NULL_RTX;
+	  load_used[i] = false;
+	}
   }
 
   bool matches (rtx group, rtx descriptor) const
@@ -9532,6 +9576,7 @@ static unsigned int
 reuse_local_md ()
 {
   bool cleanup = false;
+  bool descriptor_cleanup = false;
   const bool explicit_state = riscv_ztt_explicit_state_p ();
   if (dump_file)
     fprintf (dump_file, "Explicit Md state: %d\n", explicit_state);
@@ -9562,6 +9607,25 @@ reuse_local_md ()
 	  rtx src = set ? SET_SRC (set) : NULL_RTX;
 	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
 	    {
+	      if (XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD
+		  || XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_LOAD)
+		{
+		  unsigned int index
+		    = XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD ? 1 : 3;
+		  rtx *where = &XVECEXP (src, 0, index);
+		  rtx old = *where;
+		  rtx reg = state.descriptor_register (old, insn);
+		  if (reg != old && validate_change (insn, where, reg, false))
+		    {
+		      df_insn_rescan (insn);
+		      cleanup = descriptor_cleanup = true;
+		      if (dump_file)
+			fprintf (dump_file,
+				 "Reuse load descriptor at insn %d: x%u -> x%u\n",
+				 INSN_UID (insn), REGNO (old), REGNO (reg));
+		    }
+		  state.note_load_descriptor (*where);
+		}
 	      rtx group = NULL_RTX, descriptor = NULL_RTX;
 	      switch (XINT (src, 1))
 		{
@@ -9858,6 +9922,11 @@ reuse_local_md ()
   if (cleanup)
     {
       run_fast_dce ();
+      if (descriptor_cleanup)
+	{
+	  df_note_add_problem ();
+	  df_analyze ();
+	}
       return TODO_df_finish;
     }
   return 0;
@@ -9960,6 +10029,47 @@ run_md_reuse_selftests ()
   state.clear ();
   ASSERT_EQ (state.constant_value (a), NULL_RTX);
   ASSERT_FALSE (state.matches (group, a));
+
+  rtx use_b = gen_rtx_USE (VOIDmode, b);
+  state.record_constant (a, dtype);
+  state.record_constant (b, dtype);
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  state.note_load_descriptor (a);
+  ASSERT_TRUE (rtx_equal_p (state.descriptor_register (b, use_b), a));
+  ASSERT_EQ (state.descriptor_register (a, use_b), a);
+  ASSERT_EQ (state.descriptor_register (b, gen_rtx_CLOBBER (VOIDmode, a)), b);
+  ASSERT_EQ (state.descriptor_register (b, gen_rtx_SET (b, const0_rtx)), b);
+  auto saved_fixed = fixed_regs[REGNO (a)];
+  fixed_regs[REGNO (a)] = 1;
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  fixed_regs[REGNO (a)] = saved_fixed;
+  auto saved_global = global_regs[REGNO (a)];
+  global_regs[REGNO (a)] = 1;
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  global_regs[REGNO (a)] = saved_global;
+  state.record_constant (a, GEN_INT (0x40000021));
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  if (TARGET_64BIT)
+    {
+      state.record_constant (a, GEN_INT (HOST_WIDE_INT_C (0x140000020)));
+      ASSERT_EQ (state.descriptor_register (b, use_b), b);
+    }
+  state.record_constant (a, dtype);
+  state.invalidate (gen_rtx_SUBREG (QImode, a, 0));
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  state.clear ();
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  state.record_constant (b, dtype);
+  state.note_load_descriptor (b);
+  state.record_constant (a, dtype);
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  ASSERT_TRUE (rtx_equal_p (state.descriptor_register (a, use_b), b));
+  state.clear ();
+  state.record_constant (a, dtype);
+  state.note_load_descriptor (a);
+  state.record_constant (a, dtype);
+  state.record_constant (b, dtype);
+  ASSERT_EQ (state.descriptor_register (b, use_b), b);
 }
 #endif
 
