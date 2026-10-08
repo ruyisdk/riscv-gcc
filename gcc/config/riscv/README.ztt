@@ -83,6 +83,17 @@ descriptors and a shared type axis.  Expansion remains operation-major,
 type-minor to preserve builtin codes and LTO identities.  Names are built
 after profile/type checks.
 
+Structural folding
+------------------
+
+The GIMPLE hook can replace extraction from a single-use concatenation
+with the corresponding complete source value.  Exact types and shape
+transitions must match.  The search stays within one basic block and
+crosses only a bounded number of memory-free SSA copies or debug statements.
+Calls, asm and state operations remain boundaries.  The concatenation
+call is retained for ownership checking.  Multi-use pairs keep their
+existing lowering to avoid extending the source halves' live ranges.
+
 Local datatype preparation
 --------------------------
 

@@ -36,6 +36,9 @@ with GCC; see the file COPYING3.  If not see
 #include "expr.h"
 #include "basic-block.h"
 #include "function.h"
+#include "gimple.h"
+#include "gimple-iterator.h"
+#include "ssa.h"
 #include "builtins.h"
 #include "fold-const.h"
 #include "explow.h"
@@ -6462,6 +6465,79 @@ check_builtin_call (location_t loc, unsigned int code, tree,
       && nargs == 2)
     return reject_pointer_zip (loc, builtin_description_for (code));
   return true;
+}
+
+/* Keep the producer call as an ownership witness.  Only cross local SSA
+   copies, not memory accesses, calls or other state-changing operations.  */
+static bool
+local_structure_producer_p (gimple_stmt_iterator *gsi, gimple *producer)
+{
+  if (!gimple_bb (producer) || gimple_bb (producer) != gsi_bb (*gsi))
+    return false;
+  gimple_stmt_iterator prev = *gsi;
+  for (unsigned int i = 0; i < 16; ++i)
+    {
+      gsi_prev (&prev);
+      if (gsi_end_p (prev))
+	return false;
+      gimple *stmt = gsi_stmt (prev);
+      if (stmt == producer)
+	return true;
+      if (is_gimple_debug (stmt))
+	continue;
+      if (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
+	  || gimple_has_side_effects (stmt)
+	  || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
+	return false;
+    }
+  return false;
+}
+
+gimple *
+gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  if (!optimize || code >= ZTT_BUILTIN_MAX
+      || builtin_description_for (code).expansion != EXPAND_MEXTRACT
+      || gimple_call_num_args (stmt) != 2 || !gimple_call_lhs (stmt)
+      || !TARGET_ZTT || !runtime_profile_p ())
+    return nullptr;
+
+  tree index = gimple_call_arg (stmt, 1);
+  tree pair = gimple_call_arg (stmt, 0);
+  if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) > 1
+      || TREE_CODE (pair) != SSA_NAME || !has_single_use (pair))
+    return nullptr;
+  gimple *producer = SSA_NAME_DEF_STMT (pair);
+  if (!is_gimple_call (producer))
+    return nullptr;
+  tree decl = gimple_call_fndecl (producer);
+  if (!decl || !fndecl_built_in_p (decl, BUILT_IN_MD)
+      || gimple_call_num_args (producer) != 2)
+    return nullptr;
+  unsigned int fullcode = DECL_MD_FUNCTION_CODE (decl);
+  unsigned int source_code = fullcode >> RISCV_BUILTIN_SHIFT;
+  if ((fullcode & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_ZTT
+      || source_code >= ZTT_BUILTIN_MAX)
+    return nullptr;
+
+  const auto d = builtin_description_for (code);
+  const auto source = builtin_description_for (source_code);
+  if (source.expansion != EXPAND_MCONCAT
+      || m_utility_source_type (d.prototype, d.type) != source.type
+      || m_utility_source_type (source.prototype, source.type) != d.type)
+    return nullptr;
+  tree value = gimple_call_arg (producer, tree_to_uhwi (index));
+  tree lhs = gimple_call_lhs (stmt);
+  if (type_for_tree (TREE_TYPE (value)) != d.type
+      || type_for_tree (TREE_TYPE (lhs)) != d.type
+      || type_for_tree (TREE_TYPE (pair)) != source.type
+      || !local_structure_producer_p (gsi, producer))
+    return nullptr;
+
+  unlink_stmt_vdef (stmt);
+  if (tree vdef = gimple_vdef (stmt))
+    release_ssa_name (vdef);
+  return gimple_build_assign (lhs, value);
 }
 
 static rtx

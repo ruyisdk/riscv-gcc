@@ -535,7 +535,7 @@ riscv_gimple_fold_builtin (gimple_stmt_iterator *gsi)
       break;
 
     case RISCV_BUILTIN_ZTT:
-      new_stmt = NULL;
+      new_stmt = riscv_ztt::gimple_fold_builtin (subcode, gsi, stmt);
       break;
     }
 

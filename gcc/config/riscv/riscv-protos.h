@@ -965,6 +965,7 @@ unsigned int rowcol_length (rtx *);
 void init_builtins ();
 void handle_pragma_ztt ();
 tree builtin_decl (unsigned int, bool);
+gimple *gimple_fold_builtin (unsigned int, gimple_stmt_iterator *, gcall *);
 tree resolve_overloaded_builtin (location_t, unsigned int, vec<tree, va_gc> *);
 rtx expand_builtin (unsigned int, tree, rtx);
 bool check_builtin_arguments (location_t, unsigned int, vec<tree, va_gc> *);
