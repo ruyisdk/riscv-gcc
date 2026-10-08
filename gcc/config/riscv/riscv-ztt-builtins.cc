@@ -6467,22 +6467,30 @@ check_builtin_call (location_t loc, unsigned int code, tree,
   return true;
 }
 
-/* Keep the producer call as an ownership witness.  Only cross local SSA
+/* Keep producer calls as ownership witnesses.  Only cross local SSA
    copies, not memory accesses, calls or other state-changing operations.  */
 static bool
-local_structure_producer_p (gimple_stmt_iterator *gsi, gimple *producer)
+local_structure_producer_p (gimple_stmt_iterator *gsi, gimple *producer,
+			   gimple *other = nullptr)
 {
-  if (!gimple_bb (producer) || gimple_bb (producer) != gsi_bb (*gsi))
+  if (!gimple_bb (producer) || gimple_bb (producer) != gsi_bb (*gsi)
+      || (other && gimple_bb (other) != gsi_bb (*gsi)))
     return false;
   gimple_stmt_iterator prev = *gsi;
+  unsigned int seen = 0, wanted = other ? 3 : 1;
   for (unsigned int i = 0; i < 16; ++i)
     {
       gsi_prev (&prev);
       if (gsi_end_p (prev))
 	return false;
       gimple *stmt = gsi_stmt (prev);
-      if (stmt == producer)
-	return true;
+      if (stmt == producer || stmt == other)
+	{
+	  seen |= stmt == producer ? 1 : 2;
+	  if (seen == wanted)
+	    return true;
+	  continue;
+	}
       if (is_gimple_debug (stmt))
 	continue;
       if (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
@@ -6493,45 +6501,113 @@ local_structure_producer_p (gimple_stmt_iterator *gsi, gimple *producer)
   return false;
 }
 
-gimple *
-gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+static unsigned int
+structure_builtin_code (gimple *stmt)
 {
-  if (!optimize || code >= ZTT_BUILTIN_MAX
-      || builtin_description_for (code).expansion != EXPAND_MEXTRACT
-      || gimple_call_num_args (stmt) != 2 || !gimple_call_lhs (stmt)
-      || !TARGET_ZTT || !runtime_profile_p ())
-    return nullptr;
+  if (!is_gimple_call (stmt) || gimple_call_num_args (stmt) != 2)
+    return ZTT_BUILTIN_MAX;
+  tree decl = gimple_call_fndecl (stmt);
+  if (!decl || !fndecl_built_in_p (decl, BUILT_IN_MD))
+    return ZTT_BUILTIN_MAX;
+  unsigned int code = DECL_MD_FUNCTION_CODE (decl);
+  if ((code & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_ZTT)
+    return ZTT_BUILTIN_MAX;
+  return MIN (code >> RISCV_BUILTIN_SHIFT, ZTT_BUILTIN_MAX);
+}
 
+static tree
+extracted_concat_value (const builtin_description &d,
+			gimple_stmt_iterator *gsi, gcall *stmt)
+{
   tree index = gimple_call_arg (stmt, 1);
   tree pair = gimple_call_arg (stmt, 0);
   if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) > 1
       || TREE_CODE (pair) != SSA_NAME || !has_single_use (pair))
-    return nullptr;
+    return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (pair);
-  if (!is_gimple_call (producer))
-    return nullptr;
-  tree decl = gimple_call_fndecl (producer);
-  if (!decl || !fndecl_built_in_p (decl, BUILT_IN_MD)
-      || gimple_call_num_args (producer) != 2)
-    return nullptr;
-  unsigned int fullcode = DECL_MD_FUNCTION_CODE (decl);
-  unsigned int source_code = fullcode >> RISCV_BUILTIN_SHIFT;
-  if ((fullcode & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_ZTT
-      || source_code >= ZTT_BUILTIN_MAX)
-    return nullptr;
+  unsigned int source_code = structure_builtin_code (producer);
+  if (source_code == ZTT_BUILTIN_MAX)
+    return NULL_TREE;
 
-  const auto d = builtin_description_for (code);
   const auto source = builtin_description_for (source_code);
   if (source.expansion != EXPAND_MCONCAT
       || m_utility_source_type (d.prototype, d.type) != source.type
       || m_utility_source_type (source.prototype, source.type) != d.type)
-    return nullptr;
+    return NULL_TREE;
   tree value = gimple_call_arg (producer, tree_to_uhwi (index));
-  tree lhs = gimple_call_lhs (stmt);
   if (type_for_tree (TREE_TYPE (value)) != d.type
-      || type_for_tree (TREE_TYPE (lhs)) != d.type
       || type_for_tree (TREE_TYPE (pair)) != source.type
       || !local_structure_producer_p (gsi, producer))
+    return NULL_TREE;
+  return value;
+}
+
+static tree
+rebuilt_pair_value (const builtin_description &d,
+		    gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  type_index half_type = m_utility_source_type (d.prototype, d.type);
+  if (half_type == TYPE_MAX)
+    return NULL_TREE;
+  tree parent = NULL_TREE;
+  gimple *extracts[2];
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      tree half = gimple_call_arg (stmt, i);
+      if (TREE_CODE (half) != SSA_NAME || !has_single_use (half)
+	  || type_for_tree (TREE_TYPE (half)) != half_type)
+	return NULL_TREE;
+      extracts[i] = SSA_NAME_DEF_STMT (half);
+      unsigned int code = structure_builtin_code (extracts[i]);
+      if (code == ZTT_BUILTIN_MAX)
+	return NULL_TREE;
+      const auto source = builtin_description_for (code);
+      if (source.expansion != EXPAND_MEXTRACT || source.type != half_type
+	  || m_utility_source_type (source.prototype, source.type) != d.type)
+	return NULL_TREE;
+      tree index = gimple_call_arg (extracts[i], 1);
+      tree value = gimple_call_arg (extracts[i], 0);
+      if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) != i
+	  || TREE_CODE (value) != SSA_NAME
+	  || type_for_tree (TREE_TYPE (value)) != d.type
+	  || (i && value != parent))
+	return NULL_TREE;
+      parent = value;
+    }
+
+  unsigned int uses = 0, visits = 0;
+  imm_use_iterator iter;
+  use_operand_p use;
+  FOR_EACH_IMM_USE_FAST (use, iter, parent)
+    {
+      if (++visits > 16)
+	return NULL_TREE;
+      if (!is_gimple_debug (USE_STMT (use)) && ++uses > 2)
+	return NULL_TREE;
+    }
+  if (uses != 2
+      || !local_structure_producer_p (gsi, extracts[0], extracts[1]))
+    return NULL_TREE;
+  return parent;
+}
+
+gimple *
+gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  if (!optimize || code >= ZTT_BUILTIN_MAX)
+    return nullptr;
+  const auto d = builtin_description_for (code);
+  if ((d.expansion != EXPAND_MEXTRACT && d.expansion != EXPAND_MCONCAT)
+      || gimple_call_num_args (stmt) != 2 || !gimple_call_lhs (stmt)
+      || !TARGET_ZTT || !runtime_profile_p ())
+    return nullptr;
+  tree lhs = gimple_call_lhs (stmt);
+  if (type_for_tree (TREE_TYPE (lhs)) != d.type)
+    return nullptr;
+  tree value = d.expansion == EXPAND_MEXTRACT
+    ? extracted_concat_value (d, gsi, stmt)
+    : rebuilt_pair_value (d, gsi, stmt);
+  if (!value)
     return nullptr;
 
   unlink_stmt_vdef (stmt);
