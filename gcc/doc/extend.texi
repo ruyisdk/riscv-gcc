@@ -28410,11 +28410,16 @@ Source M values are fully saved before datatype setup and fully restored.
 The new modes distinguish ACC count from M transfer count and do not
 encode N as a compile-time constant.
 
-Packed D less than UDS transfers require the separate capability below;
-nonpacked accx8/accx16 and ordinary by-value calls remain unsupported.
+Packed D less than UDS transfers require the separate capability below.
+Runtime profiles also support complete accx8/accx16 values when the
+selected ACC resources suffice.  Integer default names select RNU for
+these groups, just as for the smaller groups; they have the same type
+and resource checks as the explicit-RNU names.  Whole M transfers also
+require the corresponding complete M value to fit the profile.
+Ordinary by-value calls with typed arguments or results remain unsupported.
 Mixed arithmetic has a separate capability below;
 the tuple-copy capability alone does not advertise it.
-The same sizeless, leaf-after-inlining and L0-mixing restrictions apply.
+The same sizeless and L0-mixing restrictions apply.
 
 @subsubheading Experimental complete packed accumulator copies
 

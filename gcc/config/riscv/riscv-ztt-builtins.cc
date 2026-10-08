@@ -4912,16 +4912,6 @@ default_builtin_alias (const builtin_description &d, const char *canonical_name,
       && !(desc & (1U << 29)))
     return false;
 
-  /* The early small-integer ACC short names advertise groups above four
-     only in packed profiles.  Preserve that gate independently of the
-     later explicit-RM catalog entries.  */
-  if ((types[d.type].accumulator || d.expansion == EXPAND_M_FROM_A)
-      && !floating_descriptor_p (desc) && (desc & 0xff) <= 32
-      && !(desc & (1U << 29))
-      && types[d.type].rows * types[d.type].columns > 4
-      && (desc & 0xff) >= active_profile ()->uds)
-    return false;
-
   gcc_assert (strlen (canonical_name) < sizeof (name));
   char *out = name;
   bool changed = false;
