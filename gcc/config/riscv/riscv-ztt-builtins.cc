@@ -6556,9 +6556,9 @@ structure_witness_p (gimple *stmt, tree parent)
 static bool
 local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 			  gimple *producer, gimple *other = nullptr,
-			  gimple *copy = nullptr)
+			  gimple *copy = nullptr, gimple *other_copy = nullptr)
 {
-  gimple *uses[17];
+  gimple *uses[18];
   unsigned int nuses = 0, values = 0, visits = 0;
   unsigned int wanted = other ? 2 : 1;
   imm_use_iterator iter;
@@ -6581,11 +6581,13 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
     }
   if (values != wanted)
     return false;
-  if (nuses == wanted && !copy)
+  if (nuses == wanted && !copy && !other_copy)
     return local_structure_producer_p (gsi, producer, other);
-  /* The matched copy does not use PARENT directly.  */
+  /* Matched copies do not use PARENT directly.  */
   if (copy)
     uses[nuses++] = copy;
+  if (other_copy)
+    uses[nuses++] = other_copy;
 
   unsigned int seen = 0;
   gimple_stmt_iterator prev = *gsi;
@@ -6645,8 +6647,12 @@ rebuilt_pair_value (const builtin_description &d,
   type_index half_type = m_utility_source_type (d.prototype, d.type);
   if (half_type == TYPE_MAX)
     return NULL_TREE;
+  unsigned int half_nregs = type_nregs (half_type);
+  if (!half_nregs || type_nregs (d.type) != 2 * half_nregs)
+    return NULL_TREE;
   tree parent = NULL_TREE;
   gimple *extracts[2];
+  gimple *copies[2] = {};
   for (unsigned int i = 0; i < 2; ++i)
     {
       tree half = gimple_call_arg (stmt, i);
@@ -6654,6 +6660,20 @@ rebuilt_pair_value (const builtin_description &d,
 	  || type_for_tree (TREE_TYPE (half)) != half_type)
 	return NULL_TREE;
       extracts[i] = SSA_NAME_DEF_STMT (half);
+      unsigned int copy_code = structure_builtin_code (extracts[i], 1);
+      if (copy_code != ZTT_BUILTIN_MAX)
+	{
+	  const auto copy = builtin_description_for (copy_code);
+	  if (copy.expansion != EXPAND_MCOPY_M2M
+	      || copy.prototype != PROTO_M_M || copy.type != half_type)
+	    return NULL_TREE;
+	  copies[i] = extracts[i];
+	  half = gimple_call_arg (copies[i], 0);
+	  if (TREE_CODE (half) != SSA_NAME || !has_single_use (half)
+	      || type_for_tree (TREE_TYPE (half)) != half_type)
+	    return NULL_TREE;
+	  extracts[i] = SSA_NAME_DEF_STMT (half);
+	}
       unsigned int code = structure_builtin_code (extracts[i]);
       if (code == ZTT_BUILTIN_MAX)
 	return NULL_TREE;
@@ -6671,7 +6691,8 @@ rebuilt_pair_value (const builtin_description &d,
       parent = value;
     }
 
-  if (!local_structure_parent_p (parent, gsi, extracts[0], extracts[1]))
+  if (!local_structure_parent_p (parent, gsi, extracts[0], extracts[1],
+				copies[0], copies[1]))
     return NULL_TREE;
   return parent;
 }

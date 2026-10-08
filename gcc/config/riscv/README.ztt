@@ -104,6 +104,11 @@ value uses must be the two extractions.  The same local boundaries apply;
 extraction calls remain as ownership witnesses.  Reversed indices and extra
 live values keep their existing lowering.
 
+Each half may pass through one same-type M-to-M copy.  Both the copy result
+and extracted half must have one use, and all calls stay in the same local
+window.  Copies retain their operands for ownership checking; longer chains
+and fractional-register halves do not match.
+
 Same-axis zip/unzip pairs can reuse their input in either order.  They
 require the same complete 1x2 type, one value use of the input and
 intermediate, and the same local boundaries.  The inner call remains for
