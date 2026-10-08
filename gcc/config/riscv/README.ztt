@@ -137,3 +137,5 @@ stores and ACC consumers can reuse their preparation.
 Binary operations also reuse matching incoming source Md independently.
 When both sources match, a prepared form drops the private memory and
 address operands while retaining any required destination setup.
+Identical physical binary inputs share their first complete preparation,
+including when incoming Md is unknown.

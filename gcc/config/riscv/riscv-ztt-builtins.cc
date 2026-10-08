@@ -9213,6 +9213,9 @@ reuse_local_md ()
 		    rtx lhs = XVECEXP (src, 0, 0), rhs = XVECEXP (src, 0, 1);
 		    unsigned int mask = state.matches (lhs, descriptor)
 		      | (state.matches (rhs, descriptor) << 1);
+		    /* Preparing one complete group also prepares an identical input.  */
+		    if (rtx_equal_p (lhs, rhs))
+		      mask |= 2;
 		    if (mask && XVECLEN (src, 0) > 3)
 		      {
 			bool changed;
