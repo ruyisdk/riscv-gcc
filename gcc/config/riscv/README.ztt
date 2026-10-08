@@ -131,3 +131,6 @@ treating a multiple-packet destination as one larger prepared group.
 Grouped M-to-ACC moves also establish source Md per transfer packet.
 Discard old source metadata and explicit scratch clobbers before recording
 these subgroups, retaining facts for disjoint M registers.
+Same-datatype binary operations establish Md for both complete source
+groups and the result.  Record all three after explicit clobbers so later
+stores and ACC consumers can reuse their preparation.

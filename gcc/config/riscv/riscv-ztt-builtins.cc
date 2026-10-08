@@ -9170,6 +9170,22 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ZERO:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
+		case UNSPECV_ZTT_STATE_ADD:
+		case UNSPECV_ZTT_STATE_SUB:
+		case UNSPECV_ZTT_STATE_MIN:
+		case UNSPECV_ZTT_STATE_MAX:
+		case UNSPECV_ZTT_STATE_AND:
+		case UNSPECV_ZTT_STATE_ANDNOT:
+		case UNSPECV_ZTT_STATE_OR:
+		case UNSPECV_ZTT_STATE_ORNOT:
+		case UNSPECV_ZTT_STATE_XOR:
+		  /* The complete sources and result have the same Md.  */
+		  descriptor = XVECEXP (src, 0, 2);
+		  note_stores (insn, invalidate_md_store, &state);
+		  state.remember (XVECEXP (src, 0, 0), descriptor);
+		  state.remember (XVECEXP (src, 0, 1), descriptor);
+		  state.remember (SET_DEST (set), descriptor);
+		  continue;
 		case UNSPECV_ZTT_ACC_TO_M:
 		  {
 		    machine_mode mode = GET_MODE (XVECEXP (src, 0, 0));
