@@ -169,9 +169,11 @@ Setters and arithmetic effects remain.
 Typed zero broadcasts between known standard integer descriptors also reuse
 the complete-group setter.  The whole scalar carrier must be zero; its dead
 setup is removed and register notes are refreshed.  Argument effects remain.
+Canonical floating broadcasts use the same rule when source and destination
+formats match; their rounding modes may differ.  Cross-format broadcasts,
+negative zero and unknown carriers retain their instructions.
 Integer and canonical floating ACC zero construction reuses asettyp for
-every member; the complete ACC mode and Ad writes remain.  Floating
-broadcasts are unchanged.
+every member; the complete ACC mode and Ad writes remain.
 It is disabled at O0.  Prepared single-ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch
 operands.  Prepared matmul retains the tied old ACC and arithmetic effects,

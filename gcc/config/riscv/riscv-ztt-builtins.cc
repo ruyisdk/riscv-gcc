@@ -9603,6 +9603,16 @@ floating_zero_width (rtx descriptor)
     }
 }
 
+static bool
+zero_broadcast_types_p (rtx source, rtx destination)
+{
+  if (integer_zero_width (source) && integer_zero_width (destination))
+    return true;
+  return floating_zero_width (source) && floating_zero_width (destination)
+    && ((UINTVAL (source) ^ UINTVAL (destination))
+	& ~HOST_WIDE_INT_UC (0x03c00000)) == 0;
+}
+
 /* Reuse Md within each block after scheduling and register allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -9641,15 +9651,16 @@ reuse_local_md ()
 	    {
 	      bool zero_broadcast = XINT (src, 1) == UNSPECV_ZTT_BROADCAST
 		&& state.descriptor_value (XVECEXP (src, 0, 0)) == const0_rtx
-		&& integer_zero_width
-		     (state.descriptor_value (XVECEXP (src, 0, 1)));
+		&& zero_broadcast_types_p
+		     (state.descriptor_value (XVECEXP (src, 0, 1)),
+		      state.descriptor_value (XVECEXP (src, 0, 2)));
 	      if ((explicit_state && XINT (src, 1) == UNSPECV_ZTT_STATE_ZERO)
 		  || zero_broadcast)
 		{
 		  rtx descriptor = XVECEXP (src, 0, zero_broadcast ? 2 : 0);
 		  unsigned int width
 		    = integer_zero_width (state.descriptor_value (descriptor));
-		  bool floating_zero = !width && !zero_broadcast;
+		  bool floating_zero = !width;
 		  if (floating_zero)
 		    width = floating_zero_width (state.descriptor_value (descriptor));
 		  machine_mode mode = GET_MODE (SET_DEST (set));
@@ -10062,6 +10073,24 @@ run_md_reuse_selftests ()
       ASSERT_EQ (floating_zero_width
 	(GEN_INT ((HOST_WIDE_INT) properties << 27 | width)), 0U);
   ASSERT_EQ (floating_zero_width (gen_rtx_REG (Pmode, 10)), 0U);
+  for (unsigned int source : { 0x14300110U, 0x20300110U,
+			      0x20300120U, 0x2c300140U })
+    for (unsigned int destination : { 0x14300110U, 0x20300110U,
+				     0x20300120U, 0x2c300140U })
+      for (unsigned int src_rm = 0; src_rm < 16; ++src_rm)
+	for (unsigned int dst_rm = 0; dst_rm < 16; ++dst_rm)
+	  ASSERT_EQ (zero_broadcast_types_p
+	    (GEN_INT (source | src_rm << 22),
+	     GEN_INT (destination | dst_rm << 22)),
+	    source == destination && src_rm < 6 && dst_rm < 6);
+  ASSERT_TRUE (zero_broadcast_types_p (GEN_INT (0x58000004),
+				     GEN_INT (0x20000080)));
+  ASSERT_FALSE (zero_broadcast_types_p (GEN_INT (0x20300120), GEN_INT (32)));
+  ASSERT_FALSE (zero_broadcast_types_p (GEN_INT (32), GEN_INT (0x20300120)));
+  ASSERT_FALSE (zero_broadcast_types_p (gen_rtx_REG (Pmode, 10),
+				      GEN_INT (0x20300120)));
+  ASSERT_FALSE (zero_broadcast_types_p (GEN_INT (0x20300120),
+				      gen_rtx_REG (Pmode, 10)));
   int saved_reload_completed = reload_completed;
   rtx operands[] = { gen_rtx_REG (ZTTMR1mode, M_REG_FIRST),
 		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1),

@@ -6,5 +6,6 @@
 /* { dg-final { scan-rtl-dump-times "Reuse floating ACC clear at insn" 24 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {mzero\.2d\.m\t} 2 } } */
 /* { dg-final { scan-assembler-times {mzero\.2d\.acc\t} 2 } } */
-/* { dg-final { scan-assembler-times {mbcast\.m\.x\t} 4 } } */
+/* { dg-final { scan-assembler-times {mbcast\.m\.x\t} 3 } } */
+/* { dg-final { scan-rtl-dump-times "Reuse floating broadcast clear at insn" 1 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {asettyp\t} 38 } } */
