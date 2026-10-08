@@ -2,6 +2,6 @@
 /* { dg-options "-O2 -g -dp -fno-ipa-icf -fdump-rtl-ztt_md_reuse -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u32-m32-a16" { target rv32 } } */
 /* { dg-options "-O2 -g -dp -fno-ipa-icf -fdump-rtl-ztt_md_reuse -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u32-m32-a16" { target rv64 } } */
 #include "ztt-m2a-md-body.h"
-/* { dg-final { scan-rtl-dump-times "Reuse Md for typed store" 49 "ztt_md_reuse" } } */
-/* { dg-final { scan-assembler-times { l=4\]  ztt_state_store_prepared_} 49 } } */
-/* { dg-final { scan-assembler-times { l=16\]  ztt_state_store_} 6 } } */
+/* { dg-final { scan-rtl-dump-times "Reuse Md for typed store" 50 "ztt_md_reuse" } } */
+/* { dg-final { scan-assembler-times { l=4\]  ztt_state_store_prepared_} 50 } } */
+/* { dg-final { scan-assembler-times { l=16\]  ztt_state_store_} 5 } } */

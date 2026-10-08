@@ -9130,6 +9130,20 @@ invalidate_md_store (rtx reg, const_rtx, void *data)
 }
 
 static bool
+md_raw_transfer_p (rtx pattern)
+{
+  if (GET_CODE (pattern) != SET)
+    return false;
+  rtx reg = SET_DEST (pattern), mem = SET_SRC (pattern);
+  if (MEM_P (reg))
+    std::swap (reg, mem);
+  return REG_P (reg) && M_REG_P (REGNO (reg))
+    && m_mode_p (GET_MODE (reg)) && m_nregs (GET_MODE (reg)) == 1
+    && MEM_P (mem) && GET_MODE (mem) == GET_MODE (reg)
+    && REG_P (XEXP (mem, 0)) && GP_REG_P (REGNO (XEXP (mem, 0)));
+}
+
+static bool
 md_scalar_insn_p (rtx pattern)
 {
   subrtx_iterator::array_type array;
@@ -9169,6 +9183,10 @@ reuse_local_md ()
 	  int code = recog_memoized (insn);
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
+	    continue;
+	  /* Whole-register transfers change payload, not the physical Md.  */
+	  if (code >= 0 && riscv_ztt_explicit_state_p ()
+	      && md_raw_transfer_p (PATTERN (insn)))
 	    continue;
 	  rtx set = single_set (insn);
 	  rtx src = set ? SET_SRC (set) : NULL_RTX;
@@ -9237,13 +9255,16 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
+		case UNSPECV_ZTT_STATE_TERNARY:
 		  {
+		    bool old_dest = XINT (src, 1) == UNSPECV_ZTT_STATE_TERNARY;
 		    bool scalar = XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X
 		      || XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE;
 		    note_stores (insn, invalidate_md_store, &state);
 		    /* Follow packet setup order; overlapping facts cannot coexist.  */
-		    for (unsigned int i : { 1U, 2U, 0U })
+		    for (unsigned int pos = 0; pos < 3; ++pos)
 		      {
+			unsigned int i = old_dest ? pos : (pos + 1) % 3;
 			if (scalar && i == 2)
 			  continue;
 			rtx reg = i ? XVECEXP (src, 0, i - 1) : SET_DEST (set);
@@ -9493,6 +9514,18 @@ run_md_reuse_selftests ()
   ASSERT_EQ (binary_state_length (operands, 3), 8U);
   reload_completed = saved_reload_completed;
   local_md_state state;
+  rtx raw_reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+  rtx raw_mem = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 10));
+  ASSERT_TRUE (md_raw_transfer_p (gen_rtx_SET (raw_reg, raw_mem)));
+  ASSERT_TRUE (md_raw_transfer_p (gen_rtx_SET (raw_mem, raw_reg)));
+  ASSERT_FALSE (md_raw_transfer_p (gen_rtx_SET (raw_reg, raw_reg)));
+  ASSERT_FALSE (md_raw_transfer_p
+    (gen_rtx_SET (raw_reg, gen_rtx_MEM (ZTTMR2mode, XEXP (raw_mem, 0)))));
+  ASSERT_FALSE (md_raw_transfer_p
+    (gen_rtx_SET (raw_reg, gen_rtx_MEM (ZTTMR1mode,
+	gen_rtx_POST_INC (Pmode, XEXP (raw_mem, 0))))));
+  ASSERT_FALSE (md_raw_transfer_p
+    (gen_rtx_SET (gen_rtx_REG (ZTTMR1mode, ACC_REG_FIRST), raw_mem)));
   rtx group = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
   rtx desc = gen_rtx_REG (SImode, 10);
   state.remember (group, desc);

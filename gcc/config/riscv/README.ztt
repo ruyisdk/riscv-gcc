@@ -138,6 +138,9 @@ Binary operations also reuse matching incoming source Md independently.
 Matrix and scalar elementwise operations establish each M packet's Md
 separately, with destination facts taking precedence on register reuse.
 Scalar operands and amestype are not M datatype state.
+Old-destination matrix operations establish Md in destination/source order.
+Whole-register loads and stores retain known physical Md without inferring
+datatype from the transferred payload.
 When both sources match, a prepared form drops the private memory and
 address operands while retaining any required destination setup.
 Identical physical binary inputs share their first complete preparation,
