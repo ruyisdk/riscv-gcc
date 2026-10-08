@@ -98,6 +98,10 @@ Calls, asm and state operations remain boundaries.  The concatenation
 call is retained for ownership checking.  Multi-use pairs keep their
 existing lowering to avoid extending the source halves' live ranges.
 
+One same-type M-to-M copy may occur between concatenation and extraction.
+Both intermediate values must have one use and consist of complete register
+groups.  The copy also remains as an ownership witness.
+
 A concatenation of complementary halves from the same parent can also
 reuse that parent.  Both halves must have one use and the parent's only
 value uses must be the two extractions.  The same local boundaries apply;

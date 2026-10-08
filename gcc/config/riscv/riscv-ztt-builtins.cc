@@ -6623,6 +6623,24 @@ extracted_concat_value (const builtin_description &d,
       || TREE_CODE (pair) != SSA_NAME || !has_single_use (pair))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (pair);
+  gimple *copy = nullptr;
+  unsigned int copy_code = structure_builtin_code (producer, 1);
+  if (copy_code != ZTT_BUILTIN_MAX)
+    {
+      const auto c = builtin_description_for (copy_code);
+      unsigned int half_nregs = type_nregs (d.type);
+      if (c.expansion != EXPAND_MCOPY_M2M || c.prototype != PROTO_M_M
+	  || c.type != m_utility_source_type (d.prototype, d.type)
+	  || type_for_tree (TREE_TYPE (pair)) != c.type
+	  || !half_nregs || type_nregs (c.type) != 2 * half_nregs)
+	return NULL_TREE;
+      copy = producer;
+      pair = gimple_call_arg (copy, 0);
+      if (TREE_CODE (pair) != SSA_NAME || !has_single_use (pair)
+	  || type_for_tree (TREE_TYPE (pair)) != c.type)
+	return NULL_TREE;
+      producer = SSA_NAME_DEF_STMT (pair);
+    }
   unsigned int source_code = structure_builtin_code (producer);
   if (source_code == ZTT_BUILTIN_MAX)
     return NULL_TREE;
@@ -6635,7 +6653,7 @@ extracted_concat_value (const builtin_description &d,
   tree value = gimple_call_arg (producer, tree_to_uhwi (index));
   if (type_for_tree (TREE_TYPE (value)) != d.type
       || type_for_tree (TREE_TYPE (pair)) != source.type
-      || !local_structure_producer_p (gsi, producer))
+      || !local_structure_producer_p (gsi, producer, copy))
     return NULL_TREE;
   return value;
 }
