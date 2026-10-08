@@ -129,6 +129,10 @@ without counting as parent value uses.  Every use and witness must occur
 in the same bounded local window.  The calls are retained; numeric, raw,
 nonlocal and genuinely live uses do not gain this exception.
 
+A resultless same-type M copy can also be a witness.  An extract or zip
+result may have one use by such a copy; both calls join the bounded window
+and retain their arguments.  The check does not follow further copies.
+
 Local datatype preparation
 --------------------------
 

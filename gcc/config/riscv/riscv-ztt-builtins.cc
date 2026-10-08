@@ -6522,11 +6522,12 @@ structure_builtin_code (gimple *stmt, unsigned int nargs = 2)
   return MIN (code >> RISCV_BUILTIN_SHIFT, ZTT_BUILTIN_MAX);
 }
 
-/* Resultless structural calls still participate in ownership checking.  */
+/* Keep structural calls and one terminal copy as ownership witnesses.  */
 static bool
-structure_witness_p (gimple *stmt, tree parent)
+structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
 {
-  if (!is_gimple_call (stmt) || gimple_call_lhs (stmt))
+  copy = nullptr;
+  if (!is_gimple_call (stmt))
     return false;
   unsigned int nargs = gimple_call_num_args (stmt);
   if ((nargs != 1 && nargs != 2) || gimple_call_arg (stmt, 0) != parent)
@@ -6539,17 +6540,56 @@ structure_witness_p (gimple *stmt, tree parent)
   if (type == TYPE_MAX || d.type == TYPE_MAX
       || !type_nregs (type) || !type_nregs (d.type))
     return false;
+  if (d.expansion == EXPAND_MCOPY_M2M)
+    return nargs == 1 && d.prototype == PROTO_M_M && d.type == type
+      && !types[type].accumulator && !gimple_call_lhs (stmt);
   if (nargs == 1)
-    return d.prototype == PROTO_M_M && zip_variant (d.expansion) >= 0
-      && d.type == type && !types[type].accumulator
-      && types[type].rows == 1 && types[type].columns == 2
-      && (types[type].descriptor & 0xff) >= active_profile ()->uds;
-  if (d.expansion != EXPAND_MEXTRACT
-      || m_utility_source_type (d.prototype, d.type) != type
-      || type_nregs (type) != 2 * type_nregs (d.type))
+    {
+      if (d.prototype != PROTO_M_M || zip_variant (d.expansion) < 0
+	  || d.type != type || types[type].accumulator
+	  || types[type].rows != 1 || types[type].columns != 2
+	  || (types[type].descriptor & 0xff) < active_profile ()->uds)
+	return false;
+    }
+  else
+    {
+      if (d.expansion != EXPAND_MEXTRACT
+	  || m_utility_source_type (d.prototype, d.type) != type
+	  || type_nregs (type) != 2 * type_nregs (d.type))
+	return false;
+      tree index = gimple_call_arg (stmt, 1);
+      if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) > 1)
+	return false;
+    }
+  tree value = gimple_call_lhs (stmt);
+  if (!value)
+    return true;
+  if (TREE_CODE (value) != SSA_NAME
+      || type_for_tree (TREE_TYPE (value)) != d.type)
     return false;
-  tree index = gimple_call_arg (stmt, 1);
-  return tree_fits_uhwi_p (index) && tree_to_uhwi (index) <= 1;
+  unsigned int visits = 0;
+  imm_use_iterator iter;
+  use_operand_p use;
+  FOR_EACH_IMM_USE_FAST (use, iter, value)
+    {
+      if (++visits > 16)
+	return false;
+      gimple *user = USE_STMT (use);
+      if (is_gimple_debug (user))
+	continue;
+      if (copy)
+	return false;
+      copy = user;
+    }
+  if (!copy)
+    return false;
+  unsigned int copy_code = structure_builtin_code (copy, 1);
+  if (copy_code == ZTT_BUILTIN_MAX || gimple_call_lhs (copy)
+      || gimple_call_arg (copy, 0) != value)
+    return false;
+  const auto c = builtin_description_for (copy_code);
+  return c.expansion == EXPAND_MCOPY_M2M && c.prototype == PROTO_M_M
+    && c.type == d.type && !types[d.type].accumulator;
 }
 
 /* Ignore only witnesses found with every real use in the same local window.  */
@@ -6570,13 +6610,18 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
       gimple *stmt = USE_STMT (use);
       if (is_gimple_debug (stmt))
 	continue;
+      gimple *terminal = nullptr;
       if (stmt == producer || stmt == other)
 	{
 	  if (++values > wanted)
 	    return false;
 	}
-      else if (!structure_witness_p (stmt, parent))
+      else if (!structure_witness_p (stmt, parent, terminal))
 	return false;
+      if (nuses + (terminal ? 2 : 1) > 16)
+	return false;
+      if (terminal)
+	uses[nuses++] = terminal;
       uses[nuses++] = stmt;
     }
   if (values != wanted)
