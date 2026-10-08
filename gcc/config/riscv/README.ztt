@@ -139,6 +139,8 @@ Matrix and scalar elementwise operations establish each M packet's Md
 separately, with destination facts taking precedence on register reuse.
 Scalar operands and amestype are not M datatype state.
 Old-destination matrix operations establish Md in destination/source order.
+Scalar old-destination operations record only D and the M source, not TC
+or the fixed exponent. Compatible overlapping groups keep the last setup.
 Whole-register loads and stores retain known physical Md without inferring
 datatype from the transferred payload.
 When both sources match, a prepared form drops the private memory and

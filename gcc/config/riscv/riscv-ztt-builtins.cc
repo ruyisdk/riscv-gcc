@@ -9256,10 +9256,15 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
 		case UNSPECV_ZTT_STATE_TERNARY:
+		case UNSPECV_ZTT_STATE_TERNARY_X:
+		case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
 		  {
-		    bool old_dest = XINT (src, 1) == UNSPECV_ZTT_STATE_TERNARY;
+		    bool old_dest = XINT (src, 1) == UNSPECV_ZTT_STATE_TERNARY
+		      || XINT (src, 1) == UNSPECV_ZTT_STATE_TERNARY_X
+		      || XINT (src, 1) == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE;
 		    bool scalar = XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X
-		      || XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE;
+		      || XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE
+		      || (old_dest && XINT (src, 1) != UNSPECV_ZTT_STATE_TERNARY);
 		    note_stores (insn, invalidate_md_store, &state);
 		    /* Follow packet setup order; overlapping facts cannot coexist.  */
 		    for (unsigned int pos = 0; pos < 3; ++pos)
