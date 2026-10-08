@@ -139,3 +139,5 @@ When both sources match, a prepared form drops the private memory and
 address operands while retaining any required destination setup.
 Identical physical binary inputs share their first complete preparation,
 including when incoming Md is unknown.
+Typed broadcast and index constructors establish their complete result
+group's Md for later consumers in the same block.

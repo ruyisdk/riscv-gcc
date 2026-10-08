@@ -9183,6 +9183,9 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 3);
 		  break;
+		case UNSPECV_ZTT_BROADCAST:
+		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 2);
+		  break;
 		/* Typed stores leave the complete source group prepared.  */
 		case UNSPECV_ZTT_STATE_STORE:
 		  if (XVECLEN (src, 0) < 2)
@@ -9196,6 +9199,7 @@ reuse_local_md ()
 		  break;
 		case UNSPECV_ZTT_SETTYP_P0:
 		case UNSPECV_ZTT_STATE_ZERO:
+		case UNSPECV_ZTT_INDEX_CONSTRUCT:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
 		case UNSPECV_ZTT_STATE_ADD:
