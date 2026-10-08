@@ -9202,6 +9202,28 @@ reuse_local_md ()
 		case UNSPECV_ZTT_INDEX_CONSTRUCT:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
+		case UNSPECV_ZTT_STATE_CONVERT:
+		case UNSPECV_ZTT_STATE_CONVERT_REUSE:
+		case UNSPECV_ZTT_STATE_STRUCTURAL:
+		case UNSPECV_ZTT_STATE_STRUCTURAL_REUSE:
+		  {
+		    note_stores (insn, invalidate_md_store, &state);
+		    /* Unary setup prepares each packet, not one combined group.  */
+		    for (unsigned int i : { 1U, 0U })
+		      {
+			rtx reg = i ? XVECEXP (src, 0, 0) : SET_DEST (set);
+			unsigned int count = m_nregs (GET_MODE (reg));
+			unsigned int step = datatype_step
+			  (UINTVAL (XVECEXP (src, 0, 4)), i);
+			gcc_assert (step && count % step == 0);
+			state.invalidate (reg);
+			for (unsigned int r = 0; r < count; r += step)
+			  state.remember
+			    (gen_rtx_REG (matrix_mode (step), REGNO (reg) + r),
+			     XVECEXP (src, 0, 1 + i));
+		      }
+		    continue;
+		  }
 		case UNSPECV_ZTT_STATE_ADD:
 		case UNSPECV_ZTT_STATE_SUB:
 		case UNSPECV_ZTT_STATE_MIN:

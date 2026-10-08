@@ -141,3 +141,5 @@ Identical physical binary inputs share their first complete preparation,
 including when incoming Md is unknown.
 Typed broadcast and index constructors establish their complete result
 group's Md for later consumers in the same block.
+Conversions and structural unary operations establish source and result Md
+per datatype packet.  Do not combine adjacent packets into a larger fact.
