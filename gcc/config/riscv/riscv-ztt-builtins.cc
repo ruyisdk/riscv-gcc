@@ -7624,6 +7624,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 		  && (dtype & 0xff) >= active_profile ()->uds);
       tree arg = CALL_EXPR_ARG (exp, 1);
       if (optimize && runtime_profile_p ()
+	  && !floating_descriptor_p (dtype)
 	  && d.prototype == PROTO_M_ROWCOL_OFFSET && integer_zerop (arg))
 	{
 	  /* Keep a full-mode move for the early ownership check.  */

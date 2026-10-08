@@ -301,6 +301,10 @@ riscv_cpu_cpp_builtins (cpp_reader *pfile)
 	  builtin_define_with_int_value ("__riscv_ztt_zip_value", 1);
 	  builtin_define_with_int_value ("__riscv_ztt_floating_broadcast", 1);
 	  builtin_define_with_int_value ("__riscv_ztt_floating_matmul", 63);
+	  builtin_define_with_int_value ("__riscv_ztt_mcolbcast_ew_x_fp", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_mrowbcast_ew_x_fp", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_mcolshift_ew_x_fp", 1);
+	  builtin_define_with_int_value ("__riscv_ztt_mrowshift_ew_x_fp", 1);
 	}
       /* explicit integer
 	 scalar datatype in the name, independent of the result type.  */

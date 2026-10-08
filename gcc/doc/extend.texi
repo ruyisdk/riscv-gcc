@@ -28089,6 +28089,21 @@ nor accepts an accumulator.  The existing sizeless, profile, leaf and
 raw-selector restrictions still apply.  This addition does not change
 the ISA encoding or claim complete intrinsic v0.2.4 support.
 
+@subsubheading Floating Row and Column Operations
+
+The @code{mcolbcast_ew_x}, @code{mrowbcast_ew_x},
+@code{mcolshift_ew_x} and @code{mrowshift_ew_x} families also accept
+FP16, BF16, FP32 and FP64 M values.  Each family provides the six
+floating rounding suffixes; omitting the suffix selects RNE.  Source and
+result types must match exactly.  Only complete @code{1x1} values with
+element width at least UDS are accepted.
+
+Broadcast indices use @code{size_t}; shift offsets use @code{int}.
+These are integer controls, not nominal Scalar data operands, and do not
+read @code{amestype}.  Each family's @code{__riscv_ztt_@var{OP}_fp}
+capability macro has value 1 in runtime profiles.  Individual type
+availability still depends on the selected profile.
+
 @subsubheading Experimental Matrix Zip Values
 
 Intrinsic v0.2.5 replaces

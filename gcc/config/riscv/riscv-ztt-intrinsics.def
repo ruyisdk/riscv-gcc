@@ -1613,3 +1613,14 @@ ZTT_COMPARE_OP (ZTT_COMPARE_X_SHAPE, MCMPLT_EW_X, mcmplt_ew_x, M_SCALAR)
 #include "riscv-ztt-exponent-scalar.def"
 #include "riscv-ztt-memory128.def"
 #include "riscv-ztt-zip-value.def"
+
+/* Append floating row/column operations without renumbering older codes.  */
+#define ZTT_FP_ROWCOL(ID, TYPE, OP, NAME, PROTO) \
+  ZTT_INTRINSIC (OP##_##ID##_1X1, \
+                 "__riscv_ztt_" #NAME "_" #TYPE "_1x1", \
+                 PROTO, OP, ID##_1X1)
+ZTT_CATALOG_FP_TYPES (ZTT_FP_ROWCOL, MCOLBCAST_EW_X, mcolbcast_ew_x, M_ROWCOL_INDEX)
+ZTT_CATALOG_FP_TYPES (ZTT_FP_ROWCOL, MROWBCAST_EW_X, mrowbcast_ew_x, M_ROWCOL_INDEX)
+ZTT_CATALOG_FP_TYPES (ZTT_FP_ROWCOL, MCOLSHIFT_EW_X, mcolshift_ew_x, M_ROWCOL_OFFSET)
+ZTT_CATALOG_FP_TYPES (ZTT_FP_ROWCOL, MROWSHIFT_EW_X, mrowshift_ew_x, M_ROWCOL_OFFSET)
+#undef ZTT_FP_ROWCOL
