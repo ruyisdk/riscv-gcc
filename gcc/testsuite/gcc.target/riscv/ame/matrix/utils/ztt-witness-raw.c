@@ -3,5 +3,7 @@
 /* { dg-additional-options "-ffat-lto-objects" } */
 /* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target { rv64 } } } */
 /* { dg-additional-options "-march=rv32im_zicsr_ztt0p6 -mabi=ilp32" { target { rv32 } } } */
-#include "ztt-inverse-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 25 "optimized" } } */
+#define WT_RAW 1
+#include "ztt-witness-body.h"
+/* { dg-error "functions using AME/Ztt typed values cannot mix L0 selector builtins" "" { target *-*-* } 0 } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mcolunzip_ew_" 11 "optimized" } } */

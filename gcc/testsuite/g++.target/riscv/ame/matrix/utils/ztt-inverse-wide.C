@@ -6,4 +6,4 @@
 #define ZIP_TYPE i128_rnu
 #define ZIP_CARRIER __riscv_ztt_i128_storage_t
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-inverse-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 26 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 25 "optimized" } } */

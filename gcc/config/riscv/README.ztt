@@ -95,16 +95,21 @@ call is retained for ownership checking.  Multi-use pairs keep their
 existing lowering to avoid extending the source halves' live ranges.
 
 A concatenation of complementary halves from the same parent can also
-reuse that parent.  Both halves must have one use and the parent only the
-two extraction uses.  The same local boundaries apply; extraction calls
-remain as ownership witnesses.  Reversed indices and extra live values
-keep their existing lowering.
+reuse that parent.  Both halves must have one use and the parent's only
+value uses must be the two extractions.  The same local boundaries apply;
+extraction calls remain as ownership witnesses.  Reversed indices and extra
+live values keep their existing lowering.
 
 Same-axis zip/unzip pairs can reuse their input in either order.  They
-require the same complete 1x2 type, single-use input and intermediate,
-and the same local boundaries.  The inner call remains for ownership
-checking.  Different axes, repeated permutations and packed types do not
-match.
+require the same complete 1x2 type, one value use of the input and
+intermediate, and the same local boundaries.  The inner call remains for
+ownership checking.  Different axes, repeated permutations and packed
+types do not match.
+
+Resultless typed extract and zip calls can remain as ownership witnesses
+without counting as parent value uses.  Every use and witness must occur
+in the same bounded local window.  The calls are retained; numeric, raw,
+nonlocal and genuinely live uses do not gain this exception.
 
 Local datatype preparation
 --------------------------
