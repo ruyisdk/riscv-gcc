@@ -9516,6 +9516,77 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
   return false;
 }
 
+/* Propagate the allocation state once per reachable block.  A conflicting
+   join, unbalanced exit or stack reference while allocated rejects the pair.  */
+static bool
+riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release)
+{
+  enum { unseen, unallocated, allocated };
+  auto_vec<unsigned char> state;
+  state.safe_grow_cleared (last_basic_block_for_fn (cfun));
+  auto_vec<basic_block, 16> worklist;
+  basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+  state[entry->index] = unallocated;
+  worklist.safe_push (entry);
+  bool seen_allocate = false, seen_release = false;
+  while (!worklist.is_empty ())
+    {
+      basic_block bb = worklist.pop ();
+      unsigned char current = state[bb->index];
+      if (bb != entry)
+	{
+	  rtx_insn *insn;
+	  FOR_BB_INSNS (bb, insn)
+	    {
+	      if (insn == allocate)
+		{
+		  if (current != unallocated)
+		    return false;
+		  current = allocated;
+		  seen_allocate = true;
+		}
+	      else if (insn == release)
+		{
+		  if (current != allocated)
+		    return false;
+		  current = unallocated;
+		  seen_release = true;
+		}
+	      else if (INSN_P (insn) && current == allocated)
+		{
+		  rtx pat = PATTERN (insn);
+		  if (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
+		      && XINT (SET_SRC (pat), 1) == UNSPEC_TIE)
+		    continue;
+		  if (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
+		      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat))
+		    return false;
+		}
+	    }
+	}
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	{
+	  if (e->flags & (EDGE_ABNORMAL | EDGE_ABNORMAL_CALL | EDGE_EH | EDGE_FAKE))
+	    return false;
+	  if (e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+	    {
+	      if (current != unallocated)
+		return false;
+	    }
+	  else if (state[e->dest->index] == unseen)
+	    {
+	      state[e->dest->index] = current;
+	      worklist.safe_push (e->dest);
+	    }
+	  else if (state[e->dest->index] != current)
+	    return false;
+	}
+    }
+  return seen_allocate && seen_release;
+}
+
 /* Local Md reuse can make every private slot dead after frame expansion.
    Keep the fixed CFA and N checks, and remove only an unused scalable pair.  */
 bool
@@ -9578,24 +9649,31 @@ riscv_ztt_remove_unused_workspace ()
       else
 	return false;
     }
-  if (!allocate || !release
-      || BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
+  if (!allocate || !release)
     return false;
-  rtx_insn *insn;
-  for (insn = NEXT_INSN (allocate); insn && insn != release;
-       insn = NEXT_INSN (insn))
-    if (INSN_P (insn))
-      {
-	rtx pat = PATTERN (insn);
-	if (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
-	    && XINT (SET_SRC (pat), 1) == UNSPEC_TIE)
-	  continue;
-	if (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
-	    || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat))
-	  return false;
-      }
-  if (!insn)
-    return false;
+  if (BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
+    {
+      if (!riscv_ztt_workspace_paths_p (allocate, release))
+	return false;
+    }
+  else
+    {
+      rtx_insn *insn;
+      for (insn = NEXT_INSN (allocate); insn && insn != release;
+	   insn = NEXT_INSN (insn))
+	if (INSN_P (insn))
+	  {
+	    rtx pat = PATTERN (insn);
+	    if (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
+		&& XINT (SET_SRC (pat), 1) == UNSPEC_TIE)
+	      continue;
+	    if (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
+		|| reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat))
+	      return false;
+	  }
+      if (!insn)
+	return false;
+    }
   if (dump_file)
     fprintf (dump_file, "Remove unused AME workspace: " HOST_WIDE_INT_PRINT_DEC
 	     " * scale, insns %d and %d\n", locals.coeffs[2],
