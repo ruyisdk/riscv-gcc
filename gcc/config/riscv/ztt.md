@@ -170,7 +170,7 @@
   [(unspec_volatile
      [(match_operand 0 "const_int_operand" "n")
       (match_operand 1 "const_int5_operand" "n")
-      (match_operand:X 2 "register_operand" "r")
+      (match_operand:X 2 "reg_or_0_operand" "rJ")
       (match_operand 3 "const_int5_operand" "n")]
      UNSPECV_ZTT)]
   "TARGET_ZTT && riscv_ztt_insn_format_p (operands[0], ZTT_FORMAT_mxm)"

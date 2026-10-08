@@ -5788,7 +5788,7 @@ riscv_split_sum_of_two_s12 (HOST_WIDE_INT val, HOST_WIDE_INT *base,
 #define ZTT_ARGS_am "\tacc%1,m%2"
 #define ZTT_ARGS_mmm "\tm%1,m%2,m%3"
 #define ZTT_ARGS_amm "\tacc%1,m%2,m%3"
-#define ZTT_ARGS_mxm "\tm%1,%2,m%3"
+#define ZTT_ARGS_mxm "\tm%1,%z2,m%3"
 #define ZTT_ARGS_mxx "\tm%1,%2,%3"
 #define ZTT_ARGS_mx "\tm%1,%2"
 #define ZTT_ARGS_ax "\tacc%1,%2"
