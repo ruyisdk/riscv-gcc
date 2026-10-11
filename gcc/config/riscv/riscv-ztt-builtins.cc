@@ -7982,6 +7982,14 @@ expand_conversion (const builtin_description &d,
     }
   rtx source = matrix_register (modes[1], exp, 0);
   rtx result = gen_reg_rtx (modes[0]);
+  if (optimize && runtime_profile_p () && d.expansion == EXPAND_MCONV_EW
+      && indices[0] == indices[1]
+      && !floating_descriptor_p (types[d.type].descriptor))
+    {
+      /* Keep the full-mode access visible to early ownership checking.  */
+      emit_move_insn (result, source);
+      return result;
+    }
   const auto &f = operation.formation;
   emit_clobber (result);
   for (unsigned int i = 0; i < f.insns; ++i)

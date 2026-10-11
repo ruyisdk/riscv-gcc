@@ -197,6 +197,11 @@ Such shifts may serve as terminal ownership witnesses.  Repeated broadcasts
 use this search too, retaining the final copy as the replacement value.
 Nonzero/dynamic offsets and longer or shared-inner chains remain boundaries.
 
+An optimized runtime-profile integer mconv with identical source and
+destination type indices expands to a full-mode M copy.  Width, signedness,
+RM, SAT and shape must all match.  The move retains the early ownership
+access; floating conversions and other unary operations are unchanged.
+
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
 retain their bits, including zero signs and NaN payloads.  The move stays
