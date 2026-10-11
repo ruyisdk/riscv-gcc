@@ -10566,6 +10566,7 @@ static bool
 reuse_cleaned_descriptors ()
 {
   bool changed = false;
+  const bool explicit_state = riscv_ztt_explicit_state_p ();
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
@@ -10585,6 +10586,9 @@ reuse_cleaned_descriptors ()
 	      state.clear ();
 	      continue;
 	    }
+	  /* Raw singleton transfers leave descriptor GPRs unchanged.  */
+	  if (code >= 0 && explicit_state && md_raw_transfer_p (pattern))
+	    continue;
 	  rtx src = SET_SRC (pattern);
 	  if (GET_CODE (src) == UNSPEC_VOLATILE && code >= 0)
 	    {

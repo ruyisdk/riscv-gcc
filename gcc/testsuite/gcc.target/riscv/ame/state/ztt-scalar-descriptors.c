@@ -4,5 +4,5 @@
 
 #include "ztt-scalar-descriptors.h"
 
-/* { dg-final { scan-rtl-dump-times "Reuse typed descriptors at insn \[0-9\]+: 0x1\[048c\]" 3 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Reuse typed descriptors at insn \[0-9\]+: 0x1\[048c\]" 4 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 29 } } */
