@@ -3086,11 +3086,13 @@ decode_integer_unary_builtin (unsigned int code, unsigned int &canonical,
   /* Only indices are cached.  Trees and availability remain profile-local.  */
   static unsigned int anchors[integer_unary_operations][wide_shape_count]
     [integer_dtype_count];
-  static bool initialized;
-  if (!initialized)
+  static unsigned int scanned;
+  unsigned int &anchor = anchors[op][shape][dst];
+  if (!anchor)
     {
-      for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+      while (scanned < ZTT_BUILTIN_MAX)
 	{
+	  unsigned int i = scanned++;
 	  const auto &d = builtin_description_for (i);
 	  unsigned int operation = wide_operation (d.expansion);
 	  if (!integer_unary_operation_p (operation) || types[d.type].accumulator
@@ -3101,13 +3103,13 @@ decode_integer_unary_builtin (unsigned int code, unsigned int &canonical,
 	  unsigned int s = q ? 2 * q - (t.rows == 1) : 0;
 	  unsigned int n = integer_dtype_number (t.descriptor);
 	  gcc_assert (s < wide_shape_count && n < integer_dtype_count);
-	  unsigned int &anchor = anchors[operation][s][n];
-	  if (!anchor)
-	    anchor = i + 1;
+	  unsigned int &entry = anchors[operation][s][n];
+	  if (!entry)
+	    entry = i + 1;
+	  if (anchor)
+	    break;
 	}
-      initialized = true;
     }
-  unsigned int anchor = anchors[op][shape][dst];
   if (!anchor)
     return false;
   canonical = anchor - 1;
@@ -3130,11 +3132,13 @@ decode_wide_builtin (unsigned int code, unsigned int &canonical,
   /* Integer-only metadata is safe across GC and target-option changes.
      Profile availability is checked by the normal decoder, not cached.  */
   static unsigned int anchors[WIDE_MAX][wide_shape_count][wide_dtype_count];
-  static bool initialized;
-  if (!initialized)
+  static unsigned int scanned;
+  unsigned int &anchor = anchors[s.operation][s.shape][s.dst];
+  if (!anchor)
     {
-      for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+      while (scanned < ZTT_BUILTIN_MAX)
 	{
+	  unsigned int i = scanned++;
 	  const auto &d = builtin_description_for (i);
 	  int operation = wide_operation (d.expansion);
 	  if (operation < 0 || d.prototype != wide_operations[operation].prototype
@@ -3147,13 +3151,13 @@ decode_wide_builtin (unsigned int code, unsigned int &canonical,
 	  unsigned int q = exact_log2 (t.rows * t.columns);
 	  unsigned int shape = q ? 2 * q - (t.rows == 1) : 0;
 	  gcc_assert (dtype < wide_dtype_count && shape < wide_shape_count);
-	  unsigned int &anchor = anchors[operation][shape][dtype];
-	  if (!anchor)
-	    anchor = i + 1;
+	  unsigned int &entry = anchors[operation][shape][dtype];
+	  if (!entry)
+	    entry = i + 1;
+	  if (anchor)
+	    break;
 	}
-      initialized = true;
     }
-  unsigned int anchor = anchors[s.operation][s.shape][s.dst];
   if (!anchor)
     return false;
   canonical = anchor - 1;
@@ -3400,6 +3404,91 @@ run_store_lookup_selftests ()
 }
 
 static void
+run_decoder_anchor_selftests ()
+{
+  using namespace selftest;
+  unsigned int canonical, data, count;
+  wide_signature early = {
+    WIDE_MADD_EW, 0, mixed_dtype_number (types[TYPE_I8_RNE_1X1].descriptor),
+    24, 0
+  };
+  ASSERT_TRUE (decode_wide_builtin (encode_wide_signature (early),
+				   canonical, data, count));
+  ASSERT_EQ (canonical, ZTT_BUILTIN_MADD_EW_I8_RNE_1X1);
+  unsigned int unary_code = encode_integer_unary_builtin
+    (ZTT_BUILTIN_MCONV_EW_I8_RNU_1X1, TYPE_I4_RNU_1X1);
+  ASSERT_TRUE (decode_integer_unary_builtin (unary_code, canonical, data));
+  ASSERT_EQ (canonical, ZTT_BUILTIN_MCONV_EW_I8_RNU_1X1);
+
+  auto_vec<unsigned int> wide, unary;
+  wide.safe_grow_cleared (WIDE_MAX * wide_shape_count * wide_dtype_count);
+  unary.safe_grow_cleared
+    (integer_unary_operations * wide_shape_count * integer_dtype_count);
+  /* Independently retain the first catalog entry for every anchor key.  */
+  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+    {
+      const auto d = builtin_description_for (i);
+      int op = wide_operation (d.expansion);
+      const auto &t = types[d.type];
+      if (op < 0 || t.accumulator || floating_descriptor_p (t.descriptor))
+	continue;
+      unsigned int q = exact_log2 (t.rows * t.columns);
+      unsigned int shape = q ? 2 * q - (t.rows == 1) : 0;
+      if (d.prototype == wide_operations[op].prototype
+	  && !extended_integer_p (t.descriptor))
+	{
+	  unsigned int key = (op * wide_shape_count + shape) * wide_dtype_count
+	    + mixed_dtype_number (t.descriptor);
+	  if (!wide[key])
+	    wide[key] = i + 1;
+	}
+      if (integer_unary_operation_p (op))
+	{
+	  unsigned int key
+	    = (op * wide_shape_count + shape) * integer_dtype_count
+	      + integer_dtype_number (t.descriptor);
+	  if (!unary[key])
+	    unary[key] = i + 1;
+	}
+    }
+  for (unsigned int key = 0; key < wide.length (); ++key)
+    {
+      unsigned int dst = key % wide_dtype_count;
+      unsigned int shape = key / wide_dtype_count % wide_shape_count;
+      unsigned int op = key / wide_dtype_count / wide_shape_count;
+      auto p = wide_operations[op].prototype;
+      bool unary_p = p == PROTO_M_CONVERT || p == PROTO_M_STRUCTURAL
+	|| p == PROTO_M_ABS || p == PROTO_M_SHIFT_X;
+      wide_signature s = { op, shape, dst, 39, unary_p ? wide_dtype_count : 0 };
+      canonical = data = count = UINT_MAX;
+      bool valid = wide[key] && !(wide_operations[op].basic && shape);
+      ASSERT_EQ (decode_wide_builtin (encode_wide_signature (s),
+				     canonical, data, count), valid);
+      ASSERT_EQ (canonical, valid ? wide[key] - 1 : UINT_MAX);
+      ASSERT_EQ (data, valid ? s.data : UINT_MAX);
+      ASSERT_EQ (count, valid ? s.count : UINT_MAX);
+      s.count = unary_p ? 0 : wide_dtype_count;
+      ASSERT_FALSE (decode_wide_builtin (encode_wide_signature (s),
+					canonical, data, count));
+    }
+  for (unsigned int key = 0; key < unary.length (); ++key)
+    {
+      unsigned int code = integer_unary_code_base
+	+ key * integer_dtype_count + integer_dtype_count - 1;
+      canonical = UINT_MAX;
+      ASSERT_EQ (decode_integer_unary_builtin (code, canonical, data),
+		 unary[key] != 0);
+      ASSERT_EQ (canonical, unary[key] ? unary[key] - 1 : UINT_MAX);
+      ASSERT_EQ (data, integer_dtype_count - 1);
+    }
+  ASSERT_TRUE (decode_wide_builtin (encode_wide_signature (early),
+				   canonical, data, count));
+  ASSERT_EQ (canonical, ZTT_BUILTIN_MADD_EW_I8_RNE_1X1);
+  ASSERT_TRUE (decode_integer_unary_builtin (unary_code, canonical, data));
+  ASSERT_EQ (canonical, ZTT_BUILTIN_MCONV_EW_I8_RNU_1X1);
+}
+
+static void
 run_profile_lookup_selftests ()
 {
   using namespace selftest;
@@ -3561,6 +3650,7 @@ run_wide_signature_selftests ()
   run_matrix_type_index_selftests ();
   run_store_lookup_selftests ();
   run_redirect_lookup_selftests ();
+  run_decoder_anchor_selftests ();
   run_profile_lookup_selftests ();
   run_type_nregs_selftests ();
   run_scalar_datatype_name_selftests ();
