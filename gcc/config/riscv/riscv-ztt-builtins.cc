@@ -2505,36 +2505,72 @@ decode_integer_broadcast (unsigned int code, type_index &dst, type_index &tc)
   return ztt_m_type_nodes[dst] != NULL_TREE;
 }
 
-static void
-scalar_datatype_name (char *name, size_t size, unsigned int d, bool alias)
+static unsigned int numeric_dtype_number (unsigned int);
+
+static const char *
+scalar_datatype_name (unsigned int d, bool alias)
 {
+  /* Names depend only on the descriptor, not on the active profile.  */
+  static char names[numeric_dtype_count][2][16];
+  unsigned int number = numeric_dtype_number (d);
+  gcc_assert (number < numeric_dtype_count);
+  char *name = names[number][alias];
+  if (name[0])
+    return name;
+  int length;
   if (floating_descriptor_p (d))
     {
       static const char *const rm[] = { "_rne", "_rtz", "_rdn", "_rup", "_rmm", "_rno" };
       bool bf = (d & ~(7U << 22))
 	== (types[TYPE_BF16_RNE_1X1].descriptor & ~(7U << 22));
-      snprintf (name, size, "%s%u%s", bf ? "bf" : "f", d & 0xff,
-		alias ? "" : rm[(d >> 22) & 7]);
+      length = snprintf (name, sizeof (names[0][0]), "%s%u%s",
+			 bf ? "bf" : "f", d & 0xff,
+			 alias ? "" : rm[(d >> 22) & 7]);
     }
   else
     {
       static const char *const rm[] = { "_rnu", "_rne", "_rdn", "_rod" };
-      snprintf (name, size, "%c%u%s%s", d & (1U << 30) ? 'i' : 'u',
-		d & 0xff, alias ? "" : rm[(d >> 27) & 3],
-		d & (1U << 29) ? "_sat" : "");
+      length = snprintf (name, sizeof (names[0][0]), "%c%u%s%s",
+			 d & (1U << 30) ? 'i' : 'u', d & 0xff,
+			 alias ? "" : rm[(d >> 27) & 3],
+			 d & (1U << 29) ? "_sat" : "");
     }
+  gcc_assert (length >= 0
+	      && static_cast<size_t> (length) < sizeof (names[0][0]));
+  return name;
 }
 
 static void
 integer_scalar_name (char *name, size_t size, const char *operation,
 		     type_index dst, type_index tc, bool alias)
 {
-  char dtype[32], ctype[32];
   unsigned int d = types[dst].descriptor, c = types[tc].descriptor;
-  scalar_datatype_name (dtype, sizeof (dtype), d, alias);
-  scalar_datatype_name (ctype, sizeof (ctype), c, alias);
-  snprintf (name, size, "__riscv_ztt_%s_%s_%ux%u_%s", operation, dtype,
-	    types[dst].rows, types[dst].columns, ctype);
+  const char *dtype = scalar_datatype_name (d, alias);
+  const char *ctype = scalar_datatype_name (c, alias);
+  auto dimension = [] (unsigned int n) {
+    static const char *const names[] = { "1", "2", "4", "8", "16", "32" };
+    int index = exact_log2 (n);
+    gcc_assert (index >= 0 && static_cast<unsigned> (index) < ARRAY_SIZE (names));
+    return names[index];
+  };
+  auto append = [&] (const char *part) {
+    size_t length = strlen (part);
+    gcc_assert (length < size);
+    memcpy (name, part, length);
+    name += length;
+    size -= length;
+  };
+  append ("__riscv_ztt_");
+  append (operation);
+  append ("_");
+  append (dtype);
+  append ("_");
+  append (dimension (types[dst].rows));
+  append ("x");
+  append (dimension (types[dst].columns));
+  append ("_");
+  append (ctype);
+  *name = '\0';
 }
 
 static const char *
@@ -2542,8 +2578,7 @@ canonical_builtin_name (const builtin_description &d, char (&name)[160])
 {
   if (!exponent_p (d.expansion))
     return d.name;
-  char dtype[32];
-  scalar_datatype_name (dtype, sizeof (dtype), types[d.type].descriptor, false);
+  const char *dtype = scalar_datatype_name (types[d.type].descriptor, false);
   int length = snprintf (name, sizeof (name), "%s_%s_%ux%u", d.name, dtype,
 			 types[d.type].rows, types[d.type].columns);
   gcc_assert (length >= 0 && static_cast<size_t> (length) < sizeof (name));
@@ -3033,10 +3068,100 @@ static void run_large_matrix_signature_selftests ();
 static void run_acc_shared_source_selftests ();
 static void run_md_reuse_selftests ();
 
+static void
+run_scalar_datatype_name_selftests ()
+{
+  using namespace selftest;
+  static const unsigned int widths[] = { 8, 16, 32, 64, 128, 4 };
+  static const char *const int_rm[] = { "rnu", "rne", "rdn", "rod" };
+  static const char *const fp_rm[] = { "rne", "rtz", "rdn", "rup", "rmm", "rno" };
+  static const char *const fp_types[] = { "f16", "bf16", "f32", "f64" };
+  char expected[numeric_dtype_count][2][32];
+  const char *names[numeric_dtype_count][2];
+  ASSERT_EQ (integer_dtype_count, 2 * ARRAY_SIZE (widths) * 8);
+  ASSERT_EQ (numeric_dtype_count - integer_dtype_count,
+	     ARRAY_SIZE (fp_types) * ARRAY_SIZE (fp_rm));
+  for (unsigned int n = 0; n < numeric_dtype_count; ++n)
+    for (unsigned int alias = 0; alias < 2; ++alias)
+      {
+	char *name = expected[n][alias];
+	if (n < integer_dtype_count)
+	  snprintf (name, sizeof (expected[0][0]), "%c%u%s%s%s",
+		    n % 8 >= 4 ? 'i' : 'u', widths[(n % 48) / 8],
+		    alias ? "" : "_", alias ? "" : int_rm[n % 4],
+		    n >= 48 ? "_sat" : "");
+	else
+	  {
+	    unsigned int fp = n - integer_dtype_count;
+	    snprintf (name, sizeof (expected[0][0]), "%s%s%s",
+		      fp_types[fp / 6], alias ? "" : "_",
+		      alias ? "" : fp_rm[fp % 6]);
+	  }
+	unsigned int d = numeric_dtype_descriptor (n);
+	ASSERT_EQ (numeric_dtype_number (d), n);
+	names[n][alias] = scalar_datatype_name (d, alias);
+	ASSERT_STREQ (names[n][alias], expected[n][alias]);
+      }
+  /* Other lookups must not overwrite earlier results.  */
+  for (unsigned int i = numeric_dtype_count; i > 0; --i)
+    for (unsigned int alias = 0; alias < 2; ++alias)
+      {
+	unsigned int n = i - 1;
+	ASSERT_STREQ (names[n][alias], expected[n][alias]);
+	ASSERT_EQ (names[n][alias], scalar_datatype_name
+		   (numeric_dtype_descriptor (n), alias));
+      }
+}
+
+static void
+run_scalar_full_name_selftests ()
+{
+  using namespace selftest;
+  type_index sources[numeric_dtype_count];
+  for (unsigned int n = 0; n < numeric_dtype_count; ++n)
+    {
+      sources[n] = TYPE_MAX;
+      for (unsigned int t = 0; t < TYPE_MAX; ++t)
+	if (!types[t].accumulator
+	    && types[t].descriptor == numeric_dtype_descriptor (n))
+	  {
+	    sources[n] = static_cast<type_index> (t);
+	    break;
+	  }
+      ASSERT_NE (sources[n], TYPE_MAX);
+    }
+  auto check = [] (const char *op, type_index dst, type_index tc, bool alias) {
+    char expected[160], actual[162];
+    int length = snprintf (expected, sizeof (expected),
+			   "__riscv_ztt_%s_%s_%ux%u_%s", op,
+			   scalar_datatype_name (types[dst].descriptor, alias),
+			   types[dst].rows, types[dst].columns,
+			   scalar_datatype_name (types[tc].descriptor, alias));
+    ASSERT_TRUE (length > 0 && static_cast<size_t> (length) < sizeof (expected));
+    memset (actual, '#', sizeof (actual));
+    integer_scalar_name (actual + 1, length + 1, op, dst, tc, alias);
+    ASSERT_STREQ (expected, actual + 1);
+    ASSERT_EQ (actual[0], '#');
+    ASSERT_EQ (actual[length + 2], '#');
+  };
+  for (unsigned int t = 0; t < TYPE_MAX; ++t)
+    for (unsigned int n = 0; n < numeric_dtype_count; ++n)
+      for (unsigned int alias = 0; alias < 2; ++alias)
+	check (numeric_scalar_name (n % floating_scalar_operations),
+	       static_cast<type_index> (t), sources[n], alias);
+  for (unsigned int op = 0; op <= floating_scalar_operations; ++op)
+    for (unsigned int alias = 0; alias < 2; ++alias)
+      check (op == floating_scalar_operations ? "mbcast_m_x"
+	     : numeric_scalar_name (op), TYPE_I128_ROD_1X1,
+	     TYPE_BF16_RNO_1X1, alias);
+}
+
 void
 run_wide_signature_selftests ()
 {
   using namespace selftest;
+  run_scalar_datatype_name_selftests ();
+  run_scalar_full_name_selftests ();
   run_acc_shared_source_selftests ();
   run_md_reuse_selftests ();
   for (unsigned int i = 0; i < exponent_type_count; ++i)
@@ -3126,12 +3251,12 @@ run_wide_signature_selftests ()
   ASSERT_TRUE (data_scalar_variant_p (40));
   ASSERT_FALSE (integer_scalar_old_p (20));
   ASSERT_FALSE (integer_scalar_old_p (21));
-  char scalar_name[32];
-  scalar_datatype_name (scalar_name, sizeof (scalar_name), types[TYPE_I16_ROD_1X1].descriptor, false);
+  const char *scalar_name
+    = scalar_datatype_name (types[TYPE_I16_ROD_1X1].descriptor, false);
   ASSERT_STREQ (scalar_name, "i16_rod");
-  scalar_datatype_name (scalar_name, sizeof (scalar_name), types[TYPE_BF16_RNO_1X1].descriptor, false);
+  scalar_name = scalar_datatype_name (types[TYPE_BF16_RNO_1X1].descriptor, false);
   ASSERT_STREQ (scalar_name, "bf16_rno");
-  scalar_datatype_name (scalar_name, sizeof (scalar_name), types[TYPE_F64_RNE_1X1].descriptor, true);
+  scalar_name = scalar_datatype_name (types[TYPE_F64_RNE_1X1].descriptor, true);
   ASSERT_STREQ (scalar_name, "f64");
   ASSERT_TRUE (elementwise_anchor_limit < ZTT_BUILTIN_MAX);
   for (unsigned int op = 0; op < 24; ++op)
@@ -5319,8 +5444,8 @@ register_nominal_scalars ()
     {
       unsigned int d = numeric_dtype_descriptor
 	(n < 40 ? n : n < 80 ? n + 8 : n + 16);
-      char dtype[32], name[128];
-      scalar_datatype_name (dtype, sizeof (dtype), d, false);
+      char name[128];
+      const char *dtype = scalar_datatype_name (d, false);
       snprintf (name, sizeof (name), "__riscv_ztt_%s_scalar_t", dtype);
       tree field = build_decl (BUILTINS_LOCATION, FIELD_DECL,
 			       get_identifier ("__bits"), nominal_payload_type (n));
@@ -5329,7 +5454,7 @@ register_nominal_scalars ()
       nominal_scalar_types[n] = type;
       if (default_scalar_rm_p (d))
 	{
-	  scalar_datatype_name (dtype, sizeof (dtype), d, true);
+	  dtype = scalar_datatype_name (d, true);
 	  snprintf (name, sizeof (name), "__riscv_ztt_%s_scalar_t", dtype);
 	  lang_hooks.types.register_builtin_type (type, name);
 	}
@@ -5354,7 +5479,8 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
     return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
-  char name[160], dtype[32];
+  char name[160];
+  const char *dtype;
   tree ftype;
   tree *slot;
   if (code < nominal_operation_base)
@@ -5365,7 +5491,7 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int d = types[tc].descriptor;
       if (!nominal_scalar_types[n] || (kind == 0 && (d & 0xff) > BITS_PER_WORD))
 	return error_mark_node;
-      scalar_datatype_name (dtype, sizeof (dtype), d, false);
+      dtype = scalar_datatype_name (d, false);
       static const char *const names[] = { "make", "from_bits", "bits" };
       snprintf (name, sizeof (name), "__riscv_ztt_scalar_%s_%s", names[kind], dtype);
       tree payload = nominal_payload_type (n);
@@ -5382,7 +5508,7 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int op = nominal_operation (code, t);
       if (!nominal_result_p (op, t))
 	return error_mark_node;
-      scalar_datatype_name (dtype, sizeof (dtype), types[t].descriptor, false);
+      dtype = scalar_datatype_name (types[t].descriptor, false);
       snprintf (name, sizeof (name), "__riscv_ztt_%s_%s_%ux%u",
 		op == floating_scalar_operations ? "mbcast_m_x"
 		: numeric_scalar_name (op), dtype,
@@ -5431,7 +5557,7 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int op = nominal_operation (code, t);
       if (default_scalar_rm_p (types[t].descriptor))
 	{
-	  scalar_datatype_name (dtype, sizeof (dtype), types[t].descriptor, true);
+	  dtype = scalar_datatype_name (types[t].descriptor, true);
 	  snprintf (name, sizeof (name), "__riscv_ztt_%s_%s_%ux%u",
 		    op == floating_scalar_operations ? "mbcast_m_x"
 		    : numeric_scalar_name (op), dtype,

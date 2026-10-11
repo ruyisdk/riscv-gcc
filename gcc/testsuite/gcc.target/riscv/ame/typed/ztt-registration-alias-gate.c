@@ -6,9 +6,8 @@
 void
 unavailable_short_names (void)
 {
-  /* These legacy short names must not be created just because an
-     explicit-RM catalog entry exists.  */
-  (void) __riscv_ztt_mclear_acc_i32_accx8; /* { dg-error "undeclared" } */
+  /* Reject unsupported groups and names without public aliases.  */
+  (void) __riscv_ztt_mclear_acc_i32_accx32; /* { dg-error "undeclared" } */
   (void) __riscv_ztt_mss_rm_i32_1x1; /* { dg-error "undeclared" } */
   (void) __builtin_riscv_ztt_mextract_column_i32_1x1; /* { dg-error "undeclared" } */
 }

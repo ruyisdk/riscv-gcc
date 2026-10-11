@@ -6,7 +6,7 @@
 void
 unavailable_short_names ()
 {
-  (void) __riscv_ztt_mclear_acc_i32_accx8; /* { dg-error "not declared" } */
+  (void) __riscv_ztt_mclear_acc_i32_accx32; /* { dg-error "not declared" } */
   (void) __riscv_ztt_mss_rm_i32_1x1; /* { dg-error "not declared" } */
   (void) __builtin_riscv_ztt_mextract_column_i32_1x1; /* { dg-error "not declared" } */
 }

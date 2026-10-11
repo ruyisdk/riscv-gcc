@@ -25,6 +25,10 @@ SAME (__riscv_ztt_madd_ew_x_i32_1x1_i32,
 SAME (__riscv_ztt_mzero_m_f32_1x1, __riscv_ztt_mzero_m_f32_rne_1x1);
 SAME (__riscv_ztt_mmul_ew_f32_1x1, __riscv_ztt_mmul_ew_f32_rne_1x1);
 SAME (__riscv_ztt_mclear_acc_i32_accx1, __riscv_ztt_mclear_acc_i32_rnu_accx1);
+SAME (__riscv_ztt_mclear_acc_i32_accx8, __riscv_ztt_mclear_acc_i32_rnu_accx8);
+SAME (__riscv_ztt_mclear_acc_i32_accx16, __riscv_ztt_mclear_acc_i32_rnu_accx16);
+SAME (__riscv_ztt_mclear_acc_i8_accx8, __riscv_ztt_mclear_acc_i8_rnu_accx8);
+SAME (__riscv_ztt_mclear_acc_i8_accx16, __riscv_ztt_mclear_acc_i8_rnu_accx16);
 SAME (__riscv_ztt_mrowzip_ew_i32_1x2, __riscv_ztt_mrowzip_ew_i32_rnu_1x2);
 
 void
