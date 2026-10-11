@@ -9589,11 +9589,11 @@ conversion_length (rtx *operands, bool prepared)
 }
 
 static bool
-rowcol_reused_destination_p (rtx *operands)
+rowcol_dest_setup_p (rtx *operands)
 {
-  return reload_completed && REG_P (operands[0])
-    && M_REG_P (REGNO (operands[0]))
-    && rtx_equal_p (operands[0], operands[1]);
+  return !reload_completed
+    || (operands[3] != const0_rtx
+	&& !rtx_equal_p (operands[0], operands[1]));
 }
 
 /* One owned basic Square,
@@ -9618,7 +9618,7 @@ output_rowcol_state (rtx *operands, bool prepared)
 	    output_asm_insn ("msettyp\t%1,%3", operands);
 	}
     }
-  if (!rowcol_reused_destination_p (operands))
+  if (rowcol_dest_setup_p (operands))
     output_asm_insn ("msettyp\t%0,%3", operands);
   static const char * const mnemonics[] = {
     "mcolbcast.ew.x\t%0,%z2,%1", "mrowbcast.ew.x\t%0,%z2,%1",
@@ -9634,8 +9634,8 @@ unsigned int
 rowcol_length (rtx *operands, bool prepared)
 {
   unsigned int nregs = m_nregs (GET_MODE (operands[0]));
-  return 4 * (2 + (prepared ? 0 : (nregs == 1 ? 3 : 4 * nregs + 1))
-	      - rowcol_reused_destination_p (operands));
+  return 4 * (1 + rowcol_dest_setup_p (operands)
+	      + (prepared ? 0 : (nregs == 1 ? 3 : 4 * nregs + 1)));
 }
 
 /* The enclosing mode owns
@@ -11499,9 +11499,11 @@ reuse_local_md ()
 		  descriptor = XVECEXP (src, 0, 2);
 		  if (XVECLEN (src, 0) == 5 && state.matches (group, descriptor))
 		    {
+		      rtx setup = state.matches (SET_DEST (set), descriptor)
+			? const0_rtx : descriptor;
 		      rtx prepared = gen_ztt_state_rowcol_prepared
 			(GET_MODE (group), Pmode, SET_DEST (set), group,
-			 XVECEXP (src, 0, 1), descriptor, XVECEXP (src, 0, 4));
+			 XVECEXP (src, 0, 1), setup, XVECEXP (src, 0, 4));
 		      bool changed = validate_change
 			(insn, &PATTERN (insn), prepared, false);
 		      gcc_assert (changed);
@@ -12302,10 +12304,14 @@ run_md_reuse_selftests ()
     {
       unsigned int count = m_nregs (mode);
       rtx rowcol[] = { gen_rtx_REG (mode, M_REG_FIRST),
-		       gen_rtx_REG (mode, M_REG_FIRST + count) };
+		       gen_rtx_REG (mode, M_REG_FIRST + count),
+		       const0_rtx, gen_rtx_REG (Pmode, 10) };
       ASSERT_EQ (rowcol_length (rowcol, true), 8U);
       ASSERT_EQ (rowcol_length (rowcol),
 		  4U * (3U + (count == 1 ? 2U : 4U * count)));
+      rowcol[3] = const0_rtx;
+      ASSERT_EQ (rowcol_length (rowcol, true), 4U);
+      rowcol[3] = gen_rtx_REG (Pmode, 10);
       rowcol[0] = rowcol[1];
       ASSERT_EQ (rowcol_length (rowcol, true), 4U);
       ASSERT_EQ (rowcol_length (rowcol),

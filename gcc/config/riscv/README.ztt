@@ -343,8 +343,8 @@ elimination.
 Retained TC writes in prepared scalar SETs also establish materialization
 witnesses in this scan.  Eliminated TC writes do not establish a witness.
 All required TC writes and their values are retained.
-Prepared row/column SETs also preserve descriptor GPR facts; their setter,
-control operand and matrix operation remain unchanged.
+Prepared row/column SETs also preserve descriptor GPR facts.  Retained
+setters keep their values; control operands and matrix operations remain.
 Prepared typed store SETs preserve those facts as well; stores and their
 layout operands remain unchanged and still end private spill tracking.
 Complete M constructor SETs also preserve descriptor GPR facts.  Their
@@ -429,6 +429,7 @@ per datatype packet.  Do not combine adjacent packets into a larger fact.
 Row/column broadcasts and shifts establish the same Md for the complete
 source and result basic Squares, including an in-place result.
 When the complete source Md already matches, a prepared form drops the
-private source-preservation envelope.  It retains the row/column operation,
-control argument and any distinct destination setup, with the same state
-invalidation boundaries as other consumers.
+private source-preservation envelope.  A matching complete destination Md
+also removes its setter and descriptor dependency.  The row/column operation
+and control argument remain, with the same state invalidation boundaries
+as other consumers.

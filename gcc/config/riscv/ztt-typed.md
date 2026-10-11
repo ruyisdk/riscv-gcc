@@ -1223,7 +1223,7 @@
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
            (match_operand:SI 2 "reg_or_0_operand" "rJ")
-           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 3 "reg_or_0_operand" "rJ")
            (match_operand 4 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_ROWCOL))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p () && reload_completed"
