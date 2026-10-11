@@ -7222,8 +7222,29 @@ check_builtin_call (location_t loc, unsigned int code, tree,
   return true;
 }
 
-/* Keep producer calls as ownership witnesses.  Only cross local SSA
-   copies, not memory accesses, calls or other state-changing operations.  */
+/* Scalar work may separate structural producers without changing AME state.  */
+static bool
+local_structure_assignment_p (gimple *stmt)
+{
+  if (!is_gimple_assign (stmt) || gimple_vuse (stmt)
+      || gimple_has_side_effects (stmt)
+      || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
+    return false;
+  if (gimple_assign_single_p (stmt))
+    return true;
+  if (gimple_could_trap_p (stmt))
+    return false;
+  for (unsigned int i = 0; i < gimple_num_ops (stmt); ++i)
+    {
+      tree type = TREE_TYPE (gimple_op (stmt, i));
+      if (!INTEGRAL_TYPE_P (type) && !POINTER_TYPE_P (type))
+	return false;
+    }
+  return true;
+}
+
+/* Keep producer calls as ownership witnesses.  Only cross local scalar
+   assignments, not memory accesses, calls or state-changing operations.  */
 static bool
 local_structure_producers_p (gimple_stmt_iterator *gsi,
 			    gimple *const *producers, unsigned int count)
@@ -7248,9 +7269,8 @@ local_structure_producers_p (gimple_stmt_iterator *gsi,
 	return true;
       if (seen != before)
 	continue;
-      if (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
-	  || gimple_has_side_effects (stmt)
-	  || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
+
+      if (!local_structure_assignment_p (stmt))
 	return false;
     }
   return false;
@@ -7321,10 +7341,7 @@ local_projection_uses_p (tree value, type_index half,
 	  seen |= 1U << j;
       if (seen == wanted)
 	return true;
-      if (seen == before
-	  && (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
-	      || gimple_has_side_effects (stmt)
-	      || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME))
+      if (seen == before && !local_structure_assignment_p (stmt))
 	return false;
     }
   return false;

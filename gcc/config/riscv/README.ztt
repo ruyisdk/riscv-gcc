@@ -123,6 +123,11 @@ extraction.  Each intermediate value must have one use and consist of a
 complete register group, except for the final shared pair checked above.
 Copies remain as ownership witnesses.
 
+The local structural window can include ordinary integer or pointer SSA
+calculations with no memory effects or possible traps.  All operands must
+have integer or pointer types; floating comparisons are not an exception.
+These calculations stay in place, and the 16-statement bound is unchanged.
+
 A concatenation of complementary halves from the same parent can also
 reuse that parent.  Both halves must have one use and the parent's only
 value uses must be the two extractions.  The same local boundaries apply;
