@@ -193,7 +193,9 @@ removing a clear.  Shared-source reuse is confined to one composite and
 retains ACC updates and arithmetic side effects.
 
 ztt_md_reuse runs after allocation and scheduling, before variable tracking.
-It tracks complete M groups and descriptor values within each block.
+It tracks complete M groups and descriptor values along single-predecessor
+fallthrough chains.  Plain scalar conditional branches preserve facts;
+joins, backedges, non-fallthrough and exceptional edges discard them.
 Matching matmul and M-to-ACC sources skip save/set/reload; internal operands
 control output and instruction length.  M-to-ACC requires a matching Md
 for every complete transfer packet, including packed ACC groups.  It still

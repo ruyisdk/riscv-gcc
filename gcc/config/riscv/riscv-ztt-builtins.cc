@@ -10914,7 +10914,7 @@ reuse_cleaned_descriptors ()
   return changed;
 }
 
-/* Reuse Md within each block after scheduling and register allocation.  */
+/* Reuse Md along single-predecessor fallthrough chains after allocation.  */
 static unsigned int
 reuse_local_md ()
 {
@@ -10923,10 +10923,16 @@ reuse_local_md ()
   const bool explicit_state = riscv_ztt_explicit_state_p ();
   if (dump_file)
     fprintf (dump_file, "Explicit Md state: %d\n", explicit_state);
+  local_md_state state;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
-      local_md_state state;
+      edge incoming = single_pred_p (bb) ? single_pred_edge (bb) : nullptr;
+      if (!incoming || incoming->src != bb->prev_bb
+	  || !(incoming->flags & EDGE_FALLTHRU)
+	  || (incoming->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_DFS_BACK
+				 | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING)))
+	state.clear ();
       rtx_insn *insn;
       FOR_BB_INSNS (bb, insn)
 	{
@@ -10934,6 +10940,12 @@ reuse_local_md ()
 	    continue;
 	  if (CALL_P (insn) || JUMP_P (insn))
 	    {
+	      /* A plain scalar branch changes neither registers nor Md.  */
+	      if (JUMP_P (insn) && GET_CODE (PATTERN (insn)) == SET
+		  && any_condjump_p (insn) && onlyjump_p (insn)
+		  && recog_memoized (insn) >= 0
+		  && md_scalar_insn_p (PATTERN (insn)))
+		continue;
 	      state.clear ();
 	      continue;
 	    }
