@@ -159,6 +159,12 @@ A resultless same-type M copy can also be a witness.  An extract or zip
 result may have one use by such a copy; both calls join the bounded window
 and retain their arguments.  The check does not follow further copies.
 
+Reconstruction and inverse permutations also accept parent uses by complete
+typed stores in the next 16 statements of the same block.  These uses keep
+the original value live across the fold.  The forward window crosses only
+typed stores and local scalar assignments.  Earlier stores, nonlocal uses,
+live intermediates and later ownership-only witnesses do not qualify.
+
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
 retain their bits, including zero signs and NaN payloads.  The move stays

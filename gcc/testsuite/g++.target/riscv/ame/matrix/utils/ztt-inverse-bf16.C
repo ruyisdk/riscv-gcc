@@ -6,4 +6,4 @@
 #define ZIP_TYPE bf16_rne
 #define ZIP_CARRIER __bf16
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-inverse-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 25 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 24 "optimized" } } */

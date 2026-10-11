@@ -9,4 +9,4 @@
 #define RB_PAIR 1x2
 #define RB_COLUMN 2x1
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-rebuild-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 9 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 8 "optimized" } } */

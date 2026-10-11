@@ -7445,7 +7445,26 @@ structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
     && c.type == d.type && !types[d.type].accumulator;
 }
 
-/* Ignore only witnesses found with every real use in the same local window.  */
+static bool
+structure_store_p (gimple *stmt, tree value = NULL_TREE)
+{
+  if (!is_gimple_call (stmt))
+    return false;
+  unsigned int nargs = gimple_call_num_args (stmt);
+  if (nargs != 2 && nargs != 3)
+    return false;
+  unsigned int code = structure_builtin_code (stmt, nargs);
+  if (code == ZTT_BUILTIN_MAX)
+    return false;
+  const auto d = builtin_description_for (code);
+  return memory_store_p (d.expansion) && d.type != TYPE_MAX
+    && !types[d.type].accumulator && type_nregs (d.type)
+    && d.prototype == (nargs == 2 ? PROTO_VOID_PTR_M : PROTO_VOID_PTR_STRIDE_M)
+    && type_for_tree (TREE_TYPE (gimple_call_arg (stmt, nargs - 1))) == d.type
+    && (!value || gimple_call_arg (stmt, nargs - 1) == value);
+}
+
+/* Later full stores keep PARENT live without extending its lifetime.  */
 static bool
 local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 			  gimple *producer, gimple *other = nullptr,
@@ -7453,7 +7472,8 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 			  unsigned int ncopies = 0)
 {
   gimple *uses[16];
-  unsigned int nuses = 0, values = 0, visits = 0;
+  gimple *stores[16];
+  unsigned int nuses = 0, nstores = 0, values = 0, visits = 0;
   unsigned int wanted = other ? 2 : 1;
   imm_use_iterator iter;
   use_operand_p use;
@@ -7471,19 +7491,46 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 	    return false;
 	}
       else if (!structure_witness_p (stmt, parent, terminal))
-	return false;
-      if (nuses + (terminal ? 2 : 1) > 16)
+	{
+	  if (!structure_store_p (stmt, parent)
+	      || gimple_bb (stmt) != gsi_bb (*gsi))
+	    return false;
+	  stores[nstores++] = stmt;
+	  continue;
+	}
+      if (nuses + nstores + (terminal ? 2 : 1) > 16)
 	return false;
       if (terminal)
 	uses[nuses++] = terminal;
       uses[nuses++] = stmt;
     }
-  if (values != wanted || nuses + ncopies > ARRAY_SIZE (uses))
+  if (values != wanted || nuses + nstores + ncopies > ARRAY_SIZE (uses))
     return false;
   /* Matched copies do not use PARENT directly.  */
   for (unsigned int i = 0; i < ncopies; ++i)
     uses[nuses++] = copies[i];
-  return local_structure_producers_p (gsi, uses, nuses);
+  if (!local_structure_producers_p (gsi, uses, nuses))
+    return false;
+  if (!nstores)
+    return true;
+
+  unsigned int seen = 0, all = (1U << nstores) - 1;
+  gimple_stmt_iterator next = *gsi;
+  for (unsigned int i = 0; i < 16; ++i)
+    {
+      gsi_next_nondebug (&next);
+      if (gsi_end_p (next))
+	return false;
+      gimple *stmt = gsi_stmt (next);
+      for (unsigned int j = 0; j < nstores; ++j)
+	if (stmt == stores[j])
+	  seen |= 1U << j;
+      if (seen == all)
+	return true;
+      if (!structure_store_p (stmt) && !local_structure_assignment_p (stmt))
+	return false;
+    }
+  return false;
 }
 
 static tree

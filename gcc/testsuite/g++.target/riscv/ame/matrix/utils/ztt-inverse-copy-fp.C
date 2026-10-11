@@ -6,4 +6,4 @@
 #define ZIP_TYPE f32_rne
 #define ZIP_CARRIER float
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-inverse-copy-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 41 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_m(?:col|row)(?:un)?zip_ew_" 40 "optimized" } } */

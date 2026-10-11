@@ -8,4 +8,4 @@
 #define RB_HALF 1x4
 #define RB_PAIR 1x8
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-rebuild-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 9 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 8 "optimized" } } */
