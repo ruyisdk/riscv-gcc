@@ -102,12 +102,15 @@ with the corresponding complete source value.  Exact types and shape
 transitions must match.  The search stays within one basic block and
 crosses only a bounded number of memory-free SSA copies or debug statements.
 Calls, asm and state operations remain boundaries.  The concatenation
-call is retained for ownership checking.  Multi-use pairs keep their
-existing lowering to avoid extending the source halves' live ranges.
+call is retained for ownership checking.  A shared pair may also fold when
+all uses are complete, same-type extractions in the same 16-statement
+window.  Full-value uses and intervening calls, asm or memory accesses keep
+their existing lowering.
 
 Up to four same-type M-to-M copies may occur between concatenation and
 extraction.  Each intermediate value must have one use and consist of a
-complete register group.  Copies remain as ownership witnesses.
+complete register group, except for the final shared pair checked above.
+Copies remain as ownership witnesses.
 
 A concatenation of complementary halves from the same parent can also
 reuse that parent.  Both halves must have one use and the parent's only

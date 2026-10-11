@@ -6843,7 +6843,7 @@ local_structure_producers_p (gimple_stmt_iterator *gsi,
   unsigned int seen = 0, wanted = (1U << count) - 1;
   for (unsigned int i = 0; i < 16; ++i)
     {
-      gsi_prev (&prev);
+      gsi_prev_nondebug (&prev);
       if (gsi_end_p (prev))
 	return false;
       gimple *stmt = gsi_stmt (prev);
@@ -6853,7 +6853,7 @@ local_structure_producers_p (gimple_stmt_iterator *gsi,
 	  seen |= 1U << j;
       if (seen == wanted)
 	return true;
-      if (seen != before || is_gimple_debug (stmt))
+      if (seen != before)
 	continue;
       if (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
 	  || gimple_has_side_effects (stmt)
@@ -6877,17 +6877,78 @@ structure_builtin_code (gimple *stmt, unsigned int nargs = 2)
   return MIN (code >> RISCV_BUILTIN_SHIFT, ZTT_BUILTIN_MAX);
 }
 
+/* Shared pairs must be consumed entirely by local, complete projections.  */
+static bool
+local_projection_uses_p (tree value, type_index half,
+			 gimple_stmt_iterator *gsi)
+{
+  type_index pair = type_for_tree (TREE_TYPE (value));
+  unsigned int nregs = type_nregs (half);
+  if (pair == TYPE_MAX || !nregs || type_nregs (pair) != 2 * nregs)
+    return false;
+  gimple *definition = SSA_NAME_DEF_STMT (value);
+  if (!is_gimple_call (definition) || gimple_bb (definition) != gsi_bb (*gsi))
+    return false;
+  gimple *users[16];
+  unsigned int count = 0;
+  imm_use_iterator iter;
+  use_operand_p use;
+  FOR_EACH_IMM_USE_FAST (use, iter, value)
+    {
+      gimple *stmt = USE_STMT (use);
+      if (is_gimple_debug (stmt))
+	continue;
+      unsigned int code = structure_builtin_code (stmt);
+      if (count == ARRAY_SIZE (users) || code == ZTT_BUILTIN_MAX
+	  || gimple_bb (stmt) != gsi_bb (*gsi))
+	return false;
+      const auto d = builtin_description_for (code);
+      if (d.expansion != EXPAND_MEXTRACT || d.type != half
+	  || m_utility_source_type (d.prototype, d.type) != pair
+	  || gimple_call_arg (stmt, 0) != value)
+	return false;
+      tree index = gimple_call_arg (stmt, 1);
+      if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) > 1)
+	return false;
+      users[count++] = stmt;
+    }
+  if (count < 2)
+    return false;
+  unsigned int seen = 0, wanted = (1U << count) - 1;
+  gimple_stmt_iterator next = gsi_for_stmt (definition);
+  for (unsigned int i = 0; i < 16; ++i)
+    {
+      gsi_next_nondebug (&next);
+      if (gsi_end_p (next))
+	return false;
+      gimple *stmt = gsi_stmt (next);
+      unsigned int before = seen;
+      for (unsigned int j = 0; j < count; ++j)
+	if (stmt == users[j])
+	  seen |= 1U << j;
+      if (seen == wanted)
+	return true;
+      if (seen == before
+	  && (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
+	      || gimple_has_side_effects (stmt)
+	      || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME))
+	return false;
+    }
+  return false;
+}
+
 /* Collect at most four same-type copies per input, without deleting witnesses.  */
 static bool
 strip_structure_copies (tree &value, type_index type, gimple **copies,
-			unsigned int &count)
+			unsigned int &count, bool shared_input = false)
 {
   if (type == TYPE_MAX || types[type].accumulator || !type_nregs (type))
     return false;
   unsigned int start = count;
   for (;;)
     {
-      if (TREE_CODE (value) != SSA_NAME || !has_single_use (value)
+      if (TREE_CODE (value) != SSA_NAME
+	  || (!has_single_use (value) && !(shared_input && count == start))
 	  || type_for_tree (TREE_TYPE (value)) != type)
 	return false;
       gimple *producer = SSA_NAME_DEF_STMT (value);
@@ -6954,11 +7015,11 @@ structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
   use_operand_p use;
   FOR_EACH_IMM_USE_FAST (use, iter, value)
     {
-      if (++visits > 16)
-	return false;
       gimple *user = USE_STMT (use);
       if (is_gimple_debug (user))
 	continue;
+      if (++visits > 16)
+	return false;
       if (copy)
 	return false;
       copy = user;
@@ -6988,11 +7049,11 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
   use_operand_p use;
   FOR_EACH_IMM_USE_FAST (use, iter, parent)
     {
-      if (++visits > 16)
-	return false;
       gimple *stmt = USE_STMT (use);
       if (is_gimple_debug (stmt))
 	continue;
+      if (++visits > 16)
+	return false;
       gimple *terminal = nullptr;
       if (stmt == producer || stmt == other)
 	{
@@ -7026,7 +7087,9 @@ extracted_concat_value (const builtin_description &d,
   gimple *producers[5];
   unsigned int count = 0;
   type_index pair_type = m_utility_source_type (d.prototype, d.type);
-  if (!strip_structure_copies (pair, pair_type, producers, count))
+  bool shared = TREE_CODE (pair) == SSA_NAME && !has_single_use (pair);
+  if ((shared && !local_projection_uses_p (pair, d.type, gsi))
+      || !strip_structure_copies (pair, pair_type, producers, count, shared))
     return NULL_TREE;
   unsigned int half_nregs = type_nregs (d.type);
   if (count && (!half_nregs || type_nregs (pair_type) != 2 * half_nregs))
