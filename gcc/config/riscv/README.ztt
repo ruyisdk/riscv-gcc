@@ -179,6 +179,11 @@ fact cannot substitute for separately prepared packets.
 Paired-value zip/unzip similarly requires matching Md for both complete
 square groups.  It keeps the original operation, drops only redundant
 preparation and records the two unchanged descriptors for later consumers.
+Conversion and structural unary operations also reuse complete source
+packets.  They retain destination setup and the original operation, including
+rounding and status effects.  A reused destination must be the same complete
+source group with the same descriptor and packet step; partial overlaps do
+not use the prepared form.
 
 Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
 Register definitions invalidate dependent descriptors and overlapping groups.

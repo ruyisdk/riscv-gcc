@@ -8611,25 +8611,25 @@ zip_value_length (rtx *operands)
 /* A complete same-Md
    source has already prepared the destination without losing its payload.  */
 static bool
-unary_reused_destination_p (rtx *operands)
+unary_reused_destination_p (rtx *operands, bool prepared = false)
 {
+  unsigned int steps = UINTVAL (operands[prepared ? 4 : 6]);
   return reload_completed && REG_P (operands[0])
     && M_REG_P (REGNO (operands[0]))
     && rtx_equal_p (operands[0], operands[1])
     && operands[2] && REG_P (operands[2])
     && GP_REG_P (REGNO (operands[2]))
     && rtx_equal_p (operands[2], operands[3])
-    && datatype_step (UINTVAL (operands[6]), 0)
-    && datatype_step (UINTVAL (operands[6]), 0)
-       == datatype_step (UINTVAL (operands[6]), 1);
+    && datatype_step (steps, 0)
+    && datatype_step (steps, 0) == datatype_step (steps, 1);
 }
 
 /* Source preparation preserves every member.  Disjoint destinations still
    need setup; a reused destination must not clear the restored source.  */
 static void
-prepare_unary_state (rtx *operands)
+prepare_unary_state (rtx *operands, bool prepared)
 {
-  unsigned int steps = UINTVAL (operands[6]);
+  unsigned int steps = UINTVAL (operands[prepared ? 4 : 6]);
   auto setup = [&] (unsigned int i)
     {
       unsigned int step = datatype_step (steps, i);
@@ -8642,28 +8642,31 @@ prepare_unary_state (rtx *operands)
 	  output_asm_insn ("msettyp\t%0,%1", args);
 	}
     };
-  rtx base = XEXP (operands[4], 0);
-  bool group = m_nregs (GET_MODE (operands[1])) > 1;
-  for (bool load : { false, true })
+  if (!prepared)
     {
-      if (group)
+      rtx base = XEXP (operands[4], 0);
+      bool group = m_nregs (GET_MODE (operands[1])) > 1;
+      for (bool load : { false, true })
 	{
-	  rtx args[] = { operands[7], base };
-	  output_asm_insn ("mv\t%0,%1", args);
+	  if (group)
+	    {
+	      rtx args[] = { operands[7], base };
+	      output_asm_insn ("mv\t%0,%1", args);
+	    }
+	  output_acc_m_transfer (operands[1], group ? operands[7] : base,
+				 operands[5], load);
+	  if (!load)
+	    setup (1);
 	}
-      output_acc_m_transfer (operands[1], group ? operands[7] : base,
-			     operands[5], load);
-      if (!load)
-	setup (1);
     }
-  if (!unary_reused_destination_p (operands))
+  if (!unary_reused_destination_p (operands, prepared))
     setup (0);
 }
 
 const char *
-output_conversion_state (rtx *operands)
+output_conversion_state (rtx *operands, bool prepared)
 {
-  prepare_unary_state (operands);
+  prepare_unary_state (operands, prepared);
   output_asm_insn ("mconv.ew\t%0,%1", operands);
   return "";
 }
@@ -8671,7 +8674,7 @@ output_conversion_state (rtx *operands)
 /* The instruction applies
    independently to each logical Square in the formed register operands.  */
 const char *
-output_structural_state (rtx *operands)
+output_structural_state (rtx *operands, bool prepared)
 {
   static const char * const mnemonics[] = {
     "mreduceadd.col\t%0,%1", "mreduceadd.row\t%0,%1",
@@ -8684,23 +8687,23 @@ output_structural_state (rtx *operands)
 #include "riscv-ztt-operations.def"
 #undef ZTT_FP_UNARY
   };
-  unsigned int variant = UINTVAL (operands[8]);
+  unsigned int variant = UINTVAL (operands[prepared ? 5 : 8]);
   gcc_assert (variant < ARRAY_SIZE (mnemonics));
-  prepare_unary_state (operands);
+  prepare_unary_state (operands, prepared);
   output_asm_insn (mnemonics[variant], operands);
   return "";
 }
 
 unsigned int
-conversion_length (rtx *operands)
+conversion_length (rtx *operands, bool prepared)
 {
-  unsigned int steps = UINTVAL (operands[6]);
+  unsigned int steps = UINTVAL (operands[prepared ? 4 : 6]);
   unsigned int dst = m_nregs (GET_MODE (operands[0]));
   unsigned int src = m_nregs (GET_MODE (operands[1]));
-  return 4 * (1 + (unary_reused_destination_p (operands)
+  return 4 * (1 + (unary_reused_destination_p (operands, prepared)
 		  ? 0 : dst / datatype_step (steps, 0))
-	      + src / datatype_step (steps, 1)
-	      + (src == 1 ? 2 : 4 * src));
+	      + (prepared ? 0 : src / datatype_step (steps, 1)
+		 + (src == 1 ? 2 : 4 * src)));
 }
 
 static bool
@@ -10109,15 +10112,43 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_CONVERT_REUSE:
 		case UNSPECV_ZTT_STATE_STRUCTURAL:
 		case UNSPECV_ZTT_STATE_STRUCTURAL_REUSE:
+		case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
+		case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
 		  {
+		    bool prepared_p
+		      = XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT_PREPARED
+			|| XINT (src, 1) == UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED;
+		    rtx steps = XVECEXP (src, 0, prepared_p ? 3 : 4);
+		    group = XVECEXP (src, 0, 0);
+		    descriptor = XVECEXP (src, 0, 2);
+		    if (!prepared_p
+			&& state.matches_packets
+			     (group, descriptor, datatype_step (UINTVAL (steps), 1)))
+		      {
+			bool convert = XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT
+			  || XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT_REUSE;
+			rtx prepared = gen_ztt_state_unary_prepared
+			  (convert ? UNSPECV_ZTT_STATE_CONVERT_PREPARED
+			   : UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED,
+			   GET_MODE (SET_DEST (set)), Pmode, SET_DEST (set),
+			   group, XVECEXP (src, 0, 1), descriptor, steps,
+			   convert ? const0_rtx : XVECEXP (src, 0, 5));
+			if (validate_change (insn, &PATTERN (insn), prepared, false))
+			  {
+			    df_insn_rescan (insn);
+			    cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file, "Reuse Md for unary at insn %d\n",
+				       INSN_UID (insn));
+			  }
+		      }
 		    note_stores (insn, invalidate_md_store, &state);
 		    /* Unary setup prepares each packet, not one combined group.  */
 		    for (unsigned int i : { 1U, 0U })
 		      {
 			rtx reg = i ? XVECEXP (src, 0, 0) : SET_DEST (set);
 			unsigned int count = m_nregs (GET_MODE (reg));
-			unsigned int step = datatype_step
-			  (UINTVAL (XVECEXP (src, 0, 4)), i);
+			unsigned int step = datatype_step (UINTVAL (steps), i);
 			gcc_assert (step && count % step == 0);
 			state.invalidate (reg);
 			for (unsigned int r = 0; r < count; r += step)
