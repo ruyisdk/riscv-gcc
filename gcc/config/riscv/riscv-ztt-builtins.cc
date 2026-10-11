@@ -7712,24 +7712,56 @@ inverse_zip_value (const builtin_description &d,
 static tree
 identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
+  builtin_description d;
   elementwise_description operation;
-  if (gimple_call_num_args (stmt) != 2
-      || !decode_elementwise_builtin (code, operation))
-    return NULL_TREE;
-  const auto d = builtin_description_for (operation.canonical);
+  bool carrier = integer_matrix_code_p (code);
+  if (carrier)
+    {
+      tree args[5];
+      if (gimple_call_num_args (stmt) != ARRAY_SIZE (args))
+	return NULL_TREE;
+      for (unsigned int i = 0; i < ARRAY_SIZE (args); ++i)
+	args[i] = gimple_call_arg (stmt, i);
+      if (!describe_integer_matrix (code, ARRAY_SIZE (args), args, d, operation))
+	return NULL_TREE;
+    }
+  else
+    {
+      if (gimple_call_num_args (stmt) != 2
+	  || !decode_elementwise_builtin (code, operation))
+	return NULL_TREE;
+      d = builtin_description_for (operation.canonical);
+    }
   if (d.prototype != PROTO_M_GATHER
       || floating_descriptor_p (types[d.type].descriptor)
       || floating_descriptor_p (types[operation.count].descriptor))
     return NULL_TREE;
   tree data = gimple_call_arg (stmt, 0);
   tree index = gimple_call_arg (stmt, 1);
+  tree lhs_type = TREE_TYPE (gimple_call_lhs (stmt));
   if (TREE_CODE (data) != SSA_NAME || TREE_CODE (index) != SSA_NAME
-      || type_for_tree (TREE_TYPE (data)) != d.type
-      || type_for_tree (TREE_TYPE (gimple_call_lhs (stmt))) != d.type
-      || type_for_tree (TREE_TYPE (index)) != operation.count)
+      || TYPE_MODE (TREE_TYPE (data)) != TYPE_MODE (lhs_type)
+      || (!carrier && (type_for_tree (TREE_TYPE (data)) != d.type
+		      || type_for_tree (lhs_type) != d.type)))
     return NULL_TREE;
-  gimple *producers[5];
+  gimple *producers[6];
   unsigned int count = 0;
+  if (carrier && type_for_tree (TREE_TYPE (index)) != operation.count)
+    {
+      gimple *view = SSA_NAME_DEF_STMT (index);
+      if (!is_gimple_assign (view)
+	  || gimple_assign_rhs_code (view) != VIEW_CONVERT_EXPR
+	  || gimple_vuse (view) || gimple_has_side_effects (view))
+	return NULL_TREE;
+      tree source = TREE_OPERAND (gimple_assign_rhs1 (view), 0);
+      if (TREE_CODE (source) != SSA_NAME
+	  || TYPE_MODE (TREE_TYPE (source)) != TYPE_MODE (TREE_TYPE (index)))
+	return NULL_TREE;
+      producers[count++] = view;
+      index = source;
+    }
+  if (type_for_tree (TREE_TYPE (index)) != operation.count)
+    return NULL_TREE;
   if (!strip_structure_copies (index, operation.count, producers, count, true))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (index);
@@ -7744,7 +7776,8 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
 	  : source.expansion != EXPAND_MROWID_EW)
       || !local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
-  return data;
+  return useless_type_conversion_p (lhs_type, TREE_TYPE (data)) ? data
+    : build1 (VIEW_CONVERT_EXPR, lhs_type, data);
 }
 
 /* The first broadcast retains the control-range and ownership checks.  */

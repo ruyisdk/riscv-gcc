@@ -204,6 +204,9 @@ access; floating conversions and other unary operations are unchanged.
 The bounded structural-copy search recognizes these integer conversions
 through their extended builtin codes.  Matched conversions remain as
 ownership witnesses, including unused parent and terminal conversions.
+Integer-matrix identity gathers use their explicit datatype metadata, not
+the physical carrier's type.  The index may have one same-mode carrier
+view before the bounded copy chain; its constructor remains in place.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
