@@ -413,6 +413,9 @@ Whole-register loads and stores retain known physical Md without inferring
 datatype from the transferred payload.
 When both sources match, a prepared form drops the private memory and
 address operands while retaining any required destination setup.
+If the independent destination group also has matching Md, the late form
+omits its setter and descriptor dependency.  Unknown or mismatched Md
+still requires destination setup.
 Identical physical binary inputs share their first complete preparation,
 including when incoming Md is unknown.
 Typed broadcast and index constructors establish their complete result

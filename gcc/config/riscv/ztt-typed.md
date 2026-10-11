@@ -334,7 +334,7 @@
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
            (match_operand:ZTT_M 2 "register_operand" "Wmr")
-           (match_operand:P 3 "register_operand" "r")]
+           (match_operand:P 3 "reg_or_0_operand" "rJ")]
           ZTT_STATE_BINARY))]
   "TARGET_ZTT && riscv_ztt_explicit_state_p () && reload_completed"
 {

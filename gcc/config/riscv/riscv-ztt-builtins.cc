@@ -8954,7 +8954,8 @@ static bool
 binary_dest_setup_p (rtx *operands)
 {
   return !reload_completed
-    || (!rtx_equal_p (operands[0], operands[1])
+    || (operands[3] != const0_rtx
+	&& !rtx_equal_p (operands[0], operands[1])
 	&& !rtx_equal_p (operands[0], operands[2]));
 }
 
@@ -11702,9 +11703,12 @@ reuse_local_md ()
 			bool changed;
 			if (mask == 3)
 			  {
+			    /* Zero marks an already established destination Md.  */
+			    rtx setup = state.matches (SET_DEST (set), descriptor)
+			      ? const0_rtx : descriptor;
 			    rtx prepared = gen_ztt_state_prepared
 			      (XINT (src, 1), GET_MODE (SET_DEST (set)), Pmode,
-			       SET_DEST (set), lhs, rhs, descriptor);
+			       SET_DEST (set), lhs, rhs, setup);
 			    changed = validate_change
 			      (insn, &PATTERN (insn), prepared, false);
 			  }
@@ -12252,12 +12256,19 @@ run_md_reuse_selftests ()
   int saved_reload_completed = reload_completed;
   rtx operands[] = { gen_rtx_REG (ZTTMR1mode, M_REG_FIRST),
 		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1),
-		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 2) };
+		     gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 2),
+		     gen_rtx_REG (Pmode, 10) };
   reload_completed = 1;
   ASSERT_EQ (binary_state_length (operands, 0), 32U);
   ASSERT_EQ (binary_state_length (operands, 1), 20U);
   ASSERT_EQ (binary_state_length (operands, 2), 20U);
   ASSERT_EQ (binary_state_length (operands, 3), 8U);
+  operands[3] = const0_rtx;
+  ASSERT_EQ (binary_state_length (operands, 3), 4U);
+  reload_completed = 0;
+  ASSERT_EQ (binary_state_length (operands, 3), 8U);
+  reload_completed = 1;
+  operands[3] = gen_rtx_REG (Pmode, 10);
   operands[0] = operands[1] = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST);
   operands[2] = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST + 8);
   ASSERT_EQ (binary_state_length (operands, 0), 268U);
