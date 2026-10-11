@@ -1020,6 +1020,22 @@
    (set (attr "length")
         (symbol_ref "riscv_ztt::rowcol_length (operands)"))])
 
+(define_insn "@ztt_state_rowcol_prepared_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "Wmr")
+           (match_operand:P 2 "register_operand" "r")
+           (match_operand:P 3 "register_operand" "r")
+           (match_operand 4 "const_int_operand" "n")]
+          UNSPECV_ZTT_STATE_ROWCOL))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p () && reload_completed"
+{
+  return riscv_ztt::output_rowcol_state (operands, true);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::rowcol_length (operands, true)"))])
+
 ;; Experimental ACC values for supported numeric types.  Packed values own
 ;; complete 2/4/8/16-ACC transfer packets; matmul remains nonpacked.
 ;;   Generic moves preserve the

@@ -230,3 +230,7 @@ Conversions and structural unary operations establish source and result Md
 per datatype packet.  Do not combine adjacent packets into a larger fact.
 Row/column broadcasts and shifts establish the same Md for the complete
 source and result basic Squares, including an in-place result.
+When the complete source Md already matches, a prepared form drops the
+private source-preservation envelope.  It retains the row/column operation,
+control argument and any distinct destination setup, with the same state
+invalidation boundaries as other consumers.

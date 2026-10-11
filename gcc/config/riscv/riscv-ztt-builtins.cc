@@ -8428,21 +8428,24 @@ rowcol_reused_destination_p (rtx *operands)
 /* One owned basic Square,
    including wide M groups.  Preserve the source across destructive Md setup.  */
 const char *
-output_rowcol_state (rtx *operands)
+output_rowcol_state (rtx *operands, bool prepared)
 {
-  rtx base = XEXP (operands[4], 0);
-  bool group = m_nregs (GET_MODE (operands[1])) > 1;
-  for (bool load : { false, true })
+  if (!prepared)
     {
-      if (group)
+      rtx base = XEXP (operands[4], 0);
+      bool group = m_nregs (GET_MODE (operands[1])) > 1;
+      for (bool load : { false, true })
 	{
-	  rtx args[] = { operands[7], base };
-	  output_asm_insn ("mv\t%0,%1", args);
+	  if (group)
+	    {
+	      rtx args[] = { operands[7], base };
+	      output_asm_insn ("mv\t%0,%1", args);
+	    }
+	  output_acc_m_transfer (operands[1], group ? operands[7] : base,
+				 operands[5], load);
+	  if (!load)
+	    output_asm_insn ("msettyp\t%1,%3", operands);
 	}
-      output_acc_m_transfer (operands[1], group ? operands[7] : base,
-			     operands[5], load);
-      if (!load)
-	output_asm_insn ("msettyp\t%1,%3", operands);
     }
   if (!rowcol_reused_destination_p (operands))
     output_asm_insn ("msettyp\t%0,%3", operands);
@@ -8450,17 +8453,17 @@ output_rowcol_state (rtx *operands)
     "mcolbcast.ew.x\t%0,%2,%1", "mrowbcast.ew.x\t%0,%2,%1",
     "mcolshift.ew.x\t%0,%2,%1", "mrowshift.ew.x\t%0,%2,%1"
   };
-  unsigned int variant = UINTVAL (operands[6]);
+  unsigned int variant = UINTVAL (operands[prepared ? 4 : 6]);
   gcc_assert (variant < ARRAY_SIZE (mnemonics));
   output_asm_insn (mnemonics[variant], operands);
   return "";
 }
 
 unsigned int
-rowcol_length (rtx *operands)
+rowcol_length (rtx *operands, bool prepared)
 {
   unsigned int nregs = m_nregs (GET_MODE (operands[0]));
-  return 4 * (3 + (nregs == 1 ? 2 : 4 * nregs)
+  return 4 * (2 + (prepared ? 0 : (nregs == 1 ? 3 : 4 * nregs + 1))
 	      - rowcol_reused_destination_p (operands));
 }
 
@@ -9732,9 +9735,24 @@ reuse_local_md ()
 		  break;
 		case UNSPECV_ZTT_STATE_ROWCOL:
 		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
-		  note_stores (insn, invalidate_md_store, &state);
+		  group = XVECEXP (src, 0, 0);
 		  descriptor = XVECEXP (src, 0, 2);
-		  state.remember (XVECEXP (src, 0, 0), descriptor);
+		  if (XVECLEN (src, 0) == 5 && state.matches (group, descriptor))
+		    {
+		      rtx prepared = gen_ztt_state_rowcol_prepared
+			(GET_MODE (group), Pmode, SET_DEST (set), group,
+			 XVECEXP (src, 0, 1), descriptor, XVECEXP (src, 0, 4));
+		      bool changed = validate_change
+			(insn, &PATTERN (insn), prepared, false);
+		      gcc_assert (changed);
+		      df_insn_rescan (insn);
+		      cleanup = true;
+		      if (dump_file)
+			fprintf (dump_file, "Reuse Md for rowcol at insn %d\n",
+				 INSN_UID (insn));
+		    }
+		  note_stores (insn, invalidate_md_store, &state);
+		  state.remember (group, descriptor);
 		  state.remember (SET_DEST (set), descriptor);
 		  continue;
 		case UNSPECV_ZTT_STATE_CONVERT:
@@ -10106,8 +10124,23 @@ run_md_reuse_selftests ()
   ASSERT_EQ (binary_state_length (operands, 3), 4U);
   operands[0] = operands[2];
   ASSERT_EQ (binary_state_length (operands, 3), 4U);
+  for (machine_mode mode : { ZTTMR1mode, ZTTMR2mode, ZTTMR4mode,
+			    ZTTMR8mode, ZTTMR16mode })
+    {
+      unsigned int count = m_nregs (mode);
+      rtx rowcol[] = { gen_rtx_REG (mode, M_REG_FIRST),
+		       gen_rtx_REG (mode, M_REG_FIRST + count) };
+      ASSERT_EQ (rowcol_length (rowcol, true), 8U);
+      ASSERT_EQ (rowcol_length (rowcol),
+		  4U * (3U + (count == 1 ? 2U : 4U * count)));
+      rowcol[0] = rowcol[1];
+      ASSERT_EQ (rowcol_length (rowcol, true), 4U);
+      ASSERT_EQ (rowcol_length (rowcol),
+		  4U * (2U + (count == 1 ? 2U : 4U * count)));
+    }
   reload_completed = 0;
   ASSERT_EQ (binary_state_length (operands, 3), 8U);
+  ASSERT_EQ (rowcol_length (operands, true), 8U);
   reload_completed = saved_reload_completed;
   local_md_state state;
   rtx raw_reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
