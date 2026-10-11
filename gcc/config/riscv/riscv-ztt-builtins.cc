@@ -2691,11 +2691,9 @@ canonical_builtin_name (const builtin_description &d, char (&name)[160])
 }
 
 static tree
-integer_broadcast_builtin_decl (unsigned int code, bool initialize_p)
+integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
+				type_index dst, type_index tc)
 {
-  type_index dst, tc;
-  if (!decode_integer_broadcast (code, dst, tc))
-    return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
   tree &decl = integer_broadcast_decls[code - integer_broadcast_code_base];
@@ -2715,6 +2713,15 @@ integer_broadcast_builtin_decl (unsigned int code, bool initialize_p)
 	}
     }
   return decl ? decl : error_mark_node;
+}
+
+static tree
+integer_broadcast_builtin_decl (unsigned int code, bool initialize_p)
+{
+  type_index dst, tc;
+  if (!decode_integer_broadcast (code, dst, tc))
+    return error_mark_node;
+  return integer_broadcast_builtin_decl (code, initialize_p, dst, tc);
 }
 
 static bool
@@ -3012,11 +3019,9 @@ nominal_registration_type (type_index dst, type_index tc, unsigned int nargs)
 }
 
 static tree
-floating_broadcast_builtin_decl (unsigned int code, bool initialize_p)
+floating_broadcast_builtin_decl (unsigned int code, bool initialize_p,
+				 type_index dst, type_index tc)
 {
-  type_index dst, tc;
-  if (!decode_floating_broadcast (code, dst, tc))
-    return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
   tree &decl = floating_broadcast_decls[code - floating_broadcast_code_base];
@@ -3037,6 +3042,15 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p)
 	}
     }
   return decl ? decl : error_mark_node;
+}
+
+static tree
+floating_broadcast_builtin_decl (unsigned int code, bool initialize_p)
+{
+  type_index dst, tc;
+  if (!decode_floating_broadcast (code, dst, tc))
+    return error_mark_node;
+  return floating_broadcast_builtin_decl (code, initialize_p, dst, tc);
 }
 
 static tree
@@ -5752,7 +5766,8 @@ register_functions ()
 	for (unsigned int c = candidate.first_tc;
 	     c < integer_scalar_dtype_count; ++c)
 	  integer_broadcast_builtin_decl
-	    (integer_broadcast_code_base + candidate.payload + c, true);
+	    (integer_broadcast_code_base + candidate.payload + c, true,
+	     candidate.dst, scalar_types[c]);
       for (unsigned int op = 0; op < integer_scalar_operations; ++op)
 	for (const auto &candidate : integer_candidates)
 	  for (unsigned int c = candidate.first_tc;
@@ -5775,7 +5790,8 @@ register_functions ()
 	for (unsigned int c = candidate.first_tc;
 	     c < numeric_scalar_dtype_count; ++c)
 	  floating_broadcast_builtin_decl
-	    (floating_broadcast_code_base + candidate.payload + c, true);
+	    (floating_broadcast_code_base + candidate.payload + c, true,
+	     candidate.dst, scalar_types[c]);
     }
   vec_free (registration_function_types);
   vec_free (nominal_registration_types);
