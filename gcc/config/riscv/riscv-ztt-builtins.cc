@@ -10459,7 +10459,8 @@ lower_explicit_state ()
 	      && !data_scalar_variant_p (UINTVAL (XVECEXP (src, 0, 2)));
 	    rtx first_dtype = XVECEXP (src, 0, 3);
 	    rtx second_dtype = XVECEXP (src, 0, 4);
-	    bool reuse_left = nregs > 4
+	    bool reuse_left = (nregs > 4
+			       || (scalar && optimize && runtime_profile_p ()))
 	      && mode == GET_MODE (XVECEXP (src, 0, 0))
 	      && rtx_equal_p (dtype, first_dtype) && groups[0] == groups[1];
 	    bool reuse_right = !scalar && nregs > 4
@@ -10476,7 +10477,7 @@ lower_explicit_state ()
 	    rtx second_descriptor = control_scalar ? const0_rtx
 	      : reuse_right ? descriptor
 	      : force_reg (Pmode, second_dtype);
-	    /* Preserve the old small-group expansion order and pseudo numbering.  */
+	    /* Keep descriptor construction order for nonreusable sources.  */
 	    rtx first_descriptor = reuse_left ? descriptor
 	      : (nregs > 4 && !control_scalar
 		 && rtx_equal_p (first_dtype, second_dtype))

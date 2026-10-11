@@ -214,6 +214,8 @@ When both sources have that full type, either may supply the destination.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.
+Optimized runtime scalar operations also allow complete-type source reuse
+for small M groups.  Matrix forms retain their existing allocation choices.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
