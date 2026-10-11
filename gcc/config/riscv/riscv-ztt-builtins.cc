@@ -8540,7 +8540,7 @@ scalar_ternary_length (rtx *operands)
 /* Both tied operands retain
    their full old payload across destructive datatype preparation.  */
 const char *
-output_zip_state (rtx *operands)
+output_zip_state (rtx *operands, bool prepared)
 {
   static const char *const templates[] = {
     "mcolzip.ew\t%0,%1", "mrowzip.ew\t%0,%1",
@@ -8548,24 +8548,27 @@ output_zip_state (rtx *operands)
   };
   unsigned int variant = UINTVAL (operands[5]);
   gcc_assert (variant < ARRAY_SIZE (templates));
-  rtx base = XEXP (operands[6], 0);
-  bool group = m_nregs (GET_MODE (operands[0])) > 1;
-  for (unsigned int i = 0; i < 2; ++i)
-    for (bool load : { false, true })
-      {
-	if (group)
+  if (!prepared)
+    {
+      rtx base = XEXP (operands[6], 0);
+      bool group = m_nregs (GET_MODE (operands[0])) > 1;
+      for (unsigned int i = 0; i < 2; ++i)
+	for (bool load : { false, true })
 	  {
-	    rtx args[] = { operands[8], base };
-	    output_asm_insn ("mv\t%0,%1", args);
+	    if (group)
+	      {
+		rtx args[] = { operands[8], base };
+		output_asm_insn ("mv\t%0,%1", args);
+	      }
+	    output_acc_m_transfer (operands[i], group ? operands[8] : base,
+				   operands[7], load);
+	    if (!load)
+	      {
+		rtx args[] = { operands[i], operands[4] };
+		output_asm_insn ("msettyp\t%0,%1", args);
+	      }
 	  }
-	output_acc_m_transfer (operands[i], group ? operands[8] : base,
-			       operands[7], load);
-	if (!load)
-	  {
-	    rtx args[] = { operands[i], operands[4] };
-	    output_asm_insn ("msettyp\t%0,%1", args);
-	  }
-      }
+    }
   output_asm_insn (templates[variant], operands);
   return "";
 }
@@ -8580,7 +8583,7 @@ zip_length (rtx *operands)
 /* Only split the single allocation unit once hard registers are known.
    Reuse the established per-square state envelope without changing it.  */
 const char *
-output_zip_value_state (rtx *operands)
+output_zip_value_state (rtx *operands, bool prepared)
 {
   unsigned int r = m_nregs (GET_MODE (operands[0])) / 2;
   unsigned int regno = REGNO (operands[0]);
@@ -8590,9 +8593,12 @@ output_zip_value_state (rtx *operands)
   machine_mode mode = matrix_mode (r);
   rtx a = gen_rtx_REG (mode, regno);
   rtx b = gen_rtx_REG (mode, regno + r);
-  rtx parts[] = { a, b, a, b, operands[2], operands[3],
-		  operands[4], operands[5], operands[6] };
-  return output_zip_state (parts);
+  rtx parts[] = { a, b, a, b, prepared ? NULL_RTX : operands[2],
+		  operands[prepared ? 2 : 3],
+		  prepared ? NULL_RTX : operands[4],
+		  prepared ? NULL_RTX : operands[5],
+		  prepared ? NULL_RTX : operands[6] };
+  return output_zip_state (parts, prepared);
 }
 
 unsigned int
@@ -8777,6 +8783,27 @@ output_acc_to_m (rtx *operands)
 		     operands[2] };
       output_asm_insn ("msettyp\t%0,%2", args);
       output_asm_insn ("mmov.m.a\t%0,acc%c1", args);
+    }
+  return "";
+}
+
+const char *
+output_acc_from_m (rtx *operands)
+{
+  machine_mode mode = GET_MODE (operands[0]);
+  unsigned int r = acc_m_nregs (mode);
+  unsigned int packet = acc_transfer_accs (mode);
+  for (unsigned int i = 0; i < acc_nregs (mode) / packet; ++i)
+    {
+      rtx args[] = { GEN_INT (REGNO (operands[0]) - ACC_REG_FIRST + i * packet),
+		     gen_rtx_REG (matrix_mode (r), REGNO (operands[1]) + i * r),
+		     operands[2] };
+      for (unsigned int j = 0; j < packet; ++j)
+	{
+	  rtx member[] = { GEN_INT (INTVAL (args[0]) + j), operands[2] };
+	  output_asm_insn ("asettyp\tacc%c0,%1", member);
+	}
+      output_asm_insn ("mmov.a.m\tacc%c0,%1", args);
     }
   return "";
 }
@@ -9132,20 +9159,7 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
       output_asm_insn (acc_mmul_template (UINTVAL (operands[7])), operands);
     }
   else
-    {
-      for (unsigned int i = 0; i < count; ++i)
-	{
-	  rtx args[] = { GEN_INT (REGNO (operands[0]) - ACC_REG_FIRST + i * packet),
-			 gen_rtx_REG (matrix_mode (r), REGNO (source) + i * r),
-			 descriptor };
-	  for (unsigned int j = 0; j < packet; ++j)
-	    {
-	      rtx member[] = { GEN_INT (INTVAL (args[0]) + j), descriptor };
-	      output_asm_insn ("asettyp\tacc%c0,%1", member);
-	    }
-	  output_asm_insn ("mmov.a.m\tacc%c0,%1", args);
-	}
-    }
+    return output_acc_from_m (operands);
   return "";
 }
 
@@ -9818,6 +9832,20 @@ public:
       && rtx_equal_p (f.descriptor, descriptor_value (descriptor));
   }
 
+  bool matches_packets (rtx group, rtx descriptor, unsigned int step) const
+  {
+    if (!REG_P (group) || !M_REG_P (REGNO (group)))
+      return false;
+    unsigned int count = m_nregs (GET_MODE (group));
+    if (!count || !step || count % step)
+      return false;
+    for (unsigned int i = 0; i < count; i += step)
+      if (!matches (gen_rtx_REG (matrix_mode (step), REGNO (group) + i),
+		    descriptor))
+	return false;
+    return true;
+  }
+
   void remember (rtx group, rtx descriptor)
   {
     gcc_assert (REG_P (group) && M_REG_P (REGNO (group))
@@ -10049,6 +10077,34 @@ reuse_local_md ()
 		  state.remember (group, descriptor);
 		  state.remember (SET_DEST (set), descriptor);
 		  continue;
+		case UNSPECV_ZTT_STATE_ZIP_VALUE:
+		  {
+		    if (XVECLEN (src, 0) != 4)
+		      break;
+		    group = SET_DEST (set);
+		    descriptor = XVECEXP (src, 0, 1);
+		    unsigned int step = m_nregs (GET_MODE (group)) / 2;
+		    gcc_assert (step && rtx_equal_p (group, XVECEXP (src, 0, 0)));
+		    if (state.matches_packets (group, descriptor, step))
+		      {
+			rtx prepared = gen_ztt_state_zip_value_prepared
+			  (GET_MODE (group), group, group, XVECEXP (src, 0, 2));
+			bool changed = validate_change
+			  (insn, &PATTERN (insn), prepared, false);
+			gcc_assert (changed);
+			df_insn_rescan (insn);
+			cleanup = true;
+			if (dump_file)
+			  fprintf (dump_file, "Reuse Md for zip at insn %d\n",
+				   INSN_UID (insn));
+		      }
+		    note_stores (insn, invalidate_md_store, &state);
+		    for (unsigned int i = 0; i < 2; ++i)
+		      state.remember
+			(gen_rtx_REG (matrix_mode (step), REGNO (group) + i * step),
+			 descriptor);
+		    continue;
+		  }
 		case UNSPECV_ZTT_STATE_CONVERT:
 		case UNSPECV_ZTT_STATE_CONVERT_REUSE:
 		case UNSPECV_ZTT_STATE_STRUCTURAL:
@@ -10170,16 +10226,18 @@ reuse_local_md ()
 		    continue;
 		  }
 		case UNSPECV_ZTT_ACC_FROM_M:
-		  if (XVECLEN (src, 0) == 4
-		      && acc_nregs (GET_MODE (SET_DEST (set))) == 1)
+		  if (XVECLEN (src, 0) == 4)
 		    {
+		      machine_mode mode = GET_MODE (SET_DEST (set));
+		      unsigned int step = acc_m_nregs (mode);
 		      group = XVECEXP (src, 0, 0);
 		      descriptor = XVECEXP (src, 0, 1);
-		      if (state.matches (group, descriptor))
+		      unsigned int count = m_nregs (GET_MODE (group));
+		      gcc_assert (count == acc_full_m_nregs (mode));
+		      if (state.matches_packets (group, descriptor, step))
 			{
 			  rtx prepared = gen_ztt_acc_from_m_prepared
-			    (GET_MODE (SET_DEST (set)), Pmode, SET_DEST (set),
-			     group, descriptor);
+			    (mode, Pmode, SET_DEST (set), group, descriptor);
 			  bool changed = validate_change
 			    (insn, &PATTERN (insn), prepared, false);
 			  gcc_assert (changed);
@@ -10189,21 +10247,13 @@ reuse_local_md ()
 			    fprintf (dump_file, "Reuse Md for ACC move at insn %d\n",
 				     INSN_UID (insn));
 			}
-		    }
-		  else if (XVECLEN (src, 0) == 4)
-		    {
-		      machine_mode mode = GET_MODE (SET_DEST (set));
-		      unsigned int step = acc_m_nregs (mode);
-		      rtx source = XVECEXP (src, 0, 0);
-		      unsigned int count = m_nregs (GET_MODE (source));
-		      gcc_assert (count == acc_full_m_nregs (mode));
 		      note_stores (insn, invalidate_md_store, &state);
-		      state.invalidate (source);
+		      state.invalidate (group);
 		      /* Preparation establishes Md for each source packet.  */
 		      for (unsigned int i = 0; i < count; i += step)
 			state.remember
-			  (gen_rtx_REG (matrix_mode (step), REGNO (source) + i),
-			   XVECEXP (src, 0, 1));
+			  (gen_rtx_REG (matrix_mode (step), REGNO (group) + i),
+			   descriptor);
 		      continue;
 		    }
 		  break;
@@ -10510,6 +10560,33 @@ run_md_reuse_selftests ()
   ASSERT_FALSE (state.matches (group, desc));
   state.clear ();
   ASSERT_FALSE (state.matches (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1), desc));
+  const char *saved_profile = riscv_ztt_profile_string;
+  riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+  for (unsigned int count : { 1U, 2U, 4U, 8U, 16U, 32U })
+    for (unsigned int step = 1; step <= count && step <= 16; step *= 2)
+      {
+	rtx all = gen_rtx_REG (matrix_mode (count), M_REG_FIRST);
+	state.clear ();
+	ASSERT_FALSE (state.matches_packets (all, desc, step));
+	for (unsigned int i = 0; i < count; i += step)
+	  {
+	    rtx part = gen_rtx_REG (matrix_mode (step), M_REG_FIRST + i);
+	    state.remember (part, desc);
+	    ASSERT_EQ (state.matches_packets (all, desc, step), i + step == count);
+	  }
+	ASSERT_FALSE (state.matches_packets (all, gen_rtx_REG (SImode, 11), step));
+	state.invalidate (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + count - 1));
+	ASSERT_FALSE (state.matches_packets (all, desc, step));
+	state.remember (all, desc);
+	ASSERT_EQ (state.matches_packets (all, desc, step), step == count);
+	state.clear ();
+	ASSERT_FALSE (state.matches_packets (all, desc, step));
+      }
+  ASSERT_FALSE (state.matches_packets (group, desc, 0));
+  ASSERT_FALSE (state.matches_packets (group, desc, 3));
+  ASSERT_FALSE (state.matches_packets (desc, desc, 1));
+  ASSERT_FALSE (state.matches_packets (const0_rtx, desc, 1));
+  riscv_ztt_profile_string = saved_profile;
   ASSERT_FALSE (md_scalar_insn_p (gen_rtx_ASM_INPUT (VOIDmode, "")));
   ASSERT_FALSE (md_scalar_insn_p (gen_rtx_POST_INC (SImode, desc)));
   ASSERT_FALSE (md_scalar_insn_p

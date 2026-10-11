@@ -798,6 +798,20 @@
    (set (attr "length")
         (symbol_ref "riscv_ztt::zip_value_length (operands)"))])
 
+;; Both tied squares already have their required Md after allocation.
+(define_insn "@ztt_state_zip_value_prepared_<mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "0")
+           (match_operand 2 "const_int_operand" "n")]
+          UNSPECV_ZTT_STATE_ZIP_VALUE))]
+  "TARGET_ZTT && reload_completed && riscv_ztt::runtime_profile_p ()
+   && riscv_ztt::m_nregs (<MODE>mode) >= 2"
+{
+  return riscv_ztt::output_zip_value_state (operands, true);
+}
+  [(set_attr "type" "multi") (set_attr "length" "4")])
+
 ;; Formed source/destination
 ;; modes may differ; retain source payload across every source Md setup.
 ;; Saturating destinations can update amexsat even for an unused result.
@@ -1504,7 +1518,7 @@
                       (const_int 8)
                       (const_int <ztt_acc_from_length>)))])
 
-;; Formed after allocation when the complete source already has its Md.
+;; Formed after allocation when every source packet already has its Md.
 (define_insn "@ztt_acc_from_m_prepared_<ZTT_XA:mode>_<P:mode>"
   [(set (match_operand:ZTT_XA 0 "register_operand" "=War")
         (unspec_volatile:ZTT_XA
@@ -1512,11 +1526,13 @@
            (match_operand:P 2 "register_operand" "r")]
           UNSPECV_ZTT_ACC_FROM_M))]
   "TARGET_ZTT && reload_completed
-   && riscv_ztt::acc_mode_supported_p (<ZTT_XA:MODE>mode)
-   && riscv_ztt::acc_nregs (<ZTT_XA:MODE>mode) == 1"
-  "asettyp\t%0,%2\n\tmmov.a.m\t%0,%1"
+   && riscv_ztt::acc_mode_supported_p (<ZTT_XA:MODE>mode)"
+{
+  return riscv_ztt::output_acc_from_m (operands);
+}
   [(set_attr "type" "multi")
-   (set_attr "length" "8")])
+   (set (attr "length")
+        (symbol_ref "4 * (riscv_ztt::acc_nregs (GET_MODE (operands[0])) + riscv_ztt::acc_nregs (GET_MODE (operands[0])) / riscv_ztt::acc_transfer_accs (GET_MODE (operands[0])))"))])
 
 ;; A tied accumulator input enforces read/modify/write.  When old_acc
 ;; remains live, ordinary ACC moves preserve it before the destructive

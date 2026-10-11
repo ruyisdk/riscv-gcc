@@ -171,10 +171,14 @@ retains ACC updates and arithmetic side effects.
 
 ztt_md_reuse runs after allocation and scheduling, before variable tracking.
 It tracks complete M groups and descriptor values within each block.
-Matching matmul and single-ACC M-to-ACC sources skip save/set/reload;
-internal operands control output and instruction length.  M-to-ACC still
-sets Ad and moves the source.  Multiple-ACC and packed constructions keep
-full preparation.
+Matching matmul and M-to-ACC sources skip save/set/reload; internal operands
+control output and instruction length.  M-to-ACC requires a matching Md
+for every complete transfer packet, including packed ACC groups.  It still
+sets every destination Ad and transfers every source packet.  A whole-group
+fact cannot substitute for separately prepared packets.
+Paired-value zip/unzip similarly requires matching Md for both complete
+square groups.  It keeps the original operation, drops only redundant
+preparation and records the two unchanged descriptors for later consumers.
 
 Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
 Register definitions invalidate dependent descriptors and overlapping groups.
@@ -198,7 +202,7 @@ formats match; their rounding modes may differ.  Cross-format broadcasts,
 negative zero and unknown carriers retain their instructions.
 Integer and canonical floating ACC zero construction reuses asettyp for
 every member; the complete ACC mode and Ad writes remain.
-It is disabled at O0.  Prepared single-ACC moves and matmul with both
+It is disabled at O0.  Prepared ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch
 operands.  Prepared matmul retains the tied old ACC and arithmetic effects,
 but no longer needs source descriptor GPRs.  Fast RTL DCE removes their dead
