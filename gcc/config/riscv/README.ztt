@@ -207,6 +207,10 @@ ownership witnesses, including unused parent and terminal conversions.
 Integer-matrix identity gathers use their explicit datatype metadata, not
 the physical carrier's type.  The index may have one same-mode carrier
 view before the bounded copy chain; its constructor remains in place.
+When a separate destination would exceed the profile's M register count,
+wide gathers tie it to a complete same-datatype data source. Early-clobber
+protects a distinct index; source preparation supplies the shared Md.
+When both sources have that full type, either may supply the destination.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values

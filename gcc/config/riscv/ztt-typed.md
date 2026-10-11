@@ -566,10 +566,26 @@
   "#"
   [(set_attr "type" "multi")])
 
-(define_insn "@ztt_state_gather_<ZTT_M:mode>_<P:mode>"
-  [(set (match_operand:ZTT_M 0 "register_operand" "=&Wmr")
+(define_int_iterator ZTT_STATE_GATHER
+  [UNSPECV_ZTT_STATE_GATHER UNSPECV_ZTT_STATE_GATHER_REUSE
+   UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH])
+(define_int_attr ztt_gather_reuse_suffix
+  [(UNSPECV_ZTT_STATE_GATHER "") (UNSPECV_ZTT_STATE_GATHER_REUSE "_reuse")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "_reuse_both")])
+(define_int_attr ztt_gather_dest_c
+  [(UNSPECV_ZTT_STATE_GATHER "&Wmr") (UNSPECV_ZTT_STATE_GATHER_REUSE "&Wmr")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "Wmr")])
+(define_int_attr ztt_gather_data_c
+  [(UNSPECV_ZTT_STATE_GATHER "Wmr") (UNSPECV_ZTT_STATE_GATHER_REUSE "0")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "Wmr")])
+(define_int_attr ztt_gather_reuse
+  [(UNSPECV_ZTT_STATE_GATHER "0") (UNSPECV_ZTT_STATE_GATHER_REUSE "1")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "3")])
+
+(define_insn "@ztt_state_gather<ztt_gather_reuse_suffix>_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_gather_dest_c>")
         (unspec_volatile:ZTT_M
-          [(match_operand 1 "register_operand" "Wmr")
+          [(match_operand 1 "register_operand" "<ztt_gather_data_c>")
            (match_operand 2 "register_operand" "Wmr")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
@@ -578,7 +594,7 @@
            (match_operand 8 "const_int_operand" "n")
            (match_operand 9 "const_int_operand" "n")
            (match_operand 11 "const_int_operand" "n")]
-          UNSPECV_ZTT_STATE_GATHER))
+          ZTT_STATE_GATHER))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
@@ -586,6 +602,16 @@
    && (reload_completed || operands[11] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
+   && (!(<ztt_gather_reuse> & 1)
+       || (GET_MODE (operands[0]) == GET_MODE (operands[1])
+           && rtx_equal_p (operands[3], operands[4])
+           && riscv_ztt::datatype_step (UINTVAL (operands[9]), 0)
+              == riscv_ztt::datatype_step (UINTVAL (operands[9]), 1)))
+   && (!(<ztt_gather_reuse> & 2)
+       || (GET_MODE (operands[0]) == GET_MODE (operands[2])
+           && rtx_equal_p (operands[3], operands[5])
+           && riscv_ztt::datatype_step (UINTVAL (operands[9]), 0)
+              == riscv_ztt::datatype_step (UINTVAL (operands[9]), 2)))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))"
 {
   return riscv_ztt::output_indexed_state (operands);

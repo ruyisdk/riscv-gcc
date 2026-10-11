@@ -10248,20 +10248,24 @@ lower_explicit_state ()
 	  insn = next;
 	  continue;
 	}
-      if (code == UNSPEC_ZTT_ELEMENTWISE_M && runtime_profile_p ()
+      unsigned int matrix_inputs = 0;
+      if ((code == UNSPEC_ZTT_ELEMENTWISE_M || code == UNSPEC_ZTT_GATHER)
+	  && runtime_profile_p ()
 	  && nregs > 4)
 	{
 	  rtx lhs = XVECEXP (src, 0, 0), rhs = XVECEXP (src, 0, 1);
-	  unsigned int inputs = m_nregs (GET_MODE (lhs));
+	  matrix_inputs = m_nregs (GET_MODE (lhs));
 	  if (!rtx_equal_p (lhs, rhs)
 	      || !rtx_equal_p (XVECEXP (src, 0, 3), XVECEXP (src, 0, 4)))
-	    inputs += m_nregs (GET_MODE (rhs));
-	  if (inputs > active_profile ()->mregs)
+	    matrix_inputs += m_nregs (GET_MODE (rhs));
+	  if (matrix_inputs > active_profile ()->mregs)
 	    {
 	      error_at (INSN_LOCATION (insn),
-			"Ztt elementwise operation requires %u simultaneously "
+			"Ztt %s operation requires %u simultaneously "
 			"allocated M registers for distinct sources; "
-			"profile provides %u", inputs, active_profile ()->mregs);
+			"profile provides %u",
+			code == UNSPEC_ZTT_GATHER ? "gather" : "elementwise",
+			matrix_inputs, active_profile ()->mregs);
 	      emit_insn_before (gen_rtx_CLOBBER (VOIDmode, SET_DEST (set)), insn);
 	      delete_insn (insn);
 	      insn = next;
@@ -10415,8 +10419,20 @@ lower_explicit_state ()
 	      }
 	    if (indexed_p)
 	      {
-		rtx data_descriptor = force_reg (Pmode, XVECEXP (src, 0, 3));
-		rtx count_descriptor = force_reg (Pmode, XVECEXP (src, 0, 4));
+		bool reuse = code == UNSPEC_ZTT_GATHER && nregs > 4
+		  && matrix_inputs
+		  && m_nregs (mode) + matrix_inputs > active_profile ()->mregs
+		  && mode == GET_MODE (XVECEXP (src, 0, 0))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+		  && groups[0] == groups[1];
+		bool reuse_both = reuse
+		  && mode == GET_MODE (XVECEXP (src, 0, 1))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4))
+		  && groups[0] == groups[2];
+		rtx data_descriptor = reuse ? descriptor
+		  : force_reg (Pmode, XVECEXP (src, 0, 3));
+		rtx count_descriptor = reuse_both ? descriptor
+		  : force_reg (Pmode, XVECEXP (src, 0, 4));
 		if (code == UNSPEC_ZTT_SCATTER)
 		  emit_insn (gen_ztt_state_scatter
 			     (mode, Pmode, dest, XVECEXP (src, 0, 0),
@@ -10427,7 +10443,10 @@ lower_explicit_state ()
 			      const0_rtx));
 		else
 		  emit_insn (gen_ztt_state_gather
-			     (mode, Pmode, dest, XVECEXP (src, 0, 0),
+			     (reuse_both ? UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH
+			      : reuse ? UNSPECV_ZTT_STATE_GATHER_REUSE
+				    : UNSPECV_ZTT_STATE_GATHER,
+			      mode, Pmode, dest, XVECEXP (src, 0, 0),
 			      XVECEXP (src, 0, 1), descriptor, data_descriptor,
 			      count_descriptor, scratch, stride ? stride : const0_rtx,
 			      XVECEXP (src, 0, 2), GEN_INT (steps),
@@ -11132,6 +11151,8 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
     case UNSPECV_ZTT_STATE_TERNARY:
     case UNSPECV_ZTT_STATE_GATHER:
+    case UNSPECV_ZTT_STATE_GATHER_REUSE:
+    case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
     case UNSPECV_ZTT_STATE_SCATTER:
       mask = 28;
       break;
@@ -11551,6 +11572,8 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_TERNARY_X:
 		case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
 		case UNSPECV_ZTT_STATE_GATHER:
+		case UNSPECV_ZTT_STATE_GATHER_REUSE:
+		case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
 		case UNSPECV_ZTT_STATE_SCATTER:
 		  {
 		    bool old_dest = common_old_dest_p (XINT (src, 1));
@@ -11573,6 +11596,9 @@ reuse_local_md ()
 			if (prepared == ((scalar ? 2U : 6U) | (old_dest ? 1U : 0U)))
 			  {
 			    int code = XINT (src, 1);
+			    if (code == UNSPECV_ZTT_STATE_GATHER_REUSE
+				|| code == UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH)
+			      code = UNSPECV_ZTT_STATE_GATHER;
 			    if (code != UNSPECV_ZTT_STATE_GATHER
 				&& code != UNSPECV_ZTT_STATE_SCATTER)
 			      code = old_dest
