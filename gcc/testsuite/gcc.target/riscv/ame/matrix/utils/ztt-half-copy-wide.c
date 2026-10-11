@@ -6,4 +6,4 @@
 #define HC_TYPE i128_rnu
 #define HC_CARRIER __riscv_ztt_i128_storage_t
 #include "ztt-half-copy-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 16 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 14 "optimized" } } */

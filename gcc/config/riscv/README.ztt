@@ -102,9 +102,9 @@ Calls, asm and state operations remain boundaries.  The concatenation
 call is retained for ownership checking.  Multi-use pairs keep their
 existing lowering to avoid extending the source halves' live ranges.
 
-One same-type M-to-M copy may occur between concatenation and extraction.
-Both intermediate values must have one use and consist of complete register
-groups.  The copy also remains as an ownership witness.
+Up to four same-type M-to-M copies may occur between concatenation and
+extraction.  Each intermediate value must have one use and consist of a
+complete register group.  Copies remain as ownership witnesses.
 
 A concatenation of complementary halves from the same parent can also
 reuse that parent.  Both halves must have one use and the parent's only
@@ -112,10 +112,10 @@ value uses must be the two extractions.  The same local boundaries apply;
 extraction calls remain as ownership witnesses.  Reversed indices and extra
 live values keep their existing lowering.
 
-Each half may pass through one same-type M-to-M copy.  Both the copy result
-and extracted half must have one use, and all calls stay in the same local
-window.  Copies retain their operands for ownership checking; longer chains
-and fractional-register halves do not match.
+Each half may pass through up to four same-type M-to-M copies.  Every copy
+result and extracted half must have one use.  All calls and witnesses must
+fit in the same 16-statement local window.  Longer chains and
+fractional-register halves do not match.
 
 Same-axis zip/unzip pairs can reuse their input in either order.  They
 require the same complete 1x2 type, one value use of the input and
@@ -123,10 +123,10 @@ intermediate, and the same local boundaries.  The inner call remains for
 ownership checking.  Different axes, repeated permutations and packed
 types do not match.
 
-One same-type M-to-M copy may occur between the inverse operations.  Both
-intermediate values must have one use, and the copy joins the same bounded
-window.  Inner layout and copy calls keep their operands for ownership
-checking.  Copy chains and extra live intermediate values do not match.
+Up to four same-type M-to-M copies may occur between the inverse operations.
+Every intermediate value must have one use, and all copies join the same
+bounded window.  Inner layout and copy calls keep their operands for
+ownership checking.  Longer chains and extra live values do not match.
 
 Resultless typed extract and zip calls can remain as ownership witnesses
 without counting as parent value uses.  Every use and witness must occur

@@ -6,4 +6,4 @@
 #define HC_TYPE f32_rne
 #define HC_CARRIER float
 #include "ztt-half-copy-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 16 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 14 "optimized" } } */

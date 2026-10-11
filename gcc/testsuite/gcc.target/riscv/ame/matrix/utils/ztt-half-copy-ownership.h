@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include <riscv_ztt.h>
 
+#define HC_COPY(X) __riscv_ztt_mcopy_m2m_i32_rnu_1x1 (X)
+#define HC_CHAIN(X) HC_COPY (HC_COPY (HC_COPY (HC_COPY (X))))
+
 void half_copy_unowned (int32_t *out, const int32_t *in)
 {
   if (!(__riscv_ztt_ame_acquire (0) & 1))
@@ -14,8 +17,8 @@ void half_copy_unowned (int32_t *out, const int32_t *in)
 #ifdef HC_ONLY_COPY
   __riscv_ztt_ame_release ();
 #endif
-  __riscv_ztt_i32_rnu_1x1_t x = __riscv_ztt_mcopy_m2m_i32_rnu_1x1 (a);
-  __riscv_ztt_i32_rnu_1x1_t y = __riscv_ztt_mcopy_m2m_i32_rnu_1x1 (b);
+  __riscv_ztt_i32_rnu_1x1_t x = HC_CHAIN (a);
+  __riscv_ztt_i32_rnu_1x1_t y = HC_CHAIN (b);
   __riscv_ztt_i32_rnu_1x2_t q = __riscv_ztt_mconcat_m_i32_rnu_1x2 (x, y);
   if (!(__riscv_ztt_ame_acquire (0) & 1))
     return;

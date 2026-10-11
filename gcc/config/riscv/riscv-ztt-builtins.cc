@@ -6767,28 +6767,28 @@ check_builtin_call (location_t loc, unsigned int code, tree,
 /* Keep producer calls as ownership witnesses.  Only cross local SSA
    copies, not memory accesses, calls or other state-changing operations.  */
 static bool
-local_structure_producer_p (gimple_stmt_iterator *gsi, gimple *producer,
-			   gimple *other = nullptr)
+local_structure_producers_p (gimple_stmt_iterator *gsi,
+			    gimple *const *producers, unsigned int count)
 {
-  if (!gimple_bb (producer) || gimple_bb (producer) != gsi_bb (*gsi)
-      || (other && gimple_bb (other) != gsi_bb (*gsi)))
-    return false;
+  gcc_assert (count && count <= 16);
+  for (unsigned int i = 0; i < count; ++i)
+    if (!gimple_bb (producers[i]) || gimple_bb (producers[i]) != gsi_bb (*gsi))
+      return false;
   gimple_stmt_iterator prev = *gsi;
-  unsigned int seen = 0, wanted = other ? 3 : 1;
+  unsigned int seen = 0, wanted = (1U << count) - 1;
   for (unsigned int i = 0; i < 16; ++i)
     {
       gsi_prev (&prev);
       if (gsi_end_p (prev))
 	return false;
       gimple *stmt = gsi_stmt (prev);
-      if (stmt == producer || stmt == other)
-	{
-	  seen |= stmt == producer ? 1 : 2;
-	  if (seen == wanted)
-	    return true;
-	  continue;
-	}
-      if (is_gimple_debug (stmt))
+      unsigned int before = seen;
+      for (unsigned int j = 0; j < count; ++j)
+	if (stmt == producers[j])
+	  seen |= 1U << j;
+      if (seen == wanted)
+	return true;
+      if (seen != before || is_gimple_debug (stmt))
 	continue;
       if (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
 	  || gimple_has_side_effects (stmt)
@@ -6810,6 +6810,33 @@ structure_builtin_code (gimple *stmt, unsigned int nargs = 2)
   if ((code & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_ZTT)
     return ZTT_BUILTIN_MAX;
   return MIN (code >> RISCV_BUILTIN_SHIFT, ZTT_BUILTIN_MAX);
+}
+
+/* Collect at most four same-type copies per input, without deleting witnesses.  */
+static bool
+strip_structure_copies (tree &value, type_index type, gimple **copies,
+			unsigned int &count)
+{
+  if (type == TYPE_MAX || types[type].accumulator || !type_nregs (type))
+    return false;
+  unsigned int start = count;
+  for (;;)
+    {
+      if (TREE_CODE (value) != SSA_NAME || !has_single_use (value)
+	  || type_for_tree (TREE_TYPE (value)) != type)
+	return false;
+      gimple *producer = SSA_NAME_DEF_STMT (value);
+      unsigned int code = structure_builtin_code (producer, 1);
+      if (code == ZTT_BUILTIN_MAX)
+	return true;
+      const auto d = builtin_description_for (code);
+      if (d.expansion != EXPAND_MCOPY_M2M)
+	return true;
+      if (d.prototype != PROTO_M_M || d.type != type || count - start == 4)
+	return false;
+      copies[count++] = producer;
+      value = gimple_call_arg (producer, 0);
+    }
 }
 
 /* Keep structural calls and one terminal copy as ownership witnesses.  */
@@ -6886,9 +6913,10 @@ structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
 static bool
 local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 			  gimple *producer, gimple *other = nullptr,
-			  gimple *copy = nullptr, gimple *other_copy = nullptr)
+			  gimple *const *copies = nullptr,
+			  unsigned int ncopies = 0)
 {
-  gimple *uses[18];
+  gimple *uses[16];
   unsigned int nuses = 0, values = 0, visits = 0;
   unsigned int wanted = other ? 2 : 1;
   imm_use_iterator iter;
@@ -6914,38 +6942,12 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 	uses[nuses++] = terminal;
       uses[nuses++] = stmt;
     }
-  if (values != wanted)
+  if (values != wanted || nuses + ncopies > ARRAY_SIZE (uses))
     return false;
-  if (nuses == wanted && !copy && !other_copy)
-    return local_structure_producer_p (gsi, producer, other);
   /* Matched copies do not use PARENT directly.  */
-  if (copy)
-    uses[nuses++] = copy;
-  if (other_copy)
-    uses[nuses++] = other_copy;
-
-  unsigned int seen = 0;
-  gimple_stmt_iterator prev = *gsi;
-  for (unsigned int i = 0; i < 16; ++i)
-    {
-      gsi_prev (&prev);
-      if (gsi_end_p (prev))
-	return false;
-      gimple *stmt = gsi_stmt (prev);
-      unsigned int before = seen;
-      for (unsigned int j = 0; j < nuses; ++j)
-	if (stmt == uses[j])
-	  seen |= 1U << j;
-      if (seen == (1U << nuses) - 1)
-	return true;
-      if (seen != before || is_gimple_debug (stmt))
-	continue;
-      if (!gimple_assign_single_p (stmt) || gimple_vuse (stmt)
-	  || gimple_has_side_effects (stmt)
-	  || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
-	return false;
-    }
-  return false;
+  for (unsigned int i = 0; i < ncopies; ++i)
+    uses[nuses++] = copies[i];
+  return local_structure_producers_p (gsi, uses, nuses);
 }
 
 static tree
@@ -6954,28 +6956,17 @@ extracted_concat_value (const builtin_description &d,
 {
   tree index = gimple_call_arg (stmt, 1);
   tree pair = gimple_call_arg (stmt, 0);
-  if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) > 1
-      || TREE_CODE (pair) != SSA_NAME || !has_single_use (pair))
+  if (!tree_fits_uhwi_p (index) || tree_to_uhwi (index) > 1)
+    return NULL_TREE;
+  gimple *producers[5];
+  unsigned int count = 0;
+  type_index pair_type = m_utility_source_type (d.prototype, d.type);
+  if (!strip_structure_copies (pair, pair_type, producers, count))
+    return NULL_TREE;
+  unsigned int half_nregs = type_nregs (d.type);
+  if (count && (!half_nregs || type_nregs (pair_type) != 2 * half_nregs))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (pair);
-  gimple *copy = nullptr;
-  unsigned int copy_code = structure_builtin_code (producer, 1);
-  if (copy_code != ZTT_BUILTIN_MAX)
-    {
-      const auto c = builtin_description_for (copy_code);
-      unsigned int half_nregs = type_nregs (d.type);
-      if (c.expansion != EXPAND_MCOPY_M2M || c.prototype != PROTO_M_M
-	  || c.type != m_utility_source_type (d.prototype, d.type)
-	  || type_for_tree (TREE_TYPE (pair)) != c.type
-	  || !half_nregs || type_nregs (c.type) != 2 * half_nregs)
-	return NULL_TREE;
-      copy = producer;
-      pair = gimple_call_arg (copy, 0);
-      if (TREE_CODE (pair) != SSA_NAME || !has_single_use (pair)
-	  || type_for_tree (TREE_TYPE (pair)) != c.type)
-	return NULL_TREE;
-      producer = SSA_NAME_DEF_STMT (pair);
-    }
   unsigned int source_code = structure_builtin_code (producer);
   if (source_code == ZTT_BUILTIN_MAX)
     return NULL_TREE;
@@ -6986,9 +6977,10 @@ extracted_concat_value (const builtin_description &d,
       || m_utility_source_type (source.prototype, source.type) != d.type)
     return NULL_TREE;
   tree value = gimple_call_arg (producer, tree_to_uhwi (index));
+  producers[count++] = producer;
   if (type_for_tree (TREE_TYPE (value)) != d.type
       || type_for_tree (TREE_TYPE (pair)) != source.type
-      || !local_structure_producer_p (gsi, producer, copy))
+      || !local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
   return value;
 }
@@ -7005,28 +6997,14 @@ rebuilt_pair_value (const builtin_description &d,
     return NULL_TREE;
   tree parent = NULL_TREE;
   gimple *extracts[2];
-  gimple *copies[2] = {};
+  gimple *copies[8];
+  unsigned int ncopies = 0;
   for (unsigned int i = 0; i < 2; ++i)
     {
       tree half = gimple_call_arg (stmt, i);
-      if (TREE_CODE (half) != SSA_NAME || !has_single_use (half)
-	  || type_for_tree (TREE_TYPE (half)) != half_type)
+      if (!strip_structure_copies (half, half_type, copies, ncopies))
 	return NULL_TREE;
       extracts[i] = SSA_NAME_DEF_STMT (half);
-      unsigned int copy_code = structure_builtin_code (extracts[i], 1);
-      if (copy_code != ZTT_BUILTIN_MAX)
-	{
-	  const auto copy = builtin_description_for (copy_code);
-	  if (copy.expansion != EXPAND_MCOPY_M2M
-	      || copy.prototype != PROTO_M_M || copy.type != half_type)
-	    return NULL_TREE;
-	  copies[i] = extracts[i];
-	  half = gimple_call_arg (copies[i], 0);
-	  if (TREE_CODE (half) != SSA_NAME || !has_single_use (half)
-	      || type_for_tree (TREE_TYPE (half)) != half_type)
-	    return NULL_TREE;
-	  extracts[i] = SSA_NAME_DEF_STMT (half);
-	}
       unsigned int code = structure_builtin_code (extracts[i]);
       if (code == ZTT_BUILTIN_MAX)
 	return NULL_TREE;
@@ -7045,7 +7023,7 @@ rebuilt_pair_value (const builtin_description &d,
     }
 
   if (!local_structure_parent_p (parent, gsi, extracts[0], extracts[1],
-				copies[0], copies[1]))
+				copies, ncopies))
     return NULL_TREE;
   return parent;
 }
@@ -7059,30 +7037,15 @@ inverse_zip_value (const builtin_description &d,
       || (types[d.type].descriptor & 0xff) < active_profile ()->uds)
     return NULL_TREE;
   tree middle = gimple_call_arg (stmt, 0);
-  if (TREE_CODE (middle) != SSA_NAME || !has_single_use (middle)
-      || type_for_tree (TREE_TYPE (middle)) != d.type)
+  gimple *copies[4];
+  unsigned int ncopies = 0;
+  if (!strip_structure_copies (middle, d.type, copies, ncopies))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (middle);
   unsigned int code = structure_builtin_code (producer, 1);
   if (code == ZTT_BUILTIN_MAX)
     return NULL_TREE;
-  auto source = builtin_description_for (code);
-  gimple *copy = nullptr;
-  if (source.expansion == EXPAND_MCOPY_M2M)
-    {
-      if (source.prototype != PROTO_M_M || source.type != d.type)
-	return NULL_TREE;
-      copy = producer;
-      middle = gimple_call_arg (copy, 0);
-      if (TREE_CODE (middle) != SSA_NAME || !has_single_use (middle)
-	  || type_for_tree (TREE_TYPE (middle)) != d.type)
-	return NULL_TREE;
-      producer = SSA_NAME_DEF_STMT (middle);
-      code = structure_builtin_code (producer, 1);
-      if (code == ZTT_BUILTIN_MAX)
-	return NULL_TREE;
-      source = builtin_description_for (code);
-    }
+  const auto source = builtin_description_for (code);
   int variant = zip_variant (source.expansion);
   if (source.prototype != PROTO_M_M || source.type != d.type
       || variant < 0 || (variant ^ 2) != zip_variant (d.expansion))
@@ -7090,7 +7053,8 @@ inverse_zip_value (const builtin_description &d,
   tree parent = gimple_call_arg (producer, 0);
   if (TREE_CODE (parent) != SSA_NAME
       || type_for_tree (TREE_TYPE (parent)) != d.type
-      || !local_structure_parent_p (parent, gsi, producer, nullptr, copy))
+      || !local_structure_parent_p (parent, gsi, producer, nullptr, copies,
+				    ncopies))
     return NULL_TREE;
   return parent;
 }

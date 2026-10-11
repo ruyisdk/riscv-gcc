@@ -6,4 +6,4 @@
 #define HC_TYPE bf16_rne
 #define HC_CARRIER __bf16
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-half-copy-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 16 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 14 "optimized" } } */

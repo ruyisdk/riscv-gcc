@@ -1,6 +1,9 @@
 #include <stdint.h>
 #include <riscv_ztt.h>
 
+#define IC_COPY(X) __riscv_ztt_mcopy_m2m_i32_rnu_1x2 (X)
+#define IC_CHAIN(X) IC_COPY (IC_COPY (IC_COPY (IC_COPY (X))))
+
 void inverse_copy_unowned (int32_t *out, const int32_t *in)
 {
   if (!(__riscv_ztt_ame_acquire (0) & 1))
@@ -13,7 +16,7 @@ void inverse_copy_unowned (int32_t *out, const int32_t *in)
 #ifndef COPY_ONLY_UNOWNED
   __riscv_ztt_i32_rnu_1x2_t q = __riscv_ztt_mcolzip_ew_i32_rnu_1x2 (p);
 #endif
-  __riscv_ztt_i32_rnu_1x2_t c = __riscv_ztt_mcopy_m2m_i32_rnu_1x2 (q);
+  __riscv_ztt_i32_rnu_1x2_t c = IC_CHAIN (q);
 #ifdef COPY_ONLY_UNOWNED
   if (!(__riscv_ztt_ame_acquire (0) & 1))
     return;

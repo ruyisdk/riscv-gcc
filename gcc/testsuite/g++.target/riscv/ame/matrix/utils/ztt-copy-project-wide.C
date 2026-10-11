@@ -6,4 +6,4 @@
 #define VALUE_TYPE i128_rnu
 #define CARRIER __riscv_ztt_i128_storage_t
 #include "../../../../../gcc.target/riscv/ame/matrix/utils/ztt-copy-project-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mextract_" 9 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mextract_" 7 "optimized" } } */

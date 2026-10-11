@@ -1,6 +1,10 @@
 #include <stdint.h>
 #include <riscv_ztt.h>
 
+#ifndef CP_COPY
+#define CP_COPY(X) __riscv_ztt_mcopy_m2m_i32_rnu_1x2 (X)
+#endif
+
 void copy_project_unowned (int32_t *out, const int32_t *in)
 {
   if (!(__riscv_ztt_ame_acquire (0) & 1))
@@ -14,7 +18,7 @@ void copy_project_unowned (int32_t *out, const int32_t *in)
 #ifdef CP_ONLY_COPY
   __riscv_ztt_ame_release ();
 #endif
-  __riscv_ztt_i32_rnu_1x2_t q = __riscv_ztt_mcopy_m2m_i32_rnu_1x2 (p);
+  __riscv_ztt_i32_rnu_1x2_t q = CP_COPY (p);
   __riscv_ztt_i32_rnu_1x1_t r = __riscv_ztt_mextract_i32_rnu_1x1 (q, 0);
   if (!(__riscv_ztt_ame_acquire (0) & 1))
     return;

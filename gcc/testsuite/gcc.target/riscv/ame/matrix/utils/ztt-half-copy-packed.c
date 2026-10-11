@@ -6,4 +6,4 @@
 #define HC_PAIR 1x8
 #define HC_HALF 1x4
 #include "ztt-half-copy-body.h"
-/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 16 "optimized" } } */
+/* { dg-final { scan-tree-dump-times "__riscv_ztt_mconcat_m_" 14 "optimized" } } */
