@@ -441,29 +441,30 @@
                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "true")])
 (define_int_attr ztt_elementwise_rhs_c [(UNSPEC_ZTT_ELEMENTWISE_M "Wmr")
                                     (UNSPEC_ZTT_ELEMENTWISE_X "rJ")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "rJ")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "Wmr0")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "rJ")])
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr,Wmr,Wmr")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "rJ,rJ,rJ")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr,Wmr,Wmr")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr,Wmr,Wmr")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "Wmr,0,Wmr0")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "rJ,rJ,rJ")])
 
-;; Only a complete compatible source may match the destination;
-;; early-clobber protects the other input.
+;; Independent destinations are early-clobbered.  A matching alternative
+;; needs no destination setup and reads both inputs before writing its result.
+;; Bank-limited groups retain a combined register/matching alternative.
 (define_int_attr ztt_elementwise_dest_c
-  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "&Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "&Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "&Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "&Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "Wmr")])
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "&Wmr,&Wmr,&Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "&Wmr,&Wmr,&Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr,Wmr,Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "&Wmr,Wmr,&Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "&Wmr,Wmr,&Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "Wmr,Wmr,Wmr")])
 (define_int_attr ztt_elementwise_lhs_c
-  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr0")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "Wmr")])
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr,Wmr,Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "Wmr,Wmr,Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr,Wmr,Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr,0,Wmr0")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "Wmr,Wmr,Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "Wmr,Wmr,Wmr")])
 (define_int_attr ztt_elementwise_reuse
   [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "0")
    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "0")
@@ -495,16 +496,16 @@
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "<ztt_elementwise_lhs_c>")
            (match_operand 2 "reg_or_0_operand" "<ztt_elementwise_rhs_c>")
-           (match_operand:P 3 "register_operand" "r")
-           (match_operand:P 4 "register_operand" "r")
-           (match_operand:P 5 "reg_or_0_operand" "rJ")
-           (match_operand:P 7 "reg_or_0_operand" "rJ")
-           (match_operand 8 "const_int_operand" "n")
-           (match_operand 9 "const_int_operand" "n")
-           (match_operand 11 "const_int_operand" "n")]
+           (match_operand:P 3 "register_operand" "r,r,r")
+           (match_operand:P 4 "register_operand" "r,r,r")
+           (match_operand:P 5 "reg_or_0_operand" "rJ,rJ,rJ")
+           (match_operand:P 7 "reg_or_0_operand" "rJ,rJ,rJ")
+           (match_operand 8 "const_int_operand" "n,n,n")
+           (match_operand 9 "const_int_operand" "n,n,n")
+           (match_operand 11 "const_int_operand" "n,n,n")]
           ZTT_STATE_ELEMENTWISE))
-   (clobber (match_operand 6 "memory_operand" "=A"))
-   (clobber (match_scratch:P 10 "=&r"))]
+   (clobber (match_operand 6 "memory_operand" "=A,A,A"))
+   (clobber (match_scratch:P 10 "=&r,&r,&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
    && !(UINTVAL (operands[11]) & ~(<ztt_elementwise_scalar> ? 2U : 6U))
    && (reload_completed || operands[11] == const0_rtx)
@@ -527,6 +528,17 @@
   return riscv_ztt::output_elementwise_state (operands, <ztt_elementwise_scalar>);
 }
   [(set_attr "type" "multi")
+   (set (attr "enabled")
+        (cond [(match_test "!<ztt_elementwise_scalar>
+                            && (<ztt_elementwise_reuse> == 1
+                                || <ztt_elementwise_reuse> == 2)
+                            && riscv_ztt::typed_profile_p ()
+                            && 2 * riscv_ztt::m_nregs (<ZTT_M:MODE>mode)
+                               >= riscv_ztt::active_profile ()->mregs")
+               (if_then_else (eq_attr "alternative" "2")
+                             (const_string "yes") (const_string "no"))
+               (eq_attr "alternative" "2") (const_string "no")]
+              (const_string "yes")))
    (set (attr "length")
         (symbol_ref "riscv_ztt::elementwise_length (operands, <ztt_elementwise_scalar>)"))])
 

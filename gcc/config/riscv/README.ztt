@@ -219,6 +219,13 @@ for small M groups.  Matrix forms retain their existing allocation choices.
 Unary and row/column operations allow the same complete-source reuse for
 small groups on optimized runtime profiles when the source dies at the
 operation.  Live small sources retain independent destinations.
+Mixed matrix operations use separate independent and tied alternatives for
+one-sided source reuse.  Small groups select reuse only for a dying complete
+compatible input.  Independent destinations retain early-clobber; a tied
+destination reads both source groups before the core writes its result.
+Groups occupying at least half the M bank retain the combined register and
+matching constraint, avoiding an impossible independent alternative while
+letting the allocator coalesce the input and output.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values

@@ -10464,10 +10464,15 @@ lower_explicit_state ()
 	    rtx first_dtype = XVECEXP (src, 0, 3);
 	    rtx second_dtype = XVECEXP (src, 0, 4);
 	    bool reuse_left = (nregs > 4
-			       || (scalar && optimize && runtime_profile_p ()))
+			       || (optimize && runtime_profile_p ()
+				   && (scalar || find_reg_note
+				       (insn, REG_DEAD, XVECEXP (src, 0, 0)))))
 	      && mode == GET_MODE (XVECEXP (src, 0, 0))
 	      && rtx_equal_p (dtype, first_dtype) && groups[0] == groups[1];
-	    bool reuse_right = !scalar && nregs > 4
+	    bool reuse_right = !scalar
+	      && (nregs > 4 || (optimize && runtime_profile_p ()
+			       && find_reg_note
+			       (insn, REG_DEAD, XVECEXP (src, 0, 1))))
 	      && mode == GET_MODE (XVECEXP (src, 0, 1))
 	      && rtx_equal_p (dtype, second_dtype) && groups[0] == groups[2];
 	    if (scalar && reuse_left)
