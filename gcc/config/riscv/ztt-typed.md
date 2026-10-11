@@ -1159,12 +1159,18 @@
 (define_int_attr ztt_unary_prepared_output
   [(UNSPECV_ZTT_STATE_CONVERT_PREPARED "output_conversion_state")
    (UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED "output_structural_state")])
+(define_int_attr ztt_unary_prepared_dest_pred
+  [(UNSPECV_ZTT_STATE_CONVERT_PREPARED "reg_or_0_operand")
+   (UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED "register_operand")])
+(define_int_attr ztt_unary_prepared_dest_c
+  [(UNSPECV_ZTT_STATE_CONVERT_PREPARED "rJ")
+   (UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED "r")])
 
 (define_insn "@ztt_state_unary_prepared_<ztt_unary_prepared_kind>_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand:P 2 "<ztt_unary_prepared_dest_pred>" "<ztt_unary_prepared_dest_c>")
            (match_operand:P 3 "register_operand" "r")
            (match_operand 4 "const_int_operand" "n")
            (match_operand 5 "const_int_operand" "n")]
@@ -1173,7 +1179,8 @@
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && (!reg_overlap_mentioned_p (operands[0], operands[1])
        || (rtx_equal_p (operands[0], operands[1])
-           && rtx_equal_p (operands[2], operands[3])
+           && (operands[2] == const0_rtx
+               || rtx_equal_p (operands[2], operands[3]))
            && riscv_ztt::datatype_step (UINTVAL (operands[4]), 0)
               == riscv_ztt::datatype_step (UINTVAL (operands[4]), 1)))"
 {

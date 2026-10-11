@@ -9490,24 +9490,25 @@ zip_value_length (rtx *operands)
   return 4 * (1 + 2 * (r == 1 ? 3 : 4 * r + 1));
 }
 
-/* A complete same-Md
-   source has already prepared the destination without losing its payload.  */
+/* A late zero descriptor marks matching destination packets.  */
 static bool
-unary_reused_destination_p (rtx *operands, bool prepared = false)
+unary_dest_setup_p (rtx *operands, bool prepared = false)
 {
+  if (prepared && reload_completed && operands[2] == const0_rtx)
+    return false;
   unsigned int steps = UINTVAL (operands[prepared ? 4 : 6]);
-  return reload_completed && REG_P (operands[0])
+  return !(reload_completed && REG_P (operands[0])
     && M_REG_P (REGNO (operands[0]))
     && rtx_equal_p (operands[0], operands[1])
     && operands[2] && REG_P (operands[2])
     && GP_REG_P (REGNO (operands[2]))
     && rtx_equal_p (operands[2], operands[3])
     && datatype_step (steps, 0)
-    && datatype_step (steps, 0) == datatype_step (steps, 1);
+    && datatype_step (steps, 0) == datatype_step (steps, 1));
 }
 
-/* Source preparation preserves every member.  Disjoint destinations still
-   need setup; a reused destination must not clear the restored source.  */
+/* Source preparation preserves every member.  Reused destinations must not
+   clear the restored source.  */
 static void
 prepare_unary_state (rtx *operands, bool prepared)
 {
@@ -9541,7 +9542,7 @@ prepare_unary_state (rtx *operands, bool prepared)
 	    setup (1);
 	}
     }
-  if (!unary_reused_destination_p (operands, prepared))
+  if (unary_dest_setup_p (operands, prepared))
     setup (0);
 }
 
@@ -9582,8 +9583,8 @@ conversion_length (rtx *operands, bool prepared)
   unsigned int steps = UINTVAL (operands[prepared ? 4 : 6]);
   unsigned int dst = m_nregs (GET_MODE (operands[0]));
   unsigned int src = m_nregs (GET_MODE (operands[1]));
-  return 4 * (1 + (unary_reused_destination_p (operands, prepared)
-		  ? 0 : dst / datatype_step (steps, 0))
+  return 4 * (1 + (unary_dest_setup_p (operands, prepared)
+		  ? dst / datatype_step (steps, 0) : 0)
 	      + (prepared ? 0 : src / datatype_step (steps, 1)
 		 + (src == 1 ? 2 : 4 * src)));
 }
@@ -11564,11 +11565,15 @@ reuse_local_md ()
 		      {
 			bool convert = XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT
 			  || XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT_REUSE;
+			rtx setup = XVECEXP (src, 0, 1);
+			if (convert && state.matches_packets
+			    (SET_DEST (set), setup, datatype_step (UINTVAL (steps), 0)))
+			  setup = const0_rtx;
 			rtx prepared = gen_ztt_state_unary_prepared
 			  (convert ? UNSPECV_ZTT_STATE_CONVERT_PREPARED
 			   : UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED,
 			   GET_MODE (SET_DEST (set)), Pmode, SET_DEST (set),
-			   group, XVECEXP (src, 0, 1), descriptor, steps,
+			   group, setup, descriptor, steps,
 			   convert ? const0_rtx : XVECEXP (src, 0, 5));
 			if (validate_change (insn, &PATTERN (insn), prepared, false))
 			  {
@@ -12320,6 +12325,19 @@ run_md_reuse_selftests ()
   reload_completed = 0;
   ASSERT_EQ (binary_state_length (operands, 3), 8U);
   ASSERT_EQ (rowcol_length (operands, true), 8U);
+  rtx unary[] = { gen_rtx_REG (ZTTMR4mode, M_REG_FIRST),
+		  gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 8),
+		  const0_rtx, gen_rtx_REG (Pmode, 10),
+		  GEN_INT (pack_datatype_steps (2, 1)), const0_rtx };
+  ASSERT_EQ (conversion_length (unary, true), 12U);
+  reload_completed = 1;
+  ASSERT_EQ (conversion_length (unary, true), 4U);
+  unary[2] = gen_rtx_REG (Pmode, 11);
+  ASSERT_EQ (conversion_length (unary, true), 12U);
+  unary[0] = unary[1];
+  unary[2] = unary[3];
+  unary[4] = GEN_INT (pack_datatype_steps (1, 1));
+  ASSERT_EQ (conversion_length (unary, true), 4U);
   reload_completed = saved_reload_completed;
   local_md_state state;
   rtx raw_reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);

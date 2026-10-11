@@ -426,6 +426,9 @@ Typed broadcast and index constructors establish their complete result
 group's Md for later consumers in the same block.
 Conversions and structural unary operations establish source and result Md
 per datatype packet.  Do not combine adjacent packets into a larger fact.
+Prepared conversions omit destination setters when every destination packet
+already has the requested Md.  Conversion and its status effects remain;
+structural unary operations retain their existing destination setup rules.
 Row/column broadcasts and shifts establish the same Md for the complete
 source and result basic Squares, including an in-place result.
 When the complete source Md already matches, a prepared form drops the
