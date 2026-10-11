@@ -214,7 +214,7 @@ invalidating the result GPR.  The volatile read and its order are unchanged;
 CSR writes, raw operations, acquire/release and asm retain their boundaries.
 Post-DCE descriptor cleanup also retains GPR facts across recognized
 single-SET ACC clears and M/ACC transfers, invalidating the written result.
-Prepared single-SET ACC matmul retains those GPR facts as well.
+Prepared single-SET ACC matmul and value zip/unzip retain those GPR facts.
 Matching matmul and M-to-ACC sources skip save/set/reload; internal operands
 control output and instruction length.  M-to-ACC requires a matching Md
 for every complete transfer packet, including packed ACC groups.  It still
