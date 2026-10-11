@@ -2737,12 +2737,9 @@ integer_scalar_old_p (unsigned int op)
 }
 
 static tree
-integer_scalar_public_decl (unsigned int code, bool initialize_p)
+integer_scalar_public_decl (unsigned int code, bool initialize_p,
+			    unsigned int op, type_index dst, type_index tc)
 {
-  unsigned int op;
-  type_index dst, tc;
-  if (!decode_integer_scalar_public (code, op, dst, tc))
-    return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
   if (!integer_scalar_public_decls)
@@ -2779,6 +2776,16 @@ integer_scalar_public_decl (unsigned int code, bool initialize_p)
 	}
     }
   return decl ? decl : error_mark_node;
+}
+
+static tree
+integer_scalar_public_decl (unsigned int code, bool initialize_p)
+{
+  unsigned int op;
+  type_index dst, tc;
+  if (!decode_integer_scalar_public (code, op, dst, tc))
+    return error_mark_node;
+  return integer_scalar_public_decl (code, initialize_p, op, dst, tc);
 }
 
 static constexpr type_index floating_dtype_bases[] = { TYPE_F16_RNE_1X1,
@@ -2882,6 +2889,17 @@ decode_numeric_scalar_types (unsigned int d, unsigned int shape,
 }
 
 static bool
+floating_scalar_operation_p (unsigned int op, bool floating)
+{
+  gcc_assert (op < floating_scalar_operations);
+  if (op >= integer_scalar_operations)
+    return floating;
+  expansion_index e = wide_operations[WIDE_MADD_EW_X + op].expansion;
+  return !floating || !(scalar_bitwise_p (e) || e == EXPAND_MCMPGE_EW_X
+			|| e == EXPAND_MCMPLT_EW_X);
+}
+
+static bool
 decode_floating_scalar_public (unsigned int code, unsigned int &op,
 			       type_index &dst, type_index &tc)
 {
@@ -2894,14 +2912,8 @@ decode_floating_scalar_public (unsigned int code, unsigned int &op,
   n /= wide_shape_count;
   unsigned int d = n % numeric_dtype_count;
   op = n / numeric_dtype_count;
-  if ((d < 96 && c < 80) || (op >= 20 && d < 96))
+  if ((d < 96 && c < 80) || !floating_scalar_operation_p (op, d >= 96))
     return false;
-  if (op < 20 && d >= 96)
-    {
-      expansion_index e = wide_operations[WIDE_MADD_EW_X + op].expansion;
-      if (scalar_bitwise_p (e) || e == EXPAND_MCMPGE_EW_X || e == EXPAND_MCMPLT_EW_X)
-	return false;
-    }
   return decode_numeric_scalar_types (d, shape, c, dst, tc);
 }
 
@@ -2999,12 +3011,9 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p)
 }
 
 static tree
-floating_scalar_public_decl (unsigned int code, bool initialize_p)
+floating_scalar_public_decl (unsigned int code, bool initialize_p,
+			     unsigned int op, type_index dst, type_index tc)
 {
-  unsigned int op;
-  type_index dst, tc;
-  if (!decode_floating_scalar_public (code, op, dst, tc))
-    return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
   if (!floating_scalar_public_decls)
@@ -3043,6 +3052,16 @@ floating_scalar_public_decl (unsigned int code, bool initialize_p)
 	}
     }
   return decl ? decl : error_mark_node;
+}
+
+static tree
+floating_scalar_public_decl (unsigned int code, bool initialize_p)
+{
+  unsigned int op;
+  type_index dst, tc;
+  if (!decode_floating_scalar_public (code, op, dst, tc))
+    return error_mark_node;
+  return floating_scalar_public_decl (code, initialize_p, op, dst, tc);
 }
 
 static bool
@@ -3785,6 +3804,15 @@ run_wide_signature_selftests ()
 		   || scalar_ternary_variant (expansion) >= 0);
       ASSERT_EQ (wide_operation (expansion), static_cast<int> (WIDE_MADD_EW_X + op));
       ASSERT_EQ (integer_scalar_old_p (op), op >= 14 && op <= 17);
+    }
+  for (unsigned int op = 0; op < floating_scalar_operations; ++op)
+    {
+      const char *name = numeric_scalar_name (op);
+      bool integer_only = strstr (name, "and") || strstr (name, "or")
+	|| strstr (name, "cmpge") || strstr (name, "cmplt");
+      ASSERT_EQ (floating_scalar_operation_p (op, true), !integer_only);
+      ASSERT_EQ (floating_scalar_operation_p (op, false),
+		 strstr (name, "log2") == nullptr);
     }
   ASSERT_FALSE (integer_broadcast_code_p (integer_broadcast_code_base - 1));
   ASSERT_TRUE (integer_broadcast_code_p (integer_broadcast_code_base));
@@ -5632,31 +5660,41 @@ register_functions ()
     }
   if (runtime_profile_p () && !in_lto_p)
     {
-      /* Scalar public codes reuse the broadcast destination/shape/TC
-	 radix.  Filter that payload once, preserving operation-major code
-	 order.  The declaration helpers retain operation-specific gates.  */
-      auto_vec<unsigned int> integer_candidates, floating_candidates;
+      /* Reuse decoded type indices within this registration, preserving
+	 operation-major order and the floating operation restrictions.  */
+      struct scalar_candidate
+	{
+	  unsigned int payload;
+	  type_index dst, tc;
+	};
+      auto_vec<scalar_candidate> integer_candidates, floating_candidates;
       type_index dst, tc;
       for (unsigned int i = 0; i < integer_broadcast_code_count; ++i)
 	if (decode_integer_broadcast (integer_broadcast_code_base + i, dst, tc))
-	  integer_candidates.safe_push (i);
+	  integer_candidates.safe_push ({ i, dst, tc });
       for (unsigned int i = 0; i < floating_broadcast_code_count; ++i)
 	if (decode_floating_broadcast (floating_broadcast_code_base + i, dst, tc))
-	  floating_candidates.safe_push (i);
-      for (unsigned int i : integer_candidates)
-	integer_broadcast_builtin_decl (integer_broadcast_code_base + i, true);
+	  floating_candidates.safe_push ({ i, dst, tc });
+      for (const auto &candidate : integer_candidates)
+	integer_broadcast_builtin_decl
+	  (integer_broadcast_code_base + candidate.payload, true);
       for (unsigned int op = 0; op < integer_scalar_operations; ++op)
-	for (unsigned int i : integer_candidates)
+	for (const auto &candidate : integer_candidates)
 	  integer_scalar_public_decl (integer_scalar_public_base
-				      + op * integer_broadcast_code_count + i,
-				      true);
+				      + op * integer_broadcast_code_count
+				      + candidate.payload, true, op,
+				      candidate.dst, candidate.tc);
       for (unsigned int op = 0; op < floating_scalar_operations; ++op)
-	for (unsigned int i : floating_candidates)
-	  floating_scalar_public_decl (floating_scalar_public_base
-				       + op * floating_broadcast_code_count + i,
-				       true);
-      for (unsigned int i : floating_candidates)
-	floating_broadcast_builtin_decl (floating_broadcast_code_base + i, true);
+	for (const auto &candidate : floating_candidates)
+	  if (floating_scalar_operation_p
+		(op, floating_descriptor_p (types[candidate.dst].descriptor)))
+	    floating_scalar_public_decl (floating_scalar_public_base
+					 + op * floating_broadcast_code_count
+					 + candidate.payload, true, op,
+					 candidate.dst, candidate.tc);
+      for (const auto &candidate : floating_candidates)
+	floating_broadcast_builtin_decl
+	  (floating_broadcast_code_base + candidate.payload, true);
     }
   vec_free (registration_function_types);
   vec_free (nominal_registration_types);
