@@ -7291,7 +7291,7 @@ structure_builtin_code (gimple *stmt, unsigned int nargs = 2)
   unsigned int code = DECL_MD_FUNCTION_CODE (decl);
   if ((code & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_ZTT)
     return ZTT_BUILTIN_MAX;
-  return MIN (code >> RISCV_BUILTIN_SHIFT, ZTT_BUILTIN_MAX);
+  return code >> RISCV_BUILTIN_SHIFT;
 }
 
 /* Shared pairs must be consumed entirely by local, complete projections.  */
@@ -7316,7 +7316,7 @@ local_projection_uses_p (tree value, type_index half,
       if (is_gimple_debug (stmt))
 	continue;
       unsigned int code = structure_builtin_code (stmt);
-      if (count == ARRAY_SIZE (users) || code == ZTT_BUILTIN_MAX
+      if (count == ARRAY_SIZE (users) || code >= ZTT_BUILTIN_MAX
 	  || gimple_bb (stmt) != gsi_bb (*gsi))
 	return false;
       const auto d = builtin_description_for (code);
@@ -7361,11 +7361,19 @@ structure_copy_p (gimple *stmt, type_index type)
   if (nargs != 1 && nargs != 2)
     return false;
   unsigned int code = structure_builtin_code (stmt, nargs);
-  if (code == ZTT_BUILTIN_MAX)
+  if (type_for_tree (TREE_TYPE (gimple_call_arg (stmt, 0))) != type)
     return false;
+  if (code >= ZTT_BUILTIN_MAX)
+    {
+      conversion_description operation;
+      if (nargs != 1 || !decode_conversion_builtin (code, operation))
+	return false;
+      const auto d = builtin_description_for (operation.canonical);
+      return d.expansion == EXPAND_MCONV_EW && d.type == type
+	&& operation.source == type;
+    }
   const auto d = builtin_description_for (code);
-  if (d.type != type
-      || type_for_tree (TREE_TYPE (gimple_call_arg (stmt, 0))) != type)
+  if (d.type != type)
     return false;
   if (d.expansion == EXPAND_MCOPY_M2M)
     return nargs == 1 && d.prototype == PROTO_M_M;
@@ -7411,16 +7419,16 @@ structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
   unsigned int nargs = gimple_call_num_args (stmt);
   if ((nargs != 1 && nargs != 2) || gimple_call_arg (stmt, 0) != parent)
     return false;
+  type_index type = type_for_tree (TREE_TYPE (parent));
+  if (structure_copy_p (stmt, type))
+    return !gimple_call_lhs (stmt);
   unsigned int code = structure_builtin_code (stmt, nargs);
-  if (code == ZTT_BUILTIN_MAX)
+  if (code >= ZTT_BUILTIN_MAX)
     return false;
   const auto d = builtin_description_for (code);
-  type_index type = type_for_tree (TREE_TYPE (parent));
   if (type == TYPE_MAX || d.type == TYPE_MAX
       || !type_nregs (type) || !type_nregs (d.type))
     return false;
-  if (structure_copy_p (stmt, type))
-    return !gimple_call_lhs (stmt);
   if (nargs == 1)
     {
       if (d.prototype != PROTO_M_M || zip_variant (d.expansion) < 0
@@ -7474,7 +7482,7 @@ structure_store_p (gimple *stmt, tree value = NULL_TREE)
   if (nargs != 2 && nargs != 3)
     return false;
   unsigned int code = structure_builtin_code (stmt, nargs);
-  if (code == ZTT_BUILTIN_MAX)
+  if (code >= ZTT_BUILTIN_MAX)
     return false;
   const auto d = builtin_description_for (code);
   return memory_store_p (d.expansion) && d.type != TYPE_MAX
@@ -7607,7 +7615,7 @@ extracted_concat_value (const builtin_description &d,
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (pair);
   unsigned int source_code = structure_builtin_code (producer);
-  if (source_code == ZTT_BUILTIN_MAX)
+  if (source_code >= ZTT_BUILTIN_MAX)
     return NULL_TREE;
 
   const auto source = builtin_description_for (source_code);
@@ -7646,7 +7654,7 @@ rebuilt_pair_value (const builtin_description &d,
 	return NULL_TREE;
       extracts[i] = SSA_NAME_DEF_STMT (half);
       unsigned int code = structure_builtin_code (extracts[i]);
-      if (code == ZTT_BUILTIN_MAX)
+      if (code >= ZTT_BUILTIN_MAX)
 	return NULL_TREE;
       const auto source = builtin_description_for (code);
       if (source.expansion != EXPAND_MEXTRACT || source.type != half_type
@@ -7684,7 +7692,7 @@ inverse_zip_value (const builtin_description &d,
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (middle);
   unsigned int code = structure_builtin_code (producer, 1);
-  if (code == ZTT_BUILTIN_MAX)
+  if (code >= ZTT_BUILTIN_MAX)
     return NULL_TREE;
   const auto source = builtin_description_for (code);
   int variant = zip_variant (source.expansion);
@@ -7726,7 +7734,7 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (index);
   unsigned int source_code = structure_builtin_code (producer, 0);
-  if (source_code == ZTT_BUILTIN_MAX)
+  if (source_code >= ZTT_BUILTIN_MAX)
     return NULL_TREE;
   producers[count++] = producer;
   const auto source = builtin_description_for (source_code);
@@ -7761,7 +7769,7 @@ repeated_broadcast_value (const builtin_description &d,
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (value);
   unsigned int code = structure_builtin_code (producer);
-  if (code == ZTT_BUILTIN_MAX)
+  if (code >= ZTT_BUILTIN_MAX)
     return NULL_TREE;
   const auto source = builtin_description_for (code);
   producers[count++] = producer;

@@ -201,6 +201,9 @@ An optimized runtime-profile integer mconv with identical source and
 destination type indices expands to a full-mode M copy.  Width, signedness,
 RM, SAT and shape must all match.  The move retains the early ownership
 access; floating conversions and other unary operations are unchanged.
+The bounded structural-copy search recognizes these integer conversions
+through their extended builtin codes.  Matched conversions remain as
+ownership witnesses, including unused parent and terminal conversions.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
