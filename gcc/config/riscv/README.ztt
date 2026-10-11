@@ -149,6 +149,8 @@ dynamic offsets, row/column broadcasts and O0 retain their existing lowering.
 Row/column broadcast indices and shift offsets use SI control operands.
 The instructions consume only bits 31:0, independently of XLEN.  Public
 size_t/int signatures and any separate full-width uses remain unchanged.
+Known zero controls use x0, including constants with nonzero upper bits on
+RV64.  The row/column instruction and its datatype preparation remain.
 
 Typed broadcasts use the source scalar carrier mode, bounded by XLEN.
 Both descriptors retain XLEN operands.  Argument
@@ -156,7 +158,11 @@ evaluation and independent full-width uses keep their original widths.
 
 Typed 8-, 16- and 32-bit data-scalar arithmetic uses the source carrier mode.
 Its TC-to-TB conversion and amestype write are unchanged.  Wider carriers,
-shift counts and fixed exponents retain Pmode operands.
+shift counts and fixed exponents retain Pmode register operands.  Known
+zero counts and exponents use x0 without removing the operation, destination
+conversion or old-destination input.  Data-scalar all-zero bit patterns also
+use x0; amestype, TC-to-TB conversion and the original operation remain.
+Nonzero bit patterns, including floating negative zero, keep their carrier.
 Narrow operands keep a separate integer carrier when their source is a
 floating register view, avoiding cross-class operands during allocation.
 

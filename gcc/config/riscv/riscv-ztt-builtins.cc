@@ -789,6 +789,10 @@ data_scalar_variant_p (unsigned int variant)
 bool
 scalar_operand_p (rtx operand, unsigned int variant, bool ternary)
 {
+  if (operand == const0_rtx)
+    return ternary ? variant <= 4
+      : (data_scalar_variant_p (variant)
+	 || variant == 1 || variant == 3 || variant == 5 || variant == 41);
   machine_mode mode = GET_MODE (operand);
   return mode == Pmode
     || ((mode == QImode || mode == HImode || mode == SImode)
@@ -7246,8 +7250,10 @@ expand_elementwise (const builtin_description &d,
   bool shared = !scalar && ternary < 0 && m_nregs (modes[1]) > 4
     && modes[1] == modes[2] && rtx_equal_p (dtype[1], dtype[2])
     && operand_equal_p (CALL_EXPR_ARG (exp, 0), CALL_EXPR_ARG (exp, 1), 0);
-  rtx count = scalar ? force_reg (Pmode, expand_normal (CALL_EXPR_ARG (exp, 1)))
+  rtx count = scalar ? expand_normal (CALL_EXPR_ARG (exp, 1))
     : shared ? data : matrix_register (modes[2], exp, ternary >= 0 ? 2 : 1);
+  if (scalar && count != const0_rtx)
+    count = force_reg (Pmode, count);
   rtx result = gen_reg_rtx (modes[0]);
   const auto &f = operation.formation;
   bool flags = floating_descriptor_p (types[d.type].descriptor)
@@ -7377,8 +7383,10 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
   rtx source = shared ? old : matrix_register (modes[1], exp, ternary >= 0 ? 1 : 0);
   tree carrier = exponent ? long_integer_type_node : scalar_carrier_type (operation.scalar);
   rtx scalar = expand_normal (CALL_EXPR_ARG (exp, ternary >= 0 ? 2 : 1));
-  scalar = force_reg (Pmode, convert_modes
-    (Pmode, TYPE_MODE (carrier), scalar, TYPE_UNSIGNED (carrier)));
+  scalar = convert_modes
+    (Pmode, TYPE_MODE (carrier), scalar, TYPE_UNSIGNED (carrier));
+  if (scalar != const0_rtx)
+    scalar = force_reg (Pmode, scalar);
   if (!exponent
       && (TYPE_MODE (carrier) == QImode || TYPE_MODE (carrier) == HImode
 	  || TYPE_MODE (carrier) == SImode))
@@ -7953,10 +7961,14 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	}
       /* Both fixed-type controls consume only the low 32 bits.  */
       rtx control = expand_normal (arg);
-      control = force_reg (Pmode, convert_modes
+      control = convert_modes
 	(Pmode, TYPE_MODE (TREE_TYPE (arg)), control,
-	 d.prototype == PROTO_M_ROWCOL_INDEX));
-      control = gen_lowpart (SImode, control);
+	 d.prototype == PROTO_M_ROWCOL_INDEX);
+      if (CONST_INT_P (control)
+	  && trunc_int_for_mode (INTVAL (control), SImode) == 0)
+	control = const0_rtx;
+      else
+	control = gen_lowpart (SImode, force_reg (Pmode, control));
       rtx result = gen_reg_rtx (mode);
       emit_insn (gen_ztt_typed_rowcol
 	(mode, result, matrix_register (mode, exp, 0), control,
@@ -8448,29 +8460,29 @@ output_elementwise_state (rtx *operands, bool scalar)
 {
   prepare_elementwise_state (operands, scalar, false, UINTVAL (operands[11]));
   static const char *const templates[] = {
-    "msll.ew\t%0,%1,%2", "msll.ew.x\t%0,%2,%1",
-    "msrl.ew\t%0,%1,%2", "msrl.ew.x\t%0,%2,%1",
-    "msra.ew\t%0,%1,%2", "msra.ew.x\t%0,%2,%1",
+    "msll.ew\t%0,%1,%2", "msll.ew.x\t%0,%z2,%1",
+    "msrl.ew\t%0,%1,%2", "msrl.ew.x\t%0,%z2,%1",
+    "msra.ew\t%0,%1,%2", "msra.ew.x\t%0,%z2,%1",
     "mmul.ew\t%0,%1,%2",
     "madd.ew\t%0,%1,%2", "msub.ew\t%0,%1,%2",
     "mabsdiff.ew\t%0,%1,%2", "mhdiff.ew\t%0,%1,%2",
     "mmean.ew\t%0,%1,%2", "mmulneg.ew\t%0,%1,%2",
-    "madd.ew.x\t%0,%2,%1", "msub.ew.x\t%0,%2,%1",
-    "mabsdiff.ew.x\t%0,%2,%1", "mhdiff.ew.x\t%0,%2,%1",
-    "mmean.ew.x\t%0,%2,%1", "mmul.ew.x\t%0,%2,%1",
-    "mmulneg.ew.x\t%0,%2,%1", "mmin.ew.x\t%0,%2,%1",
-    "mmax.ew.x\t%0,%2,%1",
-    "mand.ew.x\t%0,%2,%1", "mandnot.ew.x\t%0,%2,%1",
-    "mor.ew.x\t%0,%2,%1", "mornot.ew.x\t%0,%2,%1",
-    "mxor.ew.x\t%0,%2,%1",
+    "madd.ew.x\t%0,%z2,%1", "msub.ew.x\t%0,%z2,%1",
+    "mabsdiff.ew.x\t%0,%z2,%1", "mhdiff.ew.x\t%0,%z2,%1",
+    "mmean.ew.x\t%0,%z2,%1", "mmul.ew.x\t%0,%z2,%1",
+    "mmulneg.ew.x\t%0,%z2,%1", "mmin.ew.x\t%0,%z2,%1",
+    "mmax.ew.x\t%0,%z2,%1",
+    "mand.ew.x\t%0,%z2,%1", "mandnot.ew.x\t%0,%z2,%1",
+    "mor.ew.x\t%0,%z2,%1", "mornot.ew.x\t%0,%z2,%1",
+    "mxor.ew.x\t%0,%z2,%1",
     "mcmpge.ew\t%0,%1,%2", "mcmplt.ew\t%0,%1,%2",
-    "mcmpge.ew.x\t%0,%2,%1", "mcmplt.ew.x\t%0,%2,%1",
+    "mcmpge.ew.x\t%0,%z2,%1", "mcmplt.ew.x\t%0,%z2,%1",
     "mselge.ew\t%0,%1,%2", "msellt.ew\t%0,%1,%2",
     "mmin.ew\t%0,%1,%2", "mmax.ew\t%0,%1,%2",
     "mldexp.ew\t%0,%1,%2", "mrdexp.ew\t%0,%1,%2",
     "mlog2sub.ew\t%0,%1,%2", "msublog2.ew\t%0,%1,%2",
-    "mlog2sub.ew.x\t%0,%2,%1", "msublog2.ew.x\t%0,%2,%1",
-    "mldexp.ew.x\t%0,%2,%1"
+    "mlog2sub.ew.x\t%0,%z2,%1", "msublog2.ew.x\t%0,%z2,%1",
+    "mldexp.ew.x\t%0,%z2,%1"
   };
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates)
@@ -8569,9 +8581,9 @@ const char *
 output_scalar_ternary_state (rtx *operands)
 {
   static const char *const templates[] = {
-    "mmulacc.ew.x\t%0,%2,%1", "mmulaccneg.ew.x\t%0,%2,%1",
-    "mmuladd.ew.x\t%0,%2,%1", "mmulsub.ew.x\t%0,%2,%1",
-    "mldexpacc.ew.x\t%0,%2,%1"
+    "mmulacc.ew.x\t%0,%z2,%1", "mmulaccneg.ew.x\t%0,%z2,%1",
+    "mmuladd.ew.x\t%0,%z2,%1", "mmulsub.ew.x\t%0,%z2,%1",
+    "mldexpacc.ew.x\t%0,%z2,%1"
   };
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates));
@@ -8887,8 +8899,8 @@ output_rowcol_state (rtx *operands, bool prepared)
   if (!rowcol_reused_destination_p (operands))
     output_asm_insn ("msettyp\t%0,%3", operands);
   static const char * const mnemonics[] = {
-    "mcolbcast.ew.x\t%0,%2,%1", "mrowbcast.ew.x\t%0,%2,%1",
-    "mcolshift.ew.x\t%0,%2,%1", "mrowshift.ew.x\t%0,%2,%1"
+    "mcolbcast.ew.x\t%0,%z2,%1", "mrowbcast.ew.x\t%0,%z2,%1",
+    "mcolshift.ew.x\t%0,%z2,%1", "mrowshift.ew.x\t%0,%z2,%1"
   };
   unsigned int variant = UINTVAL (operands[prepared ? 4 : 6]);
   gcc_assert (variant < ARRAY_SIZE (mnemonics));
@@ -10759,6 +10771,16 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  for (unsigned int variant = 0; variant <= 41; ++variant)
+    {
+      ASSERT_EQ (scalar_operand_p (const0_rtx, variant, false),
+		 variant == 1 || variant == 3 || variant == 5 || variant == 41
+		 || IN_RANGE (variant, 13, 26) || IN_RANGE (variant, 29, 30)
+		 || IN_RANGE (variant, 39, 40));
+      ASSERT_EQ (scalar_operand_p (const0_rtx, variant, true), variant <= 4);
+      ASSERT_FALSE (scalar_operand_p (const1_rtx, variant, false));
+      ASSERT_FALSE (scalar_operand_p (const1_rtx, variant, true));
+    }
   const machine_mode scalar_modes[]
     = { QImode, HImode, SImode, DImode, SFmode, DFmode };
   for (machine_mode mode : scalar_modes)

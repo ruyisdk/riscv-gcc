@@ -440,13 +440,13 @@
                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "false")
                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "true")])
 (define_int_attr ztt_elementwise_rhs_c [(UNSPEC_ZTT_ELEMENTWISE_M "Wmr")
-                                    (UNSPEC_ZTT_ELEMENTWISE_X "r")
+                                    (UNSPEC_ZTT_ELEMENTWISE_X "rJ")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "r")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "rJ")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "0")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "r")])
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "rJ")])
 
 ;; Tie only a complete
 ;; compatible source; the other input remains protected by early-clobber.
@@ -476,7 +476,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "<ztt_elementwise_rhs_c>")
+           (match_operand 2 "reg_or_0_operand" "<ztt_elementwise_rhs_c>")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")
            (match_operand 5 "const_int_operand" "n")
@@ -494,7 +494,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_elementwise_dest_c>")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "<ztt_elementwise_lhs_c>")
-           (match_operand 2 "register_operand" "<ztt_elementwise_rhs_c>")
+           (match_operand 2 "reg_or_0_operand" "<ztt_elementwise_rhs_c>")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
@@ -674,7 +674,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "r")
+           (match_operand 2 "reg_or_0_operand" "rJ")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")
            (match_operand:P 5 "const_int_operand" "n")
@@ -693,7 +693,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "r")
+           (match_operand 2 "reg_or_0_operand" "rJ")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")
            (match_operand:P 5 "const_int_operand" "n")
@@ -719,7 +719,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_ternary_dest>")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "r")
+           (match_operand 2 "reg_or_0_operand" "rJ")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
@@ -774,17 +774,17 @@
    (UNSPECV_ZTT_STATE_SCATTER "false")])
 (define_int_attr ztt_common_rhs
   [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "r")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "rJ")
    (UNSPECV_ZTT_STATE_GATHER "Wmr")
    (UNSPECV_ZTT_STATE_TERNARY "Wmr")
-   (UNSPECV_ZTT_STATE_TERNARY_X "r")
+   (UNSPECV_ZTT_STATE_TERNARY_X "rJ")
    (UNSPECV_ZTT_STATE_SCATTER "Wmr")])
 
 (define_insn "@ztt_state_common_prepared_<ztt_common_kind>_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "<ztt_common_rhs>")
+           (match_operand 2 "reg_or_0_operand" "<ztt_common_rhs>")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
@@ -808,7 +808,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "<ztt_common_rhs>")
+           (match_operand 2 "reg_or_0_operand" "<ztt_common_rhs>")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
@@ -927,13 +927,13 @@
 (define_int_attr ztt_integer_scalar
   [(UNSPECV_ZTT_ELEMENTWISE_M_FLAGS "false") (UNSPECV_ZTT_ELEMENTWISE_X_FLAGS "true")])
 (define_int_attr ztt_integer_rhs_c
-  [(UNSPECV_ZTT_ELEMENTWISE_M_FLAGS "Wmr") (UNSPECV_ZTT_ELEMENTWISE_X_FLAGS "r")])
+  [(UNSPECV_ZTT_ELEMENTWISE_M_FLAGS "Wmr") (UNSPECV_ZTT_ELEMENTWISE_X_FLAGS "rJ")])
 
 (define_insn "@ztt_typed_elementwise_flags_<ztt_integer_kind>_<mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "<ztt_integer_rhs_c>")
+           (match_operand 2 "reg_or_0_operand" "<ztt_integer_rhs_c>")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")
            (match_operand 5 "const_int_operand" "n")
@@ -1149,7 +1149,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
-           (match_operand:SI 2 "register_operand" "r")
+           (match_operand:SI 2 "reg_or_0_operand" "rJ")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")]
           UNSPECV_ZTT_ROWCOL))]
@@ -1161,7 +1161,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_unary_dest_c>")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
-           (match_operand:SI 2 "register_operand" "r")
+           (match_operand:SI 2 "reg_or_0_operand" "rJ")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
            (match_operand 6 "const_int_operand" "n")]
@@ -1181,7 +1181,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
-           (match_operand:SI 2 "register_operand" "r")
+           (match_operand:SI 2 "reg_or_0_operand" "rJ")
            (match_operand:P 3 "register_operand" "r")
            (match_operand 4 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_ROWCOL))]

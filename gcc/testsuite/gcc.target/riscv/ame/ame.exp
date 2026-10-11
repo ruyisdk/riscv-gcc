@@ -121,7 +121,7 @@ foreach group {
 # These tests have identical checks at -O0 and -O2.  Keep a single source
 # per profile, with no -O option in dg-options.  Unlike the tests above,
 # do not multiply this explicit matrix by the torture options.
-foreach group {acc/packed matrix/mul matrix/permute calls state} {
+foreach group {acc/packed matrix/mul matrix/permute scalar/exponent calls state} {
     foreach flags {{-O0} {-O2}} {
 	dg-runtest [lsort [glob -nocomplain \
 	    $srcdir/$subdir/$group/optimizations/*.\[cS\]]] \

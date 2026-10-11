@@ -97,7 +97,7 @@ foreach group {
 
 # Keep the same profile/optimization matrix as the C tests, without
 # duplicating the source or overriding the selected optimization level.
-foreach group {acc/packed matrix/mul matrix/permute calls state} {
+foreach group {acc/packed matrix/mul matrix/permute scalar/exponent calls state} {
     foreach flags {{-O0} {-O2}} {
 	dg-runtest [lsort [glob -nocomplain \
 	    $srcdir/$subdir/$group/optimizations/*.C]] $flags ""
