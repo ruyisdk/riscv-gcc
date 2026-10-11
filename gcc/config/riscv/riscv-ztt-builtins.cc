@@ -1620,7 +1620,8 @@ nominal_scalar_code_p (unsigned int code)
 
 static void register_nominal_scalars ();
 static tree nominal_builtin_decl (unsigned int, bool);
-static tree nominal_registration_type (type_index, type_index, unsigned int);
+static unsigned int nominal_scalar_number (type_index);
+static tree nominal_registration_type (type_index, unsigned int, unsigned int);
 static bool check_nominal_call (unsigned int, unsigned int, tree *);
 
 static bool
@@ -2398,11 +2399,13 @@ static tree
 registration_function_type (prototype_index prototype, type_index type)
 {
   if (broadcast_prototype_p (prototype))
-    return nominal_registration_type (type, broadcast_source_type (prototype), 1);
+    return nominal_registration_type
+      (type, nominal_scalar_number (broadcast_source_type (prototype)), 1);
   if (scalar_prototype_p (prototype, false)
       || scalar_prototype_p (prototype, true))
-    return nominal_registration_type (type, scalar_source_type (prototype),
-				      scalar_prototype_p (prototype, true) ? 3 : 2);
+    return nominal_registration_type
+      (type, nominal_scalar_number (scalar_source_type (prototype)),
+       scalar_prototype_p (prototype, true) ? 3 : 2);
   unsigned int key = prototype;
   switch (prototype)
     {
@@ -2701,7 +2704,9 @@ integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
     {
       char name[160];
       integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, false);
-      tree ftype = nominal_registration_type (dst, tc, 1);
+      unsigned int c = (code - integer_broadcast_code_base)
+	% integer_scalar_dtype_count;
+      tree ftype = nominal_registration_type (dst, c, 1);
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       decl = simulate_builtin_function_decl
 	(input_location, name, ftype, fullcode, NULL, function_attributes ());
@@ -2769,7 +2774,8 @@ integer_scalar_public_decl (unsigned int code, bool initialize_p,
   if (!decl && initialize_p)
     {
       bool old = integer_scalar_old_p (op);
-      tree ftype = nominal_registration_type (dst, tc, old ? 3 : 2);
+      tree ftype = nominal_registration_type
+	(dst, index % integer_scalar_dtype_count, old ? 3 : 2);
       char name[160];
       integer_scalar_name (name, sizeof (name), integer_scalar_names[op], dst, tc, false);
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
@@ -2864,6 +2870,14 @@ nominal_scalar_type_index (unsigned int n)
   type_index type = numeric_matrix_type (n < 40 ? n : n < 80 ? n + 8 : n + 16, 0);
   gcc_assert (type != TYPE_MAX);
   return type;
+}
+
+static unsigned int
+nominal_scalar_number (type_index type)
+{
+  gcc_assert ((types[type].descriptor & 0xff) != 4);
+  unsigned int n = numeric_dtype_number (types[type].descriptor);
+  return n < 40 ? n : n < 96 ? n - 8 : n - 16;
 }
 
 static type_index
@@ -2997,11 +3011,9 @@ default_scalar_rm_p (unsigned int d)
 /* Public prototypes retain exact nominal identity, even for equal-width
    payloads.  Internal raw signatures continue to share carrier types.  */
 static tree
-nominal_registration_type (type_index dst, type_index tc, unsigned int nargs)
+nominal_registration_type (type_index dst, unsigned int c, unsigned int nargs)
 {
-  gcc_assert (nargs >= 1 && nargs <= 3 && (types[tc].descriptor & 0xff) != 4);
-  unsigned int number = numeric_dtype_number (types[tc].descriptor);
-  unsigned int c = number < 40 ? number : number < 96 ? number - 8 : number - 16;
+  gcc_assert (nargs >= 1 && nargs <= 3);
   gcc_assert (c < numeric_scalar_dtype_count && nominal_scalar_types[c]);
   unsigned int key = (dst * numeric_scalar_dtype_count + c) * 3 + nargs - 1;
   tree ftype = nominal_registration_types
@@ -3028,7 +3040,9 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p,
   if (!decl && initialize_p)
     {
       unsigned int desc = types[tc].descriptor;
-      tree ftype = nominal_registration_type (dst, tc, 1);
+      unsigned int c = (code - floating_broadcast_code_base)
+	% numeric_scalar_dtype_count;
+      tree ftype = nominal_registration_type (dst, c, 1);
       char name[160];
       integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, false);
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
@@ -3080,7 +3094,8 @@ floating_scalar_public_decl (unsigned int code, bool initialize_p,
     {
       bool old = integer_scalar_old_p (op);
       unsigned int desc = types[tc].descriptor;
-      tree ftype = nominal_registration_type (dst, tc, old ? 3 : 2);
+      tree ftype = nominal_registration_type
+	(dst, index % numeric_scalar_dtype_count, old ? 3 : 2);
       const char *operation = numeric_scalar_name (op);
       char name[160];
       integer_scalar_name (name, sizeof (name), operation, dst, tc, false);
@@ -3331,6 +3346,7 @@ run_matrix_type_index_selftests ()
 	(n < 40 ? n : n < 80 ? n + 8 : n + 16);
       ASSERT_EQ (nominal_scalar_type_index (n),
 		 linear_matrix_type (descriptor, 1, 1));
+      ASSERT_EQ (nominal_scalar_number (nominal_scalar_type_index (n)), n);
     }
 
   for (unsigned int i = 0; i < TYPE_MAX; ++i)

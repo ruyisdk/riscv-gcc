@@ -97,6 +97,8 @@ with a shared decoded TC array.  Operations expand each group's TC range in
 code order; floating restrictions and legacy integer entries are unchanged.
 Broadcast registration shares these decoded indices.  Ordinary declaration
 lookups still validate the code and active profile through their decoders.
+Function-type lookup uses the Scalar ordinal already encoded in those
+builtin codes, without converting its type descriptor back to an ordinal.
 
 The exponent Scalar catalog uses ZTT_EXPONENT_FAMILY to store family
 descriptors and a shared type axis.  Expansion remains operation-major,
