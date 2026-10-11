@@ -2472,6 +2472,52 @@ matmul_shape_allowed_p (unsigned int shape, expansion_index expansion)
     && (shape == 0 || ((shape - 1) % 3 == 0) == (variant < 2));
 }
 
+static unsigned int
+redirect_key (prototype_index prototype, expansion_index expansion,
+	      type_index type)
+{
+  gcc_assert (type < TYPE_MAX);
+  int variant = 0;
+  if (prototype != PROTO_M_EXTRACT_COLUMN && prototype != PROTO_A_M_COLUMN)
+    {
+      const auto *shape = matmul_shape (prototype);
+      variant = matmul_variant (expansion);
+      if (!shape || shape->squares <= 1 || variant < 0)
+	return UINT_MAX;
+    }
+  static_assert (TYPE_MAX < UINT_MAX / PROTO_MAX / 6);
+  return (variant * PROTO_MAX + prototype) * TYPE_MAX + type;
+}
+
+static unsigned int
+redirect_builtin_code (prototype_index prototype, expansion_index expansion,
+		       type_index type)
+{
+  unsigned int key = redirect_key (prototype, expansion, type);
+  if (key == UINT_MAX)
+    return ZTT_BUILTIN_MAX;
+  /* Catalog codes are profile-independent; declarations are not cached here.  */
+  static hash_map<int_hash<unsigned int, UINT_MAX>, unsigned int> codes;
+  static unsigned int scanned;
+  if (unsigned int *code = codes.get (key))
+    return *code;
+  while (scanned < ZTT_BUILTIN_MAX)
+    {
+      unsigned int i = scanned++;
+      const auto &d = builtin_description_for (i);
+      unsigned int candidate = redirect_key (d.prototype, d.expansion, d.type);
+      if (candidate == UINT_MAX)
+	continue;
+      bool present;
+      unsigned int &code = codes.get_or_insert (candidate, &present);
+      if (!present)
+	code = i;
+      if (candidate == key)
+	return code;
+    }
+  return ZTT_BUILTIN_MAX;
+}
+
 /* The ordinal is independent of the historical type declaration order.  */
 static unsigned int
 mixed_dtype_number (unsigned int descriptor)
@@ -3239,6 +3285,62 @@ run_matrix_type_index_selftests ()
 }
 
 static void
+run_redirect_lookup_selftests ()
+{
+  using namespace selftest;
+  static constexpr expansion_index operations[] = {
+    EXPAND_A_MMUL, EXPAND_A_MMULNEG, EXPAND_A_MMULAT, EXPAND_A_MMULATNEG,
+    EXPAND_A_MMULBT, EXPAND_A_MMULBTNEG
+  };
+  constexpr unsigned int families = 2 + 6 * (matmul_shape_count - 1);
+  auto_vec<unsigned int> expected;
+  expected.safe_grow_cleared (TYPE_MAX * families);
+  /* Independently retain the first catalog match, including absent keys.  */
+  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+    {
+      const auto &d = builtin_description_for (i);
+      unsigned int family = families;
+      if (d.prototype == PROTO_M_EXTRACT_COLUMN)
+	family = 0;
+      else if (d.prototype == PROTO_A_M_COLUMN)
+	family = 1;
+      else if (const auto *shape = matmul_shape (d.prototype))
+	if (shape->squares > 1)
+	  for (unsigned int v = 0; v < ARRAY_SIZE (operations); ++v)
+	    if (d.expansion == operations[v])
+	      for (unsigned int s = 1; s < matmul_shape_count; ++s)
+		if (d.prototype == matmul_prototype (s))
+		  family = 2 + v * (matmul_shape_count - 1) + s - 1;
+      if (family < families && !expected[d.type * families + family])
+	expected[d.type * families + family] = i + 1;
+    }
+  for (unsigned int t = 0; t < TYPE_MAX; ++t)
+    for (unsigned int f = 0; f < families; ++f)
+      {
+	prototype_index p = f == 0 ? PROTO_M_EXTRACT_COLUMN
+	  : f == 1 ? PROTO_A_M_COLUMN
+	  : matmul_prototype (1 + (f - 2) % (matmul_shape_count - 1));
+	expansion_index e = f == 0 ? EXPAND_MEXTRACT : f == 1 ? EXPAND_A_FROM_M
+	  : operations[(f - 2) / (matmul_shape_count - 1)];
+	unsigned int code = expected[t * families + f];
+	ASSERT_EQ (redirect_builtin_code (p, e, static_cast<type_index> (t)),
+		   code ? code - 1 : ZTT_BUILTIN_MAX);
+      }
+  for (unsigned int t = TYPE_MAX; t > 0; --t)
+    {
+      unsigned int code = expected[(t - 1) * families];
+      /* Column matching has never depended on the expansion field.  */
+      ASSERT_EQ (redirect_builtin_code (PROTO_M_EXTRACT_COLUMN, EXPAND_A_MMUL,
+				       static_cast<type_index> (t - 1)),
+		 code ? code - 1 : ZTT_BUILTIN_MAX);
+    }
+  ASSERT_EQ (redirect_builtin_code (PROTO_M_M_M, EXPAND_MADD_EW, TYPE_I8_RNU_1X1),
+	     ZTT_BUILTIN_MAX);
+  ASSERT_EQ (redirect_builtin_code (PROTO_A_A_M_M_Q2_RC, EXPAND_MADD_EW,
+				   TYPE_I8_RNU_ACCX1), ZTT_BUILTIN_MAX);
+}
+
+static void
 run_store_lookup_selftests ()
 {
   using namespace selftest;
@@ -3444,6 +3546,7 @@ run_wide_signature_selftests ()
   ASSERT_EQ (other.get (conversion_code_base), integer_zero_node);
   run_matrix_type_index_selftests ();
   run_store_lookup_selftests ();
+  run_redirect_lookup_selftests ();
   run_profile_lookup_selftests ();
   run_type_nregs_selftests ();
   run_scalar_datatype_name_selftests ();
@@ -6329,10 +6432,12 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
 	return NULL_TREE;
       if (type_for_tree (TREE_TYPE (arg))
 	  == m_utility_source_type (PROTO_M_EXTRACT_COLUMN, d.type))
-	for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
-	  if (builtin_description_for (i).type == d.type
-	      && builtin_description_for (i).prototype == PROTO_M_EXTRACT_COLUMN)
-	    return builtin_decl (i, true);
+	{
+	  unsigned int redirected
+	    = redirect_builtin_code (PROTO_M_EXTRACT_COLUMN, d.expansion, d.type);
+	  if (redirected < ZTT_BUILTIN_MAX)
+	    return builtin_decl (redirected, true);
+	}
       return NULL_TREE;
     }
   if (d.prototype == PROTO_A_A_M_M && args->length () == 3)
@@ -6383,19 +6488,24 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
 	  || lhs.descriptor != types[d.type].descriptor
 	  || rhs.descriptor != types[d.type].descriptor)
 	return NULL_TREE;
-      for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+
+      unsigned int redirected = ZTT_BUILTIN_MAX;
+      for (unsigned int i = 1; i < matmul_shape_count; ++i)
 	{
-	  const auto &candidate = builtin_description_for (i);
-	  if (candidate.type != d.type || candidate.expansion != d.expansion)
-	    continue;
-	  const auto *shape = matmul_shape (candidate.prototype);
-	  if (shape && shape->squares > 1
-	      && lhs.rows == (shape->lhs_column ? shape->squares : 1)
+	  prototype_index prototype = matmul_prototype (i);
+	  const auto *shape = matmul_shape (prototype);
+	  if (lhs.rows == (shape->lhs_column ? shape->squares : 1)
 	      && lhs.columns == (shape->lhs_column ? 1 : shape->squares)
 	      && rhs.rows == (shape->rhs_column ? shape->squares : 1)
 	      && rhs.columns == (shape->rhs_column ? 1 : shape->squares))
-	    return builtin_decl (i, true);
+	    {
+	      unsigned int candidate
+		= redirect_builtin_code (prototype, d.expansion, d.type);
+	      redirected = MIN (redirected, candidate);
+	    }
 	}
+      if (redirected < ZTT_BUILTIN_MAX)
+	return builtin_decl (redirected, true);
       return NULL_TREE;
     }
   if (d.prototype == PROTO_A_M && types[d.type].columns > 1
@@ -6409,10 +6519,12 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
 	  && types[actual].descriptor == types[d.type].descriptor
 	  && types[actual].rows == types[d.type].columns
 	  && types[actual].columns == 1)
-	for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
-	  if (builtin_description_for (i).type == d.type
-	      && builtin_description_for (i).prototype == PROTO_A_M_COLUMN)
-	    return builtin_decl (i, true);
+	{
+	  unsigned int redirected
+	    = redirect_builtin_code (PROTO_A_M_COLUMN, d.expansion, d.type);
+	  if (redirected < ZTT_BUILTIN_MAX)
+	    return builtin_decl (redirected, true);
+	}
       return NULL_TREE;
     }
   if (!store_dispatch_p (code)
