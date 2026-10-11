@@ -57,6 +57,7 @@ with GCC; see the file COPYING3.  If not see
 #include "dce.h"
 #include "output.h"
 #include "selftest.h"
+#include "selftest-rtl.h"
 
 namespace riscv_ztt {
 
@@ -10422,6 +10423,58 @@ md_scalar_insn_p (rtx pattern)
   return true;
 }
 
+/* Remember one complete private spill until its inputs or memory change.  */
+class local_raw_spill
+{
+  rtx reg = nullptr;
+  rtx mem = nullptr;
+
+  static bool private_slot_p (rtx x)
+  {
+    return MEM_P (x) && !MEM_VOLATILE_P (x) && MEM_NOTRAP_P (x)
+      && MEM_EXPR (x) && MEM_EXPR (x) == get_spill_slot_decl (false)
+      && MEM_OFFSET_KNOWN_P (x) && MEM_SIZE_KNOWN_P (x)
+      && known_eq (MEM_SIZE (x), GET_MODE_SIZE (GET_MODE (x)));
+  }
+
+public:
+  void clear () { reg = mem = nullptr; }
+
+  bool redundant_reload_p (rtx pattern)
+  {
+    if (md_raw_transfer_p (pattern))
+      {
+	rtx dest = SET_DEST (pattern), src = SET_SRC (pattern);
+	if (MEM_P (dest) && private_slot_p (dest))
+	  {
+	    reg = src;
+	    mem = dest;
+	    return false;
+	  }
+	if (mem && private_slot_p (src) && rtx_equal_p (reg, dest)
+	    && rtx_equal_p (mem, src)
+	    && known_eq (MEM_OFFSET (mem), MEM_OFFSET (src)))
+	  return true;
+	clear ();
+	return false;
+      }
+    if (mem)
+      {
+	if (GET_CODE (pattern) == SET
+	    && local_md_state::full_gpr_p (SET_DEST (pattern))
+	    && !fixed_regs[REGNO (SET_DEST (pattern))]
+	    && !global_regs[REGNO (SET_DEST (pattern))]
+	    && REGNO (SET_DEST (pattern)) != HARD_FRAME_POINTER_REGNUM
+	    && !reg_overlap_mentioned_p (SET_DEST (pattern), XEXP (mem, 0))
+	    && !contains_mem_rtx_p (pattern) && !side_effects_p (pattern)
+	    && md_scalar_insn_p (pattern))
+	  return false;
+	clear ();
+      }
+    return false;
+  }
+};
+
 /* Standard integer zero has an all-zero representation.  */
 static unsigned int
 integer_zero_width (rtx descriptor)
@@ -10571,12 +10624,28 @@ reuse_cleaned_descriptors ()
   FOR_EACH_BB_FN (bb, cfun)
     {
       local_md_state state;
+      local_raw_spill spill;
       rtx_insn *insn, *next;
       FOR_BB_INSNS_SAFE (bb, insn, next)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
 	  int code = recog_memoized (insn);
+	  if (explicit_state && NONJUMP_INSN_P (insn)
+	      && !RTX_FRAME_RELATED_P (insn) && code >= 0)
+	    {
+	      if (spill.redundant_reload_p (PATTERN (insn)))
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Drop redundant raw reload at insn %d\n",
+			     INSN_UID (insn));
+		  delete_insn (insn);
+		  changed = true;
+		  continue;
+		}
+	    }
+	  else
+	    spill.clear ();
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
@@ -11222,6 +11291,60 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx mem = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 10));
+    set_mem_attrs_for_spill (mem);
+    rtx store = gen_rtx_SET (mem, reg), load = gen_rtx_SET (reg, mem);
+    local_raw_spill spill;
+    ASSERT_FALSE (spill.redundant_reload_p (load));
+    ASSERT_FALSE (spill.redundant_reload_p (store));
+    ASSERT_TRUE (spill.redundant_reload_p (load));
+    ASSERT_FALSE (spill.redundant_reload_p
+	(gen_rtx_SET (gen_rtx_REG (Pmode, 11), GEN_INT (32))));
+    ASSERT_TRUE (spill.redundant_reload_p (load));
+    spill.clear ();
+    ASSERT_FALSE (spill.redundant_reload_p (load));
+    for (unsigned int test = 0; test != 8; ++test)
+      {
+	rtx other = copy_rtx (mem);
+	switch (test)
+	  {
+	  case 0: MEM_VOLATILE_P (other) = 1; break;
+	  case 1: MEM_NOTRAP_P (other) = 0; break;
+	  case 2: set_mem_expr (other, NULL_TREE); break;
+	  case 3: clear_mem_offset (other); break;
+	  case 4: clear_mem_size (other); break;
+	  case 5: set_mem_size (other, 1); break;
+	  case 6: set_mem_offset (other, 16); break;
+	  case 7: XEXP (other, 0) = gen_rtx_REG (Pmode, 11); break;
+	  }
+	spill.clear ();
+	ASSERT_FALSE (spill.redundant_reload_p (store));
+	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (reg, other)));
+	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (other, reg)));
+	ASSERT_FALSE (spill.redundant_reload_p (load));
+      }
+    rtx other_reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+    rtx addr = XEXP (mem, 0);
+    for (rtx gap : {
+	   gen_rtx_SET (addr, GEN_INT (16)),
+	   gen_rtx_SET (gen_rtx_REG (SImode, 10), const0_rtx),
+	   gen_rtx_SET (stack_pointer_rtx, addr),
+	   gen_rtx_SET (hard_frame_pointer_rtx, addr),
+	   gen_rtx_SET (reg, other_reg),
+	   gen_rtx_SET (other_reg, mem),
+	   gen_rtx_SET (gen_rtx_MEM (Pmode, addr), const0_rtx),
+	   gen_rtx_SET (gen_rtx_REG (Pmode, 11), gen_rtx_MEM (Pmode, addr)),
+	   gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, addr), UNSPECV_ZTT),
+	   gen_rtx_ASM_INPUT (VOIDmode, "") })
+      {
+	ASSERT_FALSE (spill.redundant_reload_p (store));
+	ASSERT_FALSE (spill.redundant_reload_p (gap));
+	ASSERT_FALSE (spill.redundant_reload_p (load));
+      }
+  }
   for (int code : { UNSPECV_ZTT_STATE_ELEMENTWISE_X,
 		   UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE,
 		   UNSPECV_ZTT_STATE_TERNARY_X,

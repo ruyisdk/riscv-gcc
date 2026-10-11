@@ -235,7 +235,13 @@ Retained TC writes in prepared scalar SETs also establish materialization
 witnesses in this scan.  Eliminated TC writes do not establish a witness.
 All required TC writes and their values are retained.
 Recognized singleton raw loads/stores preserve descriptor GPR facts in
-this scan, as in the main Md scan; the transfers themselves are unchanged.
+this scan, as in the main Md scan.
+The scan also removes a singleton raw reload of the unchanged register
+from its most recent private spill.  Both accesses must be nonvolatile,
+nontrapping spill-slot MEMs with identical addresses and known full sizes
+and offsets.  Only unrelated ordinary GPR SETs may intervene.  The store
+remains; frame operations, fixed/global register definitions, memory or
+matrix operations and unknown patterns end this spill fact.
 Repeated pure Pmode definitions of a surviving descriptor are removed
 only when the full value is unchanged.  Fixed/global registers, partial
 definitions and frame-related instructions retain their definitions.
