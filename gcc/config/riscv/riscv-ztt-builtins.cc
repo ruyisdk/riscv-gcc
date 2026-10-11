@@ -1932,23 +1932,45 @@ form_elementwise (unsigned int dst, unsigned int data, unsigned int count,
 }
 
 static unsigned int
-type_nregs (type_index type)
+type_nregs_for_profile (type_index type, const profile_info &profile)
 {
   const auto &t = types[type];
+  const bool runtime = profile.n == 0;
   if ((extended_integer_p (t.descriptor)
-       || floating_descriptor_p (t.descriptor)) && !runtime_profile_p ())
+       || floating_descriptor_p (t.descriptor)) && !runtime)
     return 0;
   if (t.accumulator)
-    return (acc_profile_p ()
+    return (runtime && profile.accregs
 	    && acc_shape_supported_p (t.descriptor & 0xff, t.columns,
-				      active_profile ()->uds,
-				      active_profile ()->accregs)
+				      profile.uds, profile.accregs)
 	    ? t.columns : 0);
-  if (p0_profile_p () && t.rows * t.columns != 1)
+  if (!runtime && t.rows * t.columns != 1)
     return 0;
   return m_shape_nregs (t.descriptor & 0xff, t.rows * t.columns,
-			active_profile ()->uds,
-			runtime_profile_p () ? active_profile ()->mregs : 4);
+			profile.uds, runtime ? profile.mregs : 4);
+}
+
+static unsigned int
+type_nregs (type_index type)
+{
+  static const profile_info *cached_profile;
+  static unsigned char counts[TYPE_MAX];
+  const profile_info *profile = active_profile ();
+  if (profile != cached_profile)
+    {
+      memset (counts, 0, sizeof (counts));
+      cached_profile = profile;
+    }
+  if (!profile)
+    return 0;
+  /* Store the count plus one so unavailable types also hit the cache.  */
+  if (!counts[type])
+    {
+      unsigned int count = type_nregs_for_profile (type, *profile);
+      gcc_assert (count <= M_REG_NUM);
+      counts[type] = count + 1;
+    }
+  return counts[type] - 1;
 }
 
 static machine_mode
@@ -3261,6 +3283,35 @@ run_profile_lookup_selftests ()
 }
 
 static void
+run_type_nregs_selftests ()
+{
+  using namespace selftest;
+  const char *saved_profile = riscv_ztt_profile_string;
+  for (unsigned int reverse : { 0U, 1U })
+    for (unsigned int p = 0; p < ARRAY_SIZE (profiles); ++p)
+      {
+	unsigned int index = reverse ? ARRAY_SIZE (profiles) - 1 - p : p;
+	const auto &profile = profiles[index];
+	riscv_ztt_profile_string = profile.name;
+	for (unsigned int repeat = 0; repeat < 2; ++repeat)
+	  for (unsigned int i = 0; i < TYPE_MAX; ++i)
+	    {
+	      type_index type = static_cast<type_index> (i);
+	      ASSERT_EQ (type_nregs (type),
+			 type_nregs_for_profile (type, profile));
+	    }
+	riscv_ztt_profile_string = nullptr;
+	ASSERT_EQ (type_nregs (TYPE_I8_RNU_1X1), 0U);
+	riscv_ztt_profile_string = "invalid";
+	ASSERT_EQ (type_nregs (TYPE_I8_RNU_1X1), 0U);
+	riscv_ztt_profile_string = profile.name;
+	ASSERT_EQ (type_nregs (TYPE_I8_RNU_1X1),
+		   type_nregs_for_profile (TYPE_I8_RNU_1X1, profile));
+      }
+  riscv_ztt_profile_string = saved_profile;
+}
+
+static void
 run_scalar_datatype_name_selftests ()
 {
   using namespace selftest;
@@ -3355,6 +3406,7 @@ run_wide_signature_selftests ()
   run_matrix_type_index_selftests ();
   run_store_lookup_selftests ();
   run_profile_lookup_selftests ();
+  run_type_nregs_selftests ();
   run_scalar_datatype_name_selftests ();
   run_scalar_full_name_selftests ();
   run_acc_shared_source_selftests ();

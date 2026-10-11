@@ -86,6 +86,9 @@ Datatype name fragments are cached by descriptor and alias kind.  The
 profile-independent cache contains text only; declarations, type nodes
 and availability remain under the existing registration rules.
 
+Type register counts are cached for the active profile and cleared when
+it changes.  The cache contains counts only, not trees or modes.
+
 The exponent Scalar catalog uses ZTT_EXPONENT_FAMILY to store family
 descriptors and a shared type axis.  Expansion remains operation-major,
 type-minor to preserve builtin codes and LTO identities.  Names are built
