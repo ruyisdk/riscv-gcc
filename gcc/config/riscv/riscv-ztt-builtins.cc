@@ -28,6 +28,7 @@ with GCC; see the file COPYING3.  If not see
 #include "rtl-iter.h"
 #include "tree.h"
 #include "ggc.h"
+#include "hash-map.h"
 #include "memmodel.h"
 #include "insn-codes.h"
 #include "optabs.h"
@@ -1149,13 +1150,34 @@ static_assert (q32_code_base
 		 * mixed_dtype_count * mixed_dtype_count
 	       <= (UINT_MAX >> RISCV_BUILTIN_SHIFT));
 
-struct GTY (()) mixed_builtin
+struct builtin_decl_traits
+  : simple_hashmap_traits<int_hash<unsigned, 0>, tree> {};
+typedef hash_map<unsigned, tree, builtin_decl_traits> builtin_decl_map;
+
+/* Allocate only for resolved calls; keep declarations reachable through PCH.  */
+struct GTY (()) builtin_decl_cache
 {
-  unsigned int code;
-  tree decl;
+  builtin_decl_map *entries;
+
+  tree get (unsigned int code) const
+  {
+    if (entries)
+      if (tree *decl = entries->get (code))
+	return *decl;
+    return NULL_TREE;
+  }
+
+  tree put (unsigned int code, tree decl)
+  {
+    gcc_assert (code != 0);
+    if (!entries)
+      entries = builtin_decl_map::create_ggc ();
+    entries->put (code, decl);
+    return decl;
+  }
 };
 
-static GTY (()) vec<mixed_builtin, va_gc> *mixed_builtin_decls;
+static GTY (()) builtin_decl_cache mixed_builtin_decls;
 
 /* Preserve the range and
    radices originally used by shifts; 24 is a scalar shift count only.  */
@@ -1202,7 +1224,7 @@ static constexpr unsigned int elementwise_anchor_limit = elementwise_code_limit 
 static_assert (ZTT_BUILTIN_MAX < elementwise_code_base);
 static_assert (elementwise_code_base + elementwise_anchor_limit * 24U * 25U
 	       < mixed_code_base);
-static GTY (()) vec<mixed_builtin, va_gc> *elementwise_builtin_decls;
+static GTY (()) builtin_decl_cache elementwise_builtin_decls;
 
 /* Do not reuse the scalar
    shift sentinel or alter any existing lazy-code radix.  */
@@ -1210,7 +1232,7 @@ static constexpr unsigned int conversion_code_base = 1U << 27;
 static_assert (ZTT_BUILTIN_MAX < conversion_code_base);
 static_assert (conversion_code_base + ZTT_BUILTIN_MAX * 24U
 	       < elementwise_code_base);
-static GTY (()) vec<mixed_builtin, va_gc> *conversion_builtin_decls;
+static GTY (()) builtin_decl_cache conversion_builtin_decls;
 
 /* TC is in the public
    anchor; resolve TB lazily without changing earlier code ranges.  */
@@ -1224,7 +1246,7 @@ static_assert (ZTT_BUILTIN_MAX < scalar_code_base);
 static_assert (scalar_code_base + ZTT_BUILTIN_MAX * 24U
 	       < wide_matmul_code_base);
 static_assert (wide_matmul_code_limit < conversion_code_base);
-static GTY (()) vec<mixed_builtin, va_gc> *scalar_builtin_decls;
+static GTY (()) builtin_decl_cache scalar_builtin_decls;
 
 static bool
 wide_matmul_code_p (unsigned int code)
@@ -1376,7 +1398,7 @@ static_assert (integer_matrix_code_base + integer_matrix_code_count
 	       < integer_matmul_code_base);
 static_assert (integer_matmul_code_base + integer_matmul_code_count
 	       < scalar_code_base);
-static GTY (()) vec<mixed_builtin, va_gc> *integer_matmul_decls;
+static GTY (()) builtin_decl_cache integer_matmul_decls;
 
 /* Broadcast has no M input.
    Keep its typed public signatures separate from the legacy anchor table.
@@ -3407,6 +3429,19 @@ void
 run_wide_signature_selftests ()
 {
   using namespace selftest;
+  builtin_decl_cache cache = {}, other = {};
+  ASSERT_EQ (cache.get (conversion_code_base), NULL_TREE);
+  ASSERT_EQ (cache.entries, nullptr);
+  for (unsigned int i = 0; i < 256; ++i)
+    ASSERT_EQ (cache.put (conversion_code_base + i * 257, integer_one_node),
+	       integer_one_node);
+  other.put (conversion_code_base, integer_zero_node);
+  for (unsigned int i = 256; i-- > 0;)
+    {
+      ASSERT_EQ (cache.get (conversion_code_base + i * 257), integer_one_node);
+      ASSERT_EQ (cache.get (conversion_code_base + i * 257 + 1), NULL_TREE);
+    }
+  ASSERT_EQ (other.get (conversion_code_base), integer_zero_node);
   run_matrix_type_index_selftests ();
   run_store_lookup_selftests ();
   run_profile_lookup_selftests ();
@@ -4908,9 +4943,8 @@ integer_matmul_builtin_decl (unsigned int code)
     return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
-  for (unsigned int i = 0; i < vec_safe_length (integer_matmul_decls); ++i)
-    if ((*integer_matmul_decls)[i].code == code)
-      return (*integer_matmul_decls)[i].decl;
+  if (tree decl = integer_matmul_decls.get (code))
+    return decl;
   tree dst = ztt_m_type_nodes[s.dst];
   tree lhs = ztt_m_type_nodes[integer_matrix_carrier (s.lhs)];
   tree rhs = ztt_m_type_nodes[integer_matrix_carrier (s.rhs)];
@@ -4923,8 +4957,7 @@ integer_matmul_builtin_decl (unsigned int code)
   tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  vec_safe_push (integer_matmul_decls, mixed_builtin { code, decl });
-  return decl;
+  return integer_matmul_decls.put (code, decl);
 }
 
 static bool
@@ -5065,9 +5098,8 @@ conversion_builtin_decl (unsigned int code, bool initialize_p)
     return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
-  for (unsigned int i = 0; i < vec_safe_length (conversion_builtin_decls); ++i)
-    if ((*conversion_builtin_decls)[i].code == code)
-      return (*conversion_builtin_decls)[i].decl;
+  if (tree decl = conversion_builtin_decls.get (code))
+    return decl;
   if (!initialize_p)
     return error_mark_node;
   tree ftype = build_function_type_list
@@ -5082,9 +5114,7 @@ conversion_builtin_decl (unsigned int code, bool initialize_p)
   tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  mixed_builtin entry = { code, decl };
-  vec_safe_push (conversion_builtin_decls, entry);
-  return decl;
+  return conversion_builtin_decls.put (code, decl);
 }
 
 static bool
@@ -5140,9 +5170,8 @@ scalar_builtin_decl (unsigned int code, bool initialize_p)
     return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
-  for (unsigned int i = 0; i < vec_safe_length (scalar_builtin_decls); ++i)
-    if ((*scalar_builtin_decls)[i].code == code)
-      return (*scalar_builtin_decls)[i].decl;
+  if (tree decl = scalar_builtin_decls.get (code))
+    return decl;
   if (!initialize_p)
     return error_mark_node;
   const auto &canonical = builtin_description_for (d.canonical);
@@ -5159,9 +5188,7 @@ scalar_builtin_decl (unsigned int code, bool initialize_p)
   tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  mixed_builtin entry = { code, decl };
-  vec_safe_push (scalar_builtin_decls, entry);
-  return decl;
+  return scalar_builtin_decls.put (code, decl);
 }
 
 static tree
@@ -5172,9 +5199,8 @@ elementwise_builtin_decl (unsigned int code, bool initialize_p)
     return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
-  for (unsigned int i = 0; i < vec_safe_length (elementwise_builtin_decls); ++i)
-    if ((*elementwise_builtin_decls)[i].code == code)
-      return (*elementwise_builtin_decls)[i].decl;
+  if (tree decl = elementwise_builtin_decls.get (code))
+    return decl;
   if (!initialize_p)
     return error_mark_node;
   const auto &canonical = builtin_description_for (d.canonical);
@@ -5195,9 +5221,7 @@ elementwise_builtin_decl (unsigned int code, bool initialize_p)
   tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  mixed_builtin entry = { code, decl };
-  vec_safe_push (elementwise_builtin_decls, entry);
-  return decl;
+  return elementwise_builtin_decls.put (code, decl);
 }
 
 static unsigned int
@@ -5243,9 +5267,8 @@ mixed_builtin_decl (unsigned int code, bool initialize_p)
      only validates its deterministic code and active profile.  */
   if (in_lto_p)
     return integer_zero_node;
-  for (unsigned int i = 0; i < vec_safe_length (mixed_builtin_decls); ++i)
-    if ((*mixed_builtin_decls)[i].code == code)
-      return (*mixed_builtin_decls)[i].decl;
+  if (tree decl = mixed_builtin_decls.get (code))
+    return decl;
   if (!initialize_p)
     return error_mark_node;
   tree result = ztt_m_type_nodes[builtin_description_for (d.canonical).type];
@@ -5259,9 +5282,7 @@ mixed_builtin_decl (unsigned int code, bool initialize_p)
     (name, ftype,
      (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  mixed_builtin entry = { code, decl };
-  vec_safe_push (mixed_builtin_decls, entry);
-  return decl;
+  return mixed_builtin_decls.put (code, decl);
 }
 
 /* Build the default spelling from an eligible public catalog entry.  The
