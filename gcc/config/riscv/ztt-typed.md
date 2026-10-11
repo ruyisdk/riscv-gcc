@@ -722,7 +722,7 @@
            (match_operand 2 "register_operand" "r")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
-           (match_operand:P 5 "register_operand" "r")
+           (match_operand:P 5 "reg_or_0_operand" "rJ")
            (match_operand:P 7 "reg_or_0_operand" "rJ")
            (match_operand 8 "const_int_operand" "n")
            (match_operand 9 "const_int_operand" "n")
@@ -736,7 +736,8 @@
    && (reload_completed || operands[12] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))
-   && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[8]), true)"
+   && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[8]), true)
+   && (REG_P (operands[5]) || UINTVAL (operands[8]) == 4)"
 {
   return riscv_ztt::output_scalar_ternary_state (operands);
 }
@@ -810,7 +811,7 @@
            (match_operand 2 "register_operand" "<ztt_common_rhs>")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
-           (match_operand:P 5 "register_operand" "r")
+           (match_operand:P 5 "reg_or_0_operand" "rJ")
            (match_operand 6 "const_int_operand" "n")
            (match_operand 7 "const_int_operand" "n")
            (match_operand:ZTT_M 8 "register_operand" "0")]
@@ -820,6 +821,8 @@
    && (<ztt_common_scalar>
        ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[6]), true)
        : riscv_ztt::m_mode_p (GET_MODE (operands[2])))
+   && (REG_P (operands[5])
+       || (<ztt_common_scalar> && UINTVAL (operands[6]) == 4))
    && riscv_ztt::common_prepared_operands_p (operands, <ztt_common_scalar>)"
 {
   return riscv_ztt::output_common_prepared (operands, <ztt_common_code>);

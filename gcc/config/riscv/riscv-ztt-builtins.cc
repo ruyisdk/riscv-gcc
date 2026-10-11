@@ -9636,7 +9636,8 @@ lower_explicit_state ()
 	    unsigned int steps = pack_datatype_steps (groups[0], groups[1], groups[2]);
 	    if (code == UNSPEC_ZTT_TERNARY_X)
 	      {
-		bool reuse = nregs > 4 && UINTVAL (XVECEXP (src, 0, 2)) == 4
+		bool exponent = UINTVAL (XVECEXP (src, 0, 2)) == 4;
+		bool reuse = nregs > 4 && exponent
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
 		emit_insn (gen_ztt_state_ternary_x
@@ -9645,7 +9646,7 @@ lower_explicit_state ()
 			    mode, Pmode, dest, XVECEXP (src, 0, 0),
 			    XVECEXP (src, 0, 1), descriptor,
 			    reuse ? descriptor : force_reg (Pmode, XVECEXP (src, 0, 3)),
-			    force_reg (Pmode, XVECEXP (src, 0, 4)),
+			    exponent ? const0_rtx : force_reg (Pmode, XVECEXP (src, 0, 4)),
 			    scratch, stride ? stride : const0_rtx,
 			    XVECEXP (src, 0, 2), GEN_INT (steps),
 			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
@@ -10000,6 +10001,29 @@ public:
 		    descriptor))
 	return false;
     return true;
+  }
+
+  unsigned int prepared_inputs (rtx *groups, rtx *descriptors,
+				unsigned int steps, bool scalar, bool old_dest) const
+  {
+    unsigned int prepared = 0;
+    unsigned int first = old_dest ? 0 : 1;
+    for (unsigned int i = first; i < (scalar ? 2U : 3U); ++i)
+      {
+	unsigned int step = datatype_step (steps, i);
+	bool ready = matches_packets (groups[i], descriptors[i], step);
+	/* Follow actual setup order, including an earlier identical operand.  */
+	for (unsigned int j = first; j < i; ++j)
+	  if (!(prepared & (1U << j))
+	      && reg_overlap_mentioned_p (groups[i], groups[j]))
+	    ready = rtx_equal_p (groups[i], groups[j])
+	      && step && step == datatype_step (steps, j)
+	      && rtx_equal_p (descriptor_value (descriptors[i]),
+			      descriptor_value (descriptors[j]));
+	if (ready)
+	  prepared |= 1U << i;
+      }
+    return prepared;
   }
 
   void remember (rtx group, rtx descriptor)
@@ -10425,26 +10449,13 @@ reuse_local_md ()
 		    bool scalar = common_scalar_p (XINT (src, 1));
 		    bool prepared_p = GET_CODE (PATTERN (insn)) == SET;
 		    rtx steps = XVECEXP (src, 0, prepared_p ? 6 : 7);
-		    unsigned int prepared = 0;
-		    unsigned int first = old_dest ? 0 : 1;
 		    rtx regs[] = { SET_DEST (set), XVECEXP (src, 0, 0),
 				   XVECEXP (src, 0, 1) };
-		    for (unsigned int i = first;
-			 !prepared_p && i < (scalar ? 2U : 3U); ++i)
-		      {
-			unsigned int step = datatype_step (UINTVAL (steps), i);
-			if (!state.matches_packets (regs[i], XVECEXP (src, 0, 2 + i),
-					    step))
-			  continue;
-			/* Earlier preparation must not invalidate this packet.  */
-			bool untouched = true;
-			for (unsigned int j = first; j < i; ++j)
-			  if (!(prepared & (1U << j))
-			      && reg_overlap_mentioned_p (regs[i], regs[j]))
-			    untouched = false;
-			if (untouched)
-			  prepared |= 1U << i;
-		      }
+		    rtx descriptors[] = { XVECEXP (src, 0, 2), XVECEXP (src, 0, 3),
+					  XVECEXP (src, 0, 4) };
+		    unsigned int prepared = prepared_p ? 0
+		      : state.prepared_inputs (regs, descriptors, UINTVAL (steps),
+					       scalar, old_dest);
 		    if (!prepared_p && prepared)
 		      {
 			bool changed = false;
@@ -10930,6 +10941,50 @@ run_md_reuse_selftests ()
   ASSERT_FALSE (state.matches_packets (group, desc, 3));
   ASSERT_FALSE (state.matches_packets (desc, desc, 1));
   ASSERT_FALSE (state.matches_packets (const0_rtx, desc, 1));
+  for (unsigned int count : { 2U, 4U, 8U, 16U })
+    {
+      rtx whole = gen_rtx_REG (matrix_mode (count), M_REG_FIRST);
+      rtx apart = gen_rtx_REG (matrix_mode (count), M_REG_FIRST + count);
+      rtx part = gen_rtx_REG (matrix_mode (count / 2), M_REG_FIRST);
+      rtx groups[] = { whole, whole, apart };
+      rtx descriptors[] = { desc, desc, desc };
+      unsigned int steps = pack_datatype_steps (count, count, count);
+      state.clear ();
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, true, true), 2U);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, true, false), 0U);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, false, true), 2U);
+      state.remember (whole, desc);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, true, true), 3U);
+      state.clear ();
+      descriptors[1] = gen_rtx_REG (SImode, 11);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, true, true), 0U);
+      descriptors[1] = desc;
+      ASSERT_EQ (state.prepared_inputs (groups, descriptors,
+	pack_datatype_steps (count, count / 2), true, true), 0U);
+      groups[1] = apart;
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, true, true), 0U);
+      groups[2] = whole;
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, false, true), 4U);
+      groups[1] = whole;
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, false, true), 6U);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, steps, false, false), 4U);
+      groups[1] = part;
+      unsigned int partial_steps = pack_datatype_steps (count, count / 2, count);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, partial_steps, false, true), 0U);
+      state.remember (whole, desc);
+      ASSERT_EQ (state.prepared_inputs
+	(groups, descriptors, partial_steps, false, true), 1U);
+    }
   riscv_ztt_profile_string = saved_profile;
   ASSERT_FALSE (md_scalar_insn_p (gen_rtx_ASM_INPUT (VOIDmode, "")));
   ASSERT_FALSE (md_scalar_insn_p (gen_rtx_POST_INC (SImode, desc)));
@@ -11042,6 +11097,17 @@ run_md_reuse_selftests ()
   state.record_constant (a, dtype);
   state.record_constant (b, dtype);
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  rtx shared[] = { group, group };
+  rtx descriptors[] = { a, b };
+  unsigned int steps = pack_datatype_steps (2, 2);
+  ASSERT_EQ (state.prepared_inputs
+    (shared, descriptors, steps, true, true), 2U);
+  state.record_constant (a, GEN_INT (0x40000021));
+  ASSERT_EQ (state.prepared_inputs
+    (shared, descriptors, steps, true, true), 0U);
+  state.invalidate (a);
+  ASSERT_EQ (state.prepared_inputs
+    (shared, descriptors, steps, true, true), 0U);
 }
 #endif
 
