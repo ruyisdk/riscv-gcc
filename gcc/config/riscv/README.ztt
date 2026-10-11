@@ -226,6 +226,10 @@ load.  Fixed/global registers and instruction clobbers are excluded.  Multiple
 descriptor substitutions in one consumer are validated together; scalar TC
 and control operands are not changed.  Dead materialization and register
 notes are updated after substitution.
+After dead workspace calculations are removed, one further descriptor scan
+handles prepared common and unary SETs.  It can recover constants hidden by
+the removed GPR definitions; calls, asm, parallel and unknown operations
+stop reuse.  It does not repeat state preparation or scalar TC elimination.
 Typed integer and canonical FP16/BF16/FP32/FP64 zero construction reuses
 the bit clear performed by msettyp for a known descriptor and a complete
 group.  Other descriptors and raw zeros retain their instructions.

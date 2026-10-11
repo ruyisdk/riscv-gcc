@@ -10541,6 +10541,71 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
   return true;
 }
 
+/* DCE can remove workspace calculations that killed descriptor GPRs.  */
+static bool
+reuse_cleaned_descriptors ()
+{
+  bool changed = false;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      local_md_state state;
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  int code = recog_memoized (insn);
+	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
+	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
+	    continue;
+	  rtx pattern = PATTERN (insn);
+	  if (!NONJUMP_INSN_P (insn) || GET_CODE (pattern) != SET)
+	    {
+	      state.clear ();
+	      continue;
+	    }
+	  rtx src = SET_SRC (pattern);
+	  if (GET_CODE (src) == UNSPEC_VOLATILE && code >= 0)
+	    {
+	      switch (XINT (src, 1))
+		{
+		case UNSPECV_ZTT_STATE_LOAD:
+		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
+		  state.note_load_descriptor
+		    (XVECEXP (src, 0, XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD
+				      ? 1 : 3));
+		  note_stores (insn, invalidate_md_store, &state);
+		  continue;
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+		case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+		case UNSPECV_ZTT_STATE_TERNARY:
+		case UNSPECV_ZTT_STATE_TERNARY_X:
+		case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
+		case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
+		  changed |= reuse_typed_descriptors (insn, src, state);
+		  note_stores (insn, invalidate_md_store, &state);
+		  continue;
+		default:
+		  break;
+		}
+	    }
+	  if (md_scalar_insn_p (pattern))
+	    {
+	      rtx dest = SET_DEST (pattern);
+	      rtx value = local_md_state::full_gpr_p (dest)
+		? state.constant_value (src) : NULL_RTX;
+	      note_stores (insn, invalidate_md_store, &state);
+	      if (value)
+		state.record_constant (dest, value);
+	    }
+	  else
+	    state.clear ();
+	}
+    }
+  return changed;
+}
+
 /* Reuse Md within each block after scheduling and register allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -11093,6 +11158,13 @@ reuse_local_md ()
     }
   if (cleanup)
     {
+      if (reuse_cleaned_descriptors ())
+	{
+	  descriptor_cleanup = true;
+	  run_fast_dce ();
+	  if (dump_file)
+	    fprintf (dump_file, "Reuse descriptors after workspace cleanup\n");
+	}
       if (descriptor_cleanup)
 	{
 	  df_note_add_problem ();
