@@ -7684,23 +7684,63 @@ inverse_zip_value (const builtin_description &d,
   return parent;
 }
 
+/* Keep the index constructor, including its range and ownership checks.  */
+static tree
+identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  elementwise_description operation;
+  if (gimple_call_num_args (stmt) != 2
+      || !decode_elementwise_builtin (code, operation))
+    return NULL_TREE;
+  const auto d = builtin_description_for (operation.canonical);
+  if (d.prototype != PROTO_M_GATHER
+      || floating_descriptor_p (types[d.type].descriptor)
+      || floating_descriptor_p (types[operation.count].descriptor))
+    return NULL_TREE;
+  tree data = gimple_call_arg (stmt, 0);
+  tree index = gimple_call_arg (stmt, 1);
+  if (TREE_CODE (data) != SSA_NAME || TREE_CODE (index) != SSA_NAME
+      || type_for_tree (TREE_TYPE (data)) != d.type
+      || type_for_tree (TREE_TYPE (gimple_call_lhs (stmt))) != d.type
+      || type_for_tree (TREE_TYPE (index)) != operation.count)
+    return NULL_TREE;
+  gimple *producer = SSA_NAME_DEF_STMT (index);
+  unsigned int source_code = structure_builtin_code (producer, 0);
+  if (source_code == ZTT_BUILTIN_MAX)
+    return NULL_TREE;
+  const auto source = builtin_description_for (source_code);
+  if (source.type != operation.count
+      || (d.expansion == EXPAND_MCOLGATHER_EW
+	  ? source.expansion != EXPAND_MCOLID_EW
+	  : source.expansion != EXPAND_MROWID_EW)
+      || !local_structure_producers_p (gsi, &producer, 1))
+    return NULL_TREE;
+  return data;
+}
+
 gimple *
 gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
-  if (!optimize || code >= ZTT_BUILTIN_MAX)
-    return nullptr;
-  const auto d = builtin_description_for (code);
-  bool zip = d.prototype == PROTO_M_M && zip_variant (d.expansion) >= 0;
-  if ((!zip && d.expansion != EXPAND_MEXTRACT && d.expansion != EXPAND_MCONCAT)
-      || gimple_call_num_args (stmt) != (zip ? 1 : 2) || !gimple_call_lhs (stmt)
-      || !TARGET_ZTT || !runtime_profile_p ())
+  if (!optimize || !TARGET_ZTT || !runtime_profile_p ()
+      || !gimple_call_lhs (stmt))
     return nullptr;
   tree lhs = gimple_call_lhs (stmt);
-  if (type_for_tree (TREE_TYPE (lhs)) != d.type)
-    return nullptr;
-  tree value = zip ? inverse_zip_value (d, gsi, stmt)
-    : d.expansion == EXPAND_MEXTRACT ? extracted_concat_value (d, gsi, stmt)
-    : rebuilt_pair_value (d, gsi, stmt);
+  tree value;
+  if (code >= ZTT_BUILTIN_MAX)
+    value = identity_gather_value (code, gsi, stmt);
+  else
+    {
+      const auto d = builtin_description_for (code);
+      bool zip = d.prototype == PROTO_M_M && zip_variant (d.expansion) >= 0;
+      if ((!zip && d.expansion != EXPAND_MEXTRACT
+	   && d.expansion != EXPAND_MCONCAT)
+	  || gimple_call_num_args (stmt) != (zip ? 1 : 2)
+	  || type_for_tree (TREE_TYPE (lhs)) != d.type)
+	return nullptr;
+      value = zip ? inverse_zip_value (d, gsi, stmt)
+	: d.expansion == EXPAND_MEXTRACT ? extracted_concat_value (d, gsi, stmt)
+	: rebuilt_pair_value (d, gsi, stmt);
+    }
   if (!value)
     return nullptr;
 

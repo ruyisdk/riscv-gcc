@@ -173,6 +173,14 @@ the original value live across the fold.  The forward window crosses only
 typed stores and local scalar assignments.  Earlier stores, nonlocal uses,
 live intermediates and later ownership-only witnesses do not qualify.
 
+Integer column/row gathers with the matching column/row index constructor
+can reuse their data input.  The constructor remains for ownership and
+index-range checks.  It must be in the preceding 16-statement local window;
+calls, memory accesses, asm and state changes prevent the fold.  The data
+and result must have the same complete basic-square type.  Floating and
+metadata-carrier calls, opposite axes and externally supplied indices keep
+their existing lowering.
+
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
 retain their bits, including zero signs and NaN payloads.  The move stays
