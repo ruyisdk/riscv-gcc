@@ -181,6 +181,10 @@ and result must have the same complete basic-square type.  Floating and
 metadata-carrier calls, opposite axes and externally supplied indices keep
 their existing lowering.
 
+The index may pass through up to four same-type M copies in that window.
+The constructor and copies remain as ownership witnesses.  Inner copy
+inputs require a single value use; other uses of the final index remain.
+
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
 retain their bits, including zero signs and NaN payloads.  The move stays

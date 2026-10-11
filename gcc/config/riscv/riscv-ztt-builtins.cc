@@ -7704,16 +7704,21 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
       || type_for_tree (TREE_TYPE (gimple_call_lhs (stmt))) != d.type
       || type_for_tree (TREE_TYPE (index)) != operation.count)
     return NULL_TREE;
+  gimple *producers[5];
+  unsigned int count = 0;
+  if (!strip_structure_copies (index, operation.count, producers, count, true))
+    return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (index);
   unsigned int source_code = structure_builtin_code (producer, 0);
   if (source_code == ZTT_BUILTIN_MAX)
     return NULL_TREE;
+  producers[count++] = producer;
   const auto source = builtin_description_for (source_code);
   if (source.type != operation.count
       || (d.expansion == EXPAND_MCOLGATHER_EW
 	  ? source.expansion != EXPAND_MCOLID_EW
 	  : source.expansion != EXPAND_MROWID_EW)
-      || !local_structure_producers_p (gsi, &producer, 1))
+      || !local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
   return data;
 }
