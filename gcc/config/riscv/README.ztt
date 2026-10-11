@@ -227,9 +227,13 @@ descriptor substitutions in one consumer are validated together; scalar TC
 and control operands are not changed.  Dead materialization and register
 notes are updated after substitution.
 After dead workspace calculations are removed, one further descriptor scan
-handles prepared common and unary SETs.  It can recover constants hidden by
-the removed GPR definitions; calls, asm, parallel and unknown operations
-stop reuse.  It does not repeat state preparation or scalar TC elimination.
+handles prepared common, unary and same-type binary SETs.  It can recover
+constants hidden by removed GPR definitions; calls, asm, parallel and unknown
+operations stop reuse.  It does not repeat state preparation or scalar TC
+elimination.
+Repeated pure Pmode definitions of a surviving load descriptor are removed
+only when the full value is unchanged.  Fixed/global registers, partial
+definitions and frame-related instructions retain their definitions.
 Typed integer and canonical FP16/BF16/FP32/FP64 zero construction reuses
 the bit clear performed by msettyp for a known descriptor and a complete
 group.  Other descriptors and raw zeros retain their instructions.

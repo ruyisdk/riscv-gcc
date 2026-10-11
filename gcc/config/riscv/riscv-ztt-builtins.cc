@@ -10266,6 +10266,14 @@ public:
       load_used[REGNO (reg) - GP_REG_FIRST] = true;
   }
 
+  bool redundant_descriptor_p (rtx reg, rtx value) const
+  {
+    return full_gpr_p (reg) && !fixed_regs[REGNO (reg)]
+      && !global_regs[REGNO (reg)] && load_used[REGNO (reg) - GP_REG_FIRST]
+      && value && CONST_INT_P (value)
+      && rtx_equal_p (descriptor_value (reg), value);
+  }
+
   rtx descriptor_register (rtx reg, const_rtx insn) const
   {
     if (!full_gpr_p (reg) || fixed_regs[REGNO (reg)]
@@ -10550,8 +10558,8 @@ reuse_cleaned_descriptors ()
   FOR_EACH_BB_FN (bb, cfun)
     {
       local_md_state state;
-      rtx_insn *insn;
-      FOR_BB_INSNS (bb, insn)
+      rtx_insn *insn, *next;
+      FOR_BB_INSNS_SAFE (bb, insn, next)
 	{
 	  if (!NONDEBUG_INSN_P (insn))
 	    continue;
@@ -10583,6 +10591,15 @@ reuse_cleaned_descriptors ()
 		case UNSPECV_ZTT_STATE_TERNARY_X:
 		case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
 		case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
+		case UNSPECV_ZTT_STATE_ADD:
+		case UNSPECV_ZTT_STATE_SUB:
+		case UNSPECV_ZTT_STATE_MIN:
+		case UNSPECV_ZTT_STATE_MAX:
+		case UNSPECV_ZTT_STATE_AND:
+		case UNSPECV_ZTT_STATE_ANDNOT:
+		case UNSPECV_ZTT_STATE_OR:
+		case UNSPECV_ZTT_STATE_ORNOT:
+		case UNSPECV_ZTT_STATE_XOR:
 		  changed |= reuse_typed_descriptors (insn, src, state);
 		  note_stores (insn, invalidate_md_store, &state);
 		  continue;
@@ -10595,6 +10612,16 @@ reuse_cleaned_descriptors ()
 	      rtx dest = SET_DEST (pattern);
 	      rtx value = local_md_state::full_gpr_p (dest)
 		? state.constant_value (src) : NULL_RTX;
+	      if (!RTX_FRAME_RELATED_P (insn)
+		  && state.redundant_descriptor_p (dest, value))
+		{
+		  if (dump_file)
+		    fprintf (dump_file, "Drop repeated descriptor definition at insn %d\n",
+			     INSN_UID (insn));
+		  delete_insn (insn);
+		  changed = true;
+		  continue;
+		}
 	      note_stores (insn, invalidate_md_store, &state);
 	      if (value)
 		state.record_constant (dest, value);
@@ -11514,16 +11541,25 @@ run_md_reuse_selftests ()
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
   state.note_load_descriptor (a);
   ASSERT_TRUE (rtx_equal_p (state.descriptor_register (b, use_b), a));
+  ASSERT_TRUE (state.redundant_descriptor_p (a, dtype));
+  ASSERT_FALSE (state.redundant_descriptor_p (b, dtype));
+  ASSERT_FALSE (state.redundant_descriptor_p (a, NULL_RTX));
+  ASSERT_FALSE (state.redundant_descriptor_p (a, b));
+  ASSERT_FALSE (state.redundant_descriptor_p (a, GEN_INT (0x40000021)));
+  ASSERT_FALSE (state.redundant_descriptor_p
+    (gen_rtx_REG (QImode, REGNO (a)), dtype));
   ASSERT_EQ (state.descriptor_register (a, use_b), a);
   ASSERT_EQ (state.descriptor_register (b, gen_rtx_CLOBBER (VOIDmode, a)), b);
   ASSERT_EQ (state.descriptor_register (b, gen_rtx_SET (b, const0_rtx)), b);
   auto saved_fixed = fixed_regs[REGNO (a)];
   fixed_regs[REGNO (a)] = 1;
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  ASSERT_FALSE (state.redundant_descriptor_p (a, dtype));
   fixed_regs[REGNO (a)] = saved_fixed;
   auto saved_global = global_regs[REGNO (a)];
   global_regs[REGNO (a)] = 1;
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  ASSERT_FALSE (state.redundant_descriptor_p (a, dtype));
   global_regs[REGNO (a)] = saved_global;
   state.record_constant (a, GEN_INT (0x40000021));
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
@@ -11535,8 +11571,10 @@ run_md_reuse_selftests ()
   state.record_constant (a, dtype);
   state.invalidate (gen_rtx_SUBREG (QImode, a, 0));
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  ASSERT_FALSE (state.redundant_descriptor_p (a, dtype));
   state.clear ();
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
+  ASSERT_FALSE (state.redundant_descriptor_p (a, dtype));
   state.record_constant (b, dtype);
   state.note_load_descriptor (b);
   state.record_constant (a, dtype);
