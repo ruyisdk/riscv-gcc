@@ -223,15 +223,18 @@ invalidate constants, and memory contents are not tracked.
 Typed loads and subsequent state operations can use an earlier-defined
 ordinary GPR holding the same full descriptor already consumed by a typed
 load.  Fixed/global registers and instruction clobbers are excluded.  Multiple
-descriptor substitutions in one consumer are validated together; scalar TC
-and control operands are not changed.  Dead materialization and register
-notes are updated after substitution.
+descriptor substitutions in one consumer are validated together, including
+full scalar TC values; control operands are unchanged.  Dead materialization
+and register notes are updated after substitution.
 After dead workspace calculations are removed, one further descriptor scan
 handles prepared common, unary and same-type binary SETs.  It can recover
 constants hidden by removed GPR definitions; calls, asm, parallel and unknown
 operations stop reuse.  It does not repeat state preparation or scalar TC
 elimination.
-Repeated pure Pmode definitions of a surviving load descriptor are removed
+Retained TC writes in prepared scalar SETs also establish materialization
+witnesses in this scan.  Eliminated TC writes do not establish a witness.
+All required TC writes and their values are retained.
+Repeated pure Pmode definitions of a surviving descriptor are removed
 only when the full value is unchanged.  Fixed/global registers, partial
 definitions and frame-related instructions retain their definitions.
 Typed integer and canonical FP16/BF16/FP32/FP64 zero construction reuses

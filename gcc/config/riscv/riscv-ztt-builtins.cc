@@ -8922,6 +8922,17 @@ common_scalar_p (int code)
     || code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE;
 }
 
+static bool
+common_data_scalar_p (rtx src, bool prepared)
+{
+  int code = XINT (src, 1);
+  if (!common_scalar_p (code))
+    return false;
+  unsigned int variant = UINTVAL (XVECEXP (src, 0, prepared ? 5 : 6));
+  return common_old_dest_p (code) ? variant < 4
+    : data_scalar_variant_p (variant);
+}
+
 /* Destination setup must not destroy a partially overlapping source.  */
 bool
 common_prepared_operands_p (rtx *operands, bool scalar)
@@ -10179,7 +10190,7 @@ class local_md_state
   struct fact { rtx group; rtx descriptor; } facts[M_REG_NUM] = {};
   rtx constants[32] = {}; /* GP_REG_NUM depends on the active RVE option.  */
   unsigned int definition[32] = {};
-  bool load_used[32] = {};
+  bool descriptor_used[32] = {};
   unsigned int next_definition = 0;
   rtx scalar_type = nullptr;
 
@@ -10194,7 +10205,7 @@ public:
   {
     memset (facts, 0, sizeof (facts));
     memset (constants, 0, sizeof (constants));
-    memset (load_used, 0, sizeof (load_used));
+    memset (descriptor_used, 0, sizeof (descriptor_used));
     next_definition = 0;
     scalar_type = nullptr;
   }
@@ -10257,19 +10268,19 @@ public:
     gcc_assert (full_gpr_p (reg) && CONST_INT_P (value));
     constants[REGNO (reg) - GP_REG_FIRST] = value;
     definition[REGNO (reg) - GP_REG_FIRST] = ++next_definition;
-    load_used[REGNO (reg) - GP_REG_FIRST] = false;
+    descriptor_used[REGNO (reg) - GP_REG_FIRST] = false;
   }
 
-  void note_load_descriptor (rtx reg)
+  void note_descriptor_use (rtx reg)
   {
     if (full_gpr_p (reg) && CONST_INT_P (descriptor_value (reg)))
-      load_used[REGNO (reg) - GP_REG_FIRST] = true;
+      descriptor_used[REGNO (reg) - GP_REG_FIRST] = true;
   }
 
   bool redundant_descriptor_p (rtx reg, rtx value) const
   {
     return full_gpr_p (reg) && !fixed_regs[REGNO (reg)]
-      && !global_regs[REGNO (reg)] && load_used[REGNO (reg) - GP_REG_FIRST]
+      && !global_regs[REGNO (reg)] && descriptor_used[REGNO (reg) - GP_REG_FIRST]
       && value && CONST_INT_P (value)
       && rtx_equal_p (descriptor_value (reg), value);
   }
@@ -10288,7 +10299,7 @@ public:
     for (unsigned int r = GP_REG_FIRST; r < GP_REG_FIRST + GP_REG_NUM; ++r)
       if (!fixed_regs[r] && !global_regs[r]
 	  && constants[r - GP_REG_FIRST]
-	  && load_used[r - GP_REG_FIRST]
+	  && descriptor_used[r - GP_REG_FIRST]
 	  && definition[r - GP_REG_FIRST] < oldest
 	  && rtx_equal_p (value, constants[r - GP_REG_FIRST]))
 	{
@@ -10313,7 +10324,7 @@ public:
 	  && reg_overlap_mentioned_p (reg, gen_rtx_REG (Pmode, GP_REG_FIRST + i)))
 	{
 	  constants[i] = NULL_RTX;
-	  load_used[i] = false;
+	  descriptor_used[i] = false;
 	}
   }
 
@@ -10453,7 +10464,7 @@ zero_broadcast_types_p (rtx source, rtx destination)
 	& ~HOST_WIDE_INT_UC (0x03c00000)) == 0;
 }
 
-/* Reuse constants whose materialization a preceding typed load still needs.  */
+/* Reuse constants with a retained descriptor use.  */
 static bool
 reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
 {
@@ -10515,7 +10526,8 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
     case UNSPECV_ZTT_STATE_TERNARY_X:
     case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
-      mask = 12;
+      mask = common_data_scalar_p (src, GET_CODE (PATTERN (insn)) == SET)
+	? 28 : 12;
       break;
     case UNSPECV_ZTT_ACC_MMUL:
       mask = XVECLEN (src, 0) == 8 ? 72 : XVECLEN (src, 0) == 7 ? 8 : 0;
@@ -10580,7 +10592,7 @@ reuse_cleaned_descriptors ()
 		{
 		case UNSPECV_ZTT_STATE_LOAD:
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
-		  state.note_load_descriptor
+		  state.note_descriptor_use
 		    (XVECEXP (src, 0, XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD
 				      ? 1 : 3));
 		  note_stores (insn, invalidate_md_store, &state);
@@ -10602,6 +10614,8 @@ reuse_cleaned_descriptors ()
 		case UNSPECV_ZTT_STATE_XOR:
 		  changed |= reuse_typed_descriptors (insn, src, state);
 		  note_stores (insn, invalidate_md_store, &state);
+		  if (common_data_scalar_p (src, true))
+		    state.note_descriptor_use (XVECEXP (src, 0, 4));
 		  continue;
 		default:
 		  break;
@@ -10722,7 +10736,7 @@ reuse_local_md ()
 				 "Reuse load descriptor at insn %d: x%u -> x%u\n",
 				 INSN_UID (insn), REGNO (old), REGNO (reg));
 		    }
-		  state.note_load_descriptor (*where);
+		  state.note_descriptor_use (*where);
 		}
 	      else if (reuse_typed_descriptors (insn, src, state))
 		cleanup = descriptor_cleanup = true;
@@ -10874,10 +10888,7 @@ reuse_local_md ()
 				   XVECEXP (src, 0, 1) };
 		    rtx descriptors[] = { XVECEXP (src, 0, 2), XVECEXP (src, 0, 3),
 					  XVECEXP (src, 0, 4) };
-		    unsigned int variant
-		      = UINTVAL (XVECEXP (src, 0, prepared_p ? 5 : 6));
-		    bool reuse_scalar = scalar
-		      && (old_dest ? variant < 4 : data_scalar_variant_p (variant))
+		    bool reuse_scalar = common_data_scalar_p (src, prepared_p)
 		      && REG_P (descriptors[2])
 		      && state.record_scalar_type (descriptors[2]);
 		    unsigned int prepared = prepared_p ? 0
@@ -11207,6 +11218,27 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  for (int code : { UNSPECV_ZTT_STATE_ELEMENTWISE_X,
+		   UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE,
+		   UNSPECV_ZTT_STATE_TERNARY_X,
+		   UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE,
+		   UNSPECV_ZTT_STATE_ELEMENTWISE_M, UNSPECV_ZTT_STATE_TERNARY })
+    for (unsigned int variant = 0; variant <= 41; ++variant)
+      for (bool prepared : { false, true })
+	{
+	  rtvec args = gen_rtvec (8, const0_rtx, const0_rtx, const0_rtx,
+				 const0_rtx, const0_rtx, const0_rtx,
+				 const0_rtx, const0_rtx);
+	  RTVEC_ELT (args, prepared ? 5 : 6) = GEN_INT (variant);
+	  bool data = code == UNSPECV_ZTT_STATE_ELEMENTWISE_X
+	    || code == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE
+	    ? IN_RANGE (variant, 13, 26) || IN_RANGE (variant, 29, 30)
+	      || IN_RANGE (variant, 39, 40)
+	    : ((code == UNSPECV_ZTT_STATE_TERNARY_X
+		|| code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE) && variant < 4);
+	  ASSERT_EQ (common_data_scalar_p
+	    (gen_rtx_UNSPEC_VOLATILE (VOIDmode, args, code), prepared), data);
+	}
   {
     local_md_state state;
     rtx a = gen_rtx_REG (Pmode, GP_REG_FIRST + 5);
@@ -11539,7 +11571,7 @@ run_md_reuse_selftests ()
   state.record_constant (a, dtype);
   state.record_constant (b, dtype);
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
-  state.note_load_descriptor (a);
+  state.note_descriptor_use (a);
   ASSERT_TRUE (rtx_equal_p (state.descriptor_register (b, use_b), a));
   ASSERT_TRUE (state.redundant_descriptor_p (a, dtype));
   ASSERT_FALSE (state.redundant_descriptor_p (b, dtype));
@@ -11576,13 +11608,13 @@ run_md_reuse_selftests ()
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
   ASSERT_FALSE (state.redundant_descriptor_p (a, dtype));
   state.record_constant (b, dtype);
-  state.note_load_descriptor (b);
+  state.note_descriptor_use (b);
   state.record_constant (a, dtype);
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
   ASSERT_TRUE (rtx_equal_p (state.descriptor_register (a, use_b), b));
   state.clear ();
   state.record_constant (a, dtype);
-  state.note_load_descriptor (a);
+  state.note_descriptor_use (a);
   state.record_constant (a, dtype);
   state.record_constant (b, dtype);
   ASSERT_EQ (state.descriptor_register (b, use_b), b);
