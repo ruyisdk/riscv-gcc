@@ -10295,6 +10295,9 @@ lower_explicit_state ()
 	      continue;
 	    }
 	}
+      bool reuse_small_source = (unary_p || rowcol_p) && nregs <= 4
+	&& optimize && runtime_profile_p ()
+	&& find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
       start_sequence ();
       rtx dtype = XVECEXP (src, 0, XVECLEN (src, 0) - 1);
       gcc_assert (CONST_INT_P (dtype));
@@ -10322,8 +10325,8 @@ lower_explicit_state ()
       rtx dest = SET_DEST (set);
       if (rowcol_p)
 	emit_insn (gen_ztt_state_rowcol
-		   (nregs > 4 ? UNSPECV_ZTT_STATE_ROWCOL_REUSE
-			      : UNSPECV_ZTT_STATE_ROWCOL,
+		   (nregs > 4 || reuse_small_source
+		    ? UNSPECV_ZTT_STATE_ROWCOL_REUSE : UNSPECV_ZTT_STATE_ROWCOL,
 		    mode, Pmode, dest, XVECEXP (src, 0, 0),
 		    XVECEXP (src, 0, 1), descriptor, scratch,
 		    stride ? stride : const0_rtx, XVECEXP (src, 0, 2)));
@@ -10347,7 +10350,8 @@ lower_explicit_state ()
 	    unsigned int steps = pack_datatype_steps
 	      (MAX (1U, (UINTVAL (dtype) & 0xff) / active_profile ()->uds),
 	       MAX (1U, (UINTVAL (source_dtype) & 0xff) / active_profile ()->uds));
-	    bool reuse = nregs > 4 && mode == GET_MODE (XVECEXP (src, 0, 0))
+	    bool reuse = (nregs > 4 || reuse_small_source)
+	      && mode == GET_MODE (XVECEXP (src, 0, 0))
 	      && rtx_equal_p (dtype, source_dtype);
 	    rtx source_descriptor = reuse ? descriptor
 	      : force_reg (Pmode, source_dtype);

@@ -216,6 +216,9 @@ the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.
 Optimized runtime scalar operations also allow complete-type source reuse
 for small M groups.  Matrix forms retain their existing allocation choices.
+Unary and row/column operations allow the same complete-source reuse for
+small groups on optimized runtime profiles when the source dies at the
+operation.  Live small sources retain independent destinations.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values

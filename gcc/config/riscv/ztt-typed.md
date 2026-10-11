@@ -1043,8 +1043,7 @@
   "#"
   [(set_attr "type" "multi")])
 
-;; Reuse only an entire
-;; same-mode, same-Md source; keep the old small-group constraints.
+;; Reuse only an entire same-mode, same-Md source.
 (define_int_iterator ZTT_STATE_CONVERT
   [UNSPECV_ZTT_STATE_CONVERT UNSPECV_ZTT_STATE_CONVERT_REUSE])
 (define_int_iterator ZTT_STATE_STRUCTURAL
@@ -1079,7 +1078,8 @@
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && GET_MODE (operands[4]) == GET_MODE (operands[1])
    && (!<ztt_unary_reuse>
-       || (riscv_ztt::m_nregs (GET_MODE (operands[0])) > 4
+       || ((riscv_ztt::m_nregs (GET_MODE (operands[0])) > 4
+            || (optimize && riscv_ztt::runtime_profile_p ()))
            && GET_MODE (operands[0]) == GET_MODE (operands[1])
            && rtx_equal_p (operands[2], operands[3])
            && riscv_ztt::datatype_step (UINTVAL (operands[6]), 0)
@@ -1124,7 +1124,8 @@
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && GET_MODE (operands[4]) == GET_MODE (operands[1])
    && (!<ztt_unary_reuse>
-       || (riscv_ztt::m_nregs (GET_MODE (operands[0])) > 4
+       || ((riscv_ztt::m_nregs (GET_MODE (operands[0])) > 4
+            || (optimize && riscv_ztt::runtime_profile_p ()))
            && GET_MODE (operands[0]) == GET_MODE (operands[1])
            && rtx_equal_p (operands[2], operands[3])
            && riscv_ztt::datatype_step (UINTVAL (operands[6]), 0)
@@ -1195,7 +1196,8 @@
    (clobber (match_operand:ZTT_M 4 "memory_operand" "=A"))
    (clobber (match_scratch:P 7 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
-   && (!<ztt_unary_reuse> || riscv_ztt::m_nregs (<ZTT_M:MODE>mode) > 4)"
+   && (!<ztt_unary_reuse> || riscv_ztt::m_nregs (<ZTT_M:MODE>mode) > 4
+       || (optimize && riscv_ztt::runtime_profile_p ()))"
 {
   return riscv_ztt::output_rowcol_state (operands);
 }
