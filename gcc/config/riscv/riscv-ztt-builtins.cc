@@ -7351,6 +7351,32 @@ local_projection_uses_p (tree value, type_index half,
   return false;
 }
 
+static bool
+structure_copy_p (gimple *stmt, type_index type)
+{
+  if (type == TYPE_MAX || types[type].accumulator || !type_nregs (type)
+      || !is_gimple_call (stmt))
+    return false;
+  unsigned int nargs = gimple_call_num_args (stmt);
+  if (nargs != 1 && nargs != 2)
+    return false;
+  unsigned int code = structure_builtin_code (stmt, nargs);
+  if (code == ZTT_BUILTIN_MAX)
+    return false;
+  const auto d = builtin_description_for (code);
+  if (d.type != type
+      || type_for_tree (TREE_TYPE (gimple_call_arg (stmt, 0))) != type)
+    return false;
+  if (d.expansion == EXPAND_MCOPY_M2M)
+    return nargs == 1 && d.prototype == PROTO_M_M;
+  return nargs == 2 && d.prototype == PROTO_M_ROWCOL_OFFSET
+    && (d.expansion == EXPAND_MROWSHIFT_EW_X
+	|| d.expansion == EXPAND_MCOLSHIFT_EW_X)
+    && types[type].rows == 1 && types[type].columns == 1
+    && (types[type].descriptor & 0xff) >= active_profile ()->uds
+    && integer_zerop (gimple_call_arg (stmt, 1));
+}
+
 /* Collect at most four same-type copies per input, without deleting witnesses.  */
 static bool
 strip_structure_copies (tree &value, type_index type, gimple **copies,
@@ -7366,13 +7392,9 @@ strip_structure_copies (tree &value, type_index type, gimple **copies,
 	  || type_for_tree (TREE_TYPE (value)) != type)
 	return false;
       gimple *producer = SSA_NAME_DEF_STMT (value);
-      unsigned int code = structure_builtin_code (producer, 1);
-      if (code == ZTT_BUILTIN_MAX)
+      if (!structure_copy_p (producer, type))
 	return true;
-      const auto d = builtin_description_for (code);
-      if (d.expansion != EXPAND_MCOPY_M2M)
-	return true;
-      if (d.prototype != PROTO_M_M || d.type != type || count - start == 4)
+      if (count - start == 4)
 	return false;
       copies[count++] = producer;
       value = gimple_call_arg (producer, 0);
@@ -7397,9 +7419,8 @@ structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
   if (type == TYPE_MAX || d.type == TYPE_MAX
       || !type_nregs (type) || !type_nregs (d.type))
     return false;
-  if (d.expansion == EXPAND_MCOPY_M2M)
-    return nargs == 1 && d.prototype == PROTO_M_M && d.type == type
-      && !types[type].accumulator && !gimple_call_lhs (stmt);
+  if (structure_copy_p (stmt, type))
+    return !gimple_call_lhs (stmt);
   if (nargs == 1)
     {
       if (d.prototype != PROTO_M_M || zip_variant (d.expansion) < 0
@@ -7440,13 +7461,8 @@ structure_witness_p (gimple *stmt, tree parent, gimple *&copy)
     }
   if (!copy)
     return false;
-  unsigned int copy_code = structure_builtin_code (copy, 1);
-  if (copy_code == ZTT_BUILTIN_MAX || gimple_call_lhs (copy)
-      || gimple_call_arg (copy, 0) != value)
-    return false;
-  const auto c = builtin_description_for (copy_code);
-  return c.expansion == EXPAND_MCOPY_M2M && c.prototype == PROTO_M_M
-    && c.type == d.type && !types[d.type].accumulator;
+  return structure_copy_p (copy, d.type) && !gimple_call_lhs (copy)
+    && gimple_call_arg (copy, 0) == value;
 }
 
 static bool
@@ -7738,18 +7754,24 @@ repeated_broadcast_value (const builtin_description &d,
   if (TREE_CODE (value) != SSA_NAME
       || type_for_tree (TREE_TYPE (value)) != d.type)
     return NULL_TREE;
+  tree result = value;
+  gimple *producers[5];
+  unsigned int count = 0;
+  if (!strip_structure_copies (value, d.type, producers, count, true))
+    return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (value);
   unsigned int code = structure_builtin_code (producer);
   if (code == ZTT_BUILTIN_MAX)
     return NULL_TREE;
   const auto source = builtin_description_for (code);
+  producers[count++] = producer;
   if (source.prototype != d.prototype || source.type != d.type
       || source.expansion != d.expansion
       || !operand_equal_p (gimple_call_arg (producer, 1),
 			   gimple_call_arg (stmt, 1), 0)
-      || !local_structure_producers_p (gsi, &producer, 1))
+      || !local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
-  return value;
+  return result;
 }
 
 gimple *

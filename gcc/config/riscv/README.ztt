@@ -191,6 +191,12 @@ The first broadcast retains its range and ownership checks.  Different
 controls, floating types and intervening state or memory operations do not
 qualify.
 
+The bounded copy search also recognizes zero-offset row/column shifts of
+complete basic Squares, using their existing full-value copy semantics.
+Such shifts may serve as terminal ownership witnesses.  Repeated broadcasts
+use this search too, retaining the final copy as the replacement value.
+Nonzero/dynamic offsets and longer or shared-inner chains remain boundaries.
+
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
 retain their bits, including zero signs and NaN payloads.  The move stays
