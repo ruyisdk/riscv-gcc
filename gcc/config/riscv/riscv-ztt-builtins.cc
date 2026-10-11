@@ -2932,6 +2932,35 @@ decode_floating_broadcast (unsigned int code, type_index &dst, type_index &tc)
   return decode_numeric_scalar_types (d, shape, c, dst, tc);
 }
 
+struct scalar_registration_group
+{
+  unsigned int payload;
+  type_index dst;
+  unsigned int first_tc;
+};
+
+/* TC is the innermost code axis.  Keep each available destination once.  */
+static void
+collect_scalar_registration_groups (vec<scalar_registration_group> &groups,
+				    bool floating)
+{
+  unsigned int count = floating ? numeric_dtype_count : integer_dtype_count;
+  unsigned int scalar_count = floating ? numeric_scalar_dtype_count
+    : integer_scalar_dtype_count;
+  for (unsigned int d = 0; d < count; ++d)
+    for (unsigned int shape = 0; shape < wide_shape_count; ++shape)
+      {
+	type_index dst = numeric_matrix_type (d, shape);
+	if (dst == TYPE_MAX || !ztt_m_type_nodes[dst])
+	  continue;
+	/* Integer legacy entries retain their original declarations.  */
+	unsigned int first_tc = floating ? (d < integer_dtype_count ? 80 : 0)
+	  : (d < 40 ? 40 : 0);
+	groups.safe_push ({ (d * wide_shape_count + shape) * scalar_count,
+			    dst, first_tc });
+      }
+}
+
 static const wide_operation_info &
 numeric_scalar_operation (unsigned int op)
 {
@@ -3608,6 +3637,58 @@ run_scalar_datatype_name_selftests ()
 }
 
 static void
+run_scalar_registration_group_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  const char *saved_profile = riscv_ztt_profile_string;
+  tree saved_types[TYPE_MAX];
+  memcpy (saved_types, ztt_m_type_nodes, sizeof (saved_types));
+  for (const auto &profile : profiles)
+    if (!profile.n && profile.accregs == 16)
+      {
+	riscv_ztt_profile_string = profile.name;
+	for (unsigned int i = 0; i < TYPE_MAX; ++i)
+	  ztt_m_type_nodes[i]
+	    = type_nregs_for_profile (static_cast<type_index> (i), profile)
+	      ? integer_zero_node : NULL_TREE;
+	for (bool floating : { false, true })
+	  {
+	    auto_vec<scalar_registration_group> groups;
+	    collect_scalar_registration_groups (groups, floating);
+	    unsigned int count = floating ? floating_broadcast_code_count
+	      : integer_broadcast_code_count;
+	    unsigned int scalar_count = floating ? numeric_scalar_dtype_count
+	      : integer_scalar_dtype_count;
+	    unsigned int g = 0;
+	    for (unsigned int i = 0; i < count; ++i)
+	      {
+		while (g < groups.length ()
+		       && i >= groups[g].payload + scalar_count)
+		  ++g;
+		bool present = g < groups.length ()
+		  && i >= groups[g].payload + groups[g].first_tc;
+		type_index dst, tc;
+		bool decoded = floating
+		  ? decode_floating_broadcast (floating_broadcast_code_base + i,
+					       dst, tc)
+		  : decode_integer_broadcast (integer_broadcast_code_base + i,
+					      dst, tc);
+		ASSERT_EQ (present, decoded);
+		if (decoded)
+		  {
+		    ASSERT_EQ (groups[g].dst, dst);
+		    ASSERT_EQ (nominal_scalar_type_index (i % scalar_count), tc);
+		  }
+	      }
+	  }
+      }
+  memcpy (ztt_m_type_nodes, saved_types, sizeof (saved_types));
+  riscv_ztt_profile_string = saved_profile;
+}
+
+static void
 run_scalar_full_name_selftests ()
 {
   using namespace selftest;
@@ -3675,6 +3756,7 @@ run_wide_signature_selftests ()
   run_type_nregs_selftests ();
   run_scalar_datatype_name_selftests ();
   run_scalar_full_name_selftests ();
+  run_scalar_registration_group_selftests ();
   run_acc_shared_source_selftests ();
   run_md_reuse_selftests ();
   for (unsigned int i = 0; i < exponent_type_count; ++i)
@@ -5660,41 +5742,40 @@ register_functions ()
     }
   if (runtime_profile_p () && !in_lto_p)
     {
-      /* Reuse decoded type indices within this registration, preserving
-	 operation-major order and the floating operation restrictions.  */
-      struct scalar_candidate
-	{
-	  unsigned int payload;
-	  type_index dst, tc;
-	};
-      auto_vec<scalar_candidate> integer_candidates, floating_candidates;
-      type_index dst, tc;
-      for (unsigned int i = 0; i < integer_broadcast_code_count; ++i)
-	if (decode_integer_broadcast (integer_broadcast_code_base + i, dst, tc))
-	  integer_candidates.safe_push ({ i, dst, tc });
-      for (unsigned int i = 0; i < floating_broadcast_code_count; ++i)
-	if (decode_floating_broadcast (floating_broadcast_code_base + i, dst, tc))
-	  floating_candidates.safe_push ({ i, dst, tc });
+      auto_vec<scalar_registration_group> integer_candidates, floating_candidates;
+      collect_scalar_registration_groups (integer_candidates, false);
+      collect_scalar_registration_groups (floating_candidates, true);
+      type_index scalar_types[numeric_scalar_dtype_count];
+      for (unsigned int c = 0; c < numeric_scalar_dtype_count; ++c)
+	scalar_types[c] = nominal_scalar_type_index (c);
       for (const auto &candidate : integer_candidates)
-	integer_broadcast_builtin_decl
-	  (integer_broadcast_code_base + candidate.payload, true);
+	for (unsigned int c = candidate.first_tc;
+	     c < integer_scalar_dtype_count; ++c)
+	  integer_broadcast_builtin_decl
+	    (integer_broadcast_code_base + candidate.payload + c, true);
       for (unsigned int op = 0; op < integer_scalar_operations; ++op)
 	for (const auto &candidate : integer_candidates)
-	  integer_scalar_public_decl (integer_scalar_public_base
-				      + op * integer_broadcast_code_count
-				      + candidate.payload, true, op,
-				      candidate.dst, candidate.tc);
+	  for (unsigned int c = candidate.first_tc;
+	       c < integer_scalar_dtype_count; ++c)
+	    integer_scalar_public_decl (integer_scalar_public_base
+					+ op * integer_broadcast_code_count
+					+ candidate.payload + c, true, op,
+					candidate.dst, scalar_types[c]);
       for (unsigned int op = 0; op < floating_scalar_operations; ++op)
 	for (const auto &candidate : floating_candidates)
 	  if (floating_scalar_operation_p
 		(op, floating_descriptor_p (types[candidate.dst].descriptor)))
-	    floating_scalar_public_decl (floating_scalar_public_base
-					 + op * floating_broadcast_code_count
-					 + candidate.payload, true, op,
-					 candidate.dst, candidate.tc);
+	    for (unsigned int c = candidate.first_tc;
+		 c < numeric_scalar_dtype_count; ++c)
+	      floating_scalar_public_decl (floating_scalar_public_base
+					   + op * floating_broadcast_code_count
+					   + candidate.payload + c, true, op,
+					   candidate.dst, scalar_types[c]);
       for (const auto &candidate : floating_candidates)
-	floating_broadcast_builtin_decl
-	  (floating_broadcast_code_base + candidate.payload, true);
+	for (unsigned int c = candidate.first_tc;
+	     c < numeric_scalar_dtype_count; ++c)
+	  floating_broadcast_builtin_decl
+	    (floating_broadcast_code_base + candidate.payload + c, true);
     }
   vec_free (registration_function_types);
   vec_free (nominal_registration_types);

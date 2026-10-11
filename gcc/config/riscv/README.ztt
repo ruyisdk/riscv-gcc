@@ -92,9 +92,9 @@ it changes.  The cache contains counts only, not trees or modes.
 Nominal Scalar lookups check availability before returning a cached
 declaration, without rebuilding its name or function type.
 
-Scalar registration retains decoded type indices in its temporary candidate
-lists.  Operations reuse those indices without repeating profile decoding;
-floating operation restrictions and declaration order are unchanged.
+Scalar registration keeps one temporary entry per destination type/shape,
+with a shared decoded TC array.  Operations expand each group's TC range in
+code order; floating restrictions and legacy integer entries are unchanged.
 
 The exponent Scalar catalog uses ZTT_EXPONENT_FAMILY to store family
 descriptors and a shared type axis.  Expansion remains operation-major,
