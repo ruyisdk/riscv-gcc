@@ -1314,6 +1314,7 @@ wide_operation (expansion_index expansion)
 static constexpr unsigned int wide_code_base = 1U << 20;
 static constexpr unsigned int wide_dtype_count = 40;
 static constexpr unsigned int wide_shape_count = 11;
+static constexpr unsigned int acc_shape_count = 5;
 static constexpr unsigned int wide_code_limit = wide_code_base
   + WIDE_MAX * wide_shape_count * wide_dtype_count * wide_dtype_count
     * (wide_dtype_count + 1);
@@ -2172,7 +2173,7 @@ register_builtin_type ()
 }
 
 static type_index matrix_type_index (unsigned int, unsigned int, unsigned int);
-static type_index numeric_matrix_type (unsigned int, unsigned int);
+static type_index numeric_matrix_type (unsigned int, unsigned int, bool = false);
 
 static tree
 acc_matrix_type (type_index type, unsigned int rows = 1, unsigned int columns = 1)
@@ -2709,27 +2710,45 @@ numeric_dtype_descriptor (unsigned int number)
 
 /* Only immutable catalogue indices are shared; trees remain profile-local.  */
 static type_index
-numeric_matrix_type (unsigned int number, unsigned int shape)
+numeric_matrix_type (unsigned int number, unsigned int shape, bool accumulator)
 {
-  gcc_assert (number < numeric_dtype_count && shape < wide_shape_count);
-  static unsigned int indices[numeric_dtype_count][wide_shape_count];
+  gcc_assert (number < numeric_dtype_count
+	      && shape < (accumulator ? acc_shape_count : wide_shape_count));
+  static unsigned int indices[numeric_dtype_count]
+			     [wide_shape_count + acc_shape_count];
   static bool initialized;
   if (!initialized)
     {
       for (unsigned int i = 0; i < TYPE_MAX; ++i)
-	if (!types[i].accumulator)
-	  {
-	    unsigned int number = numeric_dtype_number (types[i].descriptor);
-	    unsigned int q = exact_log2 (types[i].rows * types[i].columns);
-	    unsigned int s = q ? 2 * q - (types[i].rows == 1) : 0;
-	    gcc_assert (number < numeric_dtype_count && s < wide_shape_count);
-	    gcc_assert (!indices[number][s]);
-	    indices[number][s] = i + 1;
-	  }
+	{
+	  const auto &t = types[i];
+	  unsigned int number = numeric_dtype_number (t.descriptor);
+	  unsigned int q = exact_log2 (t.rows * t.columns);
+	  unsigned int s = q ? 2 * q - (t.rows == 1) : 0;
+	  if (t.accumulator)
+	    {
+	      gcc_assert (t.rows == 1 && q < acc_shape_count);
+	      s = wide_shape_count + q;
+	    }
+	  else
+	    gcc_assert (s < wide_shape_count);
+	  gcc_assert (number < numeric_dtype_count && !indices[number][s]);
+	  indices[number][s] = i + 1;
+	}
       initialized = true;
     }
-  unsigned int index = indices[number][shape];
+  unsigned int index = indices[number][shape + (accumulator ? wide_shape_count : 0)];
   return index ? static_cast<type_index> (index - 1) : TYPE_MAX;
+}
+
+/* A Scalar's nominal identity is independent of M shape availability.  */
+static type_index
+nominal_scalar_type_index (unsigned int n)
+{
+  gcc_assert (n < numeric_scalar_dtype_count);
+  type_index type = numeric_matrix_type (n < 40 ? n : n < 80 ? n + 8 : n + 16, 0);
+  gcc_assert (type != TYPE_MAX);
+  return type;
 }
 
 static type_index
@@ -3099,10 +3118,10 @@ static void run_md_reuse_selftests ();
 
 static type_index
 linear_matrix_type (unsigned int descriptor, unsigned int rows,
-		    unsigned int columns)
+		    unsigned int columns, bool accumulator = false)
 {
   for (unsigned int i = 0; i < TYPE_MAX; ++i)
-    if (!types[i].accumulator && types[i].descriptor == descriptor
+    if (types[i].accumulator == accumulator && types[i].descriptor == descriptor
 	&& types[i].rows == rows && types[i].columns == columns)
       return static_cast<type_index> (i);
   return TYPE_MAX;
@@ -3134,6 +3153,17 @@ run_matrix_type_index_selftests ()
       };
       for (const auto &shape : absent)
 	ASSERT_EQ (matrix_type_index (descriptor, shape[0], shape[1]), TYPE_MAX);
+      for (unsigned int s = 0; s < acc_shape_count; ++s)
+	ASSERT_EQ (numeric_matrix_type (n, s, true),
+		   linear_matrix_type (descriptor, 1, 1U << s, true));
+    }
+
+  for (unsigned int n = 0; n < numeric_scalar_dtype_count; ++n)
+    {
+      unsigned int descriptor = numeric_dtype_descriptor
+	(n < 40 ? n : n < 80 ? n + 8 : n + 16);
+      ASSERT_EQ (nominal_scalar_type_index (n),
+		 linear_matrix_type (descriptor, 1, 1));
     }
 
   for (unsigned int i = 0; i < TYPE_MAX; ++i)
@@ -4737,15 +4767,7 @@ decode_integer_matmul_code (unsigned int code, integer_matmul_signature &s)
   n /= 5;
   s.uds = 8U << (n % 5);
   s.variant = n / 5;
-  s.dst = TYPE_MAX;
-  unsigned int descriptor = numeric_dtype_descriptor (s.dtype);
-  for (unsigned int i = 0; i < TYPE_MAX; ++i)
-    if (types[i].accumulator && types[i].descriptor == descriptor
-	&& types[i].columns == (1U << s.acc_group))
-      {
-	s.dst = static_cast<type_index> (i);
-	break;
-      }
+  s.dst = numeric_matrix_type (s.dtype, s.acc_group, true);
   return TARGET_ZTT && acc_profile_p () && active_profile ()->uds == s.uds
     && (1U << s.lhs) <= active_profile ()->mregs
     && (1U << s.rhs) <= active_profile ()->mregs
@@ -5552,19 +5574,6 @@ resolve_integer_scalar (location_t loc, unsigned int op, type_index dst,
     operands.safe_push (build_int_cstu (unsigned_type_node, type));
   tree call = build_call_expr_loc_array (loc, fn, operands.length (), operands.address ());
   return build1 (VIEW_CONVERT_EXPR, ztt_m_type_nodes[dst], call);
-}
-
-/* A Scalar's nominal identity is independent of M shape availability.  */
-static type_index
-nominal_scalar_type_index (unsigned int n)
-{
-  unsigned int d = numeric_dtype_descriptor
-    (n < 40 ? n : n < 80 ? n + 8 : n + 16);
-  for (unsigned int t = 0; t < TYPE_MAX; ++t)
-    if (!types[t].accumulator && types[t].descriptor == d
-	&& types[t].rows == 1 && types[t].columns == 1)
-      return static_cast<type_index> (t);
-  gcc_unreachable ();
 }
 
 static tree
