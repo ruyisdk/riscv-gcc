@@ -10252,21 +10252,41 @@ lower_explicit_state ()
       unsigned int matrix_inputs = 0;
       if ((code == UNSPEC_ZTT_ELEMENTWISE_M || code == UNSPEC_ZTT_GATHER)
 	  && runtime_profile_p ()
-	  && nregs > 4)
+	  && (nregs > 4 || m_nregs (mode) > 4))
 	{
 	  rtx lhs = XVECEXP (src, 0, 0), rhs = XVECEXP (src, 0, 1);
 	  matrix_inputs = m_nregs (GET_MODE (lhs));
 	  if (!rtx_equal_p (lhs, rhs)
 	      || !rtx_equal_p (XVECEXP (src, 0, 3), XVECEXP (src, 0, 4)))
 	    matrix_inputs += m_nregs (GET_MODE (rhs));
-	  if (matrix_inputs > active_profile ()->mregs)
+	  unsigned int required = matrix_inputs;
+	  bool independent_dest = false;
+	  if (code == UNSPEC_ZTT_ELEMENTWISE_M
+	      && required <= active_profile ()->mregs
+	      && required + m_nregs (mode) > active_profile ()->mregs)
+	    {
+	      rtx dtype = XVECEXP (src, 0, XVECLEN (src, 0) - 1);
+	      /* Only a complete same-Md input can share the destination.  */
+	      bool reuse_left = mode == GET_MODE (lhs)
+		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3));
+	      bool reuse_right = mode == GET_MODE (rhs)
+		&& rtx_equal_p (dtype, XVECEXP (src, 0, 4));
+	      if (!reuse_left && !reuse_right)
+		{
+		  required += m_nregs (mode);
+		  independent_dest = true;
+		}
+	    }
+	  if (required > active_profile ()->mregs)
 	    {
 	      error_at (INSN_LOCATION (insn),
 			"Ztt %s operation requires %u simultaneously "
-			"allocated M registers for distinct sources; "
+			"allocated M registers for %s; "
 			"profile provides %u",
 			code == UNSPEC_ZTT_GATHER ? "gather" : "elementwise",
-			matrix_inputs, active_profile ()->mregs);
+			required, independent_dest
+			? "sources and an independent destination" : "distinct sources",
+			active_profile ()->mregs);
 	      emit_insn_before (gen_rtx_CLOBBER (VOIDmode, SET_DEST (set)), insn);
 	      delete_insn (insn);
 	      insn = next;

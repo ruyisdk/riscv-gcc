@@ -25,6 +25,10 @@ state and ownership restrictions.  Ordinary scalar/pointer calls can
 clobber the M/ACC bank; live typed values are saved and restored, including
 ACC descriptors, and typed operations prepare their required datatype.
 Callees must return with compatible N/profile and enabled/owned state.
+Before allocation, complete-group elementwise lowering checks simultaneous
+M input and independent-result capacity.  A matching full source may hold
+the result, and identical inputs share their group.  Infeasible assignments
+are diagnosed before IRA without changing the requested datatype tuple.
 Typed arguments/returns (including varargs) and a stable typed calling
 convention are not provided.  Explicit ownership changes in typed functions
 require a successful acquire-bit or ameown guard proven over the CFG.
