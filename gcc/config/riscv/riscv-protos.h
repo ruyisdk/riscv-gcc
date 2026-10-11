@@ -385,6 +385,7 @@ struct cpu_vector_cost
 #if CHECKING_P
 namespace selftest {
 void riscv_run_selftests (void);
+void riscv_ztt_workspace_selftests ();
 } // namespace selftest
 #endif
 

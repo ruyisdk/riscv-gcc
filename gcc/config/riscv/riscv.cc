@@ -82,6 +82,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "cgraph.h"
 #include "langhooks.h"
 #include "gimplify.h"
+#include "selftest.h"
+#include "selftest-rtl.h"
 
 /* This file should be included last.  */
 #include "target-def.h"
@@ -9479,14 +9481,22 @@ riscv_ztt_runtime_frame_p ()
 }
 
 /* Resolve a bounded multiple of the AME scale through full-width definitions
-   in BEFORE's block.  Zero is the only accepted constant term.  */
+   in BEFORE's block.  CONSTANT_P instead requests a positive multiplier.  */
 static bool
 riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
-			    unsigned int &budget, HOST_WIDE_INT &factor)
+			    unsigned int &budget, HOST_WIDE_INT &factor,
+			    bool constant_p = false)
 {
   if (budget == 0)
     return false;
   --budget;
+  if (constant_p && CONST_INT_P (x))
+    {
+      if (INTVAL (x) <= 0 || INTVAL (x) > limit)
+	return false;
+      factor = INTVAL (x);
+      return true;
+    }
   if (x == const0_rtx)
     {
       factor = 0;
@@ -9496,6 +9506,8 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
     {
       if (REGNO (x) == RISCV_ZTT_SCALE_REGNUM)
 	{
+	  if (constant_p)
+	    return false;
 	  factor = 1;
 	  return true;
 	}
@@ -9511,13 +9523,24 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
 	  rtx set = PATTERN (def);
 	  return GET_CODE (set) == SET && rtx_equal_p (SET_DEST (set), x)
 	    && riscv_ztt_workspace_factor (SET_SRC (set), def, limit,
-					   budget, factor);
+					   budget, factor, constant_p);
 	}
       return false;
     }
-  if (GET_MODE (x) != Pmode)
+  if (constant_p || GET_MODE (x) != Pmode)
     return false;
   HOST_WIDE_INT left, right;
+  if (GET_CODE (x) == MULT)
+    for (unsigned int i = 0; i < 2; ++i)
+      if (riscv_ztt_workspace_factor (XEXP (x, i), before, limit,
+				      budget, right, true)
+	  && riscv_ztt_workspace_factor (XEXP (x, 1 - i), before, limit,
+					 budget, left)
+	  && left <= limit / right)
+	{
+	  factor = left * right;
+	  return true;
+	}
   if (GET_CODE (x) == PLUS
       && riscv_ztt_workspace_factor (XEXP (x, 0), before, limit, budget, left)
       && riscv_ztt_workspace_factor (XEXP (x, 1), before, limit, budget, right)
@@ -9536,6 +9559,78 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
     }
   return false;
 }
+
+#if CHECKING_P
+void
+selftest::riscv_ztt_workspace_selftests ()
+{
+  rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+  basic_block bb = BASIC_BLOCK_FOR_FN (cfun, 2);
+  rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
+  rtx a = gen_rtx_REG (Pmode, GP_REG_FIRST + 5);
+  rtx b = gen_rtx_REG (Pmode, GP_REG_FIRST + 6);
+  start_sequence ();
+  auto append = [bb] (rtx pat) {
+    rtx_insn *insn = emit_insn (pat);
+    set_block_for_insn (insn, bb);
+    return insn;
+  };
+  auto check = [&] (rtx x, HOST_WIDE_INT limit, HOST_WIDE_INT expected) {
+    rtx_insn *before = append (gen_rtx_USE (VOIDmode, const0_rtx));
+    unsigned int budget = 32;
+    HOST_WIDE_INT factor = -1;
+    bool known = riscv_ztt_workspace_factor (x, before, limit, budget, factor);
+    ASSERT_EQ (known, expected >= 0);
+    if (known)
+      ASSERT_EQ (factor, expected);
+  };
+  check (scale, 80, 1);
+  check (const0_rtx, 80, 0);
+  check (GEN_INT (48), 80, -1);
+  check (gen_rtx_MULT (Pmode, scale, GEN_INT (48)), 80, 48);
+  check (gen_rtx_MULT (Pmode, GEN_INT (80), scale), 80, 80);
+  check (gen_rtx_MULT (Pmode, scale, scale), 80, -1);
+  check (gen_rtx_MULT (Pmode, scale, const0_rtx), 80, -1);
+  check (gen_rtx_MULT (Pmode, scale, GEN_INT (-1)), 80, -1);
+  check (gen_rtx_MULT (Pmode, scale, GEN_INT (HOST_WIDE_INT_MIN)), 80, -1);
+  check (gen_rtx_MULT (Pmode, scale, GEN_INT (81)), 80, -1);
+  rtx twice = gen_rtx_PLUS (Pmode, scale, scale);
+  check (gen_rtx_MULT (Pmode, twice, GEN_INT (40)), 80, 80);
+  check (gen_rtx_MULT (Pmode, twice, GEN_INT (41)), 80, -1);
+  check (gen_rtx_MULT (Pmode, twice, GEN_INT (HOST_WIDE_INT_MAX)),
+	 HOST_WIDE_INT_MAX, -1);
+  check (gen_rtx_PLUS (Pmode, scale, GEN_INT (48)), 80, -1);
+
+  append (gen_rtx_SET (a, GEN_INT (48)));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, 48);
+  append (gen_rtx_SET (b, a));
+  check (gen_rtx_MULT (Pmode, b, scale), 80, 48);
+  append (gen_rtx_SET (a, GEN_INT (80)));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, 80);
+  check (gen_rtx_MULT (Pmode, scale, b), 80, 48);
+  append (gen_rtx_SET (a, gen_rtx_MEM (Pmode, b)));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, -1);
+  append (gen_rtx_SET (a, GEN_INT (48)));
+  append (gen_rtx_SET (gen_rtx_SUBREG (HImode, a, 0), const0_rtx));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, -1);
+  append (gen_rtx_SET (a, GEN_INT (48)));
+  append (gen_rtx_CLOBBER (VOIDmode, a));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, -1);
+  append (gen_rtx_PARALLEL (VOIDmode, gen_rtvec
+    (2, gen_rtx_SET (a, GEN_INT (48)), gen_rtx_CLOBBER (VOIDmode, b))));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, -1);
+  rtx_insn *def = append (gen_rtx_SET (a, GEN_INT (48)));
+  set_block_for_insn (def, ENTRY_BLOCK_PTR_FOR_FN (cfun));
+  check (gen_rtx_MULT (Pmode, scale, a), 80, -1);
+  check (gen_rtx_REG (HImode, REGNO (a)), 80, -1);
+
+  unsigned int budget = 0;
+  HOST_WIDE_INT factor;
+  ASSERT_FALSE (riscv_ztt_workspace_factor
+		(scale, get_last_insn (), 80, budget, factor));
+  end_sequence ();
+}
+#endif
 
 /* Propagate the allocation state once per reachable block.  A conflicting
    join, unbalanced exit or stack reference while allocated rejects the pair.  */

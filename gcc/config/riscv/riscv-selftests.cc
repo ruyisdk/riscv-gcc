@@ -1391,6 +1391,7 @@ namespace selftest {
 void
 riscv_run_selftests (void)
 {
+  riscv_ztt_workspace_selftests ();
   run_ztt_group_mode_selftests ();
   run_ztt_large_acc_mode_selftests ();
   run_ztt_complete_shape_selftests ();

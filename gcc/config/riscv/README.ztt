@@ -255,7 +255,10 @@ and runtime-N validation remain unchanged.  Partly prepared matmul keeps
 its private operands.
 After DCE, leaf functions with no live stack references can
 drop an unused AME workspace allocation/release pair.  Both adjustments
-use the proven frame-size coefficient.  Cross-block pairs require matching
+use the proven frame-size coefficient.
+Frame-size recognition follows same-block full-width definitions for
+bounded additions, shifts and positive constant products.
+Cross-block pairs require matching
 allocation state at joins and balanced normal exits.  Fixed
 frames, N checks and CFA rules remain; calls, asm, real stack storage,
 probing, alloca and RVV save areas exclude this cleanup.
