@@ -9161,7 +9161,8 @@ prepare_elementwise_state (rtx *operands, bool scalar, bool preserve_dest,
 	    setup (operand);
 	}
     }
-  if (!preserve_dest && !elementwise_reused_destination_p (operands, scalar))
+  if (!preserve_dest && !(prepared & 1)
+      && !elementwise_reused_destination_p (operands, scalar))
     setup (0);
 }
 
@@ -9354,7 +9355,8 @@ common_prepared_operands_p (rtx *operands, bool scalar)
   for (unsigned int i = 1; i <= (scalar ? 1U : 2U); ++i)
     if (reg_overlap_mentioned_p (operands[0], operands[i])
 	&& (!rtx_equal_p (operands[0], operands[i])
-	    || !rtx_equal_p (operands[3], operands[3 + i])
+	    || (operands[3] != const0_rtx
+		&& !rtx_equal_p (operands[3], operands[3 + i]))
 	    || !datatype_step (steps, 0)
 	    || datatype_step (steps, 0) != datatype_step (steps, i)))
       return false;
@@ -9373,6 +9375,8 @@ unpack_common_prepared (rtx *operands, rtx *full, int code)
     full[11] = operands[8];
   full[old_dest ? 12 : 11]
     = GEN_INT ((common_scalar_p (code) ? 2 : 6) | (old_dest ? 1 : 0));
+  if (!old_dest && reload_completed && operands[3] == const0_rtx)
+    full[11] = GEN_INT (UINTVAL (full[11]) | 1);
 }
 
 const char *
@@ -11644,6 +11648,11 @@ reuse_local_md ()
 				   : UNSPECV_ZTT_STATE_TERNARY)
 				: (scalar ? UNSPECV_ZTT_STATE_ELEMENTWISE_X
 				   : UNSPECV_ZTT_STATE_ELEMENTWISE_M);
+			    rtx setup = descriptors[0];
+			    if (!old_dest && code != UNSPECV_ZTT_STATE_GATHER
+				&& state.matches_packets
+				   (regs[0], setup, datatype_step (UINTVAL (steps), 0)))
+			      setup = const0_rtx;
 			    rtx pattern = old_dest
 			      ? gen_ztt_state_common_old_prepared
 				  (code, GET_MODE (regs[0]), Pmode, regs[0], regs[1],
@@ -11652,7 +11661,7 @@ reuse_local_md ()
 				   XVECEXP (src, 0, 8))
 			      : gen_ztt_state_common_prepared
 				  (code, GET_MODE (regs[0]), Pmode, regs[0], regs[1],
-				   regs[2], XVECEXP (src, 0, 2), XVECEXP (src, 0, 3),
+				   regs[2], setup, XVECEXP (src, 0, 3),
 				   XVECEXP (src, 0, 4), XVECEXP (src, 0, 6), steps);
 			    changed = validate_change (insn, &PATTERN (insn),
 					       pattern, false);
@@ -12338,6 +12347,37 @@ run_md_reuse_selftests ()
   unary[2] = unary[3];
   unary[4] = GEN_INT (pack_datatype_steps (1, 1));
   ASSERT_EQ (conversion_length (unary, true), 4U);
+  rtx common[] = { gen_rtx_REG (ZTTMR2mode, M_REG_FIRST),
+		   gen_rtx_REG (ZTTMR4mode, M_REG_FIRST + 4),
+		   gen_rtx_REG (ZTTMR4mode, M_REG_FIRST + 8),
+		   gen_rtx_REG (Pmode, 10), gen_rtx_REG (Pmode, 11),
+		   gen_rtx_REG (Pmode, 11), GEN_INT (6),
+		   GEN_INT (pack_datatype_steps (2, 4, 4)) };
+  ASSERT_TRUE (common_prepared_operands_p (common, false));
+  ASSERT_EQ (common_prepared_length
+	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_M), 8U);
+  common[3] = const0_rtx;
+  ASSERT_EQ (common_prepared_length
+	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_M), 4U);
+  common[0] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 4);
+  ASSERT_FALSE (common_prepared_operands_p (common, false));
+  common[0] = common[1];
+  ASSERT_FALSE (common_prepared_operands_p (common, false));
+  common[7] = GEN_INT (pack_datatype_steps (4, 4, 4));
+  ASSERT_TRUE (common_prepared_operands_p (common, false));
+  common[0] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
+  common[2] = gen_rtx_REG (Pmode, 12);
+  common[5] = gen_rtx_REG (Pmode, 13);
+  common[6] = GEN_INT (18);
+  common[7] = GEN_INT (pack_datatype_steps (2, 4));
+  ASSERT_TRUE (common_prepared_operands_p (common, true));
+  ASSERT_EQ (common_prepared_length
+	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_X), 8U);
+  common[5] = const0_rtx;
+  ASSERT_EQ (common_prepared_length
+	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_X), 4U);
+  reload_completed = 0;
+  ASSERT_FALSE (common_prepared_operands_p (common, true));
   reload_completed = saved_reload_completed;
   local_md_state state;
   rtx raw_reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);

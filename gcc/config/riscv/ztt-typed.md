@@ -820,12 +820,21 @@
    (UNSPECV_ZTT_STATE_TERNARY_X "rJ")
    (UNSPECV_ZTT_STATE_SCATTER "Wmr")])
 
+(define_int_attr ztt_common_dest_pred
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "reg_or_0_operand")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "reg_or_0_operand")
+   (UNSPECV_ZTT_STATE_GATHER "register_operand")])
+(define_int_attr ztt_common_dest_c
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "rJ")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "rJ")
+   (UNSPECV_ZTT_STATE_GATHER "r")])
+
 (define_insn "@ztt_state_common_prepared_<ztt_common_kind>_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
            (match_operand 2 "reg_or_0_operand" "<ztt_common_rhs>")
-           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 3 "<ztt_common_dest_pred>" "<ztt_common_dest_c>")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
            (match_operand 6 "const_int_operand" "n")
