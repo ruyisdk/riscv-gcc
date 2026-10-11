@@ -225,8 +225,10 @@ Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
 Register definitions invalidate dependent descriptors and overlapping groups.
 Full Pmode GPR single SETs establish constants through RTL simplification.
 Prepared groups retain constant snapshots after the original GPR changes;
-unknown descriptors require unchanged GPRs.  Partial/parallel definitions
-invalidate constants, and memory contents are not tracked.
+unknown descriptors follow full-width ordinary GPR copies using local value
+identities.  Overwriting one copy does not invalidate a surviving copy.
+Partial/parallel definitions invalidate affected register identities and
+constants; memory contents are not tracked.
 Typed loads and subsequent state operations can use an earlier-defined
 ordinary GPR holding the same full descriptor already consumed by a typed
 load.  Fixed/global registers and instruction clobbers are excluded.  Multiple

@@ -10311,8 +10311,11 @@ public:
 /* Track complete physical M groups and their descriptor values.  */
 class local_md_state
 {
-  struct fact { rtx group; rtx descriptor; } facts[M_REG_NUM] = {};
+  struct fact { rtx group; rtx descriptor; unsigned int identity; }
+    facts[M_REG_NUM] = {};
   rtx constants[32] = {}; /* GP_REG_NUM depends on the active RVE option.  */
+  unsigned int identities[32] = {};
+  unsigned int next_identity = 0;
   unsigned int definition[32] = {};
   bool descriptor_used[32] = {};
   unsigned int next_definition = 0;
@@ -10329,6 +10332,8 @@ public:
   {
     memset (facts, 0, sizeof (facts));
     memset (constants, 0, sizeof (constants));
+    memset (identities, 0, sizeof (identities));
+    next_identity = 0;
     memset (descriptor_used, 0, sizeof (descriptor_used));
     next_definition = 0;
     scalar_type = nullptr;
@@ -10357,6 +10362,33 @@ public:
       return NULL_RTX;
     rtx value = simplify_replace_fn_rtx (src, NULL_RTX, substitute, this);
     return CONST_INT_P (value) ? gen_int_mode (INTVAL (value), Pmode) : NULL_RTX;
+  }
+
+  unsigned int descriptor_identity (rtx reg)
+  {
+    if (!full_gpr_p (reg) || fixed_regs[REGNO (reg)]
+	|| global_regs[REGNO (reg)] || CONST_INT_P (descriptor_value (reg)))
+      return 0;
+    unsigned int &identity = identities[REGNO (reg) - GP_REG_FIRST];
+    if (!identity)
+      identity = ++next_identity;
+    return identity;
+  }
+
+  /* Capture the source identity before invalidating the copy destination.  */
+  unsigned int copied_identity (rtx pattern)
+  {
+    if (GET_CODE (pattern) != SET || !full_gpr_p (SET_DEST (pattern))
+	|| fixed_regs[REGNO (SET_DEST (pattern))]
+	|| global_regs[REGNO (SET_DEST (pattern))])
+      return 0;
+    return descriptor_identity (SET_SRC (pattern));
+  }
+
+  void record_copy (rtx reg, unsigned int identity)
+  {
+    gcc_assert (full_gpr_p (reg) && identity);
+    identities[REGNO (reg) - GP_REG_FIRST] = identity;
   }
 
   rtx broadcast_value (rtx reg) const
@@ -10391,6 +10423,7 @@ public:
   {
     gcc_assert (full_gpr_p (reg) && CONST_INT_P (value));
     constants[REGNO (reg) - GP_REG_FIRST] = value;
+    identities[REGNO (reg) - GP_REG_FIRST] = 0;
     definition[REGNO (reg) - GP_REG_FIRST] = ++next_definition;
     descriptor_used[REGNO (reg) - GP_REG_FIRST] = false;
   }
@@ -10441,13 +10474,15 @@ public:
   {
     for (auto &f : facts)
       if (f.group && (reg_overlap_mentioned_p (reg, f.group)
-		      || reg_overlap_mentioned_p (reg, f.descriptor)))
+		      || (!f.identity
+			  && reg_overlap_mentioned_p (reg, f.descriptor))))
 	f.group = nullptr;
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
-      if (constants[i]
+      if ((constants[i] || identities[i])
 	  && reg_overlap_mentioned_p (reg, gen_rtx_REG (Pmode, GP_REG_FIRST + i)))
 	{
 	  constants[i] = NULL_RTX;
+	  identities[i] = 0;
 	  descriptor_used[i] = false;
 	}
   }
@@ -10458,7 +10493,10 @@ public:
       return false;
     const auto &f = facts[REGNO (group) - M_REG_FIRST];
     return f.group && rtx_equal_p (f.group, group)
-      && rtx_equal_p (f.descriptor, descriptor_value (descriptor));
+      && (f.identity
+	  ? full_gpr_p (descriptor)
+	    && f.identity == identities[REGNO (descriptor) - GP_REG_FIRST]
+	  : rtx_equal_p (f.descriptor, descriptor_value (descriptor)));
   }
 
   bool matches_packets (rtx group, rtx descriptor, unsigned int step) const
@@ -10504,7 +10542,7 @@ public:
 		&& REG_P (descriptor) && GP_REG_P (REGNO (descriptor)));
     invalidate (group);
     facts[REGNO (group) - M_REG_FIRST]
-      = { group, descriptor_value (descriptor) };
+      = { group, descriptor_value (descriptor), descriptor_identity (descriptor) };
   }
 };
 
@@ -11375,9 +11413,12 @@ reuse_local_md ()
 	      rtx value = GET_CODE (PATTERN (insn)) == SET
 		&& local_md_state::full_gpr_p (SET_DEST (set))
 		? state.constant_value (SET_SRC (set)) : NULL_RTX;
+	      unsigned int identity = state.copied_identity (PATTERN (insn));
 	      note_stores (insn, invalidate_md_store, &state);
 	      if (value)
 		state.record_constant (SET_DEST (set), value);
+	      else if (identity)
+		state.record_copy (SET_DEST (set), identity);
 	    }
 	  else
 	    state.clear ();
@@ -11647,6 +11688,63 @@ run_md_reuse_selftests ()
   reload_completed = saved_reload_completed;
   local_md_state state;
   rtx raw_reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+  {
+    rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+    rtx d = gen_rtx_REG (Pmode, 12);
+    auto copy = [&state] (rtx dest, rtx src) {
+      unsigned int identity = state.copied_identity (gen_rtx_SET (dest, src));
+      state.invalidate (dest);
+      if (identity)
+	state.record_copy (dest, identity);
+    };
+    for (bool before : { false, true })
+      {
+	state.clear ();
+	if (before)
+	  copy (b, a);
+	state.remember (raw_reg, a);
+	if (!before)
+	  copy (b, a);
+	ASSERT_TRUE (state.matches (raw_reg, b));
+	copy (d, b);
+	copy (b, b);
+	ASSERT_TRUE (state.matches (raw_reg, b));
+	state.invalidate (a);
+	ASSERT_FALSE (state.matches (raw_reg, a));
+	ASSERT_TRUE (state.matches (raw_reg, b));
+	state.invalidate (gen_rtx_SUBREG (QImode, b, 0));
+	ASSERT_FALSE (state.matches (raw_reg, b));
+	ASSERT_TRUE (state.matches (raw_reg, d));
+	copy (b, a);
+	ASSERT_FALSE (state.matches (raw_reg, b));
+	copy (d, b);
+	ASSERT_FALSE (state.matches (raw_reg, d));
+      }
+    state.clear ();
+    state.remember (raw_reg, a);
+    for (rtx src : { gen_rtx_MEM (Pmode, a),
+		    gen_rtx_PLUS (Pmode, a, const1_rtx),
+		    gen_rtx_REG (QImode, 10) })
+      ASSERT_EQ (state.copied_identity (gen_rtx_SET (b, src)), 0U);
+    ASSERT_EQ (state.copied_identity
+      (gen_rtx_SET (gen_rtx_REG (QImode, 11), a)), 0U);
+    ASSERT_EQ (state.copied_identity
+      (gen_rtx_PARALLEL (VOIDmode, gen_rtvec (1, gen_rtx_SET (b, a)))), 0U);
+    if (TARGET_64BIT)
+      ASSERT_EQ (state.copied_identity
+	(gen_rtx_SET (gen_rtx_REG (SImode, 11), gen_rtx_REG (SImode, 10))), 0U);
+    copy (b, a);
+    state.record_constant (a, const1_rtx);
+    ASSERT_FALSE (state.matches (raw_reg, a));
+    ASSERT_TRUE (state.matches (raw_reg, b));
+    state.invalidate (raw_reg);
+    ASSERT_FALSE (state.matches (raw_reg, b));
+    state.remember (raw_reg, b);
+    state.clear ();
+    copy (a, b);
+    ASSERT_FALSE (state.matches (raw_reg, a));
+    state.clear ();
+  }
   rtx raw_mem = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 10));
   ASSERT_TRUE (md_raw_transfer_p (gen_rtx_SET (raw_reg, raw_mem)));
   ASSERT_TRUE (md_raw_transfer_p (gen_rtx_SET (raw_mem, raw_reg)));
