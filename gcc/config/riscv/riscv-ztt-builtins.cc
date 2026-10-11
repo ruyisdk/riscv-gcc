@@ -53,6 +53,7 @@ with GCC; see the file COPYING3.  If not see
 #include "regs.h"
 #include "tree-pass.h"
 #include "cfgrtl.h"
+#include "cfghooks.h"
 #include "df.h"
 #include "dce.h"
 #include "output.h"
@@ -10713,29 +10714,34 @@ md_preserving_branch_p (rtx_insn *insn)
     && recog_memoized (insn) >= 0 && md_scalar_insn_p (PATTERN (insn));
 }
 
-/* Keep one branch snapshot; joins remain barriers and spills stay local.  */
+/* Retain an outer branch while visiting one nested branch.  */
 class local_md_path
 {
-  edge pending = nullptr;
-  local_md_state saved;
+  edge pending[2] = {};
+  local_md_state saved[2];
+  unsigned int next = 0;
 
 public:
   void enter (basic_block bb, local_md_state &state)
   {
     if (!md_fallthrough_p (bb))
       {
-	if (pending && pending->dest == bb)
-	  {
-	    state = saved;
-	    if (dump_file)
-	      fprintf (dump_file, "Restore Md on branch edge %d -> %d\n",
-		       pending->src->index, bb->index);
-	  }
-	else
+	unsigned int i;
+	for (i = 0; i < ARRAY_SIZE (pending); ++i)
+	  if (pending[i] && pending[i]->dest == bb)
+	    {
+	      state = saved[i];
+	      if (dump_file)
+		fprintf (dump_file, "Restore Md on branch edge %d -> %d\n",
+			 pending[i]->src->index, bb->index);
+	      break;
+	    }
+	if (i == ARRAY_SIZE (pending))
 	  state.clear ();
       }
-    if (pending && pending->dest == bb)
-      pending = nullptr;
+    for (edge &e : pending)
+      if (e && e->dest == bb)
+	e = nullptr;
   }
 
   void leave (basic_block bb, const local_md_state &state)
@@ -10748,8 +10754,16 @@ public:
       if (!(e->flags & EDGE_FALLTHRU) && md_normal_edge_p (e)
 	  && e->dest->index >= NUM_FIXED_BLOCKS && single_pred_p (e->dest))
 	{
-	  pending = e;
-	  saved = state;
+	  unsigned int slot = next;
+	  for (unsigned int i = 0; i < ARRAY_SIZE (pending); ++i)
+	    if (!pending[i])
+	      {
+		slot = i;
+		break;
+	      }
+	  pending[slot] = e;
+	  saved[slot] = state;
+	  next = (slot + 1) % ARRAY_SIZE (pending);
 	  break;
 	}
   }
@@ -11693,6 +11707,49 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+    basic_block source[3], target[3];
+    basic_block last = EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb;
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (unsigned int i = 0; i < ARRAY_SIZE (source); ++i)
+      {
+	source[i] = create_empty_bb (last);
+	target[i] = create_empty_bb (source[i]);
+	last = target[i];
+	make_edge (source[i], target[i], 0);
+	rtx branch = gen_rtx_SET
+	  (pc_rtx, gen_rtx_IF_THEN_ELSE
+	    (VOIDmode, gen_rtx_EQ (VOIDmode, reg, const0_rtx),
+	     gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()), pc_rtx));
+	BB_END (source[i]) = emit_jump_insn_after (branch, BB_END (source[i]));
+      }
+    for (unsigned int count : { 2U, 3U })
+      {
+	local_md_path path;
+	local_md_state state;
+	for (unsigned int i = 0; i < count; ++i)
+	  {
+	    state.clear ();
+	    state.record_constant (reg, GEN_INT (32 * (i + 1)));
+	    state.remember (matrix, reg);
+	    path.leave (source[i], state);
+	  }
+	for (unsigned int i = 0; i < count; ++i)
+	  {
+	    state.clear ();
+	    path.enter (target[i], state);
+	    bool retained = count == 2 || i != 0;
+	    ASSERT_EQ (retained, state.matches (matrix, reg));
+	    if (retained)
+	      ASSERT_RTX_EQ (GEN_INT (32 * (i + 1)),
+			     state.descriptor_value (reg));
+	    path.enter (target[i], state);
+	    ASSERT_FALSE (state.matches (matrix, reg));
+	  }
+      }
+  }
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
     basic_block source = BASIC_BLOCK_FOR_FN (cfun, 2);
