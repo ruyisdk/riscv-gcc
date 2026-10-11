@@ -10699,6 +10699,32 @@ md_preserving_branch_p (rtx_insn *insn)
     && recog_memoized (insn) >= 0 && md_scalar_insn_p (PATTERN (insn));
 }
 
+/* Only the result GPR changes; the volatile CSR observation remains.  */
+static bool
+md_read_csr_p (int code)
+{
+  switch (code)
+    {
+    case CODE_FOR_riscv_ztt_read_amenlen_si:
+    case CODE_FOR_riscv_ztt_read_amenlen_di:
+    case CODE_FOR_riscv_ztt_read_ameudsz_si:
+    case CODE_FOR_riscv_ztt_read_ameudsz_di:
+    case CODE_FOR_riscv_ztt_read_ameown_si:
+    case CODE_FOR_riscv_ztt_read_ameown_di:
+    case CODE_FOR_riscv_ztt_read_amestype_si:
+    case CODE_FOR_riscv_ztt_read_amestype_di:
+    case CODE_FOR_riscv_ztt_read_amefflags_si:
+    case CODE_FOR_riscv_ztt_read_amefflags_di:
+    case CODE_FOR_riscv_ztt_read_amexsat_si:
+    case CODE_FOR_riscv_ztt_read_amexsat_di:
+    case CODE_FOR_riscv_ztt_read_amestatus_si:
+    case CODE_FOR_riscv_ztt_read_amestatus_di:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Remember one complete private spill until its inputs or memory change.  */
 class local_raw_spill
 {
@@ -10929,6 +10955,11 @@ reuse_cleaned_descriptors ()
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
+	  if (md_read_csr_p (code))
+	    {
+	      note_stores (insn, invalidate_md_store, &state);
+	      continue;
+	    }
 	  rtx pattern = PATTERN (insn);
 	  if (!NONJUMP_INSN_P (insn) || GET_CODE (pattern) != SET)
 	    {
@@ -11045,6 +11076,11 @@ reuse_local_md ()
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
+	  if (md_read_csr_p (code))
+	    {
+	      note_stores (insn, invalidate_md_store, &state);
+	      continue;
+	    }
 	  /* Whole-register transfers change payload, not the physical Md.  */
 	  if (code >= 0 && explicit_state
 	      && md_raw_transfer_p (PATTERN (insn)))
@@ -11591,6 +11627,38 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    local_md_state state;
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx copy = gen_rtx_REG (Pmode, 11);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx_insn *read = emit_insn
+      (Pmode == DImode ? gen_riscv_ztt_read_amefflags_di (reg)
+       : gen_riscv_ztt_read_amefflags_si (reg));
+    ASSERT_TRUE (md_read_csr_p (CODE_FOR_riscv_ztt_read_amefflags_si));
+    ASSERT_TRUE (md_read_csr_p (CODE_FOR_riscv_ztt_read_amefflags_di));
+    if (TARGET_ZTT && TARGET_ZICSR)
+      ASSERT_TRUE (md_read_csr_p (recog_memoized (read)));
+    ASSERT_FALSE (md_read_csr_p (-1));
+    ASSERT_FALSE (md_read_csr_p (CODE_FOR_riscv_ztt_none));
+    ASSERT_FALSE (md_read_csr_p (CODE_FOR_riscv_ztt_release));
+    ASSERT_FALSE (md_read_csr_p (CODE_FOR_riscv_ztt_acquire_si));
+    ASSERT_FALSE (md_read_csr_p (CODE_FOR_riscv_ztt_acquire_di));
+    state.record_constant (reg, GEN_INT (32));
+    state.record_constant (copy, GEN_INT (32));
+    state.remember (matrix, reg);
+    note_stores (read, invalidate_md_store, &state);
+    ASSERT_RTX_EQ (state.descriptor_value (reg), reg);
+    ASSERT_TRUE (state.matches (matrix, copy));
+    ASSERT_FALSE (state.matches (matrix, reg));
+    state.clear ();
+    state.remember (matrix, reg);
+    state.record_copy (copy, state.descriptor_identity (reg));
+    note_stores (read, invalidate_md_store, &state);
+    ASSERT_TRUE (state.matches (matrix, copy));
+    ASSERT_FALSE (state.matches (matrix, reg));
+  }
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
     rtx reg = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);

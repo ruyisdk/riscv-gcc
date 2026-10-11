@@ -209,6 +209,9 @@ fallthrough chains.  Plain scalar conditional branches preserve facts;
 joins, backedges, non-fallthrough and exceptional edges discard them.
 Descriptor cleanup after DCE uses the same boundaries; private raw spill
 tracking remains confined to each block.
+Recognized AME CSR reads preserve Md and scalar-datatype facts while
+invalidating the result GPR.  The volatile read and its order are unchanged;
+CSR writes, raw operations, acquire/release and asm retain their boundaries.
 Matching matmul and M-to-ACC sources skip save/set/reload; internal operands
 control output and instruction length.  M-to-ACC requires a matching Md
 for every complete transfer packet, including packed ACC groups.  It still
