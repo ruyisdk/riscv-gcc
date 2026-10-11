@@ -10894,6 +10894,10 @@ reuse_cleaned_descriptors ()
 				      ? 1 : 3));
 		  note_stores (insn, invalidate_md_store, &state);
 		  continue;
+		case UNSPECV_ZTT_SETTYP_P0:
+		case UNSPECV_ZTT_STATE_ZERO:
+		case UNSPECV_ZTT_INDEX_CONSTRUCT:
+		case UNSPECV_ZTT_BROADCAST:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
 		case UNSPECV_ZTT_STATE_TERNARY:
