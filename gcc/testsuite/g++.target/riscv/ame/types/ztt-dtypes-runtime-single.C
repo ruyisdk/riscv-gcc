@@ -6,7 +6,7 @@
 #define TEST_RUNTIME 1
 #include "../../../../gcc.target/riscv/ame/types/ztt-dtypes-single.h"
 /* { dg-final { scan-assembler "msettyp" } } */
-/* { dg-final { scan-assembler "mss.1r" } } */
-/* { dg-final { scan-assembler "mls.1r" } } */
+/* { dg-final { scan-assembler-times {\tmss\.rm\t} 60 } } */
+/* { dg-final { scan-assembler-times {\tmls\.rm\t} 30 } } */
 /* { dg-final { scan-assembler-times {\tmadd\.ew\t} 30 } } */
 /* { dg-final { scan-assembler-not "mmov.m.m" } } */

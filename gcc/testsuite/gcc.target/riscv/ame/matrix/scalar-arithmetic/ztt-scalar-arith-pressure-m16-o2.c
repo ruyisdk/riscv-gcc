@@ -12,4 +12,4 @@
 /* { dg-final { scan-assembler-times {\tmmulneg\.ew\.x\t} 8 } } */
 /* { dg-final { scan-assembler-times {\tmmin\.ew\.x\t} 32 } } */
 /* { dg-final { scan-assembler-times {\tmmax\.ew\.x\t} 32 } } */
-/* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 120 } } */
+/* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 72 } } */

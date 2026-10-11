@@ -5,7 +5,7 @@
 /* { dg-options "-O2 -fno-ipa-icf -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-p0-n128-u8-m16-a4" { target rv64 } } */
 #include "ztt-dtypes-single.h"
 /* { dg-final { scan-assembler "msettyp" } } */
-/* { dg-final { scan-assembler "mss.1r" } } */
-/* { dg-final { scan-assembler "mls.1r" } } */
+/* { dg-final { scan-assembler-times {\tmss\.rm\t} 60 } } */
+/* { dg-final { scan-assembler-times {\tmls\.rm\t} 30 } } */
 /* { dg-final { scan-assembler-times {\tmadd\.ew\t} 30 } } */
 /* { dg-final { scan-assembler-not "mmov.m.m" } } */

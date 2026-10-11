@@ -8,5 +8,5 @@
 /* { dg-final { scan-assembler-times {\tmor\.ew\.x\t} 40 } } */
 /* { dg-final { scan-assembler-times {\tmornot\.ew\.x\t} 40 } } */
 /* { dg-final { scan-assembler-times {\tmxor\.ew\.x\t} 40 } } */
-/* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 200 } } */
+/* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 120 } } */
 /* { dg-final { scan-assembler-not {\tmconv\.ew\t} } } */

@@ -12,5 +12,5 @@
 /* { dg-final { scan-assembler-times {\tmmulneg\.ew\.x\t} 28 } } */
 /* { dg-final { scan-assembler-times {\tmmin\.ew\.x\t} 40 } } */
 /* { dg-final { scan-assembler-times {\tmmax\.ew\.x\t} 40 } } */
-/* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 276 } } */
+/* { dg-final { scan-assembler-times {\tcsrw\tamestype,} 216 } } */
 /* { dg-final { scan-assembler-not {\tmconv\.ew\t} } } */

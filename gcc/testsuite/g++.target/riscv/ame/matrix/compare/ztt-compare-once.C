@@ -14,5 +14,5 @@ uint32_t once (int8_t *out, const int8_t *in, uint32_t c)
 }
 /* { dg-final { scan-assembler-times {\tmcmpge\.ew\.x\t} 4 } } */
 /* { dg-final { scan-assembler-times {\tmcmplt\.ew\.x\t} 4 } } */
-/* { dg-final { scan-assembler-times {csrw\tamestype,} 8 } } */
+/* { dg-final { scan-assembler-times {csrw\tamestype,} 2 } } */
 /* { dg-final { scan-assembler {li[ \t]+a0,2} } } */
