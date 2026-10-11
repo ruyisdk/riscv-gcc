@@ -200,10 +200,12 @@ Full Pmode GPR single SETs establish constants through RTL simplification.
 Prepared groups retain constant snapshots after the original GPR changes;
 unknown descriptors require unchanged GPRs.  Partial/parallel definitions
 invalidate constants, and memory contents are not tracked.
-Typed loads can use an earlier-defined ordinary GPR holding the same full
-descriptor already consumed by a typed load.  Fixed/global registers and
-instruction clobbers are excluded;
-dead materialization and register notes are updated after substitution.
+Typed loads and subsequent state operations can use an earlier-defined
+ordinary GPR holding the same full descriptor already consumed by a typed
+load.  Fixed/global registers and instruction clobbers are excluded.  Multiple
+descriptor substitutions in one consumer are validated together; scalar TC
+and control operands are not changed.  Dead materialization and register
+notes are updated after substitution.
 Typed integer and canonical FP16/BF16/FP32/FP64 zero construction reuses
 the bit clear performed by msettyp for a known descriptor and a complete
 group.  Other descriptors and raw zeros retain their instructions.

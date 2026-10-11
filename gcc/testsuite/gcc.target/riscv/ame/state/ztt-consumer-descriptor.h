@@ -1,0 +1,10 @@
+#include "ztt-unary-prep.h"
+#undef TYPE_
+#undef TYPE
+#undef OP_
+#undef OP
+#undef KEEP
+#undef TEST
+#undef PACK_SHAPE
+#include "ztt-rowcol-md-body.h"
+#include "../acc/matmul/ztt-acc-prep-body.h"

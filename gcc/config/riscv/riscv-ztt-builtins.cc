@@ -10040,6 +10040,102 @@ zero_broadcast_types_p (rtx source, rtx destination)
 	& ~HOST_WIDE_INT_UC (0x03c00000)) == 0;
 }
 
+/* Reuse constants whose materialization a preceding typed load still needs.  */
+static bool
+reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
+{
+  unsigned int mask;
+  switch (XINT (src, 1))
+    {
+    case UNSPECV_ZTT_SETTYP_P0:
+    case UNSPECV_ZTT_STATE_ZERO:
+    case UNSPECV_ZTT_INDEX_CONSTRUCT:
+    case UNSPECV_ZTT_ACC_ZERO:
+    case UNSPECV_ZTT_ACC_CLEAR:
+      mask = 1;
+      break;
+    case UNSPECV_ZTT_ACC_TO_M:
+    case UNSPECV_ZTT_ACC_FROM_M:
+      mask = 2;
+      break;
+    case UNSPECV_ZTT_STATE_STORE:
+      mask = XVECLEN (src, 0) > 1 ? 2 : 0;
+      break;
+    case UNSPECV_ZTT_STATE_MEMORY_STORE:
+      mask = XVECLEN (src, 0) == 4 ? 4 : 0;
+      break;
+    case UNSPECV_ZTT_STATE_ZIP_VALUE:
+      mask = XVECLEN (src, 0) == 4 ? 2 : 0;
+      break;
+    case UNSPECV_ZTT_BROADCAST:
+    case UNSPECV_ZTT_STATE_ROWCOL:
+    case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
+    case UNSPECV_ZTT_STATE_ADD:
+    case UNSPECV_ZTT_STATE_SUB:
+    case UNSPECV_ZTT_STATE_MIN:
+    case UNSPECV_ZTT_STATE_MAX:
+    case UNSPECV_ZTT_STATE_AND:
+    case UNSPECV_ZTT_STATE_ANDNOT:
+    case UNSPECV_ZTT_STATE_OR:
+    case UNSPECV_ZTT_STATE_ORNOT:
+    case UNSPECV_ZTT_STATE_XOR:
+      mask = 4;
+      break;
+    case UNSPECV_ZTT_STATE_CONVERT:
+    case UNSPECV_ZTT_STATE_CONVERT_REUSE:
+    case UNSPECV_ZTT_STATE_STRUCTURAL:
+    case UNSPECV_ZTT_STATE_STRUCTURAL_REUSE:
+    case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
+    case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
+      mask = 6;
+      break;
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE:
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT:
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
+    case UNSPECV_ZTT_STATE_TERNARY:
+    case UNSPECV_ZTT_STATE_GATHER:
+    case UNSPECV_ZTT_STATE_SCATTER:
+      mask = 28;
+      break;
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
+    case UNSPECV_ZTT_STATE_TERNARY_X:
+    case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
+      mask = 12;
+      break;
+    case UNSPECV_ZTT_ACC_MMUL:
+      mask = XVECLEN (src, 0) == 8 ? 72 : XVECLEN (src, 0) == 7 ? 8 : 0;
+      break;
+    default:
+      return false;
+    }
+  unsigned int changed = 0;
+  for (unsigned int i = 0; mask; ++i, mask >>= 1)
+    if (mask & 1)
+      {
+	gcc_assert (i < (unsigned int) XVECLEN (src, 0));
+	rtx *where = &XVECEXP (src, 0, i);
+	rtx reg = state.descriptor_register (*where, insn);
+	if (reg != *where)
+	  {
+	    if (!validate_change (insn, where, reg, true))
+	      {
+		cancel_changes (0);
+		return false;
+	      }
+	    changed |= 1U << i;
+	  }
+      }
+  if (!changed || !apply_change_group ())
+    return false;
+  df_insn_rescan (insn);
+  if (dump_file)
+    fprintf (dump_file, "Reuse typed descriptors at insn %d: 0x%x\n",
+	     INSN_UID (insn), changed);
+  return true;
+}
+
 /* Reuse Md within each block after scheduling and register allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -10131,6 +10227,8 @@ reuse_local_md ()
 		    }
 		  state.note_load_descriptor (*where);
 		}
+	      else if (reuse_typed_descriptors (insn, src, state))
+		cleanup = descriptor_cleanup = true;
 	      rtx group = NULL_RTX, descriptor = NULL_RTX;
 	      switch (XINT (src, 1))
 		{
