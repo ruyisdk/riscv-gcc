@@ -10616,6 +10616,25 @@ md_scalar_insn_p (rtx pattern)
   return true;
 }
 
+static bool
+md_fallthrough_p (basic_block bb)
+{
+  edge incoming = single_pred_p (bb) ? single_pred_edge (bb) : nullptr;
+  return incoming && incoming->src == bb->prev_bb
+    && (incoming->flags & EDGE_FALLTHRU)
+    && !(incoming->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_DFS_BACK
+			   | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING));
+}
+
+/* A plain scalar branch changes neither registers nor Md.  */
+static bool
+md_preserving_branch_p (rtx_insn *insn)
+{
+  return JUMP_P (insn) && GET_CODE (PATTERN (insn)) == SET
+    && any_condjump_p (insn) && onlyjump_p (insn)
+    && recog_memoized (insn) >= 0 && md_scalar_insn_p (PATTERN (insn));
+}
+
 /* Remember one complete private spill until its inputs or memory change.  */
 class local_raw_spill
 {
@@ -10813,10 +10832,12 @@ reuse_cleaned_descriptors ()
 {
   bool changed = false;
   const bool explicit_state = riscv_ztt_explicit_state_p ();
+  local_md_state state;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
-      local_md_state state;
+      if (!md_fallthrough_p (bb))
+	state.clear ();
       local_raw_spill spill;
       rtx_insn *insn, *next;
       FOR_BB_INSNS_SAFE (bb, insn, next)
@@ -10839,6 +10860,8 @@ reuse_cleaned_descriptors ()
 	    }
 	  else
 	    spill.clear ();
+	  if (md_preserving_branch_p (insn))
+	    continue;
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
@@ -10927,11 +10950,7 @@ reuse_local_md ()
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
-      edge incoming = single_pred_p (bb) ? single_pred_edge (bb) : nullptr;
-      if (!incoming || incoming->src != bb->prev_bb
-	  || !(incoming->flags & EDGE_FALLTHRU)
-	  || (incoming->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_DFS_BACK
-				 | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING)))
+      if (!md_fallthrough_p (bb))
 	state.clear ();
       rtx_insn *insn;
       FOR_BB_INSNS (bb, insn)
@@ -10940,11 +10959,7 @@ reuse_local_md ()
 	    continue;
 	  if (CALL_P (insn) || JUMP_P (insn))
 	    {
-	      /* A plain scalar branch changes neither registers nor Md.  */
-	      if (JUMP_P (insn) && GET_CODE (PATTERN (insn)) == SET
-		  && any_condjump_p (insn) && onlyjump_p (insn)
-		  && recog_memoized (insn) >= 0
-		  && md_scalar_insn_p (PATTERN (insn)))
+	      if (md_preserving_branch_p (insn))
 		continue;
 	      state.clear ();
 	      continue;
