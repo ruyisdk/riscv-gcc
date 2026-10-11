@@ -139,6 +139,14 @@ retain their bits, including zero signs and NaN payloads.  The move stays
 visible to early ownership checking even for an unused result.  Nonzero and
 dynamic offsets, row/column broadcasts and O0 retain their existing lowering.
 
+Row/column broadcast indices and shift offsets use SI control operands.
+The instructions consume only bits 31:0, independently of XLEN.  Public
+size_t/int signatures and any separate full-width uses remain unchanged.
+
+Typed broadcasts use the source scalar carrier mode, bounded by XLEN.
+Both descriptors retain XLEN operands.  Argument
+evaluation and independent full-width uses keep their original widths.
+
 Local datatype preparation
 --------------------------
 

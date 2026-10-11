@@ -248,11 +248,13 @@
 (define_insn "@ztt_typed_broadcast_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
-          [(match_operand:P 1 "register_operand" "r")
+          [(match_operand 1 "register_operand" "r")
            (match_operand:P 2 "register_operand" "r")
            (match_operand:P 3 "register_operand" "r")]
           UNSPECV_ZTT_BROADCAST))]
-  "TARGET_ZTT && riscv_ztt::typed_profile_p ()"
+  "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && (GET_MODE (operands[1]) == QImode || GET_MODE (operands[1]) == HImode
+       || GET_MODE (operands[1]) == SImode || GET_MODE (operands[1]) == Pmode)"
   "msettyp\t%0,%3\;mbcast.m.x\t%0,%1,%2"
   [(set_attr "type" "multi")
    (set_attr "length" "8")])
@@ -988,11 +990,11 @@
 
 ;; Broadcast selectors may
 ;; trap even if the result is unused.  The late pass adds source preservation.
-(define_insn "@ztt_typed_rowcol_<ZTT_M:mode>_<P:mode>"
+(define_insn "@ztt_typed_rowcol_<ZTT_M:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand:SI 2 "register_operand" "r")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")]
           UNSPECV_ZTT_ROWCOL))]
@@ -1004,7 +1006,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_unary_dest_c>")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand:SI 2 "register_operand" "r")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
            (match_operand 6 "const_int_operand" "n")]
@@ -1024,7 +1026,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand:SI 2 "register_operand" "r")
            (match_operand:P 3 "register_operand" "r")
            (match_operand 4 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_ROWCOL))]

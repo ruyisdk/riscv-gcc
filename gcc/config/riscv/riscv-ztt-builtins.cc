@@ -7389,6 +7389,7 @@ expand_broadcast (type_index dst_type, type_index source_type, tree exp)
   rtx scalar = expand_normal (scalar_arg);
   scalar = force_reg (Pmode, convert_modes
     (Pmode, TYPE_MODE (carrier), scalar, TYPE_UNSIGNED (carrier)));
+  scalar = gen_lowpart (TYPE_MODE (carrier), scalar);
   rtx source_descriptor = force_reg
     (Pmode, GEN_INT (types[source_type].descriptor));
   rtx descriptor = force_reg (Pmode, GEN_INT (dtype));
@@ -7621,13 +7622,15 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  emit_move_insn (result, matrix_register (mode, exp, 0));
 	  return result;
 	}
+      /* Both fixed-type controls consume only the low 32 bits.  */
       rtx control = expand_normal (arg);
       control = force_reg (Pmode, convert_modes
 	(Pmode, TYPE_MODE (TREE_TYPE (arg)), control,
 	 d.prototype == PROTO_M_ROWCOL_INDEX));
+      control = gen_lowpart (SImode, control);
       rtx result = gen_reg_rtx (mode);
       emit_insn (gen_ztt_typed_rowcol
-	(mode, Pmode, result, matrix_register (mode, exp, 0), control,
+	(mode, result, matrix_register (mode, exp, 0), control,
 	 GEN_INT (rowcol_variant (d.expansion)), descriptor));
       return result;
     }
@@ -9458,6 +9461,20 @@ public:
     return CONST_INT_P (value) ? gen_int_mode (INTVAL (value), Pmode) : NULL_RTX;
   }
 
+  rtx broadcast_value (rtx reg) const
+  {
+    if (REG_P (reg) && GP_REG_P (REGNO (reg))
+	&& (GET_MODE (reg) == QImode || GET_MODE (reg) == HImode
+	    || GET_MODE (reg) == SImode))
+      {
+	/* A lowpart use does not establish the register's high bits.  */
+	rtx value = descriptor_value (gen_rtx_REG (Pmode, REGNO (reg)));
+	if (CONST_INT_P (value))
+	  return gen_int_mode (INTVAL (value), GET_MODE (reg));
+      }
+    return descriptor_value (reg);
+  }
+
   void record_constant (rtx reg, rtx value)
   {
     gcc_assert (full_gpr_p (reg) && CONST_INT_P (value));
@@ -9651,7 +9668,7 @@ reuse_local_md ()
 	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
 	    {
 	      bool zero_broadcast = XINT (src, 1) == UNSPECV_ZTT_BROADCAST
-		&& state.descriptor_value (XVECEXP (src, 0, 0)) == const0_rtx
+		&& state.broadcast_value (XVECEXP (src, 0, 0)) == const0_rtx
 		&& zero_broadcast_types_p
 		     (state.descriptor_value (XVECEXP (src, 0, 1)),
 		      state.descriptor_value (XVECEXP (src, 0, 2)));
@@ -10203,7 +10220,18 @@ run_md_reuse_selftests ()
   ASSERT_EQ (state.constant_value (b), NULL_RTX);
   if (TARGET_64BIT)
     {
+      rtx si = gen_rtx_REG (SImode, REGNO (b));
+      ASSERT_EQ (state.broadcast_value (si), si);
+      state.record_constant (b, GEN_INT (HOST_WIDE_INT_C (0x100000000)));
+      ASSERT_EQ (state.broadcast_value (si), const0_rtx);
+      ASSERT_EQ (state.descriptor_value (si), si);
+      ASSERT_TRUE (rtx_equal_p (state.descriptor_value (b),
+			      GEN_INT (HOST_WIDE_INT_C (0x100000000))));
+      state.invalidate (si);
+      ASSERT_EQ (state.broadcast_value (si), si);
       state.record_constant (b, GEN_INT (HOST_WIDE_INT_C (0x180000000)));
+      ASSERT_TRUE (rtx_equal_p (state.broadcast_value (si),
+			      GEN_INT (-HOST_WIDE_INT_C (0x80000000))));
       rtx low = gen_rtx_SUBREG (SImode, b, 0);
       ASSERT_TRUE (rtx_equal_p
 	(state.constant_value (gen_rtx_SIGN_EXTEND (DImode, low)),
@@ -10212,6 +10240,24 @@ run_md_reuse_selftests ()
       ASSERT_EQ (state.constant_value (b), NULL_RTX);
     }
   state.clear ();
+  ASSERT_EQ (state.broadcast_value (gen_rtx_REG (SImode, GP_REG_FIRST)),
+	     const0_rtx);
+  for (machine_mode mode : { QImode, HImode })
+    {
+      rtx narrow = gen_rtx_REG (mode, REGNO (b));
+      ASSERT_EQ (state.broadcast_value (narrow), narrow);
+      state.record_constant (b, GEN_INT (0x10000));
+      ASSERT_EQ (state.broadcast_value (narrow), const0_rtx);
+      ASSERT_EQ (state.descriptor_value (narrow), narrow);
+      ASSERT_TRUE (rtx_equal_p (state.descriptor_value (b), GEN_INT (0x10000)));
+      state.record_constant (b, GEN_INT (0x1ffff));
+      ASSERT_EQ (state.broadcast_value (narrow), constm1_rtx);
+      state.invalidate (narrow);
+      ASSERT_EQ (state.broadcast_value (narrow), narrow);
+      ASSERT_EQ (state.descriptor_value (b), b);
+      ASSERT_EQ (state.broadcast_value (gen_rtx_REG (mode, GP_REG_FIRST)),
+		 const0_rtx);
+    }
   ASSERT_EQ (state.constant_value (a), NULL_RTX);
   ASSERT_FALSE (state.matches (group, a));
 
