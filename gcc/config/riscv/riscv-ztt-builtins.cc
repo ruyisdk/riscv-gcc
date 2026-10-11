@@ -10879,6 +10879,14 @@ reuse_cleaned_descriptors ()
 	    {
 	      switch (XINT (src, 1))
 		{
+		case UNSPECV_ZTT_STATE_STORE:
+		case UNSPECV_ZTT_STATE_MEMORY_STORE:
+		  /* Prepared stores change memory, not descriptor GPRs.  */
+		  if (MEM_P (SET_DEST (pattern))
+		      && XVECLEN (src, 0)
+			 == (XINT (src, 1) == UNSPECV_ZTT_STATE_STORE ? 1 : 3))
+		    continue;
+		  break;
 		case UNSPECV_ZTT_STATE_LOAD:
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
 		  state.note_descriptor_use

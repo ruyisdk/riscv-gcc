@@ -253,6 +253,8 @@ witnesses in this scan.  Eliminated TC writes do not establish a witness.
 All required TC writes and their values are retained.
 Prepared row/column SETs also preserve descriptor GPR facts; their setter,
 control operand and matrix operation remain unchanged.
+Prepared typed store SETs preserve those facts as well; stores and their
+layout operands remain unchanged and still end private spill tracking.
 Recognized singleton raw loads/stores preserve descriptor GPR facts in
 this scan, as in the main Md scan.
 The scan also removes a singleton raw reload of the unchanged register
