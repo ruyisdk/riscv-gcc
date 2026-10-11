@@ -226,6 +226,9 @@ destination reads both source groups before the core writes its result.
 Groups occupying at least half the M bank retain the combined register and
 matching constraint, avoiding an impossible independent alternative while
 letting the allocator coalesce the input and output.
+Uniform-type binary operations allow complete source/output overlap for all
+runtime M group sizes.  Both inputs are preserved before the operation, and
+an overlapping destination needs no separate datatype setup.
 
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values

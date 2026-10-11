@@ -20,10 +20,11 @@
                                    (ZTTM4 "72") (ZTTMR4 "72")
                                    (ZTTMR8 "136") (ZTTMR16 "264")
                                    (ZTTMR32 "520")])
-;; Large same-Md operands can consume the whole register bank.  Their
-;; state envelope permits complete source/destination overlap.
-(define_mode_attr ztt_binary_dest [(ZTTM2 "&Wmr") (ZTTMR2 "&Wmr")
-                                  (ZTTM4 "&Wmr") (ZTTMR4 "&Wmr")
+;; Runtime same-Md envelopes preserve sources before writing their result
+;; and skip destination setup for a complete overlapping input.
+(define_mode_attr ztt_binary_dest [(ZTTM1 "&Wmr") (ZTTMR1 "Wmr")
+                                  (ZTTM2 "&Wmr") (ZTTMR2 "Wmr")
+                                  (ZTTM4 "&Wmr") (ZTTMR4 "Wmr")
                                   (ZTTMR8 "Wmr") (ZTTMR16 "Wmr")
                                   (ZTTMR32 "Wmr")])
 
@@ -311,7 +312,7 @@
    (set_attr "length" "4")])
 
 (define_insn "@ztt_state_<ztt_state_binary_op>_<ZTT_M1:mode>_<P:mode>"
-  [(set (match_operand:ZTT_M1 0 "register_operand" "=&Wmr")
+  [(set (match_operand:ZTT_M1 0 "register_operand" "=<ztt_binary_dest>")
         (unspec_volatile:ZTT_M1
           [(match_operand:ZTT_M1 1 "register_operand" "Wmr")
            (match_operand:ZTT_M1 2 "register_operand" "Wmr")
