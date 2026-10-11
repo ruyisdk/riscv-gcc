@@ -185,6 +185,12 @@ The index may pass through up to four same-type M copies in that window.
 The constructor and copies remain as ownership witnesses.  Inner copy
 inputs require a single value use; other uses of the final index remain.
 
+Consecutive integer row/column broadcasts with the same axis, control and
+complete basic-square type reuse the first result within that local window.
+The first broadcast retains its range and ownership checks.  Different
+controls, floating types and intervening state or memory operations do not
+qualify.
+
 Zero-offset integer and floating row/column shifts of basic Squares expand
 to complete-mode copies on optimized runtime profiles.  Floating values
 retain their bits, including zero signs and NaN payloads.  The move stays

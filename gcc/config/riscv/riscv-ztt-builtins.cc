@@ -7723,6 +7723,35 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
   return data;
 }
 
+/* The first broadcast retains the control-range and ownership checks.  */
+static tree
+repeated_broadcast_value (const builtin_description &d,
+			  gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  if (d.type == TYPE_MAX || types[d.type].accumulator
+      || types[d.type].rows != 1 || types[d.type].columns != 1
+      || !type_nregs (d.type)
+      || (types[d.type].descriptor & 0xff) < active_profile ()->uds
+      || floating_descriptor_p (types[d.type].descriptor))
+    return NULL_TREE;
+  tree value = gimple_call_arg (stmt, 0);
+  if (TREE_CODE (value) != SSA_NAME
+      || type_for_tree (TREE_TYPE (value)) != d.type)
+    return NULL_TREE;
+  gimple *producer = SSA_NAME_DEF_STMT (value);
+  unsigned int code = structure_builtin_code (producer);
+  if (code == ZTT_BUILTIN_MAX)
+    return NULL_TREE;
+  const auto source = builtin_description_for (code);
+  if (source.prototype != d.prototype || source.type != d.type
+      || source.expansion != d.expansion
+      || !operand_equal_p (gimple_call_arg (producer, 1),
+			   gimple_call_arg (stmt, 1), 0)
+      || !local_structure_producers_p (gsi, &producer, 1))
+    return NULL_TREE;
+  return value;
+}
+
 gimple *
 gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
@@ -7737,12 +7766,16 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
     {
       const auto d = builtin_description_for (code);
       bool zip = d.prototype == PROTO_M_M && zip_variant (d.expansion) >= 0;
-      if ((!zip && d.expansion != EXPAND_MEXTRACT
+      bool broadcast = d.prototype == PROTO_M_ROWCOL_INDEX
+	&& (d.expansion == EXPAND_MCOLBCAST_EW_X
+	    || d.expansion == EXPAND_MROWBCAST_EW_X);
+      if ((!zip && !broadcast && d.expansion != EXPAND_MEXTRACT
 	   && d.expansion != EXPAND_MCONCAT)
 	  || gimple_call_num_args (stmt) != (zip ? 1 : 2)
 	  || type_for_tree (TREE_TYPE (lhs)) != d.type)
 	return nullptr;
-      value = zip ? inverse_zip_value (d, gsi, stmt)
+      value = broadcast ? repeated_broadcast_value (d, gsi, stmt)
+	: zip ? inverse_zip_value (d, gsi, stmt)
 	: d.expansion == EXPAND_MEXTRACT ? extracted_concat_value (d, gsi, stmt)
 	: rebuilt_pair_value (d, gsi, stmt);
     }
