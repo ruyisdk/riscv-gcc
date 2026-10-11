@@ -130,28 +130,33 @@ These calculations stay in place, and the 16-statement bound is unchanged.
 The window also permits builtin amenlen and ameudsz reads, preserving each
 read and its order.  Other CSR observations and ordinary calls remain
 boundaries; builtin identity, not the function name, determines eligibility.
+Rebuild and inverse-permutation inputs may also have later complete typed
+stores in the same local window.  Those stores retain the intermediate
+values; other extra users or an intervening state boundary prevent folding.
 
 A concatenation of complementary halves from the same parent can also
-reuse that parent.  Both halves must have one use and the parent's only
-value uses must be the two extractions.  The same local boundaries apply;
+reuse that parent.  Apart from the later stores, each half has one use;
+the parent's only value uses must be the two extractions.  The same local boundaries apply;
 extraction calls remain as ownership witnesses.  Reversed indices and extra
-live values keep their existing lowering.
+live values other than the permitted stores keep their existing lowering.
 
 Each half may pass through up to four same-type M-to-M copies.  Every copy
-result and extracted half must have one use.  All calls and witnesses must
-fit in the same 16-statement local window.  Longer chains and
+result and extracted half must have one use, except for later stores of the
+final half.  All calls and witnesses must fit in the same 16-statement
+local window.  Longer chains and
 fractional-register halves do not match.
 
 Same-axis zip/unzip pairs can reuse their input in either order.  They
 require the same complete 1x2 type, one value use of the input and
-intermediate, and the same local boundaries.  The inner call remains for
-ownership checking.  Different axes, repeated permutations and packed
+intermediate (apart from its later stores), and the same local boundaries.
+The inner call remains for ownership checking.  Different axes, repeated permutations and packed
 types do not match.
 
 Up to four same-type M-to-M copies may occur between the inverse operations.
-Every intermediate value must have one use, and all copies join the same
-bounded window.  Inner layout and copy calls keep their operands for
-ownership checking.  Longer chains and extra live values do not match.
+Every intermediate value must have one use, except for later stores of the
+final copy; all copies join the same bounded window.  Inner layout and copy
+calls keep their operands for ownership checking.  Longer chains and other
+extra live values do not match.
 
 Resultless typed extract and zip calls can remain as ownership witnesses
 without counting as parent value uses.  Every use and witness must occur

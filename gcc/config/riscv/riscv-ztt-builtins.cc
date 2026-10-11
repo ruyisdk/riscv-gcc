@@ -7468,6 +7468,59 @@ structure_store_p (gimple *stmt, tree value = NULL_TREE)
     && (!value || gimple_call_arg (stmt, nargs - 1) == value);
 }
 
+static bool
+local_structure_stores_p (gimple_stmt_iterator *gsi, gimple *const *stores,
+			  unsigned int count)
+{
+  if (!count)
+    return true;
+  unsigned int seen = 0, all = (1U << count) - 1;
+  gimple_stmt_iterator next = *gsi;
+  for (unsigned int i = 0; i < 16; ++i)
+    {
+      gsi_next_nondebug (&next);
+      if (gsi_end_p (next))
+	return false;
+      gimple *stmt = gsi_stmt (next);
+      for (unsigned int j = 0; j < count; ++j)
+	if (stmt == stores[j])
+	  seen |= 1U << j;
+      if (seen == all)
+	return true;
+      if (!structure_store_p (stmt) && !local_structure_gap_p (stmt))
+	return false;
+    }
+  return false;
+}
+
+/* Extra users must retain the complete value in local, later stores.  */
+static bool
+locally_stored_structure_p (tree value, gimple_stmt_iterator *gsi)
+{
+  if (TREE_CODE (value) != SSA_NAME || has_single_use (value))
+    return false;
+  gimple *stores[16];
+  unsigned int count = 0, visits = 0, matched = 0;
+  imm_use_iterator iter;
+  use_operand_p use;
+  FOR_EACH_IMM_USE_FAST (use, iter, value)
+    {
+      gimple *stmt = USE_STMT (use);
+      if (is_gimple_debug (stmt))
+	continue;
+      if (++visits > 16)
+	return false;
+      if (stmt == gsi_stmt (*gsi))
+	++matched;
+      else if (structure_store_p (stmt, value)
+	       && gimple_bb (stmt) == gsi_bb (*gsi))
+	stores[count++] = stmt;
+      else
+	return false;
+    }
+  return matched == 1 && count && local_structure_stores_p (gsi, stores, count);
+}
+
 /* Later full stores keep PARENT live without extending its lifetime.  */
 static bool
 local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
@@ -7515,26 +7568,7 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
     uses[nuses++] = copies[i];
   if (!local_structure_producers_p (gsi, uses, nuses))
     return false;
-  if (!nstores)
-    return true;
-
-  unsigned int seen = 0, all = (1U << nstores) - 1;
-  gimple_stmt_iterator next = *gsi;
-  for (unsigned int i = 0; i < 16; ++i)
-    {
-      gsi_next_nondebug (&next);
-      if (gsi_end_p (next))
-	return false;
-      gimple *stmt = gsi_stmt (next);
-      for (unsigned int j = 0; j < nstores; ++j)
-	if (stmt == stores[j])
-	  seen |= 1U << j;
-      if (seen == all)
-	return true;
-      if (!structure_store_p (stmt) && !local_structure_gap_p (stmt))
-	return false;
-    }
-  return false;
+  return local_structure_stores_p (gsi, stores, nstores);
 }
 
 static tree
@@ -7591,7 +7625,8 @@ rebuilt_pair_value (const builtin_description &d,
   for (unsigned int i = 0; i < 2; ++i)
     {
       tree half = gimple_call_arg (stmt, i);
-      if (!strip_structure_copies (half, half_type, copies, ncopies))
+      bool stored = locally_stored_structure_p (half, gsi);
+      if (!strip_structure_copies (half, half_type, copies, ncopies, stored))
 	return NULL_TREE;
       extracts[i] = SSA_NAME_DEF_STMT (half);
       unsigned int code = structure_builtin_code (extracts[i]);
@@ -7628,7 +7663,8 @@ inverse_zip_value (const builtin_description &d,
   tree middle = gimple_call_arg (stmt, 0);
   gimple *copies[4];
   unsigned int ncopies = 0;
-  if (!strip_structure_copies (middle, d.type, copies, ncopies))
+  bool stored = locally_stored_structure_p (middle, gsi);
+  if (!strip_structure_copies (middle, d.type, copies, ncopies, stored))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (middle);
   unsigned int code = structure_builtin_code (producer, 1);
