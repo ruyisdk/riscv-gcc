@@ -500,11 +500,14 @@
            (match_operand:P 5 "reg_or_0_operand" "rJ")
            (match_operand:P 7 "reg_or_0_operand" "rJ")
            (match_operand 8 "const_int_operand" "n")
-           (match_operand 9 "const_int_operand" "n")]
+           (match_operand 9 "const_int_operand" "n")
+           (match_operand 11 "const_int_operand" "n")]
           ZTT_STATE_ELEMENTWISE))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[11]) & ~(<ztt_elementwise_scalar> ? 2U : 6U))
+   && (reload_completed || operands[11] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))
    && (!(<ztt_elementwise_reuse> & 1)
@@ -573,11 +576,14 @@
            (match_operand:P 5 "register_operand" "r")
            (match_operand:P 7 "reg_or_0_operand" "rJ")
            (match_operand 8 "const_int_operand" "n")
-           (match_operand 9 "const_int_operand" "n")]
+           (match_operand 9 "const_int_operand" "n")
+           (match_operand 11 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_GATHER))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[11]) & ~6U)
+   && (reload_completed || operands[11] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))"
@@ -598,11 +604,14 @@
            (match_operand:P 7 "reg_or_0_operand" "rJ")
            (match_operand 8 "const_int_operand" "n")
            (match_operand 9 "const_int_operand" "n")
-           (match_operand:ZTT_M 11 "register_operand" "0")]
+           (match_operand:ZTT_M 11 "register_operand" "0")
+           (match_operand 12 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_SCATTER))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[12]) & ~7U)
+   && (reload_completed || operands[12] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))"
@@ -642,11 +651,14 @@
            (match_operand:P 7 "reg_or_0_operand" "rJ")
            (match_operand 8 "const_int_operand" "n")
            (match_operand 9 "const_int_operand" "n")
-           (match_operand:ZTT_M 11 "register_operand" "0")]
+           (match_operand:ZTT_M 11 "register_operand" "0")
+           (match_operand 12 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_TERNARY))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[12]) & ~7U)
+   && (reload_completed || operands[12] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))"
@@ -714,11 +726,14 @@
            (match_operand:P 7 "reg_or_0_operand" "rJ")
            (match_operand 8 "const_int_operand" "n")
            (match_operand 9 "const_int_operand" "n")
-           (match_operand:ZTT_M 11 "register_operand" "0")]
+           (match_operand:ZTT_M 11 "register_operand" "0")
+           (match_operand 12 "const_int_operand" "n")]
           ZTT_STATE_TERNARY_X))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[12]) & ~3U)
+   && (reload_completed || operands[12] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))
    && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[8]), true)"
@@ -728,6 +743,90 @@
   [(set_attr "type" "multi")
    (set (attr "length")
         (symbol_ref "riscv_ztt::scalar_ternary_length (operands)"))])
+
+(define_int_iterator ZTT_COMMON_PREPARED
+  [UNSPECV_ZTT_STATE_ELEMENTWISE_M UNSPECV_ZTT_STATE_ELEMENTWISE_X
+   UNSPECV_ZTT_STATE_GATHER])
+(define_int_iterator ZTT_COMMON_OLD_PREPARED
+  [UNSPECV_ZTT_STATE_TERNARY UNSPECV_ZTT_STATE_TERNARY_X
+   UNSPECV_ZTT_STATE_SCATTER])
+(define_int_attr ztt_common_kind
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "binary_m")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "binary_x")
+   (UNSPECV_ZTT_STATE_GATHER "gather")
+   (UNSPECV_ZTT_STATE_TERNARY "ternary_m")
+   (UNSPECV_ZTT_STATE_TERNARY_X "ternary_x")
+   (UNSPECV_ZTT_STATE_SCATTER "scatter")])
+(define_int_attr ztt_common_code
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "UNSPECV_ZTT_STATE_ELEMENTWISE_M")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "UNSPECV_ZTT_STATE_ELEMENTWISE_X")
+   (UNSPECV_ZTT_STATE_GATHER "UNSPECV_ZTT_STATE_GATHER")
+   (UNSPECV_ZTT_STATE_TERNARY "UNSPECV_ZTT_STATE_TERNARY")
+   (UNSPECV_ZTT_STATE_TERNARY_X "UNSPECV_ZTT_STATE_TERNARY_X")
+   (UNSPECV_ZTT_STATE_SCATTER "UNSPECV_ZTT_STATE_SCATTER")])
+(define_int_attr ztt_common_scalar
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "false")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "true")
+   (UNSPECV_ZTT_STATE_GATHER "false")
+   (UNSPECV_ZTT_STATE_TERNARY "false")
+   (UNSPECV_ZTT_STATE_TERNARY_X "true")
+   (UNSPECV_ZTT_STATE_SCATTER "false")])
+(define_int_attr ztt_common_rhs
+  [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_X "r")
+   (UNSPECV_ZTT_STATE_GATHER "Wmr")
+   (UNSPECV_ZTT_STATE_TERNARY "Wmr")
+   (UNSPECV_ZTT_STATE_TERNARY_X "r")
+   (UNSPECV_ZTT_STATE_SCATTER "Wmr")])
+
+(define_insn "@ztt_state_common_prepared_<ztt_common_kind>_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand 1 "register_operand" "Wmr")
+           (match_operand 2 "register_operand" "<ztt_common_rhs>")
+           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 4 "register_operand" "r")
+           (match_operand:P 5 "reg_or_0_operand" "rJ")
+           (match_operand 6 "const_int_operand" "n")
+           (match_operand 7 "const_int_operand" "n")]
+          ZTT_COMMON_PREPARED))]
+  "TARGET_ZTT && reload_completed && riscv_ztt::typed_profile_p ()
+   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
+   && (<ztt_common_scalar>
+       ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[6]), false)
+       : riscv_ztt::m_mode_p (GET_MODE (operands[2])))
+   && riscv_ztt::common_prepared_operands_p (operands, <ztt_common_scalar>)"
+{
+  return riscv_ztt::output_common_prepared (operands, <ztt_common_code>);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::common_prepared_length (operands, <ztt_common_code>)"))])
+
+(define_insn "@ztt_state_common_old_prepared_<ztt_common_kind>_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand 1 "register_operand" "Wmr")
+           (match_operand 2 "register_operand" "<ztt_common_rhs>")
+           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 4 "register_operand" "r")
+           (match_operand:P 5 "register_operand" "r")
+           (match_operand 6 "const_int_operand" "n")
+           (match_operand 7 "const_int_operand" "n")
+           (match_operand:ZTT_M 8 "register_operand" "0")]
+          ZTT_COMMON_OLD_PREPARED))]
+  "TARGET_ZTT && reload_completed && riscv_ztt::typed_profile_p ()
+   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
+   && (<ztt_common_scalar>
+       ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[6]), true)
+       : riscv_ztt::m_mode_p (GET_MODE (operands[2])))
+   && riscv_ztt::common_prepared_operands_p (operands, <ztt_common_scalar>)"
+{
+  return riscv_ztt::output_common_prepared (operands, <ztt_common_code>);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::common_prepared_length (operands, <ztt_common_code>)"))])
 
 ;; Each result depends on both
 ;; old values; distinct tied groups survive allocation and destructive setup.

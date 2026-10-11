@@ -8348,10 +8348,10 @@ elementwise_reused_destination_p (rtx *operands, bool scalar)
 /* Preserve every raw member
    before settyp; a formed operand can contain several datatype groups.  */
 static void
-prepare_elementwise_state (rtx *operands, bool scalar, bool preserve_dest)
+prepare_elementwise_state (rtx *operands, bool scalar, bool preserve_dest,
+			   unsigned int prepared)
 {
   unsigned int steps = UINTVAL (operands[9]);
-  rtx base = XEXP (operands[6], 0);
   auto setup = [&] (unsigned int operand)
     {
       unsigned int group = datatype_step (steps, operand);
@@ -8370,6 +8370,9 @@ prepare_elementwise_state (rtx *operands, bool scalar, bool preserve_dest)
   for (unsigned int operand = preserve_dest ? 0 : 1;
        operand <= sources; ++operand)
     {
+      if (prepared & (1U << operand))
+	continue;
+      rtx base = XEXP (operands[6], 0);
       bool group = m_nregs (GET_MODE (operands[operand])) > 1;
       for (bool load : { false, true })
 	{
@@ -8391,7 +8394,7 @@ prepare_elementwise_state (rtx *operands, bool scalar, bool preserve_dest)
 const char *
 output_elementwise_state (rtx *operands, bool scalar)
 {
-  prepare_elementwise_state (operands, scalar, false);
+  prepare_elementwise_state (operands, scalar, false, UINTVAL (operands[11]));
   static const char *const templates[] = {
     "msll.ew\t%0,%1,%2", "msll.ew.x\t%0,%2,%1",
     "msrl.ew\t%0,%1,%2", "msrl.ew.x\t%0,%2,%1",
@@ -8428,7 +8431,8 @@ output_elementwise_state (rtx *operands, bool scalar)
 }
 
 static unsigned int
-elementwise_base_length (rtx *operands, bool scalar, bool preserve_dest)
+elementwise_base_length (rtx *operands, bool scalar, bool preserve_dest,
+			 unsigned int prepared)
 {
   unsigned int length = 1 + data_scalar_variant_p (UINTVAL (operands[8]));
   unsigned int steps = UINTVAL (operands[9]);
@@ -8436,12 +8440,14 @@ elementwise_base_length (rtx *operands, bool scalar, bool preserve_dest)
     = scalar || elementwise_shared_source_p (operands, scalar) ? 2 : 3;
   for (unsigned int i = 0; i < count; ++i)
     {
+      if (prepared & (1U << i))
+	continue;
       unsigned int r = m_nregs (GET_MODE (operands[i]));
       unsigned int group = datatype_step (steps, i);
       if (i || preserve_dest
 	  || !elementwise_reused_destination_p (operands, scalar))
 	length += r / group;
-      if (i)
+      if (i || preserve_dest)
 	length += r == 1 ? 2 : 4 * r;
     }
   return 4 * length;
@@ -8450,7 +8456,8 @@ elementwise_base_length (rtx *operands, bool scalar, bool preserve_dest)
 unsigned int
 elementwise_length (rtx *operands, bool scalar)
 {
-  return elementwise_base_length (operands, scalar, false);
+  return elementwise_base_length (operands, scalar, false,
+				  UINTVAL (operands[11]));
 }
 
 /* Scatter must preserve the
@@ -8465,7 +8472,8 @@ output_indexed_state (rtx *operands)
   };
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates));
-  prepare_elementwise_state (operands, false, variant >= 2);
+  prepare_elementwise_state (operands, false, variant >= 2,
+			     UINTVAL (operands[variant >= 2 ? 12 : 11]));
   output_asm_insn (templates[variant], operands);
   return "";
 }
@@ -8473,14 +8481,9 @@ output_indexed_state (rtx *operands)
 unsigned int
 indexed_length (rtx *operands)
 {
-  unsigned int length = elementwise_base_length (operands, false,
-						UINTVAL (operands[8]) >= 2);
-  if (UINTVAL (operands[8]) >= 2)
-    {
-      unsigned int r = m_nregs (GET_MODE (operands[0]));
-      length += 4 * (r == 1 ? 2 : 4 * r);
-    }
-  return length;
+  bool old_dest = UINTVAL (operands[8]) >= 2;
+  return elementwise_base_length (operands, false, old_dest,
+				  UINTVAL (operands[old_dest ? 12 : 11]));
 }
 
 /* The tied destination
@@ -8496,7 +8499,7 @@ output_ternary_state (rtx *operands)
   };
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates));
-  prepare_elementwise_state (operands, false, true);
+  prepare_elementwise_state (operands, false, true, UINTVAL (operands[12]));
   output_asm_insn (templates[variant], operands);
   return "";
 }
@@ -8504,9 +8507,8 @@ output_ternary_state (rtx *operands)
 unsigned int
 ternary_length (rtx *operands)
 {
-  unsigned int r = m_nregs (GET_MODE (operands[0]));
-  return elementwise_base_length (operands, false, true)
-    + 4 * (r == 1 ? 2 : 4 * r);
+  return elementwise_base_length (operands, false, true,
+				  UINTVAL (operands[12]));
 }
 
 /* Preserve D and B before
@@ -8521,7 +8523,7 @@ output_scalar_ternary_state (rtx *operands)
   };
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates));
-  prepare_elementwise_state (operands, true, true);
+  prepare_elementwise_state (operands, true, true, UINTVAL (operands[12]));
   if (variant < 4)
     output_asm_insn ("csrw\tamestype,%5", operands);
   output_asm_insn (templates[variant], operands);
@@ -8531,10 +8533,104 @@ output_scalar_ternary_state (rtx *operands)
 unsigned int
 scalar_ternary_length (rtx *operands)
 {
-  unsigned int r = m_nregs (GET_MODE (operands[0]));
   gcc_assert (UINTVAL (operands[8]) <= 4);
-  return elementwise_base_length (operands, true, true)
-    + 4 * (UINTVAL (operands[8]) < 4) + 4 * (r == 1 ? 2 : 4 * r);
+  return elementwise_base_length (operands, true, true,
+				  UINTVAL (operands[12]))
+    + 4 * (UINTVAL (operands[8]) < 4);
+}
+
+static bool
+common_old_dest_p (int code)
+{
+  return code == UNSPECV_ZTT_STATE_TERNARY
+    || code == UNSPECV_ZTT_STATE_TERNARY_X
+    || code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE
+    || code == UNSPECV_ZTT_STATE_SCATTER;
+}
+
+static bool
+common_scalar_p (int code)
+{
+  return code == UNSPECV_ZTT_STATE_ELEMENTWISE_X
+    || code == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE
+    || code == UNSPECV_ZTT_STATE_TERNARY_X
+    || code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE;
+}
+
+/* Destination setup must not destroy a partially overlapping source.  */
+bool
+common_prepared_operands_p (rtx *operands, bool scalar)
+{
+  if (!reload_completed || !REG_P (operands[0])
+      || !M_REG_P (REGNO (operands[0])))
+    return false;
+  unsigned int steps = UINTVAL (operands[7]);
+  for (unsigned int i = 1; i <= (scalar ? 1U : 2U); ++i)
+    if (reg_overlap_mentioned_p (operands[0], operands[i])
+	&& (!rtx_equal_p (operands[0], operands[i])
+	    || !rtx_equal_p (operands[3], operands[3 + i])
+	    || !datatype_step (steps, 0)
+	    || datatype_step (steps, 0) != datatype_step (steps, i)))
+      return false;
+  return true;
+}
+
+static void
+unpack_common_prepared (rtx *operands, rtx *full, int code)
+{
+  for (unsigned int i = 0; i < 6; ++i)
+    full[i] = operands[i];
+  full[8] = operands[6];
+  full[9] = operands[7];
+  bool old_dest = common_old_dest_p (code);
+  if (old_dest)
+    full[11] = operands[8];
+  full[old_dest ? 12 : 11]
+    = GEN_INT ((common_scalar_p (code) ? 2 : 6) | (old_dest ? 1 : 0));
+}
+
+const char *
+output_common_prepared (rtx *operands, int code)
+{
+  rtx full[13] = {};
+  unpack_common_prepared (operands, full, code);
+  switch (code)
+    {
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+      return output_elementwise_state (full, common_scalar_p (code));
+    case UNSPECV_ZTT_STATE_GATHER:
+    case UNSPECV_ZTT_STATE_SCATTER:
+      return output_indexed_state (full);
+    case UNSPECV_ZTT_STATE_TERNARY:
+      return output_ternary_state (full);
+    case UNSPECV_ZTT_STATE_TERNARY_X:
+      return output_scalar_ternary_state (full);
+    default:
+      gcc_unreachable ();
+    }
+}
+
+unsigned int
+common_prepared_length (rtx *operands, int code)
+{
+  rtx full[13] = {};
+  unpack_common_prepared (operands, full, code);
+  switch (code)
+    {
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+    case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+      return elementwise_length (full, common_scalar_p (code));
+    case UNSPECV_ZTT_STATE_GATHER:
+    case UNSPECV_ZTT_STATE_SCATTER:
+      return indexed_length (full);
+    case UNSPECV_ZTT_STATE_TERNARY:
+      return ternary_length (full);
+    case UNSPECV_ZTT_STATE_TERNARY_X:
+      return scalar_ternary_length (full);
+    default:
+      gcc_unreachable ();
+    }
 }
 
 /* Both tied operands retain
@@ -9500,7 +9596,8 @@ lower_explicit_state ()
 			    force_reg (Pmode, XVECEXP (src, 0, 4)),
 			    scratch, stride ? stride : const0_rtx,
 			    XVECEXP (src, 0, 2), GEN_INT (steps),
-			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5)));
+			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
+			    const0_rtx));
 		break;
 	      }
 	    if (code == UNSPEC_ZTT_TERNARY)
@@ -9512,7 +9609,8 @@ lower_explicit_state ()
 			    force_reg (Pmode, XVECEXP (src, 0, 4)),
 			    scratch, stride ? stride : const0_rtx,
 			    XVECEXP (src, 0, 2), GEN_INT (steps),
-			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5)));
+			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
+			    const0_rtx));
 		break;
 	      }
 	    if (indexed_p)
@@ -9525,13 +9623,15 @@ lower_explicit_state ()
 			      XVECEXP (src, 0, 1), descriptor, data_descriptor,
 			      count_descriptor, scratch, stride ? stride : const0_rtx,
 			      XVECEXP (src, 0, 2), GEN_INT (steps),
-			      gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5)));
+			      gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
+			      const0_rtx));
 		else
 		  emit_insn (gen_ztt_state_gather
 			     (mode, Pmode, dest, XVECEXP (src, 0, 0),
 			      XVECEXP (src, 0, 1), descriptor, data_descriptor,
 			      count_descriptor, scratch, stride ? stride : const0_rtx,
-			      XVECEXP (src, 0, 2), GEN_INT (steps)));
+			      XVECEXP (src, 0, 2), GEN_INT (steps),
+			      gen_rtx_SCRATCH (Pmode), const0_rtx));
 		break;
 	      }
 	    int state_code = scalar ? UNSPECV_ZTT_STATE_ELEMENTWISE_X
@@ -9568,7 +9668,8 @@ lower_explicit_state ()
 			descriptor, first_descriptor,
 			second_descriptor,
 			scratch, stride ? stride : const0_rtx,
-			XVECEXP (src, 0, 2), GEN_INT (steps)));
+			XVECEXP (src, 0, 2), GEN_INT (steps),
+			gen_rtx_SCRATCH (Pmode), const0_rtx));
 	    break;
 	  }
 	case UNSPEC_ZTT_ACC_FROM_M:
@@ -10167,13 +10268,76 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_TERNARY:
 		case UNSPECV_ZTT_STATE_TERNARY_X:
 		case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
+		case UNSPECV_ZTT_STATE_GATHER:
+		case UNSPECV_ZTT_STATE_SCATTER:
 		  {
-		    bool old_dest = XINT (src, 1) == UNSPECV_ZTT_STATE_TERNARY
-		      || XINT (src, 1) == UNSPECV_ZTT_STATE_TERNARY_X
-		      || XINT (src, 1) == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE;
-		    bool scalar = XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X
-		      || XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE
-		      || (old_dest && XINT (src, 1) != UNSPECV_ZTT_STATE_TERNARY);
+		    bool old_dest = common_old_dest_p (XINT (src, 1));
+		    bool scalar = common_scalar_p (XINT (src, 1));
+		    bool prepared_p = GET_CODE (PATTERN (insn)) == SET;
+		    rtx steps = XVECEXP (src, 0, prepared_p ? 6 : 7);
+		    unsigned int prepared = 0;
+		    unsigned int first = old_dest ? 0 : 1;
+		    rtx regs[] = { SET_DEST (set), XVECEXP (src, 0, 0),
+				   XVECEXP (src, 0, 1) };
+		    for (unsigned int i = first;
+			 !prepared_p && i < (scalar ? 2U : 3U); ++i)
+		      {
+			unsigned int step = datatype_step (UINTVAL (steps), i);
+			if (!state.matches_packets (regs[i], XVECEXP (src, 0, 2 + i),
+					    step))
+			  continue;
+			/* Earlier preparation must not invalidate this packet.  */
+			bool untouched = true;
+			for (unsigned int j = first; j < i; ++j)
+			  if (!(prepared & (1U << j))
+			      && reg_overlap_mentioned_p (regs[i], regs[j]))
+			    untouched = false;
+			if (untouched)
+			  prepared |= 1U << i;
+		      }
+		    if (!prepared_p && prepared)
+		      {
+			bool changed = false;
+			if (prepared == ((scalar ? 2U : 6U) | (old_dest ? 1U : 0U)))
+			  {
+			    int code = XINT (src, 1);
+			    if (code != UNSPECV_ZTT_STATE_GATHER
+				&& code != UNSPECV_ZTT_STATE_SCATTER)
+			      code = old_dest
+				? (scalar ? UNSPECV_ZTT_STATE_TERNARY_X
+				   : UNSPECV_ZTT_STATE_TERNARY)
+				: (scalar ? UNSPECV_ZTT_STATE_ELEMENTWISE_X
+				   : UNSPECV_ZTT_STATE_ELEMENTWISE_M);
+			    rtx pattern = old_dest
+			      ? gen_ztt_state_common_old_prepared
+				  (code, GET_MODE (regs[0]), Pmode, regs[0], regs[1],
+				   regs[2], XVECEXP (src, 0, 2), XVECEXP (src, 0, 3),
+				   XVECEXP (src, 0, 4), XVECEXP (src, 0, 6), steps,
+				   XVECEXP (src, 0, 8))
+			      : gen_ztt_state_common_prepared
+				  (code, GET_MODE (regs[0]), Pmode, regs[0], regs[1],
+				   regs[2], XVECEXP (src, 0, 2), XVECEXP (src, 0, 3),
+				   XVECEXP (src, 0, 4), XVECEXP (src, 0, 6), steps);
+			    changed = validate_change (insn, &PATTERN (insn),
+					       pattern, false);
+			    if (changed && dump_file)
+			      fprintf (dump_file,
+				       "Drop common preparation workspace at insn %d\n",
+				       INSN_UID (insn));
+			  }
+			rtx *mask = &XVECEXP (src, 0, old_dest ? 9 : 8);
+			if (!changed && UINTVAL (*mask) != prepared)
+			  changed = validate_change (insn, mask, GEN_INT (prepared), false);
+			if (changed)
+			  {
+			    df_insn_rescan (insn);
+			    cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file,
+				       "Reuse Md for common preparation at insn %d: %u\n",
+				       INSN_UID (insn), prepared);
+			  }
+		      }
 		    note_stores (insn, invalidate_md_store, &state);
 		    /* Follow packet setup order; overlapping facts cannot coexist.  */
 		    for (unsigned int pos = 0; pos < 3; ++pos)
@@ -10183,8 +10347,7 @@ reuse_local_md ()
 			  continue;
 			rtx reg = i ? XVECEXP (src, 0, i - 1) : SET_DEST (set);
 			unsigned int count = m_nregs (GET_MODE (reg));
-			unsigned int step = datatype_step
-			  (UINTVAL (XVECEXP (src, 0, 7)), i);
+			unsigned int step = datatype_step (UINTVAL (steps), i);
 			gcc_assert (step && count % step == 0);
 			state.invalidate (reg);
 			for (unsigned int r = 0; r < count; r += step)

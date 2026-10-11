@@ -185,6 +185,15 @@ rounding and status effects.  A reused destination must be the same complete
 source group with the same descriptor and packet step; partial overlaps do
 not use the prepared form.
 
+Mixed elementwise, scalar, ternary and indexed operations use the same
+per-operand preparation mask after allocation.  Every packet must match,
+and an earlier unprepared overlapping operand prevents reuse.  Tied old
+destinations participate in this check; scalar TC writes and the original
+calculation remain.  Partial preparation retains the private MEM and scratch.
+When every required operand matches, a prepared SET drops the MEM, stride
+and scratch dependencies while keeping tied old destinations.  Existing
+dead-workspace cleanup then checks whether the dynamic allocation is unused.
+
 Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
 Register definitions invalidate dependent descriptors and overlapping groups.
 Full Pmode GPR single SETs establish constants through RTL simplification.

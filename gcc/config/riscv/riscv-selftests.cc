@@ -817,7 +817,8 @@ run_ztt_elementwise_shared_source_selftests ()
 	for (unsigned int step = 1; step <= (1U << i); step *= 2)
 	  {
 	    unsigned int nregs = 1U << i;
-	    rtx ops[11] = {};
+	    rtx ops[13] = {};
+	    ops[11] = ops[12] = const0_rtx;
 	    ops[0] = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 12);
 	    ops[1] = gen_rtx_REG (mode, M_REG_FIRST);
 	    ops[2] = gen_rtx_REG (mode, M_REG_FIRST);
@@ -914,7 +915,8 @@ run_ztt_elementwise_destination_selftests ()
 	  unsigned int n = riscv_ztt::m_nregs (mode);
 	  unsigned int setup = 4 * n / step;
 	  unsigned int transfer = 4 * (n == 1 ? 2 : 4 * n);
-	  rtx ops[11] = {};
+	  rtx ops[13] = {};
+	  ops[11] = ops[12] = const0_rtx;
 	  ops[0] = ops[1] = ops[2] = gen_rtx_REG (mode, M_REG_FIRST);
 	  ops[3] = ops[4] = ops[5] = gen_rtx_REG (gmode, 11);
 	  ops[8] = GEN_INT (6);
@@ -925,7 +927,42 @@ run_ztt_elementwise_destination_selftests ()
 	  reload_completed = 1;
 	  unsigned int reduced = 4 + setup + transfer;
 	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, false), reduced);
+	  rtx prepared_ops[] = { ops[0], ops[1], ops[2], ops[3], ops[4],
+				 ops[5], ops[8], ops[9] };
+	  ASSERT_TRUE (riscv_ztt::common_prepared_operands_p (prepared_ops, false));
+	  prepared_ops[3] = gen_rtx_REG (gmode, 12);
+	  ASSERT_FALSE (riscv_ztt::common_prepared_operands_p (prepared_ops, false));
+	  if (n <= 16)
+	    {
+	      prepared_ops[0] = gen_rtx_REG (mode, M_REG_FIRST + 16);
+	      ASSERT_TRUE (riscv_ztt::common_prepared_operands_p (prepared_ops, false));
+	    }
+	  prepared_ops[3] = ops[3];
+	  if (n > 1)
+	    {
+	      prepared_ops[0] = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+	      ASSERT_FALSE (riscv_ztt::common_prepared_operands_p (prepared_ops, false));
+	    }
+	  prepared_ops[0] = ops[0];
+	  reload_completed = 0;
+	  ASSERT_FALSE (riscv_ztt::common_prepared_operands_p (prepared_ops, false));
+	  reload_completed = 1;
 	  ASSERT_EQ (riscv_ztt::ternary_length (ops), reduced + setup + transfer);
+	  ops[11] = GEN_INT (6);
+	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, false), 4U);
+	  ops[11] = const0_rtx;
+	  for (unsigned int mask = 0; mask < 8; ++mask)
+	    {
+	      ops[12] = GEN_INT (mask);
+	      unsigned int expected = 4
+		+ ((mask & 1) ? 0 : setup + transfer)
+		+ ((mask & 2) ? 0 : setup + transfer);
+	      ASSERT_EQ (riscv_ztt::ternary_length (ops), expected);
+	      ops[8] = GEN_INT (2);
+	      ASSERT_EQ (riscv_ztt::indexed_length (ops), expected);
+	      ops[8] = GEN_INT (6);
+	    }
+	  ops[12] = const0_rtx;
 	  ops[8] = GEN_INT (2);
 	  ASSERT_EQ (riscv_ztt::indexed_length (ops), reduced + setup + transfer);
 	  ops[8] = GEN_INT (0);
@@ -958,6 +995,17 @@ run_ztt_elementwise_destination_selftests ()
 	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, true), reduced);
 	  ASSERT_EQ (riscv_ztt::scalar_ternary_length (ops),
 		     reduced + setup + transfer + 4);
+	  for (unsigned int mask = 0; mask < 4; ++mask)
+	    {
+	      ops[12] = GEN_INT (mask);
+	      ASSERT_EQ (riscv_ztt::scalar_ternary_length (ops),
+			 8U + ((mask & 1) ? 0 : setup + transfer)
+			 + ((mask & 2) ? 0 : setup + transfer));
+	    }
+	  ops[12] = const0_rtx;
+	  ops[11] = GEN_INT (2);
+	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, true), 4U);
+	  ops[11] = const0_rtx;
 	  ops[8] = GEN_INT (18);
 	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, true), reduced + 4);
 	  if (step > 1)
