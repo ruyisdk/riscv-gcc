@@ -9885,6 +9885,20 @@ lower_explicit_state ()
   for (rtx_insn *insn = get_insns (); insn; )
     {
       rtx_insn *next = NEXT_INSN (insn);
+      if (CALL_P (insn))
+	{
+	  /* IPA summaries may cover only part of the physical bank.  */
+	  const profile_info *profile = active_profile ();
+	  for (unsigned int i = 0; i < profile->mregs; ++i)
+	    clobber_reg (&CALL_INSN_FUNCTION_USAGE (insn),
+			 gen_rtx_REG (SImode, M_REG_FIRST + i));
+	  for (unsigned int i = 0; i < profile->accregs; ++i)
+	    clobber_reg (&CALL_INSN_FUNCTION_USAGE (insn),
+			 gen_rtx_REG (SImode, ACC_REG_FIRST + i));
+	  df_insn_rescan (insn);
+	  if (dump_file)
+	    fprintf (dump_file, "Ztt call clobbers at insn %d\n", INSN_UID (insn));
+	}
       rtx value_set = NONDEBUG_INSN_P (insn) ? single_set (insn) : NULL_RTX;
       if (value_set && GET_CODE (SET_SRC (value_set)) == UNSPEC
 	  && XINT (SET_SRC (value_set), 1) == UNSPEC_ZTT_ZIP_VALUE)
@@ -9946,7 +9960,7 @@ lower_explicit_state ()
 	  insn = next;
 	  continue;
 	}
-      rtx set = NONDEBUG_INSN_P (insn) ? single_set (insn) : NULL_RTX;
+      rtx set = value_set;
       /* Earlier copies may have been recognized before expansion discovered
 	 another datatype.  Select the raw-copy code for the final policy.  */
       if (matrix_state && set && m_mode_p (GET_MODE (SET_DEST (set))))
@@ -10359,10 +10373,12 @@ public:
     bool typed = false;
     bool acc = false;
     bool matrix_asm = false;
+    bool calls = false;
     for (rtx_insn *insn = get_insns (); insn;
 	 insn = NEXT_INSN (insn))
       if (NONDEBUG_INSN_P (insn))
 	{
+	  calls |= CALL_P (insn);
 	  int nargs = asm_noperands (PATTERN (insn));
 	  if (nargs > 0)
 	    {
@@ -10390,23 +10406,9 @@ public:
       }
     if (acc && matrix_asm)
       riscv_ztt_note_acc_reload ();
-    /* This runs after inlining and before allocation.  Use complete raw
-       copies and per-operation datatype setup even for uniform i8 functions:
-       a callee can change Md/Ad without changing the caller's type set.
-       Explicit clobbers also cover callees whose IPA summaries only mention
-       a subset of the physical bank.  No typed argument ABI is introduced.  */
-    for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
-      if (CALL_P (insn))
-	{
-	  riscv_ztt_note_call_boundary ();
-	  for (unsigned int i = 0; i < active_profile ()->mregs; ++i)
-	    clobber_reg (&CALL_INSN_FUNCTION_USAGE (insn),
-			 gen_rtx_REG (SImode, M_REG_FIRST + i));
-	  for (unsigned int i = 0; i < active_profile ()->accregs; ++i)
-	    clobber_reg (&CALL_INSN_FUNCTION_USAGE (insn),
-			 gen_rtx_REG (SImode, ACC_REG_FIRST + i));
-	  df_insn_rescan (insn);
-	}
+    /* Even uniform i8 operations before a call need explicit state.  */
+    if (calls)
+      riscv_ztt_note_call_boundary ();
     return lower_explicit_state ();
   }
 };
