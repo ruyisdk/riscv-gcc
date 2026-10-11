@@ -203,6 +203,9 @@ msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and
 retains ACC updates and arithmetic side effects.
 
+ztt_state stops after classification when a function has no typed M/ACC
+operands, skipping its call-clobber and state-lowering walks.
+
 ztt_md_reuse runs after allocation and scheduling, before variable tracking.
 It tracks complete M groups and descriptor values along single-predecessor
 fallthrough chains.  Plain scalar conditional branches preserve facts;

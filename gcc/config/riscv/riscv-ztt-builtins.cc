@@ -10381,6 +10381,13 @@ public:
 		acc |= acc_mode_p (GET_MODE (*iter));
 	      }
 	}
+    if (!typed)
+      {
+	if (dump_file)
+	  fprintf (dump_file,
+		   "Skip Ztt state lowering without typed operands\n");
+	return 0;
+      }
     if (acc && matrix_asm)
       riscv_ztt_note_acc_reload ();
     /* This runs after inlining and before allocation.  Use complete raw
@@ -10389,7 +10396,7 @@ public:
        Explicit clobbers also cover callees whose IPA summaries only mention
        a subset of the physical bank.  No typed argument ABI is introduced.  */
     for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
-      if (typed && CALL_P (insn))
+      if (CALL_P (insn))
 	{
 	  riscv_ztt_note_call_boundary ();
 	  for (unsigned int i = 0; i < active_profile ()->mregs; ++i)
