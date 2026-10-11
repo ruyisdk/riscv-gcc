@@ -4032,11 +4032,15 @@ riscv_legitimize_poly_move (machine_mode mode, rtx dest, rtx tmp, rtx src)
 	 The saved size cache is immutable while this frame is active.  */
       value.coeffs[0] -= ame_factor;
       value.coeffs[2] = 0;
-      if (value.is_constant ())
-	riscv_emit_move (dest, gen_int_mode (value, mode));
-      else
-	riscv_legitimize_poly_move (mode, dest, tmp,
-				    gen_int_mode (value, mode));
+      bool pure_ame = reload_completed && known_eq (value, 0);
+      if (!pure_ame)
+	{
+	  if (value.is_constant ())
+	    riscv_emit_move (dest, gen_int_mode (value, mode));
+	  else
+	    riscv_legitimize_poly_move (mode, dest, tmp,
+					gen_int_mode (value, mode));
+	}
       rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
       if (mode != Pmode)
 	{
@@ -4044,8 +4048,10 @@ riscv_legitimize_poly_move (machine_mode mode, rtx dest, rtx tmp, rtx src)
 	  scale = convert_to_mode (mode, scale, 1);
 	  scale = force_reg (mode, scale);
 	}
-      riscv_expand_mult_with_const_int (mode, tmp, scale, ame_factor);
-      riscv_expand_op (PLUS, mode, dest, dest, tmp);
+      riscv_expand_mult_with_const_int (mode, pure_ame ? dest : tmp,
+				       scale, ame_factor);
+      if (!pure_ame)
+	riscv_expand_op (PLUS, mode, dest, dest, tmp);
       return;
     }
   if (value.is_constant ())

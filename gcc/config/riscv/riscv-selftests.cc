@@ -1287,6 +1287,94 @@ run_ztt_datatype_step_selftests ()
   ASSERT_EQ (riscv_ztt::datatype_step (33824, 2), 8U);
 }
 
+/* Evaluate emitted operations in order, without relying on REG_EQUAL notes.  */
+static poly_int64
+eval_ztt_poly (rtx x, const std::map<unsigned int, poly_int64> &values)
+{
+  if (REG_P (x))
+    {
+      auto it = values.find (REGNO (x));
+      ASSERT_TRUE (it != values.end ());
+      return it->second;
+    }
+  if (CONST_INT_P (x))
+    return INTVAL (x);
+  poly_int64 lhs = eval_ztt_poly (XEXP (x, 0), values);
+  if (GET_CODE (x) == NEG)
+    return -lhs;
+  poly_int64 rhs = eval_ztt_poly (XEXP (x, 1), values);
+  switch (GET_CODE (x))
+    {
+    case PLUS: return lhs + rhs;
+    case MINUS: return lhs - rhs;
+    case ASHIFT:
+      ASSERT_TRUE (rhs.is_constant ());
+      return lhs * (HOST_WIDE_INT_1 << rhs.to_constant ());
+    case MULT:
+      if (lhs.is_constant ())
+	return lhs.to_constant () * rhs;
+      ASSERT_TRUE (rhs.is_constant ());
+      return lhs * rhs.to_constant ();
+    default: gcc_unreachable ();
+    }
+}
+
+static void
+run_ztt_poly_move_selftests ()
+{
+  const char *saved_profile = riscv_ztt_profile_string;
+  int saved_reload = reload_completed;
+  for (bool rv64 : { false, true })
+    {
+      riscv_selftest_arch_abi_setter rv
+	(rv64 ? "rv64im_zicsr_ztt0p6" : "rv32im_zicsr_ztt0p6",
+	 rv64 ? ABI_LP64 : ABI_ILP32);
+      riscv_ztt_profile_string = "gcc-runtime-u8-m32-a16";
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      set_new_first_and_last_insn (NULL, NULL);
+      for (bool allocated : { false, true })
+	for (HOST_WIDE_INT factor : { -33, -32, -31, -16, -9, -8, -7, -3,
+				     -2, -1, 1, 2, 3, 7, 8, 9, 16, 31, 32, 33 })
+	  for (HOST_WIDE_INT offset : { 0, 16, -32 })
+	    {
+	      reload_completed = allocated;
+	      start_sequence ();
+	      rtx dest = allocated ? gen_rtx_REG (Pmode, 10) : gen_reg_rtx (Pmode);
+	      rtx tmp = allocated ? gen_rtx_REG (Pmode, 11) : gen_reg_rtx (Pmode);
+	      poly_int64 value (factor + offset, 0, factor);
+	      riscv_legitimize_poly_move (Pmode, dest, tmp, gen_int_mode (value, Pmode));
+	      std::map<unsigned int, poly_int64> values;
+	      values[RISCV_ZTT_SCALE_REGNUM] = poly_int64 (1, 0, 1);
+	      unsigned int count = 0;
+	      for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+		{
+		  if (!NONDEBUG_INSN_P (insn))
+		    continue;
+		  rtx pat = PATTERN (insn);
+		  ASSERT_EQ (GET_CODE (pat), SET);
+		  ASSERT_TRUE (REG_P (SET_DEST (pat)));
+		  if (allocated && !offset)
+		    ASSERT_FALSE (SET_SRC (pat) == const0_rtx);
+		  values[REGNO (SET_DEST (pat))] = eval_ztt_poly (SET_SRC (pat), values);
+		  ++count;
+		}
+	      ASSERT_TRUE (known_eq (values[REGNO (dest)], value));
+	      ASSERT_TRUE (known_eq (values[RISCV_ZTT_SCALE_REGNUM],
+				    poly_int64 (1, 0, 1)));
+	      if (allocated)
+		{
+		  unsigned HOST_WIDE_INT magnitude = abs (factor);
+		  unsigned int expected = magnitude == 1 ? 1
+		    : pow2p_hwi (magnitude) ? 1 + (factor < 0) : 2;
+		  ASSERT_EQ (count, expected + (offset ? 2 : 0));
+		}
+	      end_sequence ();
+	    }
+      reload_completed = saved_reload;
+      riscv_ztt_profile_string = saved_profile;
+    }
+}
+
 namespace selftest {
 /* Run all target-specific selftests.  */
 void
@@ -1296,6 +1384,7 @@ riscv_run_selftests (void)
   run_ztt_large_acc_mode_selftests ();
   run_ztt_complete_shape_selftests ();
   run_ztt_datatype_step_selftests ();
+  run_ztt_poly_move_selftests ();
   run_ztt_runtime_n_bound_selftests ();
   run_ztt_matmul_formation_selftests ();
   run_ztt_elementwise_formation_selftests ();

@@ -201,6 +201,10 @@ When every required operand matches, a prepared SET drops the MEM, stride
 and scratch dependencies while keeping tied old destinations.  Existing
 dead-workspace cleanup then checks whether the dynamic allocation is unused.
 
+After register allocation, pure AME dynamic sizes expand directly from the
+saved scale register, without materializing an additional zero term.  Early
+expansion, fixed-offset and mixed RVV/AME sizes retain their existing form.
+
 Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
 Register definitions invalidate dependent descriptors and overlapping groups.
 Full Pmode GPR single SETs establish constants through RTL simplification.
