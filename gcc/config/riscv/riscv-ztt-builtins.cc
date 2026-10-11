@@ -97,10 +97,19 @@ static constexpr profile_info profiles[] =
 static const profile_info *
 lookup_profile (const char *name)
 {
+  /* Keep the static table entry, not the caller's option string.  */
+  static const profile_info *last_profile;
   if (name)
-    for (const auto &profile : profiles)
-      if (strcmp (name, profile.name) == 0)
-	return &profile;
+    {
+      if (last_profile && strcmp (name, last_profile->name) == 0)
+	return last_profile;
+      for (const auto &profile : profiles)
+	if (strcmp (name, profile.name) == 0)
+	  {
+	    last_profile = &profile;
+	    return last_profile;
+	  }
+    }
   return nullptr;
 }
 
@@ -1015,6 +1024,30 @@ store_dispatch_p (unsigned int code)
     || code == ZTT_BUILTIN_MSS_CM_DISPATCH
     || code == ZTT_BUILTIN_MSS_ST_DISPATCH
     || code == ZTT_BUILTIN_MSS_TST_DISPATCH;
+}
+
+static unsigned int
+store_builtin_code (expansion_index expansion, type_index type)
+{
+  gcc_assert (memory_store_p (expansion) && type < TYPE_MAX);
+  /* Cache catalog codes only; declaration availability remains profile-local.  */
+  static unsigned int codes[4][TYPE_MAX];
+  unsigned int &code = codes[memory_variant (expansion)][type];
+  if (!code)
+    {
+      code = ZTT_BUILTIN_MAX + 1;
+      for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+	{
+	  const auto &d = builtin_description_for (i);
+	  if (d.expansion == expansion && d.type == type
+	      && (i == ZTT_BUILTIN_MSS_RM_I8_RNE_1X1 || !store_dispatch_p (i)))
+	    {
+	      code = i + 1;
+	      break;
+	    }
+	}
+    }
+  return code - 1;
 }
 
 /* Source shape is independent
@@ -2138,17 +2171,16 @@ register_builtin_type ()
   types_registered_p = true;
 }
 
+static type_index matrix_type_index (unsigned int, unsigned int, unsigned int);
+static type_index numeric_matrix_type (unsigned int, unsigned int);
+
 static tree
 acc_matrix_type (type_index type, unsigned int rows = 1, unsigned int columns = 1)
 {
   gcc_assert (types[type].accumulator);
-  for (unsigned int i = 0; i < TYPE_MAX; ++i)
-    if (!types[i].accumulator
-	&& types[i].rows == rows
-	&& types[i].columns == columns
-	&& types[i].descriptor == types[type].descriptor)
-      return ztt_m_type_nodes[i];
-  gcc_unreachable ();
+  type_index index = matrix_type_index (types[type].descriptor, rows, columns);
+  gcc_assert (index != TYPE_MAX);
+  return ztt_m_type_nodes[index];
 }
 
 /* Both ends of a shape
@@ -2170,11 +2202,7 @@ m_utility_source_type (prototype_index prototype, type_index type)
     rows *= 2;
   else
     columns *= 2;
-  for (unsigned int i = 0; i < TYPE_MAX; ++i)
-    if (!types[i].accumulator && types[i].descriptor == t.descriptor
-	&& types[i].rows == rows && types[i].columns == columns)
-      return static_cast<type_index> (i);
-  return TYPE_MAX;
+  return matrix_type_index (t.descriptor, rows, columns);
 }
 
 static tree
@@ -2415,13 +2443,8 @@ mixed_dtype_descriptor (unsigned int number)
 static type_index
 mixed_matrix_type (unsigned int number, unsigned int q, bool column)
 {
-  unsigned int descriptor = mixed_dtype_descriptor (number);
-  for (unsigned int i = 0; i < TYPE_MAX; ++i)
-    if (!types[i].accumulator && types[i].descriptor == descriptor
-	&& types[i].rows == (column ? q : 1)
-	&& types[i].columns == (column ? 1 : q))
-      return static_cast<type_index> (i);
-  return TYPE_MAX;
+  return matrix_type_index (mixed_dtype_descriptor (number), column ? q : 1,
+			    column ? 1 : q);
 }
 
 /* The first forty ordinals are identical to the existing integer scheme.
@@ -2450,13 +2473,8 @@ integer_dtype_descriptor (unsigned int number)
 static type_index
 integer_matrix_type (unsigned int number, unsigned int q, bool column)
 {
-  unsigned int descriptor = integer_dtype_descriptor (number);
-  for (unsigned int i = 0; i < TYPE_MAX; ++i)
-    if (!types[i].accumulator && types[i].descriptor == descriptor
-	&& types[i].rows == (column ? q : 1)
-	&& types[i].columns == (column ? 1 : q))
-      return static_cast<type_index> (i);
-  return TYPE_MAX;
+  return matrix_type_index (integer_dtype_descriptor (number), column ? q : 1,
+			    column ? 1 : q);
 }
 
 static unsigned int
@@ -2481,27 +2499,12 @@ decode_integer_broadcast (unsigned int code, type_index &dst, type_index &tc)
   if (d < 40 && c < 40)
     return false; /* Preserve the old public declarations and codes.  */
 
-  /* Cache indices only; trees and availability remain profile-local.  */
-  static unsigned int indices[integer_dtype_count][wide_shape_count];
-  static bool initialized;
-  if (!initialized)
-    {
-      for (unsigned int i = 0; i < TYPE_MAX; ++i)
-	if (!types[i].accumulator
-	    && !floating_descriptor_p (types[i].descriptor))
-	  {
-	    unsigned int q = exact_log2 (types[i].rows * types[i].columns);
-	    unsigned int s = q ? 2 * q - (types[i].rows == 1) : 0;
-	    indices[integer_dtype_number (types[i].descriptor)][s] = i + 1;
-	  }
-      initialized = true;
-    }
-  unsigned int di = indices[d][shape];
-  unsigned int ci = indices[c < 40 ? c : c + 8][0];
-  if (!di || !ci)
+  type_index di = numeric_matrix_type (d, shape);
+  type_index ci = numeric_matrix_type (c < 40 ? c : c + 8, 0);
+  if (di == TYPE_MAX || ci == TYPE_MAX)
     return false;
-  dst = static_cast<type_index> (di - 1);
-  tc = static_cast<type_index> (ci - 1);
+  dst = di;
+  tc = ci;
   return ztt_m_type_nodes[dst] != NULL_TREE;
 }
 
@@ -2704,12 +2707,11 @@ numeric_dtype_descriptor (unsigned int number)
     | ((number % 6) << 22);
 }
 
-static bool
-decode_numeric_scalar_types (unsigned int d, unsigned int shape,
-			     unsigned int c, type_index &dst, type_index &tc)
+/* Only immutable catalogue indices are shared; trees remain profile-local.  */
+static type_index
+numeric_matrix_type (unsigned int number, unsigned int shape)
 {
-  gcc_assert (d < numeric_dtype_count && shape < wide_shape_count
-	      && c < numeric_scalar_dtype_count);
+  gcc_assert (number < numeric_dtype_count && shape < wide_shape_count);
   static unsigned int indices[numeric_dtype_count][wide_shape_count];
   static bool initialized;
   if (!initialized)
@@ -2719,16 +2721,43 @@ decode_numeric_scalar_types (unsigned int d, unsigned int shape,
 	  {
 	    unsigned int number = numeric_dtype_number (types[i].descriptor);
 	    unsigned int q = exact_log2 (types[i].rows * types[i].columns);
-	    indices[number][q ? 2 * q - (types[i].rows == 1) : 0] = i + 1;
+	    unsigned int s = q ? 2 * q - (types[i].rows == 1) : 0;
+	    gcc_assert (number < numeric_dtype_count && s < wide_shape_count);
+	    gcc_assert (!indices[number][s]);
+	    indices[number][s] = i + 1;
 	  }
       initialized = true;
     }
-  unsigned int di = indices[d][shape];
-  unsigned int ci = indices[c < 40 ? c : c < 80 ? c + 8 : c + 16][0];
-  if (!di || !ci)
+  unsigned int index = indices[number][shape];
+  return index ? static_cast<type_index> (index - 1) : TYPE_MAX;
+}
+
+static type_index
+matrix_type_index (unsigned int descriptor, unsigned int rows,
+		   unsigned int columns)
+{
+  if (!rows || !columns || (rows != 1 && columns != 1))
+    return TYPE_MAX;
+  int q = exact_log2 (rows == 1 ? columns : rows);
+  if (q < 0)
+    return TYPE_MAX;
+  unsigned int shape = q ? 2 * q - (rows == 1) : 0;
+  if (shape >= wide_shape_count)
+    return TYPE_MAX;
+  return numeric_matrix_type (numeric_dtype_number (descriptor), shape);
+}
+
+static bool
+decode_numeric_scalar_types (unsigned int d, unsigned int shape,
+			     unsigned int c, type_index &dst, type_index &tc)
+{
+  gcc_assert (c < numeric_scalar_dtype_count);
+  type_index di = numeric_matrix_type (d, shape);
+  type_index ci = numeric_matrix_type (c < 40 ? c : c < 80 ? c + 8 : c + 16, 0);
+  if (di == TYPE_MAX || ci == TYPE_MAX)
     return false;
-  dst = static_cast<type_index> (di - 1);
-  tc = static_cast<type_index> (ci - 1);
+  dst = di;
+  tc = ci;
   return ztt_m_type_nodes[dst] != NULL_TREE;
 }
 
@@ -3068,6 +3097,139 @@ static void run_large_matrix_signature_selftests ();
 static void run_acc_shared_source_selftests ();
 static void run_md_reuse_selftests ();
 
+static type_index
+linear_matrix_type (unsigned int descriptor, unsigned int rows,
+		    unsigned int columns)
+{
+  for (unsigned int i = 0; i < TYPE_MAX; ++i)
+    if (!types[i].accumulator && types[i].descriptor == descriptor
+	&& types[i].rows == rows && types[i].columns == columns)
+      return static_cast<type_index> (i);
+  return TYPE_MAX;
+}
+
+static void
+run_matrix_type_index_selftests ()
+{
+  using namespace selftest;
+  for (unsigned int n = 0; n < numeric_dtype_count; ++n)
+    {
+      unsigned int descriptor = numeric_dtype_descriptor (n);
+      for (unsigned int s = 0; s < wide_shape_count; ++s)
+	{
+	  unsigned int q = 1U << ((s + 1) / 2);
+	  bool column = s && !(s & 1);
+	  unsigned int rows = column ? q : 1, columns = column ? 1 : q;
+	  type_index expected = linear_matrix_type (descriptor, rows, columns);
+	  ASSERT_EQ (numeric_matrix_type (n, s), expected);
+	  ASSERT_EQ (matrix_type_index (descriptor, rows, columns), expected);
+	  if (n < integer_dtype_count)
+	    ASSERT_EQ (integer_matrix_type (n, q, column), expected);
+	  if (n < wide_dtype_count)
+	    ASSERT_EQ (mixed_matrix_type (n, q, column), expected);
+	}
+      const unsigned int absent[][2] = {
+	{ 0, 1 }, { 1, 0 }, { 2, 2 }, { 3, 1 }, { 1, 3 },
+	{ 64, 1 }, { 1, 64 }, { ~0U, 1 }, { 1, ~0U }
+      };
+      for (const auto &shape : absent)
+	ASSERT_EQ (matrix_type_index (descriptor, shape[0], shape[1]), TYPE_MAX);
+    }
+
+  for (unsigned int i = 0; i < TYPE_MAX; ++i)
+    if (!types[i].accumulator)
+      {
+	const auto &t = types[i];
+	ASSERT_EQ (numeric_dtype_descriptor (numeric_dtype_number (t.descriptor)),
+		   t.descriptor);
+	ASSERT_EQ (matrix_type_index (t.descriptor, t.rows, t.columns),
+		   static_cast<type_index> (i));
+	unsigned int half_rows = t.rows > 1 ? t.rows / 2 : 1;
+	unsigned int half_columns = t.rows > 1 ? t.columns : t.columns / 2;
+	ASSERT_EQ (m_utility_source_type (PROTO_M_CONCAT,
+					 static_cast<type_index> (i)),
+		   linear_matrix_type (t.descriptor, half_rows, half_columns));
+	ASSERT_EQ (m_utility_source_type (PROTO_M_EXTRACT,
+					 static_cast<type_index> (i)),
+		   linear_matrix_type (t.descriptor,
+				       t.rows > 1 ? t.rows * 2 : 1,
+				       t.rows > 1 ? t.columns : t.columns * 2));
+	ASSERT_EQ (m_utility_source_type (PROTO_M_EXTRACT_COLUMN,
+					 static_cast<type_index> (i)),
+		   linear_matrix_type (t.descriptor, t.rows * 2, t.columns));
+      }
+}
+
+static void
+run_store_lookup_selftests ()
+{
+  using namespace selftest;
+  static constexpr expansion_index operations[] = {
+    EXPAND_MSS_RM, EXPAND_MSS_CM, EXPAND_MSS_ST, EXPAND_MSS_TST
+  };
+  static constexpr type_index samples[] = {
+    TYPE_I8_RNE_1X1, TYPE_I8_RNU_1X1, TYPE_I8_RNU_1X2, TYPE_I8_RNU_2X1,
+    TYPE_I32_RDN_1X1, TYPE_U32_ROD_1X4, TYPE_I64_RNU_1X1, TYPE_U128_ROD_1X1,
+    TYPE_F16_RNE_1X1, TYPE_BF16_RNE_1X1, TYPE_F32_RTZ_1X1, TYPE_F64_RMM_1X1,
+    TYPE_I4_RNU_1X1, TYPE_I128_RNU_ACCX1
+  };
+  unsigned int expected[ARRAY_SIZE (operations)][ARRAY_SIZE (samples)];
+  for (auto &row : expected)
+    for (unsigned int &code : row)
+      code = ZTT_BUILTIN_MAX;
+  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+    {
+      const auto &d = builtin_description_for (i);
+      if (!memory_store_p (d.expansion)
+	  || (store_dispatch_p (i) && i != ZTT_BUILTIN_MSS_RM_I8_RNE_1X1))
+	continue;
+      for (unsigned int op = 0; op < ARRAY_SIZE (operations); ++op)
+	for (unsigned int t = 0; t < ARRAY_SIZE (samples); ++t)
+	  if (d.expansion == operations[op] && d.type == samples[t]
+	      && expected[op][t] == ZTT_BUILTIN_MAX)
+	    expected[op][t] = i;
+    }
+  for (unsigned int op = 0; op < ARRAY_SIZE (operations); ++op)
+    for (unsigned int t = 0; t < ARRAY_SIZE (samples); ++t)
+      ASSERT_EQ (store_builtin_code (operations[op], samples[t]), expected[op][t]);
+  for (unsigned int op = ARRAY_SIZE (operations); op > 0; --op)
+    for (unsigned int t = ARRAY_SIZE (samples); t > 0; --t)
+      ASSERT_EQ (store_builtin_code (operations[op - 1], samples[t - 1]),
+		 expected[op - 1][t - 1]);
+  ASSERT_EQ (store_builtin_code (EXPAND_MSS_RM, TYPE_I8_RNE_1X1),
+	     ZTT_BUILTIN_MSS_RM_I8_RNE_1X1);
+  for (auto op : operations)
+    {
+      ASSERT_EQ (store_builtin_code (op, TYPE_I4_RNU_1X1), ZTT_BUILTIN_MAX);
+      ASSERT_EQ (store_builtin_code (op, TYPE_I128_RNU_ACCX1), ZTT_BUILTIN_MAX);
+    }
+}
+
+static void
+run_profile_lookup_selftests ()
+{
+  using namespace selftest;
+  ASSERT_EQ (lookup_profile (nullptr), nullptr);
+  ASSERT_EQ (lookup_profile (""), nullptr);
+  char name[80];
+  for (const auto &from : profiles)
+    for (const auto &to : profiles)
+      {
+	ASSERT_EQ (lookup_profile (from.name), &from);
+	size_t length = strlen (to.name);
+	ASSERT_TRUE (length + 1 < sizeof (name));
+	memcpy (name, to.name, length + 1);
+	ASSERT_EQ (lookup_profile (name), &to);
+	ASSERT_EQ (lookup_profile (name), &to);
+	name[length] = 'x';
+	name[length + 1] = '\0';
+	ASSERT_EQ (lookup_profile (name), nullptr);
+	ASSERT_EQ (lookup_profile (nullptr), nullptr);
+	name[length] = '\0';
+	ASSERT_EQ (lookup_profile (name), &to);
+      }
+}
+
 static void
 run_scalar_datatype_name_selftests ()
 {
@@ -3160,6 +3322,9 @@ void
 run_wide_signature_selftests ()
 {
   using namespace selftest;
+  run_matrix_type_index_selftests ();
+  run_store_lookup_selftests ();
+  run_profile_lookup_selftests ();
   run_scalar_datatype_name_selftests ();
   run_scalar_full_name_selftests ();
   run_acc_shared_source_selftests ();
@@ -6185,12 +6350,9 @@ resolve_overloaded_builtin (location_t loc, unsigned int code,
       error_at (loc, "AME/Ztt i4/u4 memory interfaces are not supported");
       return error_mark_node;
     }
-  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
-    if (builtin_description_for (i).expansion == d.expansion
-	&& builtin_description_for (i).type == type
-	&& (i == ZTT_BUILTIN_MSS_RM_I8_RNE_1X1 || !store_dispatch_p (i)))
-      return builtin_decl (i, true);
-  gcc_unreachable ();
+  unsigned int resolved = store_builtin_code (d.expansion, type);
+  gcc_assert (resolved != ZTT_BUILTIN_MAX);
+  return builtin_decl (resolved, true);
 }
 
 /* Retain old codes for a migration diagnostic, not executable compatibility.  */
