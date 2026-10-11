@@ -127,6 +127,9 @@ The local structural window can include ordinary integer or pointer SSA
 calculations with no memory effects or possible traps.  All operands must
 have integer or pointer types; floating comparisons are not an exception.
 These calculations stay in place, and the 16-statement bound is unchanged.
+The window also permits builtin amenlen and ameudsz reads, preserving each
+read and its order.  Other CSR observations and ordinary calls remain
+boundaries; builtin identity, not the function name, determines eligibility.
 
 A concatenation of complementary halves from the same parent can also
 reuse that parent.  Both halves must have one use and the parent's only

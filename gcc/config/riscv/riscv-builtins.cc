@@ -514,6 +514,29 @@ riscv_expand_builtin_ztt (const struct riscv_builtin_description *d,
   return riscv_expand_builtin_insn (d->icode, opno, ops, has_target_p);
 }
 
+/* Recognize geometry observers by builtin identity, including both aliases.  */
+bool
+riscv_ztt::geometry_query_p (tree decl)
+{
+  if (!decl || !fndecl_built_in_p (decl, BUILT_IN_MD))
+    return false;
+  unsigned int code = DECL_MD_FUNCTION_CODE (decl);
+  unsigned int subcode = code >> RISCV_BUILTIN_SHIFT;
+  if ((code & RISCV_BUILTIN_CLASS) != RISCV_BUILTIN_GENERAL
+      || subcode >= ARRAY_SIZE (riscv_builtins))
+    return false;
+  switch (riscv_builtins[subcode].icode)
+    {
+    case CODE_FOR_riscv_ztt_read_amenlen_si:
+    case CODE_FOR_riscv_ztt_read_amenlen_di:
+    case CODE_FOR_riscv_ztt_read_ameudsz_si:
+    case CODE_FOR_riscv_ztt_read_ameudsz_di:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Implement TARGET_GIMPLE_FOLD_BUILTIN.  */
 
 bool

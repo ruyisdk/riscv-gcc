@@ -882,6 +882,7 @@ const unsigned int RISCV_BUILTIN_SHIFT = 2;
 const unsigned int RISCV_BUILTIN_CLASS = (1 << RISCV_BUILTIN_SHIFT) - 1;
 
 namespace riscv_ztt {
+bool geometry_query_p (tree);
 struct profile_info
 {
   const char *name;

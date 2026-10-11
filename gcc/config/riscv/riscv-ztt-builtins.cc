@@ -7223,10 +7223,13 @@ check_builtin_call (location_t loc, unsigned int code, tree,
   return true;
 }
 
-/* Scalar work may separate structural producers without changing AME state.  */
+/* Geometry reads stay in place and do not observe structural value changes.  */
 static bool
-local_structure_assignment_p (gimple *stmt)
+local_structure_gap_p (gimple *stmt)
 {
+  if (is_gimple_call (stmt))
+    return gimple_call_num_args (stmt) == 0
+      && geometry_query_p (gimple_call_fndecl (stmt));
   if (!is_gimple_assign (stmt) || gimple_vuse (stmt)
       || gimple_has_side_effects (stmt)
       || TREE_CODE (gimple_assign_lhs (stmt)) != SSA_NAME)
@@ -7244,8 +7247,8 @@ local_structure_assignment_p (gimple *stmt)
   return true;
 }
 
-/* Keep producer calls as ownership witnesses.  Only cross local scalar
-   assignments, not memory accesses, calls or state-changing operations.  */
+/* Keep producer calls as ownership witnesses.  Only cross scalar work and
+   geometry reads, not memory accesses, other calls or state changes.  */
 static bool
 local_structure_producers_p (gimple_stmt_iterator *gsi,
 			    gimple *const *producers, unsigned int count)
@@ -7271,7 +7274,7 @@ local_structure_producers_p (gimple_stmt_iterator *gsi,
       if (seen != before)
 	continue;
 
-      if (!local_structure_assignment_p (stmt))
+      if (!local_structure_gap_p (stmt))
 	return false;
     }
   return false;
@@ -7342,7 +7345,7 @@ local_projection_uses_p (tree value, type_index half,
 	  seen |= 1U << j;
       if (seen == wanted)
 	return true;
-      if (seen == before && !local_structure_assignment_p (stmt))
+      if (seen == before && !local_structure_gap_p (stmt))
 	return false;
     }
   return false;
@@ -7528,7 +7531,7 @@ local_structure_parent_p (tree parent, gimple_stmt_iterator *gsi,
 	  seen |= 1U << j;
       if (seen == all)
 	return true;
-      if (!structure_store_p (stmt) && !local_structure_assignment_p (stmt))
+      if (!structure_store_p (stmt) && !local_structure_gap_p (stmt))
 	return false;
     }
   return false;
