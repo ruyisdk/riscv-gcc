@@ -445,11 +445,11 @@
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_X "rJ")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr")
-                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "0")
+                                    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "Wmr0")
                                     (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "rJ")])
 
-;; Tie only a complete
-;; compatible source; the other input remains protected by early-clobber.
+;; Only a complete compatible source may match the destination;
+;; early-clobber protects the other input.
 (define_int_attr ztt_elementwise_dest_c
   [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "&Wmr")
    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "&Wmr")
@@ -461,7 +461,7 @@
   [(UNSPECV_ZTT_STATE_ELEMENTWISE_M "Wmr")
    (UNSPECV_ZTT_STATE_ELEMENTWISE_X "Wmr")
    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE "Wmr")
-   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "0")
+   (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT "Wmr0")
    (UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT "Wmr")
    (UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE "Wmr")])
 (define_int_attr ztt_elementwise_reuse
