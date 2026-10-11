@@ -10690,13 +10690,18 @@ md_scalar_insn_p (rtx pattern)
 }
 
 static bool
+md_normal_edge_p (edge incoming)
+{
+  return !(incoming->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_DFS_BACK
+			     | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING));
+}
+
+static bool
 md_fallthrough_p (basic_block bb)
 {
   edge incoming = single_pred_p (bb) ? single_pred_edge (bb) : nullptr;
   return incoming && incoming->src == bb->prev_bb
-    && (incoming->flags & EDGE_FALLTHRU)
-    && !(incoming->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_DFS_BACK
-			   | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING));
+    && (incoming->flags & EDGE_FALLTHRU) && md_normal_edge_p (incoming);
 }
 
 /* A plain scalar branch changes neither registers nor Md.  */
@@ -10707,6 +10712,48 @@ md_preserving_branch_p (rtx_insn *insn)
     && any_condjump_p (insn) && onlyjump_p (insn)
     && recog_memoized (insn) >= 0 && md_scalar_insn_p (PATTERN (insn));
 }
+
+/* Keep one branch snapshot; joins remain barriers and spills stay local.  */
+class local_md_path
+{
+  edge pending = nullptr;
+  local_md_state saved;
+
+public:
+  void enter (basic_block bb, local_md_state &state)
+  {
+    if (!md_fallthrough_p (bb))
+      {
+	if (pending && pending->dest == bb)
+	  {
+	    state = saved;
+	    if (dump_file)
+	      fprintf (dump_file, "Restore Md on branch edge %d -> %d\n",
+		       pending->src->index, bb->index);
+	  }
+	else
+	  state.clear ();
+      }
+    if (pending && pending->dest == bb)
+      pending = nullptr;
+  }
+
+  void leave (basic_block bb, const local_md_state &state)
+  {
+    if (!md_preserving_branch_p (BB_END (bb)))
+      return;
+    edge e;
+    edge_iterator ei;
+    FOR_EACH_EDGE (e, ei, bb->succs)
+      if (!(e->flags & EDGE_FALLTHRU) && md_normal_edge_p (e)
+	  && e->dest->index >= NUM_FIXED_BLOCKS && single_pred_p (e->dest))
+	{
+	  pending = e;
+	  saved = state;
+	  break;
+	}
+  }
+};
 
 /* Only the result GPR changes; the volatile CSR observation remains.  */
 static bool
@@ -10932,11 +10979,11 @@ reuse_cleaned_descriptors ()
   bool changed = false;
   const bool explicit_state = riscv_ztt_explicit_state_p ();
   local_md_state state;
+  local_md_path path;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
-      if (!md_fallthrough_p (bb))
-	state.clear ();
+      path.enter (bb, state);
       local_raw_spill spill;
       rtx_insn *insn, *next;
       FOR_BB_INSNS_SAFE (bb, insn, next)
@@ -11057,11 +11104,12 @@ reuse_cleaned_descriptors ()
 	  else
 	    state.clear ();
 	}
+      path.leave (bb, state);
     }
   return changed;
 }
 
-/* Reuse Md along single-predecessor fallthrough chains after allocation.  */
+/* Reuse Md along proven single-predecessor paths after allocation.  */
 static unsigned int
 reuse_local_md ()
 {
@@ -11071,11 +11119,11 @@ reuse_local_md ()
   if (dump_file)
     fprintf (dump_file, "Explicit Md state: %d\n", explicit_state);
   local_md_state state;
+  local_md_path path;
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
-      if (!md_fallthrough_p (bb))
-	state.clear ();
+      path.enter (bb, state);
       rtx_insn *insn;
       FOR_BB_INSNS (bb, insn)
 	{
@@ -11611,6 +11659,7 @@ reuse_local_md ()
 	  else
 	    state.clear ();
 	}
+      path.leave (bb, state);
     }
   /* Dropping private operands exposes dead address and stride calculations.  */
   if (cleanup)
@@ -11644,6 +11693,54 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+    basic_block source = BASIC_BLOCK_FOR_FN (cfun, 2);
+    basic_block target = BASIC_BLOCK_FOR_FN (cfun, 4);
+    basic_block join = BASIC_BLOCK_FOR_FN (cfun, 5);
+    edge taken = single_pred_edge (target);
+    taken->flags = 0;
+    single_pred_edge (BASIC_BLOCK_FOR_FN (cfun, 3))->flags = EDGE_FALLTHRU;
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx_code_label *label = gen_label_rtx ();
+    rtx branch = gen_rtx_SET
+      (pc_rtx, gen_rtx_IF_THEN_ELSE
+	(VOIDmode, gen_rtx_EQ (VOIDmode, reg, const0_rtx),
+	 gen_rtx_LABEL_REF (VOIDmode, label), pc_rtx));
+    rtx_insn *jump = emit_jump_insn_after (branch, BB_END (source));
+    BB_END (source) = jump;
+    ASSERT_TRUE (md_preserving_branch_p (jump));
+    const int edge_flags[] = { 0, EDGE_ABNORMAL, EDGE_EH, EDGE_FAKE,
+			      EDGE_DFS_BACK, EDGE_IRREDUCIBLE_LOOP,
+			      EDGE_CROSSING, EDGE_FALLTHRU };
+    for (int flags : edge_flags)
+      {
+	taken->flags = flags;
+	local_md_state state;
+	local_md_path path;
+	state.record_constant (reg, GEN_INT (32));
+	state.remember (matrix, reg);
+	path.leave (source, state);
+	state.clear ();
+	state.record_constant (reg, GEN_INT (64));
+	path.enter (target, state);
+	ASSERT_EQ (flags == 0, state.matches (matrix, reg));
+	if (!flags)
+	  ASSERT_RTX_EQ (GEN_INT (32), state.descriptor_value (reg));
+	path.enter (join, state);
+	ASSERT_FALSE (state.matches (matrix, reg));
+      }
+    taken->flags = 0;
+    PATTERN (jump) = gen_rtx_ASM_INPUT (VOIDmode, "");
+    INSN_CODE (jump) = -1;
+    local_md_state state;
+    local_md_path path;
+    state.remember (matrix, reg);
+    path.leave (source, state);
+    path.enter (target, state);
+    ASSERT_FALSE (state.matches (matrix, reg));
+  }
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
     local_md_state state;

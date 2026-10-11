@@ -209,8 +209,9 @@ and adds physical-bank call clobbers during the same lowering walk.
 
 ztt_md_reuse runs after allocation and scheduling, before variable tracking.
 It tracks complete M groups and descriptor values along single-predecessor
-fallthrough chains.  Plain scalar conditional branches preserve facts;
-joins, backedges, non-fallthrough and exceptional edges discard them.
+fallthrough chains.  One pending snapshot also reaches a unique-predecessor
+target of a plain scalar conditional branch.  Joins, backedges and
+exceptional edges discard facts; nested branches may replace the snapshot.
 Descriptor cleanup after DCE uses the same boundaries; private raw spill
 tracking remains confined to each block.
 Recognized AME CSR reads preserve Md and scalar-datatype facts while
