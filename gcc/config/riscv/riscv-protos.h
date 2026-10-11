@@ -895,6 +895,7 @@ bool profile_selected_p ();
 bool p0_profile_p ();
 bool runtime_profile_p ();
 bool typed_profile_p ();
+bool scalar_operand_p (rtx, unsigned int, bool);
 machine_mode matrix_mode (unsigned int = 1);
 unsigned int m_nregs (machine_mode);
 void split_group_move (rtx *);

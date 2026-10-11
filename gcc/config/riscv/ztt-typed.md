@@ -484,8 +484,9 @@
           ZTT_ELEMENTWISE))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
-   && (<ztt_elementwise_scalar> ? GET_MODE (operands[2]) == Pmode
-                         : riscv_ztt::m_mode_p (GET_MODE (operands[2])))"
+   && (<ztt_elementwise_scalar>
+       ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[3]), false)
+       : riscv_ztt::m_mode_p (GET_MODE (operands[2])))"
   "#"
   [(set_attr "type" "multi")])
 
@@ -516,8 +517,9 @@
            && rtx_equal_p (operands[3], operands[5])
            && riscv_ztt::datatype_step (UINTVAL (operands[9]), 0)
               == riscv_ztt::datatype_step (UINTVAL (operands[9]), 2)))
-   && (<ztt_elementwise_scalar> ? GET_MODE (operands[2]) == Pmode
-                         : riscv_ztt::m_mode_p (GET_MODE (operands[2])))"
+   && (<ztt_elementwise_scalar>
+       ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[8]), false)
+       : riscv_ztt::m_mode_p (GET_MODE (operands[2])))"
 {
   return riscv_ztt::output_elementwise_state (operands, <ztt_elementwise_scalar>);
 }
@@ -660,15 +662,16 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand 2 "register_operand" "r")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")
-           (match_operand 5 "const_int_operand" "n")
+           (match_operand:P 5 "const_int_operand" "n")
            (match_operand:ZTT_M 7 "register_operand" "0")
            (match_operand 6 "const_int_operand" "n")]
           UNSPEC_ZTT_TERNARY_X))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
-   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))"
+   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
+   && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[3]), true)"
   "#"
   [(set_attr "type" "multi")])
 
@@ -678,15 +681,16 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand 2 "register_operand" "r")
            (match_operand 3 "const_int_operand" "n")
            (match_operand 4 "const_int_operand" "n")
-           (match_operand 5 "const_int_operand" "n")
+           (match_operand:P 5 "const_int_operand" "n")
            (match_operand:ZTT_M 7 "register_operand" "0")
            (match_operand 6 "const_int_operand" "n")]
           UNSPECV_ZTT_TERNARY_X_FLAGS))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
-   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))"
+   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
+   && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[3]), true)"
   "#"
   [(set_attr "type" "multi")])
 
@@ -703,7 +707,7 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_ternary_dest>")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
-           (match_operand:P 2 "register_operand" "r")
+           (match_operand 2 "register_operand" "r")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "register_operand" "r")
@@ -716,7 +720,8 @@
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
-   && riscv_ztt::m_mode_p (GET_MODE (operands[6]))"
+   && riscv_ztt::m_mode_p (GET_MODE (operands[6]))
+   && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[8]), true)"
 {
   return riscv_ztt::output_scalar_ternary_state (operands);
 }
@@ -820,8 +825,9 @@
           ZTT_INTEGER_ELEMENTWISE))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
-   && (<ztt_integer_scalar> ? GET_MODE (operands[2]) == Pmode
-                         : riscv_ztt::m_mode_p (GET_MODE (operands[2])))"
+   && (<ztt_integer_scalar>
+       ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[3]), false)
+       : riscv_ztt::m_mode_p (GET_MODE (operands[2])))"
   "#"
   [(set_attr "type" "multi")])
 

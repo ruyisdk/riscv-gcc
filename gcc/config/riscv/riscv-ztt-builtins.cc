@@ -777,6 +777,18 @@ data_scalar_variant_p (unsigned int variant)
     || IN_RANGE (variant, 39, 40);
 }
 
+bool
+scalar_operand_p (rtx operand, unsigned int variant, bool ternary)
+{
+  machine_mode mode = GET_MODE (operand);
+  return mode == Pmode
+    || ((mode == QImode || mode == HImode || mode == SImode)
+	/* Keep a separate integer carrier for floating register views.  */
+	&& (!SUBREG_P (operand)
+	    || !FLOAT_MODE_P (GET_MODE (SUBREG_REG (operand))))
+	&& (ternary ? variant < 4 : data_scalar_variant_p (variant)));
+}
+
 /* Column and row zip, followed by their respective inverses.  */
 static int
 zip_variant (expansion_index expansion)
@@ -7054,6 +7066,10 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
   rtx scalar = expand_normal (CALL_EXPR_ARG (exp, ternary >= 0 ? 2 : 1));
   scalar = force_reg (Pmode, convert_modes
     (Pmode, TYPE_MODE (carrier), scalar, TYPE_UNSIGNED (carrier)));
+  if (!exponent
+      && (TYPE_MODE (carrier) == QImode || TYPE_MODE (carrier) == HImode
+	  || TYPE_MODE (carrier) == SImode))
+    scalar = gen_lowpart (TYPE_MODE (carrier), scalar);
   rtx scalar_descriptor = exponent ? const0_rtx : GEN_INT (types[operation.scalar].descriptor);
   rtx result = gen_reg_rtx (modes[0]);
   const auto &f = operation.formation;
@@ -10077,6 +10093,49 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  const machine_mode scalar_modes[]
+    = { QImode, HImode, SImode, DImode, SFmode, DFmode };
+  for (machine_mode mode : scalar_modes)
+    {
+      rtx reg = gen_raw_REG (mode, LAST_VIRTUAL_REGISTER + 1);
+      bool data = mode == Pmode || mode == QImode || mode == HImode
+	|| mode == SImode;
+      for (unsigned int variant : { 13U, 21U, 22U, 26U, 29U, 30U, 39U, 40U })
+	ASSERT_EQ (scalar_operand_p (reg, variant, false), data);
+      for (unsigned int variant : { 1U, 3U, 5U, 41U })
+	ASSERT_EQ (scalar_operand_p (reg, variant, false), mode == Pmode);
+      for (unsigned int variant = 0; variant < 4; ++variant)
+	ASSERT_EQ (scalar_operand_p (reg, variant, true), data);
+      ASSERT_EQ (scalar_operand_p (reg, 4, true), mode == Pmode);
+    }
+  const machine_mode float_modes[] = { HFmode, BFmode, SFmode, DFmode };
+  for (machine_mode mode : float_modes)
+    {
+      rtx reg = gen_raw_REG (mode, LAST_VIRTUAL_REGISTER + 1);
+
+      if (mode == HFmode || mode == BFmode)
+	{
+	  rtx view = gen_rtx_SUBREG (HImode, reg, 0);
+	  ASSERT_FALSE (scalar_operand_p (view, 13, false));
+	  ASSERT_FALSE (scalar_operand_p (view, 0, true));
+	}
+      if (mode == SFmode)
+	{
+	  rtx view = gen_rtx_SUBREG (SImode, reg, 0);
+	  ASSERT_EQ (scalar_operand_p (view, 13, false), SImode == Pmode);
+	  ASSERT_EQ (scalar_operand_p (view, 0, true), SImode == Pmode);
+	}
+      ASSERT_TRUE (scalar_operand_p (gen_rtx_SUBREG (Pmode, reg, 0),
+				     13, false));
+    }
+  rtx integer = gen_raw_REG (DImode, LAST_VIRTUAL_REGISTER + 1);
+  for (machine_mode narrow : { QImode, HImode, SImode })
+    {
+      rtx view = gen_rtx_SUBREG (narrow, integer, 0);
+      ASSERT_TRUE (scalar_operand_p (view, 13, false));
+      ASSERT_TRUE (scalar_operand_p (view, 0, true));
+      ASSERT_EQ (scalar_operand_p (view, 41, false), narrow == Pmode);
+    }
   for (unsigned int width = 4; width <= 128; width *= 2)
     for (unsigned int properties = 0; properties < 16; ++properties)
       ASSERT_EQ (integer_zero_width

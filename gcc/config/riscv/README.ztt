@@ -147,6 +147,12 @@ Typed broadcasts use the source scalar carrier mode, bounded by XLEN.
 Both descriptors retain XLEN operands.  Argument
 evaluation and independent full-width uses keep their original widths.
 
+Typed 8-, 16- and 32-bit data-scalar arithmetic uses the source carrier mode.
+Its TC-to-TB conversion and amestype write are unchanged.  Wider carriers,
+shift counts and fixed exponents retain Pmode operands.
+Narrow operands keep a separate integer carrier when their source is a
+floating register view, avoiding cross-class operands during allocation.
+
 Local datatype preparation
 --------------------------
 
