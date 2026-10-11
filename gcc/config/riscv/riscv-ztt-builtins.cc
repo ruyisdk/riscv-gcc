@@ -5950,6 +5950,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int d = types[tc].descriptor;
       if (!nominal_scalar_types[n] || (kind == 0 && (d & 0xff) > BITS_PER_WORD))
 	return error_mark_node;
+      slot = &nominal_scalar_decls[code - nominal_scalar_base];
+      if (*slot || !initialize_p)
+	return *slot ? *slot : error_mark_node;
       dtype = scalar_datatype_name (d, false);
       static const char *const names[] = { "make", "from_bits", "bits" };
       snprintf (name, sizeof (name), "__riscv_ztt_scalar_%s_%s", names[kind], dtype);
@@ -5958,7 +5961,6 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
 	(kind == 2 ? payload : nominal_scalar_types[n],
 	 kind == 2 ? nominal_scalar_types[n]
 	 : kind == 0 ? scalar_public_carrier_type (tc) : payload, NULL_TREE);
-      slot = &nominal_scalar_decls[code - nominal_scalar_base];
     }
   else if (nominal_operation_p (code))
     {
@@ -5967,6 +5969,11 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int op = nominal_operation (code, t);
       if (!nominal_result_p (op, t))
 	return error_mark_node;
+      slot = nominal_extended_p (code)
+	? &nominal_extended_decls[code - nominal_extended_base]
+	: &nominal_scalar_decls[code - nominal_scalar_base];
+      if (*slot || !initialize_p)
+	return *slot ? *slot : error_mark_node;
       dtype = scalar_datatype_name (types[t].descriptor, false);
       snprintf (name, sizeof (name), "__riscv_ztt_%s_%s_%ux%u",
 		op == floating_scalar_operations ? "mbcast_m_x"
@@ -5980,9 +5987,6 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
 	: integer_scalar_old_p (op)
 	? build_function_type_list (m, m, m, void_type_node, NULL_TREE)
 	: build_function_type_list (m, m, void_type_node, NULL_TREE);
-      slot = nominal_extended_p (code)
-	? &nominal_extended_decls[code - nominal_extended_base]
-	: &nominal_scalar_decls[code - nominal_scalar_base];
     }
   else
     {
@@ -5998,12 +6002,12 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
 				TYPE_MAX * numeric_scalar_dtype_count, true);
 	}
       slot = &(*nominal_broadcast_decls)[n];
+      if (*slot || !initialize_p)
+	return *slot ? *slot : error_mark_node;
       snprintf (name, sizeof (name), "__builtin_riscv_ztt_nominal_broadcast_%u", n);
       ftype = build_function_type_list (ztt_m_type_nodes[t],
 					scalar_carrier_type (nominal_scalar_type_index (c)), NULL_TREE);
     }
-  if (*slot || !initialize_p)
-    return *slot ? *slot : error_mark_node;
   unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
   *slot = nominal_raw_broadcast_p (code)
     ? add_builtin_function_ext_scope (name, ftype, fullcode, BUILT_IN_MD,
