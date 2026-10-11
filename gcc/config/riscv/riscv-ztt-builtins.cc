@@ -1037,20 +1037,26 @@ store_builtin_code (expansion_index expansion, type_index type)
   gcc_assert (memory_store_p (expansion) && type < TYPE_MAX);
   /* Cache catalog codes only; declaration availability remains profile-local.  */
   static unsigned int codes[4][TYPE_MAX];
+  static unsigned int scanned;
   unsigned int &code = codes[memory_variant (expansion)][type];
   if (!code)
     {
-      code = ZTT_BUILTIN_MAX + 1;
-      for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+      while (scanned < ZTT_BUILTIN_MAX)
 	{
+	  unsigned int i = scanned++;
 	  const auto &d = builtin_description_for (i);
-	  if (d.expansion == expansion && d.type == type
-	      && (i == ZTT_BUILTIN_MSS_RM_I8_RNE_1X1 || !store_dispatch_p (i)))
-	    {
-	      code = i + 1;
-	      break;
-	    }
+	  if (!memory_store_p (d.expansion)
+	      || (store_dispatch_p (i) && i != ZTT_BUILTIN_MSS_RM_I8_RNE_1X1))
+	    continue;
+	  gcc_assert (d.type < TYPE_MAX);
+	  unsigned int &entry = codes[memory_variant (d.expansion)][d.type];
+	  if (!entry)
+	    entry = i + 1;
+	  if (code)
+	    break;
 	}
+      if (!code)
+	code = ZTT_BUILTIN_MAX + 1;
     }
   return code - 1;
 }
@@ -3353,10 +3359,8 @@ run_store_lookup_selftests ()
     TYPE_F16_RNE_1X1, TYPE_BF16_RNE_1X1, TYPE_F32_RTZ_1X1, TYPE_F64_RMM_1X1,
     TYPE_I4_RNU_1X1, TYPE_I128_RNU_ACCX1
   };
-  unsigned int expected[ARRAY_SIZE (operations)][ARRAY_SIZE (samples)];
-  for (auto &row : expected)
-    for (unsigned int &code : row)
-      code = ZTT_BUILTIN_MAX;
+  auto_vec<unsigned int> expected;
+  expected.safe_grow_cleared (ARRAY_SIZE (operations) * TYPE_MAX);
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const auto &d = builtin_description_for (i);
@@ -3364,18 +3368,28 @@ run_store_lookup_selftests ()
 	  || (store_dispatch_p (i) && i != ZTT_BUILTIN_MSS_RM_I8_RNE_1X1))
 	continue;
       for (unsigned int op = 0; op < ARRAY_SIZE (operations); ++op)
-	for (unsigned int t = 0; t < ARRAY_SIZE (samples); ++t)
-	  if (d.expansion == operations[op] && d.type == samples[t]
-	      && expected[op][t] == ZTT_BUILTIN_MAX)
-	    expected[op][t] = i;
+	if (d.expansion == operations[op])
+	  {
+	    unsigned int &code = expected[op * TYPE_MAX + d.type];
+	    if (!code)
+	      code = i + 1;
+	  }
     }
   for (unsigned int op = 0; op < ARRAY_SIZE (operations); ++op)
-    for (unsigned int t = 0; t < ARRAY_SIZE (samples); ++t)
-      ASSERT_EQ (store_builtin_code (operations[op], samples[t]), expected[op][t]);
+    for (type_index type : samples)
+      {
+	unsigned int code = expected[op * TYPE_MAX + type];
+	ASSERT_EQ (store_builtin_code (operations[op], type),
+		   code ? code - 1 : ZTT_BUILTIN_MAX);
+      }
   for (unsigned int op = ARRAY_SIZE (operations); op > 0; --op)
-    for (unsigned int t = ARRAY_SIZE (samples); t > 0; --t)
-      ASSERT_EQ (store_builtin_code (operations[op - 1], samples[t - 1]),
-		 expected[op - 1][t - 1]);
+    for (unsigned int t = TYPE_MAX; t > 0; --t)
+      {
+	unsigned int code = expected[(op - 1) * TYPE_MAX + t - 1];
+	ASSERT_EQ (store_builtin_code (operations[op - 1],
+				       static_cast<type_index> (t - 1)),
+		   code ? code - 1 : ZTT_BUILTIN_MAX);
+      }
   ASSERT_EQ (store_builtin_code (EXPAND_MSS_RM, TYPE_I8_RNE_1X1),
 	     ZTT_BUILTIN_MSS_RM_I8_RNE_1X1);
   for (auto op : operations)
