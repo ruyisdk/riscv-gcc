@@ -8572,7 +8572,7 @@ output_elementwise_state (rtx *operands, bool scalar)
   gcc_assert (variant < ARRAY_SIZE (templates)
 	      && scalar == ((variant < 6 && (variant % 2) != 0)
 			    || data_scalar_variant_p (variant) || variant == 41));
-  if (data_scalar_variant_p (variant))
+  if (data_scalar_variant_p (variant) && operands[5] != const0_rtx)
     output_asm_insn ("csrw\tamestype,%5", operands);
   output_asm_insn (templates[variant], operands);
   return "";
@@ -8582,7 +8582,8 @@ static unsigned int
 elementwise_base_length (rtx *operands, bool scalar, bool preserve_dest,
 			 unsigned int prepared)
 {
-  unsigned int length = 1 + data_scalar_variant_p (UINTVAL (operands[8]));
+  unsigned int length = 1 + (data_scalar_variant_p (UINTVAL (operands[8]))
+			    && operands[5] != const0_rtx);
   unsigned int steps = UINTVAL (operands[9]);
   unsigned int count
     = scalar || elementwise_shared_source_p (operands, scalar) ? 2 : 3;
@@ -8672,7 +8673,7 @@ output_scalar_ternary_state (rtx *operands)
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates));
   prepare_elementwise_state (operands, true, true, UINTVAL (operands[12]));
-  if (variant < 4)
+  if (variant < 4 && operands[5] != const0_rtx)
     output_asm_insn ("csrw\tamestype,%5", operands);
   output_asm_insn (templates[variant], operands);
   return "";
@@ -8684,7 +8685,7 @@ scalar_ternary_length (rtx *operands)
   gcc_assert (UINTVAL (operands[8]) <= 4);
   return elementwise_base_length (operands, true, true,
 				  UINTVAL (operands[12]))
-    + 4 * (UINTVAL (operands[8]) < 4);
+    + 4 * (UINTVAL (operands[8]) < 4 && operands[5] != const0_rtx);
 }
 
 static bool
@@ -9964,6 +9965,7 @@ class local_md_state
   unsigned int definition[32] = {};
   bool load_used[32] = {};
   unsigned int next_definition = 0;
+  rtx scalar_type = nullptr;
 
   static rtx substitute (rtx x, const_rtx, void *data)
   {
@@ -9978,6 +9980,7 @@ public:
     memset (constants, 0, sizeof (constants));
     memset (load_used, 0, sizeof (load_used));
     next_definition = 0;
+    scalar_type = nullptr;
   }
 
   static bool full_gpr_p (rtx reg)
@@ -10017,6 +10020,20 @@ public:
 	  return gen_int_mode (INTVAL (value), GET_MODE (reg));
       }
     return descriptor_value (reg);
+  }
+
+  /* The CSR retains its value when the materializing GPR is overwritten.  */
+  bool record_scalar_type (rtx reg)
+  {
+    rtx value = descriptor_value (reg);
+    if (!CONST_INT_P (value))
+      {
+	scalar_type = nullptr;
+	return false;
+      }
+    bool repeated = scalar_type && rtx_equal_p (scalar_type, value);
+    scalar_type = value;
+    return repeated;
   }
 
   void record_constant (rtx reg, rtx value)
@@ -10549,6 +10566,12 @@ reuse_local_md ()
 				   XVECEXP (src, 0, 1) };
 		    rtx descriptors[] = { XVECEXP (src, 0, 2), XVECEXP (src, 0, 3),
 					  XVECEXP (src, 0, 4) };
+		    unsigned int variant
+		      = UINTVAL (XVECEXP (src, 0, prepared_p ? 5 : 6));
+		    bool reuse_scalar = scalar
+		      && (old_dest ? variant < 4 : data_scalar_variant_p (variant))
+		      && REG_P (descriptors[2])
+		      && state.record_scalar_type (descriptors[2]);
 		    unsigned int prepared = prepared_p ? 0
 		      : state.prepared_inputs (regs, descriptors, UINTVAL (steps),
 					       scalar, old_dest);
@@ -10593,6 +10616,20 @@ reuse_local_md ()
 			      fprintf (dump_file,
 				       "Reuse Md for common preparation at insn %d: %u\n",
 				       INSN_UID (insn), prepared);
+			  }
+		      }
+		    if (reuse_scalar)
+		      {
+			rtx current = SET_SRC (single_set (insn));
+			/* Zero is a late marker, not a request to write zero to TC.  */
+			if (validate_change (insn, &XVECEXP (current, 0, 4),
+					     const0_rtx, false))
+			  {
+			    df_insn_rescan (insn);
+			    cleanup = descriptor_cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file, "Reuse scalar datatype at insn %d\n",
+				       INSN_UID (insn));
 			  }
 		      }
 		    note_stores (insn, invalidate_md_store, &state);
@@ -10855,6 +10892,26 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    local_md_state state;
+    rtx a = gen_rtx_REG (Pmode, GP_REG_FIRST + 5);
+    rtx b = gen_rtx_REG (Pmode, GP_REG_FIRST + 6);
+    rtx tc = GEN_INT (0x48000020);
+    ASSERT_FALSE (state.record_scalar_type (a));
+    state.record_constant (a, tc);
+    ASSERT_FALSE (state.record_scalar_type (a));
+    ASSERT_TRUE (state.record_scalar_type (a));
+    state.invalidate (a);
+    state.record_constant (b, tc);
+    ASSERT_TRUE (state.record_scalar_type (b));
+    ASSERT_FALSE (state.record_scalar_type (a));
+    ASSERT_FALSE (state.record_scalar_type (b));
+    state.record_constant (b, GEN_INT (0x50000020));
+    ASSERT_FALSE (state.record_scalar_type (b));
+    state.clear ();
+    state.record_constant (b, tc);
+    ASSERT_FALSE (state.record_scalar_type (b));
+  }
   for (unsigned int variant = 0; variant <= 41; ++variant)
     {
       ASSERT_EQ (scalar_operand_p (const0_rtx, variant, false),

@@ -737,7 +737,7 @@
    && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
    && riscv_ztt::m_mode_p (GET_MODE (operands[6]))
    && riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[8]), true)
-   && (REG_P (operands[5]) || UINTVAL (operands[8]) == 4)"
+   && (REG_P (operands[5]) || UINTVAL (operands[8]) == 4 || reload_completed)"
 {
   return riscv_ztt::output_scalar_ternary_state (operands);
 }
@@ -745,6 +745,7 @@
    (set (attr "length")
         (symbol_ref "riscv_ztt::scalar_ternary_length (operands)"))])
 
+;; A zero TC operand after reload reuses the established amestype value.
 (define_int_iterator ZTT_COMMON_PREPARED
   [UNSPECV_ZTT_STATE_ELEMENTWISE_M UNSPECV_ZTT_STATE_ELEMENTWISE_X
    UNSPECV_ZTT_STATE_GATHER])
@@ -821,8 +822,7 @@
    && (<ztt_common_scalar>
        ? riscv_ztt::scalar_operand_p (operands[2], UINTVAL (operands[6]), true)
        : riscv_ztt::m_mode_p (GET_MODE (operands[2])))
-   && (REG_P (operands[5])
-       || (<ztt_common_scalar> && UINTVAL (operands[6]) == 4))
+   && (REG_P (operands[5]) || <ztt_common_scalar>)
    && riscv_ztt::common_prepared_operands_p (operands, <ztt_common_scalar>)"
 {
   return riscv_ztt::output_common_prepared (operands, <ztt_common_code>);

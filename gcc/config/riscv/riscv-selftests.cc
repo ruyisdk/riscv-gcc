@@ -994,6 +994,9 @@ run_ztt_elementwise_destination_selftests ()
 	  ops[8] = GEN_INT (1);
 	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, true), reduced);
 	  ASSERT_EQ (riscv_ztt::scalar_ternary_length (ops),
+		     reduced + setup + transfer);
+	  ops[5] = gen_rtx_REG (gmode, 11);
+	  ASSERT_EQ (riscv_ztt::scalar_ternary_length (ops),
 		     reduced + setup + transfer + 4);
 	  for (unsigned int mask = 0; mask < 4; ++mask)
 	    {
@@ -1001,6 +1004,11 @@ run_ztt_elementwise_destination_selftests ()
 	      ASSERT_EQ (riscv_ztt::scalar_ternary_length (ops),
 			 8U + ((mask & 1) ? 0 : setup + transfer)
 			 + ((mask & 2) ? 0 : setup + transfer));
+	      ops[5] = const0_rtx;
+	      ASSERT_EQ (riscv_ztt::scalar_ternary_length (ops),
+			 4U + ((mask & 1) ? 0 : setup + transfer)
+			 + ((mask & 2) ? 0 : setup + transfer));
+	      ops[5] = gen_rtx_REG (gmode, 11);
 	    }
 	  ops[12] = const0_rtx;
 	  ops[11] = GEN_INT (2);
@@ -1008,6 +1016,9 @@ run_ztt_elementwise_destination_selftests ()
 	  ops[11] = const0_rtx;
 	  ops[8] = GEN_INT (18);
 	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, true), reduced + 4);
+	  ops[5] = const0_rtx;
+	  ASSERT_EQ (riscv_ztt::elementwise_length (ops, true), reduced);
+	  ops[5] = gen_rtx_REG (gmode, 11);
 	  if (step > 1)
 	    {
 	      ops[9] = GEN_INT (riscv_ztt::pack_datatype_steps (step / 2, step));
