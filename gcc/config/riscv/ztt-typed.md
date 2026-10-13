@@ -706,19 +706,34 @@
   "#"
   [(set_attr "type" "multi")])
 
-;; Complete same-Md sources can overlap the tied old destination.
+;; Only complete same-Md inputs may overlap the tied old destination.
 (define_int_iterator ZTT_STATE_TERNARY
   [UNSPECV_ZTT_STATE_TERNARY UNSPECV_ZTT_STATE_TERNARY_REUSE])
+(define_int_iterator ZTT_STATE_TERNARY_TIED
+  [UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT])
 (define_int_attr ztt_ternary_m_suffix
-  [(UNSPECV_ZTT_STATE_TERNARY "") (UNSPECV_ZTT_STATE_TERNARY_REUSE "_reuse")])
+  [(UNSPECV_ZTT_STATE_TERNARY "") (UNSPECV_ZTT_STATE_TERNARY_REUSE "_reuse")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT "_reuse_left")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT "_reuse_right")])
 (define_int_attr ztt_ternary_m_dest
   [(UNSPECV_ZTT_STATE_TERNARY "&Wmr") (UNSPECV_ZTT_STATE_TERNARY_REUSE "Wmr")])
+(define_int_attr ztt_ternary_m_lhs
+  [(UNSPECV_ZTT_STATE_TERNARY "Wmr") (UNSPECV_ZTT_STATE_TERNARY_REUSE "Wmr")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT "0")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT "Wmr")])
+(define_int_attr ztt_ternary_m_rhs
+  [(UNSPECV_ZTT_STATE_TERNARY "Wmr") (UNSPECV_ZTT_STATE_TERNARY_REUSE "Wmr")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT "Wmr")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT "0")])
+(define_int_attr ztt_ternary_m_old
+  [(UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT "1")
+   (UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT "2")])
 
 (define_insn "@ztt_state_ternary<ztt_ternary_m_suffix>_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_ternary_m_dest>")
         (unspec_volatile:ZTT_M
-          [(match_operand 1 "register_operand" "Wmr")
-           (match_operand 2 "register_operand" "Wmr")
+          [(match_operand 1 "register_operand" "<ztt_ternary_m_lhs>")
+           (match_operand 2 "register_operand" "<ztt_ternary_m_rhs>")
            (match_operand:P 3 "register_operand" "r")
            (match_operand:P 4 "register_operand" "r")
            (match_operand:P 5 "register_operand" "r")
@@ -741,6 +756,36 @@
 }
   [(set_attr "type" "multi")
    (set (attr "length") (symbol_ref "riscv_ztt::ternary_length (operands)"))])
+
+;; Use one matching operand so LRA reloads the repeated old value once.
+(define_insn "@ztt_state_ternary_tied<ztt_ternary_m_suffix>_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=&Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand 1 "register_operand" "<ztt_ternary_m_lhs>")
+           (match_operand 2 "register_operand" "<ztt_ternary_m_rhs>")
+           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 4 "register_operand" "r")
+           (match_operand:P 5 "register_operand" "r")
+           (match_operand:P 7 "reg_or_0_operand" "rJ")
+           (match_operand 8 "const_int_operand" "n")
+           (match_operand 9 "const_int_operand" "n")
+           (match_dup <ztt_ternary_m_old>)
+           (match_operand 11 "const_int_operand" "n")]
+          ZTT_STATE_TERNARY_TIED))
+   (clobber (match_operand 6 "memory_operand" "=A"))
+   (clobber (match_scratch:P 10 "=&r"))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[11]) & ~7U)
+   && (reload_completed || operands[11] == const0_rtx)
+   && GET_MODE (operands[<ztt_ternary_m_old>]) == <ZTT_M:MODE>mode
+   && riscv_ztt::m_mode_p (GET_MODE (operands[1]))
+   && riscv_ztt::m_mode_p (GET_MODE (operands[2]))
+   && riscv_ztt::m_mode_p (GET_MODE (operands[6]))"
+{
+  return riscv_ztt::output_ternary_state (operands, 11);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length") (symbol_ref "riscv_ztt::ternary_length (operands, 11)"))])
 
 ;; Scalar old-D expressions
 ;; read a tied destination and one independent M source, not two M sources.

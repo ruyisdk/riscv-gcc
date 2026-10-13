@@ -228,9 +228,10 @@ must match; live old values and distinct inputs retain their allocation.
 Data-scalar old-destination operations use this same complete-value rule.
 Their TC setup, ingress conversion flags and arithmetic remain intact.
 Matrix ternary operations can similarly reuse a dying old/source value
-when both complete input modes and datatypes match the destination.  This
-includes conditional moves and integer matrix-exponent accumulation;
-floating data with an integer exponent retains independent allocation.
+when its complete mode and datatype match the destination.  If only one
+input matches, it is tied to the old destination while early-clobber
+keeps the other input independent.  This includes floating data with an
+integer matrix exponent.  Live old values retain independent allocation.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.
