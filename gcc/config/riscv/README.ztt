@@ -331,7 +331,12 @@ After register allocation, pure AME dynamic sizes expand directly from the
 saved scale register, without materializing an additional zero term.  Early
 expansion, fixed-offset and mixed RVV/AME sizes retain their existing form.
 
-Calls, asm, unknown typed operations and unknown UNSPECs clear all facts.
+Calls, basic asm, unknown typed operations and unknown UNSPECs clear all facts.
+Extended asm clears AME state facts but preserves unchanged ordinary GPR
+constants and value identities.  Outputs, partial writes and clobbers
+invalidate overlapping GPR facts; fixed/global registers are excluded.
+Asm goto remains a control-flow boundary.  Neither descriptor scan carries
+Md or the scalar-type CSR through any asm, and spill tracking still stops.
 Register definitions invalidate dependent descriptors and overlapping groups.
 Full Pmode GPR single SETs establish constants through RTL simplification.
 Prepared groups retain constant snapshots after the original GPR changes;
@@ -347,7 +352,7 @@ full scalar TC values; control operands are unchanged.  Dead materialization
 and register notes are updated after substitution.
 After dead workspace calculations are removed, one further descriptor scan
 handles prepared common, unary and same-type binary SETs.  It can recover
-constants hidden by removed GPR definitions; calls, asm, parallel and unknown
+constants hidden by removed GPR definitions; calls, basic asm, other parallel and unknown
 operations stop reuse.  It does not repeat state preparation or scalar TC
 elimination.
 Retained TC writes in prepared scalar SETs also establish materialization

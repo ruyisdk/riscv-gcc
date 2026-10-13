@@ -10715,6 +10715,19 @@ public:
     scalar_type = nullptr;
   }
 
+  void clear_ame ()
+  {
+    memset (facts, 0, sizeof (facts));
+    scalar_type = nullptr;
+    for (unsigned int i = 0; i < GP_REG_NUM; ++i)
+      if (fixed_regs[GP_REG_FIRST + i] || global_regs[GP_REG_FIRST + i])
+	{
+	  constants[i] = NULL_RTX;
+	  identities[i] = 0;
+	  descriptor_used[i] = false;
+	}
+  }
+
   static bool full_gpr_p (rtx reg)
   {
     return REG_P (reg) && GP_REG_P (REGNO (reg)) && GET_MODE (reg) == Pmode;
@@ -10927,6 +10940,18 @@ invalidate_md_store (rtx reg, const_rtx, void *data)
 {
   if (!MEM_P (reg))
     static_cast<local_md_state *> (data)->invalidate (reg);
+}
+
+/* Extended asm describes its GPR writes, but not its AME state changes.  */
+static bool
+invalidate_asm_md (rtx_insn *insn, local_md_state &state)
+{
+  if (!NONJUMP_INSN_P (insn) || !extract_asm_operands (PATTERN (insn))
+      || asm_noperands (PATTERN (insn)) < 0)
+    return false;
+  state.clear_ame ();
+  note_stores (insn, invalidate_md_store, &state);
+  return true;
 }
 
 static bool
@@ -11294,6 +11319,8 @@ reuse_cleaned_descriptors ()
 	    spill.clear ();
 	  if (md_preserving_branch_p (insn))
 	    continue;
+	  if (invalidate_asm_md (insn, state))
+	    continue;
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
@@ -11422,6 +11449,8 @@ reuse_local_md ()
 	      state.clear ();
 	      continue;
 	    }
+	  if (invalidate_asm_md (insn, state))
+	    continue;
 	  /* These zero-length scheduling barriers do not alter Md or GPRs.  */
 	  int code = recog_memoized (insn);
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
@@ -12009,6 +12038,73 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    auto assembly = [] (machine_mode mode) {
+      return gen_rtx_ASM_OPERANDS (mode, "", "=r", 0, rtvec_alloc (0),
+				  rtvec_alloc (0), rtvec_alloc (0),
+				  UNKNOWN_LOCATION);
+    };
+    rtx reg = gen_rtx_REG (Pmode, 10), copy = gen_rtx_REG (Pmode, 11);
+    rtx dynamic = gen_rtx_REG (Pmode, 12), alias = gen_rtx_REG (Pmode, 13);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx mem = gen_rtx_CLOBBER
+      (VOIDmode, gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode)));
+    rtx_insn *barrier = emit_insn
+      (gen_rtx_PARALLEL (VOIDmode, gen_rtvec (2, assembly (VOIDmode), mem)));
+    local_md_state state;
+    state.record_constant (reg, GEN_INT (32));
+    state.record_constant (copy, GEN_INT (32));
+    state.remember (matrix, reg);
+    unsigned int identity = state.descriptor_identity (dynamic);
+    state.record_copy (alias, identity);
+    ASSERT_FALSE (state.record_scalar_type (reg));
+    ASSERT_TRUE (state.record_scalar_type (reg));
+    ASSERT_TRUE (invalidate_asm_md (barrier, state));
+    ASSERT_FALSE (state.matches (matrix, reg));
+    ASSERT_FALSE (state.record_scalar_type (reg));
+    ASSERT_RTX_EQ (GEN_INT (32), state.descriptor_value (reg));
+    ASSERT_EQ (identity, state.descriptor_identity (alias));
+
+    for (rtx output : { reg, gen_rtx_REG (QImode, 10),
+			gen_rtx_SUBREG (QImode, reg, 0) })
+      for (bool clobber : { false, true })
+	{
+	  rtx pattern = clobber
+	    ? gen_rtx_PARALLEL
+		(VOIDmode, gen_rtvec (2, assembly (VOIDmode),
+				     gen_rtx_CLOBBER (VOIDmode, output)))
+	    : gen_rtx_SET (output, assembly (GET_MODE (output)));
+	  state.record_constant (reg, GEN_INT (32));
+	  state.remember (matrix, copy);
+	  ASSERT_TRUE (invalidate_asm_md (emit_insn (pattern), state));
+	  ASSERT_RTX_EQ (reg, state.descriptor_value (reg));
+	  ASSERT_RTX_EQ (GEN_INT (32), state.descriptor_value (copy));
+	  ASSERT_FALSE (state.matches (matrix, copy));
+	}
+    rtx multi = assembly (Pmode);
+    rtx_insn *outputs = emit_insn
+      (gen_rtx_PARALLEL (VOIDmode, gen_rtvec (2, gen_rtx_SET (dynamic, multi),
+					   gen_rtx_SET (alias, multi))));
+    ASSERT_TRUE (invalidate_asm_md (outputs, state));
+    ASSERT_NE (identity, state.descriptor_identity (dynamic));
+    ASSERT_NE (identity, state.descriptor_identity (alias));
+
+    rtx fixed = gen_rtx_REG (Pmode, 14), global = gen_rtx_REG (Pmode, 15);
+    auto old_fixed = fixed_regs[14], old_global = global_regs[15];
+    fixed_regs[14] = global_regs[15] = 1;
+    state.record_constant (fixed, GEN_INT (32));
+    state.record_constant (global, GEN_INT (32));
+    ASSERT_TRUE (invalidate_asm_md (barrier, state));
+    ASSERT_RTX_EQ (fixed, state.descriptor_value (fixed));
+    ASSERT_RTX_EQ (global, state.descriptor_value (global));
+    fixed_regs[14] = old_fixed;
+    global_regs[15] = old_global;
+    ASSERT_FALSE (invalidate_asm_md
+	(emit_insn (gen_rtx_ASM_INPUT (VOIDmode, "")), state));
+    ASSERT_FALSE (invalidate_asm_md
+	(emit_jump_insn (assembly (VOIDmode)), state));
+  }
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
     basic_block source[3], target[3];
