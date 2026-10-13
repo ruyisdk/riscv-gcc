@@ -7676,6 +7676,32 @@ rebuilt_pair_value (const builtin_description &d,
   return parent;
 }
 
+/* Avoid preserving PARENT when the inverse could consume MIDDLE in place.  */
+static bool
+stored_inverse_profitable_p (tree parent, gimple_stmt_iterator *gsi)
+{
+  gimple *inverse = gsi_stmt (*gsi);
+  tree middle = gimple_call_arg (inverse, 0);
+  tree result = gimple_call_lhs (inverse);
+  bool result_stored = false;
+  gimple_stmt_iterator next = *gsi;
+  for (unsigned int i = 0; i < 16; ++i)
+    {
+      gsi_next_nondebug (&next);
+      if (gsi_end_p (next))
+	break;
+      gimple *stmt = gsi_stmt (next);
+      if (structure_store_p (stmt, parent)
+	  || (result_stored && structure_store_p (stmt, middle)))
+	return true;
+      if (result && structure_store_p (stmt, result))
+	result_stored = true;
+      if (!structure_store_p (stmt) && !local_structure_gap_p (stmt))
+	break;
+    }
+  return false;
+}
+
 static tree
 inverse_zip_value (const builtin_description &d,
 		   gimple_stmt_iterator *gsi, gcall *stmt)
@@ -7703,7 +7729,8 @@ inverse_zip_value (const builtin_description &d,
   if (TREE_CODE (parent) != SSA_NAME
       || type_for_tree (TREE_TYPE (parent)) != d.type
       || !local_structure_parent_p (parent, gsi, producer, nullptr, copies,
-				    ncopies))
+				    ncopies)
+      || (stored && !stored_inverse_profitable_p (parent, gsi)))
     return NULL_TREE;
   return parent;
 }

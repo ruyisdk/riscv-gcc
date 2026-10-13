@@ -137,6 +137,9 @@ boundaries; builtin identity, not the function name, determines eligibility.
 Rebuild and inverse-permutation inputs may also have later complete typed
 stores in the same local window.  Those stores retain the intermediate
 values; other extra users or an intervening state boundary prevent folding.
+For inverse permutations, a retained intermediate must be stored after the
+result, or the parent must already have a later store.  Otherwise the inverse
+can consume the intermediate in place, avoiding an extra parent copy.
 
 A concatenation of complementary halves from the same parent can also
 reuse that parent.  Apart from the later stores, each half has one use;
