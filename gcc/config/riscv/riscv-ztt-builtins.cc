@@ -7847,10 +7847,13 @@ repeated_broadcast_value (const builtin_description &d,
     return NULL_TREE;
   const auto source = builtin_description_for (code);
   producers[count++] = producer;
+  tree control = gimple_call_arg (stmt, 1);
+  bool zero_control = TREE_CODE (control) == INTEGER_CST
+    && wi::extract_uhwi (wi::to_wide (control), 0, 32) == 0;
   if (source.prototype != d.prototype || source.type != d.type
       || source.expansion != d.expansion
-      || !operand_equal_p (gimple_call_arg (producer, 1),
-			   gimple_call_arg (stmt, 1), 0)
+      || (!zero_control
+	  && !operand_equal_p (gimple_call_arg (producer, 1), control, 0))
       || !local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
   return result;
