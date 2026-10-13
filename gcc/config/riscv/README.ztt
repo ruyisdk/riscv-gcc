@@ -218,6 +218,10 @@ When a separate destination would exceed the profile's M register count,
 wide gathers tie it to a complete same-datatype data source. Early-clobber
 protects a distinct index; source preparation supplies the shared Md.
 When both sources have that full type, either may supply the destination.
+Optimized runtime gathers offer independent and matching destinations for
+a dying complete data input distinct from the index.  Bank-limited groups
+retain their tied early-clobber alternative.  Live inputs and shared
+data/index values retain their existing allocation choices.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.

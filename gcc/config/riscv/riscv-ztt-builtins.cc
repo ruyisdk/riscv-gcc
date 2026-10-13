@@ -10476,13 +10476,17 @@ lower_explicit_state ()
 	      }
 	    if (indexed_p)
 	      {
-		bool reuse = code == UNSPEC_ZTT_GATHER && nregs > 4
+		bool bank_reuse = nregs > 4
 		  && matrix_inputs
-		  && m_nregs (mode) + matrix_inputs > active_profile ()->mregs
+		  && m_nregs (mode) + matrix_inputs > active_profile ()->mregs;
+		bool dead_data = optimize && runtime_profile_p ()
+		  && !rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
+		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
+		bool reuse = code == UNSPEC_ZTT_GATHER && (bank_reuse || dead_data)
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
 		  && groups[0] == groups[1];
-		bool reuse_both = reuse
+		bool reuse_both = reuse && bank_reuse
 		  && mode == GET_MODE (XVECEXP (src, 0, 1))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4))
 		  && groups[0] == groups[2];

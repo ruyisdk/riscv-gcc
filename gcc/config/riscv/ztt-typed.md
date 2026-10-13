@@ -598,11 +598,13 @@
   [(UNSPECV_ZTT_STATE_GATHER "") (UNSPECV_ZTT_STATE_GATHER_REUSE "_reuse")
    (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "_reuse_both")])
 (define_int_attr ztt_gather_dest_c
-  [(UNSPECV_ZTT_STATE_GATHER "&Wmr") (UNSPECV_ZTT_STATE_GATHER_REUSE "&Wmr")
-   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "Wmr")])
+  [(UNSPECV_ZTT_STATE_GATHER "&Wmr,&Wmr,&Wmr")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE "&Wmr,Wmr,&Wmr")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "Wmr,Wmr,Wmr")])
 (define_int_attr ztt_gather_data_c
-  [(UNSPECV_ZTT_STATE_GATHER "Wmr") (UNSPECV_ZTT_STATE_GATHER_REUSE "0")
-   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "Wmr")])
+  [(UNSPECV_ZTT_STATE_GATHER "Wmr,Wmr,Wmr")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE "Wmr,0,0")
+   (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "Wmr,Wmr,Wmr")])
 (define_int_attr ztt_gather_reuse
   [(UNSPECV_ZTT_STATE_GATHER "0") (UNSPECV_ZTT_STATE_GATHER_REUSE "1")
    (UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH "3")])
@@ -611,17 +613,17 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_gather_dest_c>")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "<ztt_gather_data_c>")
-           (match_operand 2 "register_operand" "Wmr")
-           (match_operand:P 3 "register_operand" "r")
-           (match_operand:P 4 "register_operand" "r")
-           (match_operand:P 5 "register_operand" "r")
-           (match_operand:P 7 "reg_or_0_operand" "rJ")
-           (match_operand 8 "const_int_operand" "n")
-           (match_operand 9 "const_int_operand" "n")
-           (match_operand 11 "const_int_operand" "n")]
+           (match_operand 2 "register_operand" "Wmr,Wmr,Wmr")
+           (match_operand:P 3 "register_operand" "r,r,r")
+           (match_operand:P 4 "register_operand" "r,r,r")
+           (match_operand:P 5 "register_operand" "r,r,r")
+           (match_operand:P 7 "reg_or_0_operand" "rJ,rJ,rJ")
+           (match_operand 8 "const_int_operand" "n,n,n")
+           (match_operand 9 "const_int_operand" "n,n,n")
+           (match_operand 11 "const_int_operand" "n,n,n")]
           ZTT_STATE_GATHER))
-   (clobber (match_operand 6 "memory_operand" "=A"))
-   (clobber (match_scratch:P 10 "=&r"))]
+   (clobber (match_operand 6 "memory_operand" "=A,A,A"))
+   (clobber (match_scratch:P 10 "=&r,&r,&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
    && !(UINTVAL (operands[11]) & ~6U)
    && (reload_completed || operands[11] == const0_rtx)
@@ -642,6 +644,19 @@
   return riscv_ztt::output_indexed_state (operands);
 }
   [(set_attr "type" "multi")
+   (set (attr "enabled")
+        (cond [(match_test "<ztt_gather_reuse> == 1
+                            && riscv_ztt::typed_profile_p ()
+                            && (2 * riscv_ztt::m_nregs (<ZTT_M:MODE>mode)
+                                + riscv_ztt::m_nregs (GET_MODE (operands[2])))
+                               > riscv_ztt::active_profile ()->mregs")
+               (if_then_else (eq_attr "alternative" "2")
+                             (const_string "yes") (const_string "no"))
+               (eq_attr "alternative" "2") (const_string "no")
+               (match_test "<ztt_gather_reuse> != 1")
+               (if_then_else (eq_attr "alternative" "0")
+                             (const_string "yes") (const_string "no"))]
+              (const_string "yes")))
    (set (attr "length") (symbol_ref "riscv_ztt::indexed_length (operands)"))])
 
 (define_insn "@ztt_state_scatter_<ZTT_M:mode>_<P:mode>"
