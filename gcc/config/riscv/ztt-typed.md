@@ -122,11 +122,13 @@
           [(match_operand:BLK 1 "memory_operand" "A")
            (match_operand:P 2 "reg_or_0_operand" "rJ")
            (match_operand 3 "const_int_operand" "n")
-           (match_operand:P 4 "register_operand" "r")]
+           (match_operand:P 4 "reg_or_0_operand" "rJ")]
           UNSPECV_ZTT_STATE_MEMORY_LOAD))]
-  "TARGET_ZTT && riscv_ztt::typed_profile_p ()"
+  "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && (REG_P (operands[4]) || reload_completed)"
 {
-  output_asm_insn ("msettyp\t%0,%4", operands);
+  if (operands[4] != const0_rtx)
+    output_asm_insn ("msettyp\t%0,%4", operands);
   switch (INTVAL (operands[3]))
     {
     case 1: return "mls.cm\t%0,%q1";
@@ -136,7 +138,9 @@
     }
 }
   [(set_attr "type" "multi")
-   (set_attr "length" "8")])
+   (set (attr "length")
+        (if_then_else (match_test "operands[4] == const0_rtx")
+                      (const_int 4) (const_int 8)))])
 
 (define_insn "@ztt_state_memory_store_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:BLK 0 "memory_operand" "=A")

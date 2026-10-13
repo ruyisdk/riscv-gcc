@@ -11474,19 +11474,21 @@ reuse_local_md ()
 	      switch (XINT (src, 1))
 		{
 		case UNSPECV_ZTT_STATE_LOAD:
-		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 1);
-		  if (state.matches (group, descriptor)
-		      && validate_change (insn, &XVECEXP (src, 0, 1),
-				  const0_rtx, false))
-		    {
-		      df_insn_rescan (insn);
-		      cleanup = true;
-		      descriptor_cleanup = true;
-		    }
-		  break;
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
-		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 3);
-		  break;
+		  {
+		    unsigned int index
+		      = XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD ? 1 : 3;
+		    group = SET_DEST (set); descriptor = XVECEXP (src, 0, index);
+		    if (state.matches (group, descriptor)
+			&& validate_change (insn, &XVECEXP (src, 0, index),
+				    const0_rtx, false))
+		      {
+			df_insn_rescan (insn);
+			cleanup = true;
+			descriptor_cleanup = true;
+		      }
+		    break;
+		  }
 		case UNSPECV_ZTT_BROADCAST:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 2);
 		  break;
