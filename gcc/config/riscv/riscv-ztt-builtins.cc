@@ -11628,6 +11628,29 @@ reuse_cleaned_descriptors ()
   return changed;
 }
 
+/* REG must appear only as the fixed-width row/column control.  */
+static bool
+rowcol_control_only_p (rtx_insn *insn, rtx reg)
+{
+  rtx set = single_set (insn);
+  rtx src = set ? SET_SRC (set) : NULL_RTX;
+  if (!src || GET_CODE (src) != UNSPEC_VOLATILE
+      || (XINT (src, 1) != UNSPECV_ZTT_STATE_ROWCOL
+	  && XINT (src, 1) != UNSPECV_ZTT_STATE_ROWCOL_REUSE)
+      || recog_memoized (insn) < 0)
+    return false;
+  rtx control = XVECEXP (src, 0, 1);
+  if (!REG_P (control) || GET_MODE (control) != SImode
+      || REGNO (control) != REGNO (reg))
+    return false;
+  unsigned int uses = 0;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
+    if (REG_P (*iter) && REGNO (*iter) == REGNO (reg))
+      ++uses;
+  return uses == 1;
+}
+
 /* Narrow a dead control definition without disrupting full-width uses.  */
 static bool
 shorten_rowcol_control (rtx_insn *insn, rtx control, local_md_state &state)
@@ -11644,16 +11667,11 @@ shorten_rowcol_control (rtx_insn *insn, rtx control, local_md_state &state)
   rtx low = gen_int_mode (INTVAL (value), SImode);
   if (rtx_equal_p (low, value) || riscv_const_insns (low, false) != 1)
     return false;
-  unsigned int uses = 0;
-  subrtx_iterator::array_type array;
-  FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
-    if (REG_P (*iter) && REGNO (*iter) == REGNO (control))
-      ++uses;
-  if (uses != 1)
+  if (!rowcol_control_only_p (insn, reg))
     return false;
   unsigned int count = 0;
   for (rtx_insn *def = PREV_INSN (insn);
-       def && BLOCK_FOR_INSN (def) == BLOCK_FOR_INSN (insn) && count < 16;
+       def && BLOCK_FOR_INSN (def) == BLOCK_FOR_INSN (insn) && count < 32;
        def = PREV_INSN (def))
     {
       if (!INSN_P (def))
@@ -11691,7 +11709,8 @@ shorten_rowcol_control (rtx_insn *insn, rtx control, local_md_state &state)
 		     INSN_UID (def));
 	  return true;
 	}
-      if (reg_referenced_p (reg, PATTERN (def)))
+      if (reg_referenced_p (reg, PATTERN (def))
+	  && !rowcol_control_only_p (def, reg))
 	return false;
     }
   return false;
