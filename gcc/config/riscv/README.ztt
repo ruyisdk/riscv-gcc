@@ -249,6 +249,9 @@ operand, including when the original value remains live.
 Scalar datatype setup and TC-to-TB conversion remain at the scalar core.
 Bank-limited gather likewise shares identical complete data and index
 values, while keeping the gather operation and its index semantics.
+Scatter can share the same complete data/index pair when separate inputs
+would exceed the bank.  Its tied old destination stays independent of both
+sources; capacity checks include that group before register allocation.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.

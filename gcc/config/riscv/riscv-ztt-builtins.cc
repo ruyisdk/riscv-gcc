@@ -7930,7 +7930,8 @@ matrix_register (machine_mode mode, tree exp, unsigned int argno)
   return force_reg (mode, expand_normal (CALL_EXPR_ARG (exp, argno)));
 }
 
-static bool same_matrix_arguments_p (tree, type_index, unsigned int);
+static bool same_matrix_arguments_p (tree, type_index, unsigned int,
+				     unsigned int = 0);
 
 /* A scatter result retains
    the old destination as an explicit input, including untouched elements.  */
@@ -7954,11 +7955,12 @@ expand_indexed (const builtin_description &d,
   rtx old = scatter ? matrix_register (modes[0], exp, 0) : NULL_RTX;
   rtx data = matrix_register (modes[1], exp, scatter ? 1 : 0);
   unsigned int inputs = operation.formation.step[1]
-    + operation.formation.step[2];
-  bool shared = !scatter && runtime_profile_p ()
+    + operation.formation.step[2]
+    + (scatter ? operation.formation.step[0] : 0);
+  bool shared = runtime_profile_p ()
     && inputs > active_profile ()->mregs
     && modes[1] == modes[2] && rtx_equal_p (dtype[1], dtype[2])
-    && same_matrix_arguments_p (exp, indices[1], inputs);
+    && same_matrix_arguments_p (exp, indices[1], inputs, scatter ? 1 : 0);
   rtx index = shared ? data : matrix_register (modes[2], exp, scatter ? 2 : 1);
   rtx result = gen_reg_rtx (modes[0]);
   rtx variant = GEN_INT (indexed_variant (d.expansion));
@@ -8033,9 +8035,10 @@ matrix_copy_origin (tree value, type_index type)
 
 /* Share complete copies when distinct inputs would exceed the M bank.  */
 static bool
-same_matrix_arguments_p (tree exp, type_index type, unsigned int inputs)
+same_matrix_arguments_p (tree exp, type_index type, unsigned int inputs,
+			 unsigned int first)
 {
-  tree a = CALL_EXPR_ARG (exp, 0), b = CALL_EXPR_ARG (exp, 1);
+  tree a = CALL_EXPR_ARG (exp, first), b = CALL_EXPR_ARG (exp, first + 1);
   if (operand_equal_p (a, b, 0))
     return true;
   if (!runtime_profile_p () || inputs <= active_profile ()->mregs)
@@ -10425,7 +10428,7 @@ lower_explicit_state ()
 	  continue;
 	}
       unsigned int matrix_inputs = 0;
-      if ((code == UNSPEC_ZTT_ELEMENTWISE_M || code == UNSPEC_ZTT_GATHER)
+      if ((code == UNSPEC_ZTT_ELEMENTWISE_M || indexed_p)
 	  && runtime_profile_p ()
 	  && (nregs > 4 || m_nregs (mode) > 4))
 	{
@@ -10436,6 +10439,11 @@ lower_explicit_state ()
 	    matrix_inputs += m_nregs (GET_MODE (rhs));
 	  unsigned int required = matrix_inputs;
 	  bool independent_dest = false;
+	  if (code == UNSPEC_ZTT_SCATTER)
+	    {
+	      required += m_nregs (mode);
+	      independent_dest = true;
+	    }
 	  if (code == UNSPEC_ZTT_ELEMENTWISE_M
 	      && required <= active_profile ()->mregs
 	      && required + m_nregs (mode) > active_profile ()->mregs)
@@ -10458,7 +10466,8 @@ lower_explicit_state ()
 			"Ztt %s operation requires %u simultaneously "
 			"allocated M registers for %s; "
 			"profile provides %u",
-			code == UNSPEC_ZTT_GATHER ? "gather" : "elementwise",
+			code == UNSPEC_ZTT_GATHER ? "gather"
+			: code == UNSPEC_ZTT_SCATTER ? "scatter" : "elementwise",
 			required, independent_dest
 			? "sources and an independent destination" : "distinct sources",
 			active_profile ()->mregs);
