@@ -9347,7 +9347,7 @@ common_old_dest_p (int code)
 {
   return code == UNSPECV_ZTT_STATE_TERNARY
     || code == UNSPECV_ZTT_STATE_TERNARY_X
-    || code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE
+    || code == UNSPECV_ZTT_STATE_TERNARY_X_REUSE
     || code == UNSPECV_ZTT_STATE_SCATTER;
 }
 
@@ -9357,7 +9357,7 @@ common_scalar_p (int code)
   return code == UNSPECV_ZTT_STATE_ELEMENTWISE_X
     || code == UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE
     || code == UNSPECV_ZTT_STATE_TERNARY_X
-    || code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE;
+    || code == UNSPECV_ZTT_STATE_TERNARY_X_REUSE;
 }
 
 static bool
@@ -10448,11 +10448,12 @@ lower_explicit_state ()
 		bool shared_old = optimize && runtime_profile_p ()
 		  && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
 		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
-		bool reuse = (nregs > 4 || shared_old) && exponent
+		bool reuse = (nregs > 4 && exponent) || shared_old;
+		reuse = reuse
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
 		emit_insn (gen_ztt_state_ternary_x
-			   (reuse ? UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE
+			   (reuse ? UNSPECV_ZTT_STATE_TERNARY_X_REUSE
 				  : UNSPECV_ZTT_STATE_TERNARY_X,
 			    mode, Pmode, dest, XVECEXP (src, 0, 0),
 			    XVECEXP (src, 0, 1), descriptor,
@@ -11254,7 +11255,7 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
     case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
     case UNSPECV_ZTT_STATE_TERNARY_X:
-    case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
+    case UNSPECV_ZTT_STATE_TERNARY_X_REUSE:
       mask = common_data_scalar_p (src, GET_CODE (PATTERN (insn)) == SET)
 	? 28 : 12;
       break;
@@ -11686,7 +11687,7 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
 		case UNSPECV_ZTT_STATE_TERNARY:
 		case UNSPECV_ZTT_STATE_TERNARY_X:
-		case UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE:
+		case UNSPECV_ZTT_STATE_TERNARY_X_REUSE:
 		case UNSPECV_ZTT_STATE_GATHER:
 		case UNSPECV_ZTT_STATE_GATHER_REUSE:
 		case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
@@ -12292,7 +12293,7 @@ run_md_reuse_selftests ()
   for (int code : { UNSPECV_ZTT_STATE_ELEMENTWISE_X,
 		   UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE,
 		   UNSPECV_ZTT_STATE_TERNARY_X,
-		   UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE,
+		   UNSPECV_ZTT_STATE_TERNARY_X_REUSE,
 		   UNSPECV_ZTT_STATE_ELEMENTWISE_M, UNSPECV_ZTT_STATE_TERNARY })
     for (unsigned int variant = 0; variant <= 41; ++variant)
       for (bool prepared : { false, true })
@@ -12306,7 +12307,7 @@ run_md_reuse_selftests ()
 	    ? IN_RANGE (variant, 13, 26) || IN_RANGE (variant, 29, 30)
 	      || IN_RANGE (variant, 39, 40)
 	    : ((code == UNSPECV_ZTT_STATE_TERNARY_X
-		|| code == UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE) && variant < 4);
+		|| code == UNSPECV_ZTT_STATE_TERNARY_X_REUSE) && variant < 4);
 	  ASSERT_EQ (common_data_scalar_p
 	    (gen_rtx_UNSPEC_VOLATILE (VOIDmode, args, code), prepared), data);
 	}

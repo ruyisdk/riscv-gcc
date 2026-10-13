@@ -772,14 +772,14 @@
   "#"
   [(set_attr "type" "multi")])
 
-;; Fixed exponent old-D may
-;; overlap a complete same-mode/Md source.  Keep legacy names and constraints.
+;; Old-D may overlap a complete same-mode/Md source.  Scalar TC and
+;; arithmetic effects remain part of the composite.
 (define_int_iterator ZTT_STATE_TERNARY_X
-  [UNSPECV_ZTT_STATE_TERNARY_X UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE])
+  [UNSPECV_ZTT_STATE_TERNARY_X UNSPECV_ZTT_STATE_TERNARY_X_REUSE])
 (define_int_attr ztt_ternary_suffix
-  [(UNSPECV_ZTT_STATE_TERNARY_X "") (UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE "_reuse")])
+  [(UNSPECV_ZTT_STATE_TERNARY_X "") (UNSPECV_ZTT_STATE_TERNARY_X_REUSE "_reuse")])
 (define_int_attr ztt_ternary_dest
-  [(UNSPECV_ZTT_STATE_TERNARY_X "&Wmr") (UNSPECV_ZTT_STATE_EXPONENT_ACC_REUSE "Wmr")])
+  [(UNSPECV_ZTT_STATE_TERNARY_X "&Wmr") (UNSPECV_ZTT_STATE_TERNARY_X_REUSE "Wmr")])
 
 (define_insn "@ztt_state_ternary_x<ztt_ternary_suffix>_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_ternary_dest>")
