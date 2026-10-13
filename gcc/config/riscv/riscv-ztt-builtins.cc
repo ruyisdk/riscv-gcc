@@ -8225,7 +8225,10 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
       modes[i] = type_mode (indices[i]);
     }
   rtx old = ternary >= 0 ? matrix_register (modes[0], exp, 0) : NULL_RTX;
-  bool shared = exponent && ternary >= 0 && m_nregs (modes[0]) > 4
+  bool shared = ternary >= 0 && m_nregs (modes[0]) > 4
+    && (exponent || (runtime_profile_p ()
+	&& operation.formation.step[0] + operation.formation.step[1]
+	   > active_profile ()->mregs))
     && modes[0] == modes[1] && rtx_equal_p (dtype[0], dtype[1])
     && same_matrix_arguments_p (exp, indices[0],
 	operation.formation.step[0] + operation.formation.step[1]);
@@ -9430,14 +9433,9 @@ static void
 unpack_shared_ternary (rtx *full, rtx *operands, bool scalar)
 {
   const unsigned int indices[] = { 0, 1, 1, 2, 2, 2, 3, 4, 5, 6, 7, 1, 8 };
-  const unsigned int scalar_indices[] = { 0, 1, 2, 3, 3, 3, 4, 5, 6, 6, 7, 1, 8 };
+  const unsigned int scalar_indices[] = { 0, 1, 2, 3, 3, 9, 4, 5, 10, 6, 7, 1, 8 };
   for (unsigned int i = 0; i < ARRAY_SIZE (indices); ++i)
     full[i] = operands[scalar ? scalar_indices[i] : indices[i]];
-  if (scalar)
-    {
-      full[5] = const0_rtx;
-      full[8] = GEN_INT (4);
-    }
 }
 
 const char *
@@ -10506,11 +10504,8 @@ lower_explicit_state ()
 	    }
 	  ternary_bank_reuse = independent > active_profile ()->mregs;
 	}
-      /* Old-D and the matrix
-	 source must coexist at a fixed-exponent core; spilling cannot make
-	 an impossible simultaneous input assignment fit the physical bank.  */
-      if (code == UNSPEC_ZTT_TERNARY_X
-	  && UINTVAL (XVECEXP (src, 0, 2)) == 4 && runtime_profile_p ())
+      /* Old-D and the matrix source must coexist at a scalar ternary core.  */
+      if (code == UNSPEC_ZTT_TERNARY_X && runtime_profile_p ())
 	{
 	  rtx data = XVECEXP (src, 0, 0), old = XVECEXP (src, 0, 5);
 	  unsigned int inputs = m_nregs (GET_MODE (data));
@@ -10520,9 +10515,12 @@ lower_explicit_state ()
 	  if (inputs > active_profile ()->mregs)
 	    {
 	      error_at (INSN_LOCATION (insn),
-			"Ztt exponent operation requires %u simultaneously "
+			"Ztt %s operation requires %u simultaneously "
 			"allocated M registers for distinct inputs; "
-			"profile provides %u", inputs, active_profile ()->mregs);
+			"profile provides %u",
+			UINTVAL (XVECEXP (src, 0, 2)) == 4
+			? "exponent" : "scalar ternary",
+			inputs, active_profile ()->mregs);
 	      emit_insn_before (gen_rtx_CLOBBER (VOIDmode, SET_DEST (set)), insn);
 	      delete_insn (insn);
 	      insn = next;
@@ -10629,19 +10627,23 @@ lower_explicit_state ()
 		bool shared_old = optimize && runtime_profile_p ()
 		  && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
 		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
-		bool reuse = (nregs > 4 && exponent) || shared_old;
+		bool bank_shared = runtime_profile_p ()
+		  && 2 * nregs > active_profile ()->mregs
+		  && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5));
+		bool reuse = (nregs > 4 && exponent) || shared_old || bank_shared;
 		reuse = reuse
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
-		if (reuse && exponent && runtime_profile_p ()
-		    && 2 * nregs > active_profile ()->mregs
-		    && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5)))
+		if (reuse && bank_shared)
 		  {
-		    emit_insn (gen_ztt_state_exponent_shared
+		    emit_insn (gen_ztt_state_scalar_shared
 			       (mode, Pmode, dest, XVECEXP (src, 0, 0),
 				XVECEXP (src, 0, 1), descriptor, scratch,
 				stride ? stride : const0_rtx, GEN_INT (steps),
-				gen_rtx_SCRATCH (Pmode), const0_rtx));
+				gen_rtx_SCRATCH (Pmode), const0_rtx,
+				exponent ? const0_rtx
+				: force_reg (Pmode, XVECEXP (src, 0, 4)),
+				XVECEXP (src, 0, 2)));
 		    break;
 		  }
 		emit_insn (gen_ztt_state_ternary_x

@@ -863,16 +863,16 @@
   [(UNSPECV_ZTT_STATE_TERNARY_X "&Wmr") (UNSPECV_ZTT_STATE_TERNARY_X_REUSE "Wmr")])
 
 ;; Reload a whole-bank old/source value only once.
-(define_insn "@ztt_state_exponent_shared_<ZTT_M:mode>_<P:mode>"
+(define_insn "@ztt_state_scalar_shared_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "register_operand" "0")
-           (match_operand:P 2 "reg_or_0_operand" "rJ")
+           (match_operand 2 "reg_or_0_operand" "rJ")
            (match_operand:P 3 "register_operand" "r")
            (match_dup 3)
-           (const_int 0)
+           (match_operand:P 9 "reg_or_0_operand" "rJ")
            (match_operand:P 5 "reg_or_0_operand" "rJ")
-           (const_int 4)
+           (match_operand 10 "const_int_operand" "n")
            (match_operand 6 "const_int_operand" "n")
            (match_dup 1)
            (match_operand 8 "const_int_operand" "n")]
@@ -882,6 +882,7 @@
   "TARGET_ZTT && riscv_ztt::runtime_profile_p ()
    && 2 * riscv_ztt::m_nregs (<ZTT_M:MODE>mode)
       > riscv_ztt::active_profile ()->mregs
+   && UINTVAL (operands[10]) <= 4
    && !(UINTVAL (operands[8]) & ~3U)
    && (reload_completed || operands[8] == const0_rtx)
    && riscv_ztt::m_mode_p (GET_MODE (operands[4]))"
