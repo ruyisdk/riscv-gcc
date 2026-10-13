@@ -7930,6 +7930,8 @@ matrix_register (machine_mode mode, tree exp, unsigned int argno)
   return force_reg (mode, expand_normal (CALL_EXPR_ARG (exp, argno)));
 }
 
+static bool same_matrix_arguments_p (tree, type_index, unsigned int);
+
 /* A scatter result retains
    the old destination as an explicit input, including untouched elements.  */
 static rtx
@@ -7951,7 +7953,13 @@ expand_indexed (const builtin_description &d,
 	      && types[d.type].rows == 1 && types[d.type].columns == 1);
   rtx old = scatter ? matrix_register (modes[0], exp, 0) : NULL_RTX;
   rtx data = matrix_register (modes[1], exp, scatter ? 1 : 0);
-  rtx index = matrix_register (modes[2], exp, scatter ? 2 : 1);
+  unsigned int inputs = operation.formation.step[1]
+    + operation.formation.step[2];
+  bool shared = !scatter && runtime_profile_p ()
+    && inputs > active_profile ()->mregs
+    && modes[1] == modes[2] && rtx_equal_p (dtype[1], dtype[2])
+    && same_matrix_arguments_p (exp, indices[1], inputs);
+  rtx index = shared ? data : matrix_register (modes[2], exp, scatter ? 2 : 1);
   rtx result = gen_reg_rtx (modes[0]);
   rtx variant = GEN_INT (indexed_variant (d.expansion));
   bool flags = floating_descriptor_p (types[d.type].descriptor)

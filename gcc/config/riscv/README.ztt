@@ -246,6 +246,8 @@ Wide binary and fixed-exponent inputs use the same complete-copy proof
 when distinct inputs would exceed the bank.  Whole-bank exponent
 accumulation ties its shared source and old destination as one reload
 operand, including when the original value remains live.
+Bank-limited gather likewise shares identical complete data and index
+values, while keeping the gather operation and its index semantics.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.
