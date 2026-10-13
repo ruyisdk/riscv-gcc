@@ -10469,7 +10469,7 @@ lower_explicit_state ()
 	    if (code == UNSPEC_ZTT_TERNARY)
 	      {
 		bool reuse = optimize && runtime_profile_p ()
-		  && UINTVAL (XVECEXP (src, 0, 2)) < 4
+		  && UINTVAL (XVECEXP (src, 0, 2)) < 8
 		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5))
 		  && (rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
 		      || rtx_equal_p (XVECEXP (src, 0, 1), XVECEXP (src, 0, 5)))
