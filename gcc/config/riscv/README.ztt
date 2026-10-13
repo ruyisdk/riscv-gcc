@@ -263,6 +263,10 @@ floating register view, avoiding cross-class operands during allocation.
 Local datatype preparation
 --------------------------
 
+Row-major typed loads reuse matching Md for the complete destination group.
+The late zero descriptor marker omits only msettyp; the load and its memory
+dependency remain.  Unknown or mismatched groups retain datatype setup.
+
 ACC matmul shares source preparation when both operands are the same
 allocated M group, mode and Md.  Output and instruction length use the same
 predicate; before allocation, length assumes both sources need preparation.

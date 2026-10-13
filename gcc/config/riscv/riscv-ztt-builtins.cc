@@ -11475,6 +11475,14 @@ reuse_local_md ()
 		{
 		case UNSPECV_ZTT_STATE_LOAD:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 1);
+		  if (state.matches (group, descriptor)
+		      && validate_change (insn, &XVECEXP (src, 0, 1),
+				  const0_rtx, false))
+		    {
+		      df_insn_rescan (insn);
+		      cleanup = true;
+		      descriptor_cleanup = true;
+		    }
 		  break;
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 3);

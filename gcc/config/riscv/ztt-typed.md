@@ -282,12 +282,18 @@
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand:ZTT_M 1 "memory_operand" "A")
-           (match_operand:P 2 "register_operand" "r")]
+           (match_operand:P 2 "reg_or_0_operand" "rJ")]
           UNSPECV_ZTT_STATE_LOAD))]
-  "TARGET_ZTT && riscv_ztt_explicit_state_p ()"
-  "msettyp\t%0,%2\;mls.rm\t%0,%q1"
+  "TARGET_ZTT && riscv_ztt_explicit_state_p ()
+   && (REG_P (operands[2]) || reload_completed)"
+{
+  return operands[2] == const0_rtx ? "mls.rm\t%0,%q1"
+    : "msettyp\t%0,%2\;mls.rm\t%0,%q1";
+}
   [(set_attr "type" "multi")
-   (set_attr "length" "8")])
+   (set (attr "length")
+        (if_then_else (match_test "operands[2] == const0_rtx")
+                      (const_int 4) (const_int 8)))])
 
 (define_insn "@ztt_state_store_<ZTT_M1:mode>_<P:mode>"
   [(set (match_operand:ZTT_M1 0 "memory_operand" "=A")
