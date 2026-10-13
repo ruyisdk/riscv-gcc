@@ -231,7 +231,11 @@ Matrix ternary operations can similarly reuse a dying old/source value
 when its complete mode and datatype match the destination.  If only one
 input matches, it is tied to the old destination while early-clobber
 keeps the other input independent.  This includes floating data with an
-integer matrix exponent.  Live old values retain independent allocation.
+integer matrix exponent.  Bank-limited matrix ternaries share identical
+nonvolatile arguments during expansion and allow complete old/source reuse
+even at O0 or with a live original.  Distinct core inputs must fit the M
+bank; impossible assignments are diagnosed before allocation.  Other live
+old values retain independent allocation.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.

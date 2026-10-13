@@ -4649,11 +4649,25 @@ resolve_integer_matrix (location_t loc, const builtin_description &d,
      the same large value otherwise become distinct O0 temporaries.  */
   bool shared = !old && !scalar && f.nregs[1] > 4 && t[1] == t[2]
     && operand_equal_p ((*args)[0], (*args)[1], 0);
+  unsigned int source[] = { 0, 1, 2 };
+  bool save[] = { shared, false, false };
+  if (shared)
+    source[1] = 0;
+  if (old && !scalar && runtime_profile_p ()
+      && f.step[0] + f.step[1] + f.step[2] > active_profile ()->mregs)
+    for (unsigned int i = 1; i < values; ++i)
+      for (unsigned int j = 0; j < i; ++j)
+	if (t[i] == t[j] && operand_equal_p ((*args)[i], (*args)[j], 0))
+	  {
+	    source[i] = source[j];
+	    save[source[i]] = true;
+	    break;
+	  }
   for (unsigned int i = 0; i < values; ++i)
     {
-      if (shared && i == 1)
+      if (source[i] != i)
 	{
-	  operands.safe_push (operands[0]);
+	  operands.safe_push (operands[source[i]]);
 	  continue;
 	}
       tree arg = (*args)[i];
@@ -4662,7 +4676,7 @@ resolve_integer_matrix (location_t loc, const builtin_description &d,
 	: build1 (VIEW_CONVERT_EXPR,
 		  ztt_m_type_nodes[integer_matrix_carrier
 		    (exact_log2 (f.nregs[index]))], arg);
-      if (shared)
+      if (save[i])
 	value = save_expr (value);
       operands.safe_push (value);
     }
@@ -7973,13 +7987,25 @@ expand_elementwise (const builtin_description &d,
       dtype[i] = GEN_INT (descriptor);
       modes[i] = type_mode (indices[i]);
     }
+  bool bank_limited = ternary >= 0 && runtime_profile_p ()
+    && (operation.formation.step[0] + operation.formation.step[1]
+	+ operation.formation.step[2] > active_profile ()->mregs);
+  auto same_value = [&] (unsigned int i, unsigned int j)
+    {
+      return modes[i] == modes[j] && rtx_equal_p (dtype[i], dtype[j])
+	&& operand_equal_p (CALL_EXPR_ARG (exp, i), CALL_EXPR_ARG (exp, j), 0);
+    };
   rtx old = ternary >= 0 ? matrix_register (modes[0], exp, 0) : NULL_RTX;
-  rtx data = matrix_register (modes[1], exp, ternary >= 0 ? 1 : 0);
+  rtx data = bank_limited && same_value (0, 1)
+    ? old : matrix_register (modes[1], exp, ternary >= 0 ? 1 : 0);
   bool shared = !scalar && ternary < 0 && m_nregs (modes[1]) > 4
     && modes[1] == modes[2] && rtx_equal_p (dtype[1], dtype[2])
     && operand_equal_p (CALL_EXPR_ARG (exp, 0), CALL_EXPR_ARG (exp, 1), 0);
+  if (bank_limited && same_value (1, 2))
+    shared = true;
   rtx count = scalar ? expand_normal (CALL_EXPR_ARG (exp, 1))
-    : shared ? data : matrix_register (modes[2], exp, ternary >= 0 ? 2 : 1);
+    : shared ? data : bank_limited && same_value (0, 2) ? old
+    : matrix_register (modes[2], exp, ternary >= 0 ? 2 : 1);
   if (scalar && count != const0_rtx)
     count = force_reg (Pmode, count);
   rtx result = gen_reg_rtx (modes[0]);
@@ -9315,6 +9341,30 @@ ternary_length (rtx *operands, unsigned int mask_operand)
 				  UINTVAL (operands[mask_operand]));
 }
 
+static void
+unpack_shared_ternary (rtx *full, rtx *operands)
+{
+  const unsigned int indices[] = { 0, 1, 1, 2, 2, 2, 3, 4, 5, 6, 7, 1, 8 };
+  for (unsigned int i = 0; i < ARRAY_SIZE (indices); ++i)
+    full[i] = operands[indices[i]];
+}
+
+const char *
+output_shared_ternary_state (rtx *operands)
+{
+  rtx full[13];
+  unpack_shared_ternary (full, operands);
+  return output_ternary_state (full);
+}
+
+unsigned int
+shared_ternary_length (rtx *operands)
+{
+  rtx full[13];
+  unpack_shared_ternary (full, operands);
+  return ternary_length (full);
+}
+
 /* Preserve D and B before
    destructive Md setup, then set TC immediately before the scalar core.  */
 const char *
@@ -10329,6 +10379,42 @@ lower_explicit_state ()
 	      continue;
 	    }
 	}
+      bool ternary_bank_reuse = false;
+      if (code == UNSPEC_ZTT_TERNARY && runtime_profile_p ())
+	{
+	  rtx values[] = { XVECEXP (src, 0, 5), XVECEXP (src, 0, 0),
+			   XVECEXP (src, 0, 1) };
+	  rtx types[] = { XVECEXP (src, 0, 6), XVECEXP (src, 0, 3),
+			  XVECEXP (src, 0, 4) };
+	  unsigned int unique = 0;
+	  unsigned int independent = m_nregs (mode);
+	  for (unsigned int i = 0; i < 3; ++i)
+	    {
+	      bool shared = false;
+	      for (unsigned int j = 0; j < i; ++j)
+		if (rtx_equal_p (values[i], values[j])
+		    && rtx_equal_p (types[i], types[j]))
+		  shared = true;
+	      if (!shared)
+		unique += m_nregs (GET_MODE (values[i]));
+	      if (i == 1 || (i == 2
+			     && (!rtx_equal_p (values[1], values[2])
+				 || !rtx_equal_p (types[1], types[2]))))
+		independent += m_nregs (GET_MODE (values[i]));
+	    }
+	  if (unique > active_profile ()->mregs)
+	    {
+	      error_at (INSN_LOCATION (insn),
+			"Ztt ternary operation requires %u simultaneously "
+			"allocated M registers for distinct inputs; "
+			"profile provides %u", unique, active_profile ()->mregs);
+	      emit_insn_before (gen_rtx_CLOBBER (VOIDmode, SET_DEST (set)), insn);
+	      delete_insn (insn);
+	      insn = next;
+	      continue;
+	    }
+	  ternary_bank_reuse = independent > active_profile ()->mregs;
+	}
       /* Old-D and the matrix
 	 source must coexist at a fixed-exponent core; spilling cannot make
 	 an impossible simultaneous input assignment fit the physical bank.  */
@@ -10483,9 +10569,10 @@ lower_explicit_state ()
 		bool old_right = rtx_equal_p (XVECEXP (src, 0, 1),
 					    XVECEXP (src, 0, 5));
 		int state_code = UNSPECV_ZTT_STATE_TERNARY;
-		if (dead_old)
+		if (dead_old || ternary_bank_reuse)
 		  {
-		    if (left && right && (old_left || old_right))
+		    if (!ternary_bank_reuse && left && right
+			&& (old_left || old_right))
 		      state_code = UNSPECV_ZTT_STATE_TERNARY_REUSE;
 		    else if (left && old_left)
 		      state_code = UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT;
@@ -10493,7 +10580,13 @@ lower_explicit_state ()
 		      state_code = UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT;
 		  }
 		bool reuse = state_code != UNSPECV_ZTT_STATE_TERNARY;
-		if (state_code == UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT
+		if (ternary_bank_reuse && left && right && old_left && old_right)
+		  emit_insn (gen_ztt_state_ternary_shared
+			     (mode, Pmode, dest, XVECEXP (src, 0, 0), descriptor,
+			      scratch, stride ? stride : const0_rtx,
+			      XVECEXP (src, 0, 2), GEN_INT (steps),
+			      gen_rtx_SCRATCH (Pmode), const0_rtx));
+		else if (state_code == UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT
 		    || state_code == UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT)
 		  emit_insn (gen_ztt_state_ternary_tied
 			     (state_code, mode, Pmode, dest, XVECEXP (src, 0, 0),

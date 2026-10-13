@@ -757,6 +757,34 @@
   [(set_attr "type" "multi")
    (set (attr "length") (symbol_ref "riscv_ztt::ternary_length (operands)"))])
 
+;; A whole-bank value must reload all three identical inputs together.
+(define_insn "@ztt_state_ternary_shared_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "0")
+           (match_dup 1)
+           (match_operand:P 2 "register_operand" "r")
+           (match_dup 2)
+           (match_dup 2)
+           (match_operand:P 4 "reg_or_0_operand" "rJ")
+           (match_operand 5 "const_int_operand" "n")
+           (match_operand 6 "const_int_operand" "n")
+           (match_dup 1)
+           (match_operand 8 "const_int_operand" "n")]
+          UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT))
+   (clobber (match_operand 3 "memory_operand" "=A"))
+   (clobber (match_scratch:P 7 "=&r"))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && !(UINTVAL (operands[8]) & ~7U)
+   && (reload_completed || operands[8] == const0_rtx)
+   && riscv_ztt::m_mode_p (GET_MODE (operands[3]))"
+{
+  return riscv_ztt::output_shared_ternary_state (operands);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+     (symbol_ref "riscv_ztt::shared_ternary_length (operands)"))])
+
 ;; Use one matching operand so LRA reloads the repeated old value once.
 (define_insn "@ztt_state_ternary_tied<ztt_ternary_m_suffix>_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=&Wmr")
