@@ -222,6 +222,9 @@ Optimized runtime gathers offer independent and matching destinations for
 a dying complete data input distinct from the index.  Bank-limited groups
 retain their tied early-clobber alternative.  Live inputs and shared
 data/index values retain their existing allocation choices.
+Fixed-exponent accumulation can also reuse a dying input shared with the
+old destination on optimized runtime profiles.  The complete mode and Md
+must match; live old values and distinct inputs retain their allocation.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.

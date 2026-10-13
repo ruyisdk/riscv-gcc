@@ -10445,7 +10445,10 @@ lower_explicit_state ()
 	    if (code == UNSPEC_ZTT_TERNARY_X)
 	      {
 		bool exponent = UINTVAL (XVECEXP (src, 0, 2)) == 4;
-		bool reuse = nregs > 4 && exponent
+		bool shared_old = optimize && runtime_profile_p ()
+		  && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
+		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
+		bool reuse = (nregs > 4 || shared_old) && exponent
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
 		emit_insn (gen_ztt_state_ternary_x
