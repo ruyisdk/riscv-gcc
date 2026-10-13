@@ -8023,6 +8023,20 @@ matrix_copy_origin (tree value, type_index type)
   return value;
 }
 
+/* Share complete copies when distinct inputs would exceed the M bank.  */
+static bool
+same_matrix_arguments_p (tree exp, type_index type, unsigned int inputs)
+{
+  tree a = CALL_EXPR_ARG (exp, 0), b = CALL_EXPR_ARG (exp, 1);
+  if (operand_equal_p (a, b, 0))
+    return true;
+  if (!runtime_profile_p () || inputs <= active_profile ()->mregs)
+    return false;
+  a = matrix_copy_origin (a, type);
+  b = matrix_copy_origin (b, type);
+  return TREE_CODE (a) == SSA_NAME && a == b;
+}
+
 static rtx
 expand_elementwise (const builtin_description &d,
 		    const elementwise_description &operation, tree exp)
@@ -8063,7 +8077,8 @@ expand_elementwise (const builtin_description &d,
     ? old : matrix_register (modes[1], exp, ternary >= 0 ? 1 : 0);
   bool shared = !scalar && ternary < 0 && m_nregs (modes[1]) > 4
     && modes[1] == modes[2] && rtx_equal_p (dtype[1], dtype[2])
-    && operand_equal_p (CALL_EXPR_ARG (exp, 0), CALL_EXPR_ARG (exp, 1), 0);
+    && same_matrix_arguments_p (exp, indices[1],
+	operation.formation.step[1] + operation.formation.step[2]);
   if (bank_limited && same_value (1, 2))
     shared = true;
   rtx count = scalar ? expand_normal (CALL_EXPR_ARG (exp, 1))
@@ -8204,7 +8219,8 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
   rtx old = ternary >= 0 ? matrix_register (modes[0], exp, 0) : NULL_RTX;
   bool shared = exponent && ternary >= 0 && m_nregs (modes[0]) > 4
     && modes[0] == modes[1] && rtx_equal_p (dtype[0], dtype[1])
-    && operand_equal_p (CALL_EXPR_ARG (exp, 0), CALL_EXPR_ARG (exp, 1), 0);
+    && same_matrix_arguments_p (exp, indices[0],
+	operation.formation.step[0] + operation.formation.step[1]);
   rtx source = shared ? old : matrix_register (modes[1], exp, ternary >= 0 ? 1 : 0);
   tree carrier = exponent ? long_integer_type_node : scalar_carrier_type (operation.scalar);
   rtx scalar = expand_normal (CALL_EXPR_ARG (exp, ternary >= 0 ? 2 : 1));
@@ -8916,8 +8932,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	    {
 	      lhs = matrix_register (mode, exp, 0);
 	      rhs = (group > 4
-		     && operand_equal_p (CALL_EXPR_ARG (exp, 0),
-				 CALL_EXPR_ARG (exp, 1), 0))
+		     && same_matrix_arguments_p (exp, d.type, 2 * group))
 		? lhs : matrix_register (mode, exp, 1);
 	    }
 	  emit_clobber (target);
@@ -9013,8 +9028,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	   pseudos.  Keep one read for equal, nonvolatile operands so an
 	   entire-bank input remains allocatable without relying on CSE.  */
 	rtx b = (group > 4
-		 && operand_equal_p (CALL_EXPR_ARG (exp, 0),
-				     CALL_EXPR_ARG (exp, 1), 0))
+		 && same_matrix_arguments_p (exp, d.type, 2 * group))
 	  ? a : matrix_register (mode, exp, 1);
 	emit_insn (gen_ztt_typed_m_ew
 		   (binary_code, mode, target, a, b, descriptor));
@@ -9405,27 +9419,33 @@ ternary_length (rtx *operands, unsigned int mask_operand)
 }
 
 static void
-unpack_shared_ternary (rtx *full, rtx *operands)
+unpack_shared_ternary (rtx *full, rtx *operands, bool scalar)
 {
   const unsigned int indices[] = { 0, 1, 1, 2, 2, 2, 3, 4, 5, 6, 7, 1, 8 };
+  const unsigned int scalar_indices[] = { 0, 1, 2, 3, 3, 3, 4, 5, 6, 6, 7, 1, 8 };
   for (unsigned int i = 0; i < ARRAY_SIZE (indices); ++i)
-    full[i] = operands[indices[i]];
+    full[i] = operands[scalar ? scalar_indices[i] : indices[i]];
+  if (scalar)
+    {
+      full[5] = const0_rtx;
+      full[8] = GEN_INT (4);
+    }
 }
 
 const char *
-output_shared_ternary_state (rtx *operands)
+output_shared_ternary_state (rtx *operands, bool scalar)
 {
   rtx full[13];
-  unpack_shared_ternary (full, operands);
-  return output_ternary_state (full);
+  unpack_shared_ternary (full, operands, scalar);
+  return scalar ? output_scalar_ternary_state (full) : output_ternary_state (full);
 }
 
 unsigned int
-shared_ternary_length (rtx *operands)
+shared_ternary_length (rtx *operands, bool scalar)
 {
   rtx full[13];
-  unpack_shared_ternary (full, operands);
-  return ternary_length (full);
+  unpack_shared_ternary (full, operands, scalar);
+  return scalar ? scalar_ternary_length (full) : ternary_length (full);
 }
 
 /* Preserve D and B before
@@ -10605,6 +10625,17 @@ lower_explicit_state ()
 		reuse = reuse
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
+		if (reuse && exponent && runtime_profile_p ()
+		    && 2 * nregs > active_profile ()->mregs
+		    && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5)))
+		  {
+		    emit_insn (gen_ztt_state_exponent_shared
+			       (mode, Pmode, dest, XVECEXP (src, 0, 0),
+				XVECEXP (src, 0, 1), descriptor, scratch,
+				stride ? stride : const0_rtx, GEN_INT (steps),
+				gen_rtx_SCRATCH (Pmode), const0_rtx));
+		    break;
+		  }
 		emit_insn (gen_ztt_state_ternary_x
 			   (reuse ? UNSPECV_ZTT_STATE_TERNARY_X_REUSE
 				  : UNSPECV_ZTT_STATE_TERNARY_X,

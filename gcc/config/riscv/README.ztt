@@ -242,6 +242,10 @@ The shared-input proof follows up to four exact-type SSA copies, including
 explicit mcopy, through one same-mode carrier view. Copy calls stay in
 place for ownership checking. Loads, volatile accesses, conversions and
 partial-group operations do not establish this identity.
+Wide binary and fixed-exponent inputs use the same complete-copy proof
+when distinct inputs would exceed the bank.  Whole-bank exponent
+accumulation ties its shared source and old destination as one reload
+operand, including when the original value remains live.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.
