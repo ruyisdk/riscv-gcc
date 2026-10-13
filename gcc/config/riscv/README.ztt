@@ -227,6 +227,8 @@ old destination on optimized runtime profiles.  The complete mode and Md
 must match; live old values and distinct inputs retain their allocation.
 Data-scalar old-destination operations use this same complete-value rule.
 Their TC setup, ingress conversion flags and arithmetic remain intact.
+Matrix multiply-add variants can similarly reuse a dying old/source value
+when both complete input modes and datatypes match the destination.
 Mixed elementwise operations allow a complete compatible source to match
 the destination or occupy a separate group.  Early-clobber still excludes
 the incompatible input, avoiding a forced copy of a live compatible source.

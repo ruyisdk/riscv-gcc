@@ -9346,6 +9346,7 @@ static bool
 common_old_dest_p (int code)
 {
   return code == UNSPECV_ZTT_STATE_TERNARY
+    || code == UNSPECV_ZTT_STATE_TERNARY_REUSE
     || code == UNSPECV_ZTT_STATE_TERNARY_X
     || code == UNSPECV_ZTT_STATE_TERNARY_X_REUSE
     || code == UNSPECV_ZTT_STATE_SCATTER;
@@ -10467,11 +10468,22 @@ lower_explicit_state ()
 	      }
 	    if (code == UNSPEC_ZTT_TERNARY)
 	      {
+		bool reuse = optimize && runtime_profile_p ()
+		  && UINTVAL (XVECEXP (src, 0, 2)) < 4
+		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5))
+		  && (rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
+		      || rtx_equal_p (XVECEXP (src, 0, 1), XVECEXP (src, 0, 5)))
+		  && mode == GET_MODE (XVECEXP (src, 0, 0))
+		  && mode == GET_MODE (XVECEXP (src, 0, 1))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4));
 		emit_insn (gen_ztt_state_ternary
-			   (mode, Pmode, dest, XVECEXP (src, 0, 0),
+			   (reuse ? UNSPECV_ZTT_STATE_TERNARY_REUSE
+				  : UNSPECV_ZTT_STATE_TERNARY,
+			    mode, Pmode, dest, XVECEXP (src, 0, 0),
 			    XVECEXP (src, 0, 1), descriptor,
-			    force_reg (Pmode, XVECEXP (src, 0, 3)),
-			    force_reg (Pmode, XVECEXP (src, 0, 4)),
+			    reuse ? descriptor : force_reg (Pmode, XVECEXP (src, 0, 3)),
+			    reuse ? descriptor : force_reg (Pmode, XVECEXP (src, 0, 4)),
 			    scratch, stride ? stride : const0_rtx,
 			    XVECEXP (src, 0, 2), GEN_INT (steps),
 			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
@@ -11246,6 +11258,7 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT:
     case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
     case UNSPECV_ZTT_STATE_TERNARY:
+    case UNSPECV_ZTT_STATE_TERNARY_REUSE:
     case UNSPECV_ZTT_STATE_GATHER:
     case UNSPECV_ZTT_STATE_GATHER_REUSE:
     case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
@@ -11686,6 +11699,7 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
 		case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
 		case UNSPECV_ZTT_STATE_TERNARY:
+		case UNSPECV_ZTT_STATE_TERNARY_REUSE:
 		case UNSPECV_ZTT_STATE_TERNARY_X:
 		case UNSPECV_ZTT_STATE_TERNARY_X_REUSE:
 		case UNSPECV_ZTT_STATE_GATHER:
@@ -12294,7 +12308,8 @@ run_md_reuse_selftests ()
 		   UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE,
 		   UNSPECV_ZTT_STATE_TERNARY_X,
 		   UNSPECV_ZTT_STATE_TERNARY_X_REUSE,
-		   UNSPECV_ZTT_STATE_ELEMENTWISE_M, UNSPECV_ZTT_STATE_TERNARY })
+		   UNSPECV_ZTT_STATE_ELEMENTWISE_M, UNSPECV_ZTT_STATE_TERNARY,
+		   UNSPECV_ZTT_STATE_TERNARY_REUSE })
     for (unsigned int variant = 0; variant <= 41; ++variant)
       for (bool prepared : { false, true })
 	{

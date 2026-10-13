@@ -706,8 +706,16 @@
   "#"
   [(set_attr "type" "multi")])
 
-(define_insn "@ztt_state_ternary_<ZTT_M:mode>_<P:mode>"
-  [(set (match_operand:ZTT_M 0 "register_operand" "=&Wmr")
+;; Complete same-Md sources can overlap the tied old destination.
+(define_int_iterator ZTT_STATE_TERNARY
+  [UNSPECV_ZTT_STATE_TERNARY UNSPECV_ZTT_STATE_TERNARY_REUSE])
+(define_int_attr ztt_ternary_m_suffix
+  [(UNSPECV_ZTT_STATE_TERNARY "") (UNSPECV_ZTT_STATE_TERNARY_REUSE "_reuse")])
+(define_int_attr ztt_ternary_m_dest
+  [(UNSPECV_ZTT_STATE_TERNARY "&Wmr") (UNSPECV_ZTT_STATE_TERNARY_REUSE "Wmr")])
+
+(define_insn "@ztt_state_ternary<ztt_ternary_m_suffix>_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=<ztt_ternary_m_dest>")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
            (match_operand 2 "register_operand" "Wmr")
@@ -719,7 +727,7 @@
            (match_operand 9 "const_int_operand" "n")
            (match_operand:ZTT_M 11 "register_operand" "0")
            (match_operand 12 "const_int_operand" "n")]
-          UNSPECV_ZTT_STATE_TERNARY))
+          ZTT_STATE_TERNARY))
    (clobber (match_operand 6 "memory_operand" "=A"))
    (clobber (match_scratch:P 10 "=&r"))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
