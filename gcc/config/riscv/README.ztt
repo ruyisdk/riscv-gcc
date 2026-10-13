@@ -267,6 +267,8 @@ Typed row-major, column-major and strided loads reuse matching Md for the
 complete destination group.  Layout, stride and BLK memory extents are unchanged.
 The late zero descriptor marker omits only msettyp; the load and its memory
 dependency remain.  Unknown or mismatched groups retain datatype setup.
+Integer row/column index constructors also reuse complete destination Md;
+their call-site range checks and index instructions remain.
 
 ACC matmul shares source preparation when both operands are the same
 allocated M group, mode and Md.  Output and instruction length use the same

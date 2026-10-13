@@ -11475,9 +11475,11 @@ reuse_local_md ()
 		{
 		case UNSPECV_ZTT_STATE_LOAD:
 		case UNSPECV_ZTT_STATE_MEMORY_LOAD:
+		case UNSPECV_ZTT_INDEX_CONSTRUCT:
 		  {
 		    unsigned int index
-		      = XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD ? 1 : 3;
+		      = XINT (src, 1) == UNSPECV_ZTT_INDEX_CONSTRUCT ? 0
+		      : XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD ? 1 : 3;
 		    group = SET_DEST (set); descriptor = XVECEXP (src, 0, index);
 		    if (state.matches (group, descriptor)
 			&& validate_change (insn, &XVECEXP (src, 0, index),
@@ -11505,7 +11507,6 @@ reuse_local_md ()
 		  break;
 		case UNSPECV_ZTT_SETTYP_P0:
 		case UNSPECV_ZTT_STATE_ZERO:
-		case UNSPECV_ZTT_INDEX_CONSTRUCT:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  break;
 		case UNSPECV_ZTT_STATE_ROWCOL:

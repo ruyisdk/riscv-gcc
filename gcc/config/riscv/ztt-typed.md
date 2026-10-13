@@ -264,23 +264,25 @@
   [(set_attr "type" "multi")
    (set_attr "length" "8")])
 
-;; The call-site range check
-;; precedes this indivisible setup/constructor pair.  No old M is an input.
+;; The call-site range check precedes the complete index construction.
 (define_insn "@ztt_typed_index_construct_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
-          [(match_operand:P 1 "register_operand" "r")
+          [(match_operand:P 1 "reg_or_0_operand" "rJ")
            (match_operand 2 "const_int_operand" "n")]
           UNSPECV_ZTT_INDEX_CONSTRUCT))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && (REG_P (operands[1]) || reload_completed)
    && IN_RANGE (INTVAL (operands[2]), 0, 1)"
 {
-  return INTVAL (operands[2]) == 0
-    ? "msettyp\t%0,%1\;mrowid.ew\t%0"
-    : "msettyp\t%0,%1\;mcolid.ew\t%0";
+  if (operands[1] != const0_rtx)
+    output_asm_insn ("msettyp\t%0,%1", operands);
+  return INTVAL (operands[2]) == 0 ? "mrowid.ew\t%0" : "mcolid.ew\t%0";
 }
   [(set_attr "type" "multi")
-   (set_attr "length" "8")])
+   (set (attr "length")
+        (if_then_else (match_test "operands[1] == const0_rtx")
+                      (const_int 4) (const_int 8)))])
 
 (define_insn "@ztt_state_load_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
