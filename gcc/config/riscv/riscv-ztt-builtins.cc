@@ -7966,6 +7966,53 @@ expand_indexed (const builtin_description &d,
   return result;
 }
 
+/* Follow complete SSA copies without removing their ownership witnesses.  */
+static tree
+matrix_copy_origin (tree value, type_index type)
+{
+  if (TREE_CODE (value) != SSA_NAME)
+    return value;
+  if (type_for_tree (TREE_TYPE (value)) != type)
+    {
+      gimple *view = SSA_NAME_DEF_STMT (value);
+      if (!is_gimple_assign (view)
+	  || gimple_assign_rhs_code (view) != VIEW_CONVERT_EXPR
+	  || gimple_vuse (view) || gimple_has_side_effects (view))
+	return value;
+      tree source = TREE_OPERAND (gimple_assign_rhs1 (view), 0);
+      if (TREE_CODE (source) != SSA_NAME
+	  || type_for_tree (TREE_TYPE (source)) != type
+	  || TYPE_MODE (TREE_TYPE (source)) != TYPE_MODE (TREE_TYPE (value)))
+	return value;
+      value = source;
+    }
+  for (unsigned int i = 0; i < 4; ++i)
+    {
+      gimple *copy = SSA_NAME_DEF_STMT (value);
+      tree source = NULL_TREE;
+      if (is_gimple_assign (copy)
+	  && gimple_assign_rhs_code (copy) == SSA_NAME
+	  && !gimple_vuse (copy) && !gimple_has_side_effects (copy))
+	source = gimple_assign_rhs1 (copy);
+      else
+	{
+	  unsigned int code = structure_builtin_code (copy, 1);
+	  if (code >= ZTT_BUILTIN_MAX)
+	    break;
+	  const auto d = builtin_description_for (code);
+	  if (d.expansion != EXPAND_MCOPY_M2M || d.type != type
+	      || d.prototype != PROTO_M_M)
+	    break;
+	  source = gimple_call_arg (copy, 0);
+	}
+      if (TREE_CODE (source) != SSA_NAME
+	  || type_for_tree (TREE_TYPE (source)) != type)
+	break;
+      value = source;
+    }
+  return value;
+}
+
 static rtx
 expand_elementwise (const builtin_description &d,
 		    const elementwise_description &operation, tree exp)
@@ -7992,8 +8039,14 @@ expand_elementwise (const builtin_description &d,
 	+ operation.formation.step[2] > active_profile ()->mregs);
   auto same_value = [&] (unsigned int i, unsigned int j)
     {
-      return modes[i] == modes[j] && rtx_equal_p (dtype[i], dtype[j])
-	&& operand_equal_p (CALL_EXPR_ARG (exp, i), CALL_EXPR_ARG (exp, j), 0);
+      if (modes[i] != modes[j] || !rtx_equal_p (dtype[i], dtype[j]))
+	return false;
+      tree a = CALL_EXPR_ARG (exp, i), b = CALL_EXPR_ARG (exp, j);
+      if (operand_equal_p (a, b, 0))
+	return true;
+      a = matrix_copy_origin (a, indices[i]);
+      b = matrix_copy_origin (b, indices[j]);
+      return TREE_CODE (a) == SSA_NAME && a == b;
     };
   rtx old = ternary >= 0 ? matrix_register (modes[0], exp, 0) : NULL_RTX;
   rtx data = bank_limited && same_value (0, 1)
