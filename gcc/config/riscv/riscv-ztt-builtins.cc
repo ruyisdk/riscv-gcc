@@ -11628,6 +11628,75 @@ reuse_cleaned_descriptors ()
   return changed;
 }
 
+/* Narrow a dead control definition without disrupting full-width uses.  */
+static bool
+shorten_rowcol_control (rtx_insn *insn, rtx control, local_md_state &state)
+{
+  if (!TARGET_64BIT || !REG_P (control) || GET_MODE (control) != SImode
+      || !GP_REG_P (REGNO (control)) || fixed_regs[REGNO (control)]
+      || global_regs[REGNO (control)]
+      || !find_reg_note (insn, REG_DEAD, control))
+    return false;
+  rtx reg = gen_rtx_REG (Pmode, REGNO (control));
+  rtx value = state.descriptor_value (reg);
+  if (!CONST_INT_P (value))
+    return false;
+  rtx low = gen_int_mode (INTVAL (value), SImode);
+  if (rtx_equal_p (low, value) || riscv_const_insns (low, false) != 1)
+    return false;
+  unsigned int uses = 0;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, PATTERN (insn), NONCONST)
+    if (REG_P (*iter) && REGNO (*iter) == REGNO (control))
+      ++uses;
+  if (uses != 1)
+    return false;
+  unsigned int count = 0;
+  for (rtx_insn *def = PREV_INSN (insn);
+       def && BLOCK_FOR_INSN (def) == BLOCK_FOR_INSN (insn) && count < 16;
+       def = PREV_INSN (def))
+    {
+      if (!INSN_P (def))
+	continue;
+      if (DEBUG_INSN_P (def))
+	{
+	  if (reg_mentioned_p (reg, PATTERN (def)))
+	    return false;
+	  continue;
+	}
+      ++count;
+      if (CALL_P (def) || JUMP_P (def) || RTX_FRAME_RELATED_P (def)
+	  || GET_CODE (PATTERN (def)) == ASM_INPUT
+	  || asm_noperands (PATTERN (def)) >= 0)
+	return false;
+      if (reg_set_p (reg, def))
+	{
+	  rtx pattern = PATTERN (def);
+	  if (GET_CODE (pattern) != SET || !rtx_equal_p (SET_DEST (pattern), reg)
+	      || !md_scalar_insn_p (pattern))
+	    return false;
+	  int length = get_attr_length (def);
+	  validate_change (def, &SET_SRC (pattern), low, true);
+	  if (!verify_changes (0) || get_attr_length (def) > length)
+	    {
+	      cancel_changes (0);
+	      return false;
+	    }
+	  confirm_change_group ();
+	  remove_reg_equal_equiv_notes (def);
+	  state.invalidate (reg);
+	  state.record_constant (reg, low);
+	  if (dump_file)
+	    fprintf (dump_file, "Narrow rowcol control definition at insn %d\n",
+		     INSN_UID (def));
+	  return true;
+	}
+      if (reg_referenced_p (reg, PATTERN (def)))
+	return false;
+    }
+  return false;
+}
+
 /* Reuse Md along proven single-predecessor paths after allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -11773,6 +11842,8 @@ reuse_local_md ()
 		  break;
 		case UNSPECV_ZTT_STATE_ROWCOL:
 		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
+		  if (shorten_rowcol_control (insn, XVECEXP (src, 0, 1), state))
+		    cleanup = descriptor_cleanup = true;
 		  group = XVECEXP (src, 0, 0);
 		  descriptor = XVECEXP (src, 0, 2);
 		  if (XVECLEN (src, 0) == 5 && state.matches (group, descriptor))
