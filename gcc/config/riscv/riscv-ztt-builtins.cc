@@ -1103,7 +1103,7 @@ static GTY (()) tree ztt_m_type_nodes[TYPE_MAX];
 static GTY (()) tree ztt_storage128_types[2];
 static GTY (()) tree builtin_decls[ZTT_BUILTIN_MAX];
 /* Root temporary prototypes until all language declarations are registered.  */
-static GTY (()) vec<tree, va_gc> *registration_function_types;
+static GTY (()) vec<tree, va_gc> *registration_function_types[PROTO_MAX];
 static bool functions_registered_p;
 static bool types_registered_p;
 
@@ -2431,8 +2431,10 @@ registration_function_type (prototype_index prototype, type_index type)
     default:
       break;
     }
-  tree &result = (*registration_function_types)
-    [type * PROTO_MAX + key];
+  vec<tree, va_gc> *&entries = registration_function_types[key];
+  if (!entries)
+    vec_safe_grow_cleared (entries, TYPE_MAX, true);
+  tree &result = (*entries)[type];
   if (!result)
     result = build_function_type (prototype, type);
   return result;
@@ -5713,8 +5715,6 @@ register_functions ()
       register_nominal_scalars ();
       vec_safe_grow_cleared (nominal_registration_types,
 			    TYPE_MAX * numeric_scalar_dtype_count * 3, true);
-      vec_safe_grow_cleared (registration_function_types,
-			    TYPE_MAX * PROTO_MAX, true);
     }
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
@@ -5826,7 +5826,8 @@ register_functions ()
 	    (floating_broadcast_code_base + candidate.payload + c, true,
 	     candidate.dst, scalar_types[c]);
     }
-  vec_free (registration_function_types);
+  for (auto &entries : registration_function_types)
+    vec_free (entries);
   vec_free (nominal_registration_types);
   current_optimize_pragma = saved_optimize_pragma;
   functions_registered_p = true;

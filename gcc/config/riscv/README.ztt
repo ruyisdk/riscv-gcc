@@ -86,6 +86,10 @@ Registration reuses a GC-rooted leaf/nothrow input list.  Each declaration
 receives its own attribute nodes; option pragmas and declaration-specific
 attributes must not modify the shared inputs.
 
+Ordinary function signatures use a temporary GC-rooted vector for each
+used prototype.  Nominal Scalar signatures retain their separate cache;
+unused prototypes allocate no type vector.  Both caches end at registration.
+
 Datatype name fragments are cached by descriptor and alias kind.  The
 profile-independent cache contains text only; declarations, type nodes
 and availability remain under the existing registration rules.
