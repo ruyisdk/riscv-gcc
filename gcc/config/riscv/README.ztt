@@ -95,6 +95,12 @@ the resolver still checks exact source and Scalar identities at each call.
 Unused prototypes and destinations allocate no type vector.  Both caches
 end at registration; later lazy declarations do not retain these caches.
 
+Scalar resolution indexes exact main-variant type identities on first use.
+The GC/PCH-visible reverse index grows only through the catalog prefix
+needed by a lookup.  Repeated calls avoid rescanning that prefix; unrelated
+record types remain invalid, and non-record arguments allocate no index.
+Type UIDs provide stable hashes across PCH restore; equality remains exact.
+
 Dense matrix, scalar, broadcast, unary, math and exponent declaration tables
 use GC/PCH-visible pages of 256 declarations, allocated on first insertion
 into each page.  Empty lookups allocate nothing.  Code indexing uses the

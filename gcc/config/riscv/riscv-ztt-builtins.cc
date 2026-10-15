@@ -1635,6 +1635,7 @@ static_assert (nominal_scalar_limit < nominal_extended_base);
 static_assert (nominal_extended_base + nominal_extended_count
 	       < elementwise_code_base);
 static GTY (()) tree nominal_scalar_types[numeric_scalar_dtype_count];
+static GTY (()) hash_map<tree_type_hash, unsigned> *nominal_scalar_indices;
 static GTY (()) tree nominal_scalar_decls[3 * numeric_scalar_dtype_count
 					+ 2 * TYPE_MAX];
 static GTY (()) tree nominal_extended_decls[nominal_extended_count];
@@ -6332,9 +6333,23 @@ static unsigned int
 nominal_scalar_number (tree type)
 {
   type = TYPE_MAIN_VARIANT (type);
-  for (unsigned int n = 0; n < numeric_scalar_dtype_count; ++n)
-    if (type == nominal_scalar_types[n])
-      return n;
+  if (TREE_CODE (type) != RECORD_TYPE || !nominal_scalar_types[0])
+    return numeric_scalar_dtype_count;
+  if (!nominal_scalar_indices)
+    nominal_scalar_indices = hash_map<tree_type_hash, unsigned>::create_ggc ();
+  if (unsigned int *index = nominal_scalar_indices->get (type))
+    return *index;
+  /* Registered Scalar nodes are distinct; the index holds a catalog prefix.  */
+  for (unsigned int n = nominal_scalar_indices->elements ();
+       n < numeric_scalar_dtype_count; ++n)
+    {
+      tree candidate = nominal_scalar_types[n];
+      gcc_checking_assert (candidate && TYPE_MAIN_VARIANT (candidate) == candidate);
+      bool existed = nominal_scalar_indices->put (candidate, n);
+      gcc_checking_assert (!existed);
+      if (type == candidate)
+	return n;
+    }
   return numeric_scalar_dtype_count;
 }
 
