@@ -40,6 +40,9 @@ with GCC; see the file COPYING3.  If not see
 #include "gimple.h"
 #include "gimple-iterator.h"
 #include "ssa.h"
+#include "cfg.h"
+#include "tree-ssa-live.h"
+#include "tree-outof-ssa.h"
 #include "builtins.h"
 #include "fold-const.h"
 #include "explow.h"
@@ -8622,6 +8625,20 @@ expand_elementwise (unsigned int code, tree exp)
 			     operation, exp);
 }
 
+/* A same-mode view replaced by TER does not write an SSA partition.  */
+static bool
+ter_structure_view_p (gimple *stmt)
+{
+  if (!is_gimple_assign (stmt)
+      || gimple_assign_rhs_code (stmt) != VIEW_CONVERT_EXPR)
+    return false;
+  tree lhs = gimple_assign_lhs (stmt);
+  tree rhs = TREE_OPERAND (gimple_assign_rhs1 (stmt), 0);
+  return TREE_CODE (lhs) == SSA_NAME && TREE_CODE (rhs) == SSA_NAME
+    && TYPE_MODE (TREE_TYPE (lhs)) == TYPE_MODE (TREE_TYPE (rhs))
+    && get_gimple_for_ssa_name (lhs) == stmt;
+}
+
 /* Use complete concat halves without moving the original ownership access.  */
 static bool
 concat_operand_sources (tree pair, type_index type,
@@ -8661,7 +8678,8 @@ concat_operand_sources (tree pair, type_index type,
        gsi_prev_nondebug (&gsi))
     if (gsi_stmt (gsi) != view)
       if (tree lhs = gimple_get_lhs (gsi_stmt (gsi)))
-	if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs))))
+	if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs)))
+	    && !ter_structure_view_p (gsi_stmt (gsi)))
 	  return false;
   for (unsigned int i = 0; i < 2; ++i)
     if (TREE_CODE (gimple_call_arg (producer, i)) != SSA_NAME

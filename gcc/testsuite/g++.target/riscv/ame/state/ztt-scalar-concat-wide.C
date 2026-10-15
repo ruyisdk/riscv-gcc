@@ -5,4 +5,4 @@
 #define SC_HALF 1x2
 #define SC_WHOLE 1x4
 #include "../../../../gcc.target/riscv/ame/state/ztt-scalar-concat.h"
-/* { dg-final { scan-rtl-dump-times "Use concat inputs for scalar" 12 "expand" } } */
+/* { dg-final { scan-rtl-dump-times "Use concat inputs for scalar" 15 "expand" } } */

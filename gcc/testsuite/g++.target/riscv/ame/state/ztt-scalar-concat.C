@@ -3,4 +3,4 @@
 /* { dg-additional-options "-march=rv32im_zicsr_ztt0p6 -mabi=ilp32" { target rv32 } } */
 /* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
 #include "../../../../gcc.target/riscv/ame/state/ztt-scalar-concat.h"
-/* { dg-final { scan-rtl-dump-times "Use concat inputs for scalar" 12 "expand" } } */
+/* { dg-final { scan-rtl-dump-times "Use concat inputs for scalar" 15 "expand" } } */

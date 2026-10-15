@@ -142,7 +142,8 @@ carrier view can be traversed when its original type matches exactly.
 Scalar conversion, exponent controls and ternary old destinations retain
 their original expansion and evaluation order.
 Ternary consumers keep the concat allocation when both inputs are single-use.
-Other intervening M definitions prevent this expansion-time substitution.
+Same-mode carrier views replaced by TER do not block this substitution.
+Other intervening M definitions remain boundaries.
 
 The GIMPLE hook can replace extraction from a single-use concatenation
 with the corresponding complete source value.  Exact types and shape
