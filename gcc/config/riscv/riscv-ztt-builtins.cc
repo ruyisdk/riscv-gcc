@@ -12135,6 +12135,24 @@ reuse_cleaned_descriptors ()
 	      continue;
 	    }
 	  rtx pattern = PATTERN (insn);
+	  if (explicit_state && NONJUMP_INSN_P (insn) && code >= 0
+	      && GET_CODE (pattern) == PARALLEL)
+	    {
+	      rtx set = single_set (insn);
+	      rtx src = set ? SET_SRC (set) : NULL_RTX;
+	      if (src && GET_CODE (src) == UNSPEC_VOLATILE
+		  && (XINT (src, 1) == UNSPECV_ZTT_STATE_STORE
+		      || XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE))
+		{
+		  /* Retained store preparation exposes its GPR clobbers.  */
+		  changed |= reuse_typed_descriptors (insn, src, state);
+		  note_stores (insn, invalidate_md_store, &state);
+		  state.note_descriptor_use
+		    (XVECEXP (src, 0, XINT (src, 1) == UNSPECV_ZTT_STATE_STORE
+				      ? 1 : 2));
+		  continue;
+		}
+	    }
 	  if (!NONJUMP_INSN_P (insn) || GET_CODE (pattern) != SET)
 	    {
 	      state.clear ();

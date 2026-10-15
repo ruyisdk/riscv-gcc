@@ -442,6 +442,9 @@ Prepared row/column SETs also preserve descriptor GPR facts.  Retained
 setters keep their values; control operands and matrix operations remain.
 Prepared typed store SETs preserve those facts as well; stores and their
 layout operands remain unchanged and still end private spill tracking.
+Retained store preparation likewise preserves GPR facts outside its
+explicit clobbers and records the descriptor use in this scan.  Its
+save, datatype setup, reload and final store remain unchanged.
 Complete M constructor SETs also preserve descriptor GPR facts.  Their
 datatype setters, scalar inputs and construction instructions remain.
 Recognized singleton raw loads/stores preserve descriptor GPR facts in
