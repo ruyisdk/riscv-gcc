@@ -232,8 +232,16 @@ do not qualify.
 The same integer operations reuse an inner result when the other outer
 input repeats either inner input.  Both operators and datatypes must match.
 Up to four complete copies may occur on each path, within the same local
-window.  The inner operation, its loads and the copies remain; different
-operators, unrelated inputs and state boundaries keep the outer operation.
+window.  The inner operation, its loads and the copies remain; unrelated
+inputs and state boundaries keep the outer operation.
+
+Integer AND/OR and min/max pairs also apply absorption: an
+outer operation combining the inner result with an inner input reuses
+that input.  The inner result and its intervening copies must have single
+uses, so the rewrite does not keep both that result and the original input
+live.  The other inner input must feed a subsequent complete local store,
+retaining its producers and loads.  The same type, copy-depth and local-window
+checks apply.  Ownership witnesses remain; floating pairs do not qualify.
 
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their

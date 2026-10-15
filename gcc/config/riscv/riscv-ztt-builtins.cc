@@ -7828,11 +7828,39 @@ same_structure_value_p (tree left, tree right, type_index type,
   return true;
 }
 
-/* Repeating an inner input leaves an integer min/max/and/or result intact.  */
+/* Keep an absorbed input's producers live through a complete local store.  */
+static bool
+stored_binary_input_p (tree value, gimple_stmt_iterator *gsi)
+{
+  gimple_stmt_iterator next = *gsi;
+  for (unsigned int i = 0; i < 16; ++i)
+    {
+      gsi_next_nondebug (&next);
+      if (gsi_end_p (next))
+	break;
+      gimple *stmt = gsi_stmt (next);
+      if (structure_store_p (stmt, value))
+	return true;
+      if (!structure_store_p (stmt) && !local_structure_gap_p (stmt))
+	break;
+    }
+  return false;
+}
+
+/* Fold repeated or absorbed inputs of integer min/max/and/or.  */
 static tree
-repeated_binary_value (gcall *stmt, const builtin_description &d,
+combined_binary_value (gcall *stmt, const builtin_description &d,
 		       gimple_stmt_iterator *gsi)
 {
+  expansion_index dual;
+  switch (d.expansion)
+    {
+    case EXPAND_MMIN_EW: dual = EXPAND_MMAX_EW; break;
+    case EXPAND_MMAX_EW: dual = EXPAND_MMIN_EW; break;
+    case EXPAND_MAND_EW: dual = EXPAND_MOR_EW; break;
+    case EXPAND_MOR_EW: dual = EXPAND_MAND_EW; break;
+    default: return NULL_TREE;
+    }
   for (unsigned int side = 0; side < 2; ++side)
     {
       tree result = gimple_call_arg (stmt, side), value = result;
@@ -7847,9 +7875,23 @@ repeated_binary_value (gcall *stmt, const builtin_description &d,
       if (code >= ZTT_BUILTIN_MAX)
 	continue;
       const auto source = builtin_description_for (code);
-      if (source.type != d.type || source.expansion != d.expansion
+      bool absorb = source.expansion == dual;
+      if (source.type != d.type || (!absorb && source.expansion != d.expansion)
 	  || source.prototype != PROTO_M_M_M)
 	continue;
+      if (absorb)
+	{
+	  /* A live inner result can extend the absorbed input's live range.  */
+	  bool dead_result = has_single_use (value);
+	  for (unsigned int i = 0; i < count && dead_result; ++i)
+	    {
+	      tree lhs = gimple_get_lhs (producers[i]);
+	      dead_result = lhs && TREE_CODE (lhs) == SSA_NAME
+		&& has_single_use (lhs);
+	    }
+	  if (!dead_result)
+	    continue;
+	}
       producers[count++] = inner;
       for (unsigned int input = 0; input < 2; ++input)
 	{
@@ -7863,8 +7905,11 @@ repeated_binary_value (gcall *stmt, const builtin_description &d,
 	      && strip_structure_copies (right, d.type, producers, end,
 					false, true)
 	      && left == right
+	      && (!absorb
+		  || stored_binary_input_p (gimple_call_arg (inner, 1 - input),
+				    gsi))
 	      && local_structure_producers_p (gsi, producers, end))
-	    return result;
+	    return absorb ? gimple_call_arg (stmt, 1 - side) : result;
 	}
     }
   return NULL_TREE;
@@ -7930,7 +7975,7 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     && same_structure_value_p (result, gimple_call_arg (stmt, 1), d.type,
 			       producers, count);
   if (idempotent && !same)
-    if (tree repeated = repeated_binary_value (stmt, d, gsi))
+    if (tree repeated = combined_binary_value (stmt, d, gsi))
       return useless_type_conversion_p (lhs_type, TREE_TYPE (repeated))
 	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
   if (!same)
