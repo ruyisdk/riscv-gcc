@@ -402,8 +402,10 @@ Recognized singleton raw loads/stores preserve descriptor GPR facts in
 this scan, as in the main Md scan.
 The scan also removes a singleton raw reload of the unchanged register
 from its most recent private spill.  Both accesses must be nonvolatile,
-nontrapping spill-slot MEMs with identical addresses and known full sizes
-and offsets.  Only unrelated ordinary GPR SETs may intervene.  The store
+nontrapping spill-slot MEMs with equal addresses and known full sizes
+and offsets.  Different address GPRs may match through at most sixteen
+local pointer-width definitions, with address expressions capped at
+sixteen nodes.  Only unrelated ordinary GPR SETs may intervene.  The store
 remains; frame operations, fixed/global register definitions, memory or
 matrix operations and unknown patterns end this spill fact.
 Repeated pure Pmode definitions of a surviving descriptor are removed

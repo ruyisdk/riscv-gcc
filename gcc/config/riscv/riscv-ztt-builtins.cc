@@ -11437,6 +11437,69 @@ class local_raw_spill
 {
   rtx reg = nullptr;
   rtx mem = nullptr;
+  rtx_insn *store = nullptr;
+
+  static bool address_expr_p (rtx x)
+  {
+    unsigned int count = 0;
+    subrtx_iterator::array_type array;
+    FOR_EACH_SUBRTX (iter, array, x, ALL)
+      {
+	if (++count > 16)
+	  return false;
+	rtx part = const_cast<rtx> (*iter);
+	if (CONST_INT_P (part) || local_md_state::full_gpr_p (part))
+	  continue;
+	if (GET_MODE (part) != Pmode
+	    || (GET_CODE (part) != PLUS && GET_CODE (part) != MINUS
+		&& GET_CODE (part) != NEG && GET_CODE (part) != ASHIFT))
+	  return false;
+	if (GET_CODE (part) == ASHIFT
+	    && (!CONST_INT_P (XEXP (part, 1))
+		|| UINTVAL (XEXP (part, 1)) >= GET_MODE_BITSIZE (Pmode)))
+	  return false;
+      }
+    return true;
+  }
+
+  /* Compare address values before STORE through at most sixteen definitions.  */
+  bool same_address_p (rtx src, rtx_insn *load) const
+  {
+    if (!store || !load)
+      return false;
+    rtx lhs = XEXP (mem, 0), rhs = XEXP (src, 0);
+    bool before_store = false;
+    unsigned int count = 0;
+    for (rtx_insn *p = PREV_INSN (load); p; p = PREV_INSN (p))
+      {
+	if (LABEL_P (p) || BARRIER_P (p)
+	    || (NOTE_P (p) && NOTE_KIND (p) == NOTE_INSN_BASIC_BLOCK))
+	  return false;
+	if (!NONDEBUG_INSN_P (p))
+	  continue;
+	if (++count > 16)
+	  return false;
+	if (p == store)
+	  before_store = true;
+	else
+	  {
+	    rtx pat = PATTERN (p);
+	    if (!NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
+		|| GET_CODE (pat) != SET
+		|| !local_md_state::full_gpr_p (SET_DEST (pat))
+		|| !address_expr_p (SET_SRC (pat)))
+	      return false;
+	    rhs = simplify_replace_rtx (rhs, SET_DEST (pat), SET_SRC (pat));
+	    if (before_store)
+	      lhs = simplify_replace_rtx (lhs, SET_DEST (pat), SET_SRC (pat));
+	    if (!address_expr_p (lhs) || !address_expr_p (rhs))
+	      return false;
+	  }
+	if (before_store && rtx_equal_p (lhs, rhs))
+	  return true;
+      }
+    return false;
+  }
 
   static bool private_slot_p (rtx x)
   {
@@ -11447,9 +11510,9 @@ class local_raw_spill
   }
 
 public:
-  void clear () { reg = mem = nullptr; }
+  void clear () { reg = mem = nullptr; store = nullptr; }
 
-  bool redundant_reload_p (rtx pattern)
+  bool redundant_reload_p (rtx pattern, rtx_insn *insn = nullptr)
   {
     if (md_raw_transfer_p (pattern))
       {
@@ -11458,11 +11521,13 @@ public:
 	  {
 	    reg = src;
 	    mem = dest;
+	    store = insn;
 	    return false;
 	  }
 	if (mem && private_slot_p (src) && rtx_equal_p (reg, dest)
-	    && rtx_equal_p (mem, src)
-	    && known_eq (MEM_OFFSET (mem), MEM_OFFSET (src)))
+	    && known_eq (MEM_OFFSET (mem), MEM_OFFSET (src))
+	    && MEM_ADDR_SPACE (mem) == MEM_ADDR_SPACE (src)
+	    && (rtx_equal_p (mem, src) || same_address_p (src, insn)))
 	  return true;
 	clear ();
 	return false;
@@ -11652,7 +11717,7 @@ reuse_cleaned_descriptors ()
 	  if (explicit_state && NONJUMP_INSN_P (insn)
 	      && !RTX_FRAME_RELATED_P (insn) && code >= 0)
 	    {
-	      if (spill.redundant_reload_p (PATTERN (insn)))
+	      if (spill.redundant_reload_p (PATTERN (insn), insn))
 		{
 		  if (dump_file)
 		    fprintf (dump_file, "Drop redundant raw reload at insn %d\n",
@@ -12728,6 +12793,58 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
+  for (unsigned int test = 0; test != 15; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      local_raw_spill spill;
+      auto visit = [&] (rtx pattern) {
+	rtx_insn *insn = emit_insn (pattern);
+	return spill.redundant_reload_p (pattern, insn);
+      };
+      rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+      rtx c = gen_rtx_REG (Pmode, 12), d = gen_rtx_REG (Pmode, 13);
+      rtx input = gen_rtx_REG (Pmode, 14);
+      rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx mem = gen_rtx_MEM (ZTTMR1mode, b);
+      set_mem_attrs_for_spill (mem);
+      visit (gen_rtx_SET (a, gen_rtx_PLUS (Pmode, input, GEN_INT (-32))));
+      visit (gen_rtx_SET (b, gen_rtx_PLUS (Pmode, a, hard_frame_pointer_rtx)));
+      if (test == 12)
+	visit (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      visit (gen_rtx_SET (c, gen_rtx_PLUS
+	(Pmode, input, GEN_INT (test == 1 ? -16 : -32))));
+      ASSERT_FALSE (visit (gen_rtx_SET (mem, m)));
+      rtx other = copy_rtx (mem);
+      XEXP (other, 0) = d;
+      switch (test)
+	{
+	case 2: set_mem_offset (other, 16); break;
+	case 3: MEM_VOLATILE_P (other) = 1; break;
+	case 4: MEM_NOTRAP_P (other) = 0; break;
+	case 5: visit (gen_rtx_SET (b, const0_rtx)); break;
+	case 6: visit (gen_rtx_SET (c, const0_rtx)); break;
+	case 7: visit (gen_rtx_SET (hard_frame_pointer_rtx, a)); break;
+	case 8: visit (gen_rtx_ASM_INPUT (VOIDmode, "")); break;
+	case 9: visit (gen_rtx_SET (gen_rtx_MEM (Pmode, a), const0_rtx)); break;
+	case 10: visit (gen_rtx_SET (m, gen_rtx_REG (ZTTMR1mode,
+						  M_REG_FIRST + 1))); break;
+	case 11:
+	  for (unsigned int i = 0; i != 16; ++i)
+	    visit (gen_rtx_SET (a, GEN_INT (i)));
+	  break;
+	case 13:
+	  visit (gen_rtx_SET (c, gen_rtx_ASHIFT
+	    (Pmode, input, GEN_INT (GET_MODE_BITSIZE (Pmode)))));
+	  break;
+	case 14:
+	  /* Changing an expression input does not change its computed addresses.  */
+	  visit (gen_rtx_SET (input, const0_rtx));
+	  break;
+	}
+      visit (gen_rtx_SET (d, gen_rtx_PLUS (Pmode, c, hard_frame_pointer_rtx)));
+      ASSERT_EQ (test == 0 || test == 14,
+		 visit (gen_rtx_SET (m, other)));
+    }
   for (int code : { UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT,
 		   UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT })
     {
