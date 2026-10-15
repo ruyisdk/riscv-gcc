@@ -7906,7 +7906,8 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
   bool idempotent = d.expansion == EXPAND_MMIN_EW
     || d.expansion == EXPAND_MMAX_EW || d.expansion == EXPAND_MAND_EW
     || d.expansion == EXPAND_MOR_EW;
-  if ((!commutative && !idempotent && d.expansion != EXPAND_MSUB_EW)
+  if ((!commutative && !idempotent && d.expansion != EXPAND_MSUB_EW
+       && d.expansion != EXPAND_MANDNOT_EW)
       || d.type == TYPE_MAX || types[d.type].accumulator
       || !type_nregs (d.type)
       || floating_descriptor_p (types[d.type].descriptor))
@@ -7934,11 +7935,12 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
 	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
   if (!same)
     {
-      /* MSUB computes its second input minus its first.  */
-      if (!commutative && d.expansion != EXPAND_MSUB_EW)
+      /* MSUB computes B-A, whereas AND-NOT computes A & ~B.  */
+      if (!commutative && d.expansion != EXPAND_MSUB_EW
+	  && d.expansion != EXPAND_MANDNOT_EW)
 	return NULL_TREE;
       count = 0;
-      unsigned int zero = commutative ? 1 : 0;
+      unsigned int zero = d.expansion == EXPAND_MSUB_EW ? 0 : 1;
       result = gimple_call_arg (stmt, 1 - zero);
       if (!structure_zero_p (gimple_call_arg (stmt, zero), d.type,
 			    producers, count))
