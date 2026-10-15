@@ -8622,6 +8622,50 @@ expand_elementwise (unsigned int code, tree exp)
 			     operation, exp);
 }
 
+/* Use complete concat halves without moving the original ownership access.  */
+static bool
+unary_concat_sources (const conversion_description &operation, tree exp,
+		      rtx *sources)
+{
+  if (!optimize || !runtime_profile_p () || operation.formation.insns != 2
+      || !currently_expanding_gimple_stmt)
+    return false;
+  tree pair = CALL_EXPR_ARG (exp, 0);
+  if (TREE_CODE (pair) != SSA_NAME || !has_single_use (pair)
+      || type_for_tree (TREE_TYPE (pair)) != operation.source)
+    return false;
+  gimple *producer = SSA_NAME_DEF_STMT (pair);
+  unsigned int code = structure_builtin_code (producer);
+  if (code >= ZTT_BUILTIN_MAX)
+    return false;
+  const auto d = builtin_description_for (code);
+  if (d.expansion != EXPAND_MCONCAT || d.type != operation.source)
+    return false;
+  type_index half = m_utility_source_type (d.prototype, d.type);
+  if (half == TYPE_MAX || type_nregs (half) != operation.formation.step[1]
+      || type_nregs (d.type) != 2 * type_nregs (half))
+    return false;
+  gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
+  if (!local_structure_producers_p (&gsi, &producer, 1))
+    return false;
+  /* SSA partitions are already assigned; do not cross a new M definition.  */
+  for (gsi_prev_nondebug (&gsi); gsi_stmt (gsi) != producer;
+       gsi_prev_nondebug (&gsi))
+    if (tree lhs = gimple_get_lhs (gsi_stmt (gsi)))
+      if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs))))
+	return false;
+  for (unsigned int i = 0; i < 2; ++i)
+    if (TREE_CODE (gimple_call_arg (producer, i)) != SSA_NAME
+	|| type_for_tree (TREE_TYPE (gimple_call_arg (producer, i))) != half)
+      return false;
+  for (unsigned int i = 0; i < 2; ++i)
+    sources[i] = force_reg (type_mode (half),
+			    expand_normal (gimple_call_arg (producer, i)));
+  if (dump_file)
+    fprintf (dump_file, "Use concat inputs for unary\n");
+  return true;
+}
+
 static rtx
 expand_conversion (const builtin_description &d,
 		   const conversion_description &operation, tree exp)
@@ -8647,13 +8691,16 @@ expand_conversion (const builtin_description &d,
       return result;
     }
   const auto &f = operation.formation;
+  rtx sources[2];
+  bool concat = unary_concat_sources (operation, exp, sources);
   emit_clobber (result);
   for (unsigned int i = 0; i < f.insns; ++i)
     {
       machine_mode dm = matrix_mode (f.step[0]);
       machine_mode sm = matrix_mode (f.step[1]);
       rtx dst = simplify_gen_subreg (dm, result, modes[0], GET_MODE_SIZE (dm) * i);
-      rtx src = simplify_gen_subreg (sm, source, modes[1], GET_MODE_SIZE (sm) * i);
+      rtx src = concat ? sources[i]
+	: simplify_gen_subreg (sm, source, modes[1], GET_MODE_SIZE (sm) * i);
       int variant = structural_variant (d.expansion);
       /* FP exceptions accrue in amefflags, independently of scalar fast-math
 	 and fenv options.  FP exponent bits must not be read as integer SAT.  */
