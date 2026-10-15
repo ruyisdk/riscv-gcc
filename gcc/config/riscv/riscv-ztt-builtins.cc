@@ -12483,6 +12483,18 @@ md_preserving_fp_p (int code, rtx pat = nullptr)
     case CODE_FOR_riscv_fscsr:
     case CODE_FOR_riscv_frflags:
     case CODE_FOR_riscv_fsflags:
+    case CODE_FOR_flt_quiethfsi4_zfa:
+    case CODE_FOR_fle_quiethfsi4_zfa:
+    case CODE_FOR_flt_quiethfdi4_zfa:
+    case CODE_FOR_fle_quiethfdi4_zfa:
+    case CODE_FOR_flt_quietsfsi4_zfa:
+    case CODE_FOR_fle_quietsfsi4_zfa:
+    case CODE_FOR_flt_quietsfdi4_zfa:
+    case CODE_FOR_fle_quietsfdi4_zfa:
+    case CODE_FOR_flt_quietdfsi4_zfa:
+    case CODE_FOR_fle_quietdfsi4_zfa:
+    case CODE_FOR_flt_quietdfdi4_zfa:
+    case CODE_FOR_fle_quietdfdi4_zfa:
     case CODE_FOR_copysignhf3:
     case CODE_FOR_copysignsf3:
     case CODE_FOR_copysigndf3:
@@ -13907,6 +13919,12 @@ run_md_reuse_selftests ()
     const int codes[] = {
       CODE_FOR_riscv_frcsr, CODE_FOR_riscv_fscsr,
       CODE_FOR_riscv_frflags, CODE_FOR_riscv_fsflags,
+      CODE_FOR_flt_quiethfsi4_zfa, CODE_FOR_fle_quiethfsi4_zfa,
+      CODE_FOR_flt_quiethfdi4_zfa, CODE_FOR_fle_quiethfdi4_zfa,
+      CODE_FOR_flt_quietsfsi4_zfa, CODE_FOR_fle_quietsfsi4_zfa,
+      CODE_FOR_flt_quietsfdi4_zfa, CODE_FOR_fle_quietsfdi4_zfa,
+      CODE_FOR_flt_quietdfsi4_zfa, CODE_FOR_fle_quietdfsi4_zfa,
+      CODE_FOR_flt_quietdfdi4_zfa, CODE_FOR_fle_quietdfdi4_zfa,
       CODE_FOR_copysignhf3, CODE_FOR_copysignsf3, CODE_FOR_copysigndf3,
       CODE_FOR_fminhf3, CODE_FOR_fminsf3, CODE_FOR_fmindf3,
       CODE_FOR_fmaxhf3, CODE_FOR_fmaxsf3, CODE_FOR_fmaxdf3,
@@ -14012,6 +14030,31 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (pat));
 	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, mem)));
       }
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (machine_mode mode : { HFmode, SFmode, DFmode })
+      for (int code : { UNSPEC_FLT_QUIET, UNSPEC_FLE_QUIET })
+	{
+	  rtx fp = gen_rtx_REG (mode, FP_REG_FIRST);
+	  rtx pat = gen_rtx_SET (reg, gen_rtx_UNSPEC (Pmode,
+				gen_rtvec (2, fp, fp), code));
+	  rtx_insn *insn = emit_insn (pat);
+	  if (TARGET_HARD_FLOAT && TARGET_ZFA)
+	    {
+	      ASSERT_TRUE (md_preserving_fp_p (recog_memoized (insn)));
+	      ASSERT_EQ (get_attr_length (insn), 4);
+	    }
+	  local_md_state state;
+	  state.record_constant (reg, GEN_INT (32));
+	  state.remember (matrix, reg);
+	  note_stores (insn, invalidate_md_store, &state);
+	  ASSERT_FALSE (state.matches (matrix, reg));
+	  ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+	  ASSERT_FALSE (md_scalar_insn_p (pat));
+	}
   }
   {
     const struct { machine_mode full, half, source; } cases[] = {

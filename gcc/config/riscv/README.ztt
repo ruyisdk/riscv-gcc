@@ -496,7 +496,8 @@ saved scale register, without materializing an additional zero term.  Early
 expansion, fixed-offset and mixed RVV/AME sizes retain their existing form.
 
 Calls, basic asm, unknown typed operations and unknown UNSPECs clear all facts.
-Recognized scalar copysign, min/max, classification and CPU fcsr/fflags
+Recognized scalar copysign, min/max, classification, Zfa quiet comparisons
+and CPU fcsr/fflags
 accesses preserve Md and amestype facts. Recognized sNaN flag helpers also
 preserve these facts. Their instructions and status effects remain; any
 result GPR is invalidated. Private spill rules are unchanged.
