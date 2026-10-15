@@ -3956,7 +3956,7 @@
   "f<quiet_pattern>q.<fmt>\t%0,%1,%2"
   [(set_attr "type" "fcmp")
    (set_attr "mode" "<UNITMODE>")
-   (set (attr "length") (const_int 16))])
+   (set_attr "length" "4")])
 
 ;; fclass instruction output bitmap
 ;;   0 negative infinity
