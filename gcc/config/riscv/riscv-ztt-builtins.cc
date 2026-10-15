@@ -2749,13 +2749,13 @@ scalar_datatype_name (unsigned int d, bool alias)
   return name;
 }
 
-static void
-integer_scalar_name (char *name, size_t size, const char *operation,
-		     type_index dst, type_index tc, bool alias)
+static size_t
+matrix_operation_name (char *name, size_t size, const char *operation,
+		       type_index dst, bool alias)
 {
+  char *begin = name;
   const auto &type = types[dst];
   const char *type_name = alias ? type.default_name : type.name;
-  const char *ctype = scalar_datatype_name (types[tc].descriptor, alias);
   auto dimension = [] (unsigned int n) {
     static const char *const names[] = { "1", "2", "4", "8", "16", "32" };
     int index = exact_log2 (n);
@@ -2788,9 +2788,20 @@ integer_scalar_name (char *name, size_t size, const char *operation,
       append ("x");
       append (dimension (type.columns));
     }
-  append ("_");
-  append (ctype);
   *name = '\0';
+  return name - begin;
+}
+
+static void
+integer_scalar_name (char *name, size_t size, const char *operation,
+		     type_index dst, type_index tc, bool alias)
+{
+  size_t used = matrix_operation_name (name, size, operation, dst, alias);
+  const char *ctype = scalar_datatype_name (types[tc].descriptor, alias);
+  size_t length = strlen (ctype);
+  gcc_assert (used + 1 + length < size);
+  name[used] = '_';
+  memcpy (name + used + 1, ctype, length + 1);
 }
 
 static const char *
@@ -3902,6 +3913,20 @@ run_scalar_full_name_selftests ()
     ASSERT_EQ (actual[0], '#');
     ASSERT_EQ (actual[length + 2], '#');
   };
+  auto check_operation = [] (const char *op, type_index dst, bool alias) {
+    char expected[160], actual[162];
+    int length = snprintf (expected, sizeof (expected),
+			   "__riscv_ztt_%s_%s_%ux%u", op,
+			   scalar_datatype_name (types[dst].descriptor, alias),
+			   types[dst].rows, types[dst].columns);
+    ASSERT_TRUE (length > 0 && static_cast<size_t> (length) < sizeof (expected));
+    memset (actual, '#', sizeof (actual));
+    ASSERT_EQ (matrix_operation_name (actual + 1, length + 1, op, dst, alias),
+	       static_cast<size_t> (length));
+    ASSERT_STREQ (expected, actual + 1);
+    ASSERT_EQ (actual[0], '#');
+    ASSERT_EQ (actual[length + 2], '#');
+  };
   for (unsigned int t = 0; t < TYPE_MAX; ++t)
     {
       for (const char *name : { types[t].name, types[t].default_name })
@@ -3910,6 +3935,9 @@ run_scalar_full_name_selftests ()
 	    ASSERT_TRUE (startswith (name, "__riscv_ztt_"));
 	    ASSERT_STREQ (name + strlen (name) - 2, "_t");
 	  }
+      for (unsigned int alias = 0; alias < 2; ++alias)
+	check_operation (numeric_scalar_name (t % floating_scalar_operations),
+			 static_cast<type_index> (t), alias);
       for (unsigned int n = 0; n < numeric_dtype_count; ++n)
 	for (unsigned int alias = 0; alias < 2; ++alias)
 	  check (numeric_scalar_name (n % floating_scalar_operations),
@@ -3917,9 +3945,12 @@ run_scalar_full_name_selftests ()
     }
   for (unsigned int op = 0; op <= floating_scalar_operations; ++op)
     for (unsigned int alias = 0; alias < 2; ++alias)
-      check (op == floating_scalar_operations ? "mbcast_m_x"
-	     : numeric_scalar_name (op), TYPE_I128_ROD_1X1,
-	     TYPE_BF16_RNO_1X1, alias);
+      {
+	const char *name = op == floating_scalar_operations ? "mbcast_m_x"
+	  : numeric_scalar_name (op);
+	check (name, TYPE_I128_ROD_1X1, TYPE_BF16_RNO_1X1, alias);
+	check_operation (name, TYPE_I128_ROD_1X1, alias);
+      }
 }
 
 static void
@@ -6428,11 +6459,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       tree decl = decls.get (slot);
       if (decl || !initialize_p)
 	return decl ? decl : error_mark_node;
-      dtype = scalar_datatype_name (types[t].descriptor, false);
-      snprintf (name, sizeof (name), "__riscv_ztt_%s_%s_%ux%u",
-		op == floating_scalar_operations ? "mbcast_m_x"
-		: numeric_scalar_name (op), dtype,
-		types[t].rows, types[t].columns);
+      matrix_operation_name
+	(name, sizeof (name), op == floating_scalar_operations ? "mbcast_m_x"
+	 : numeric_scalar_name (op), t, false);
       /* Resolution checks the unconverted arguments.  The placeholder
 	 prototype is never a GIMPLE or LTO signature.  */
       ftype = nominal_registration_type
@@ -6464,11 +6493,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int op = nominal_operation (code, t);
       if (default_scalar_rm_p (types[t].descriptor))
 	{
-	  dtype = scalar_datatype_name (types[t].descriptor, true);
-	  snprintf (name, sizeof (name), "__riscv_ztt_%s_%s_%ux%u",
-		    op == floating_scalar_operations ? "mbcast_m_x"
-		    : numeric_scalar_name (op), dtype,
-		    types[t].rows, types[t].columns);
+	  matrix_operation_name
+	    (name, sizeof (name), op == floating_scalar_operations ? "mbcast_m_x"
+	     : numeric_scalar_name (op), t, true);
 	  simulate_builtin_function_decl (input_location, name, ftype, fullcode,
 					  NULL, function_attributes ());
 	}
