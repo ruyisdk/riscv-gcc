@@ -11401,6 +11401,26 @@ public:
 	}
   }
 
+  /* Dynamic identities and definition order are local to each path.  */
+  void intersect_constants (const local_md_state &other)
+  {
+    for (auto &f : facts)
+      if (f.group && (f.identity || !CONST_INT_P (f.descriptor)
+		      || !other.matches (f.group, f.descriptor)))
+	f.group = nullptr;
+    for (unsigned int i = 0; i < GP_REG_NUM; ++i)
+      if (constants[i] && (!other.constants[i]
+			  || !rtx_equal_p (constants[i], other.constants[i])))
+	constants[i] = nullptr;
+    memset (identities, 0, sizeof (identities));
+    memset (definition, 0, sizeof (definition));
+    memset (descriptor_used, 0, sizeof (descriptor_used));
+    next_identity = next_definition = 0;
+    if (scalar_type && (!other.scalar_type
+		       || !rtx_equal_p (scalar_type, other.scalar_type)))
+      scalar_type = nullptr;
+  }
+
   static bool full_gpr_p (rtx reg)
   {
     return REG_P (reg) && GP_REG_P (REGNO (reg)) && GET_MODE (reg) == Pmode;
@@ -11705,16 +11725,16 @@ md_fallthrough_p (basic_block bb)
     && (incoming->flags & EDGE_FALLTHRU) && md_normal_edge_p (incoming);
 }
 
-/* A plain scalar branch changes neither registers nor Md.  */
+/* Plain scalar branches and direct jumps change neither registers nor Md.  */
 static bool
 md_preserving_branch_p (rtx_insn *insn)
 {
   return JUMP_P (insn) && GET_CODE (PATTERN (insn)) == SET
-    && any_condjump_p (insn) && onlyjump_p (insn)
+    && (any_condjump_p (insn) || simplejump_p (insn)) && onlyjump_p (insn)
     && recog_memoized (insn) >= 0 && md_scalar_insn_p (PATTERN (insn));
 }
 
-/* Retain an outer branch while visiting one nested branch.  */
+/* Retain two pending edges, including the far side of a local join.  */
 class local_md_path
 {
   edge pending[2] = {};
@@ -11724,11 +11744,30 @@ class local_md_path
 public:
   void enter (basic_block bb, local_md_state &state)
   {
-    if (!md_fallthrough_p (bb))
+    bool joined = false;
+    if (EDGE_COUNT (bb->preds) == 2)
+      {
+	edge a = EDGE_PRED (bb, 0), b = EDGE_PRED (bb, 1);
+	if (!(a->flags & EDGE_FALLTHRU))
+	  std::swap (a, b);
+	if ((a->flags & EDGE_FALLTHRU) && a->src == bb->prev_bb
+	    && !(b->flags & EDGE_FALLTHRU)
+	    && md_normal_edge_p (a) && md_normal_edge_p (b))
+	  for (unsigned int i = 0; i < ARRAY_SIZE (pending); ++i)
+	    if (pending[i] == b)
+	      {
+		state.intersect_constants (saved[i]);
+		joined = true;
+		if (dump_file)
+		  fprintf (dump_file, "Intersect Md at join block %d\n", bb->index);
+		break;
+	      }
+      }
+    if (!joined && !md_fallthrough_p (bb))
       {
 	unsigned int i;
 	for (i = 0; i < ARRAY_SIZE (pending); ++i)
-	  if (pending[i] && pending[i]->dest == bb)
+	  if (single_pred_p (bb) && pending[i] && pending[i]->dest == bb)
 	    {
 	      state = saved[i];
 	      if (dump_file)
@@ -11752,7 +11791,8 @@ public:
     edge_iterator ei;
     FOR_EACH_EDGE (e, ei, bb->succs)
       if (!(e->flags & EDGE_FALLTHRU) && md_normal_edge_p (e)
-	  && e->dest->index >= NUM_FIXED_BLOCKS && single_pred_p (e->dest))
+	  && e->dest->index >= NUM_FIXED_BLOCKS
+	  && EDGE_COUNT (e->dest->preds) <= 2)
 	{
 	  unsigned int slot = next;
 	  for (unsigned int i = 0; i < ARRAY_SIZE (pending); ++i)
@@ -12485,7 +12525,7 @@ shorten_rowcol_control (rtx_insn *insn, rtx control, local_md_state &state)
   return false;
 }
 
-/* Reuse Md along proven single-predecessor paths after allocation.  */
+/* Reuse Md along proven paths and constant-state joins after allocation.  */
 static unsigned int
 reuse_local_md ()
 {
@@ -13120,6 +13160,115 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  for (unsigned int test = 0; test != 9; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      local_md_state left, right;
+      rtx reg = gen_rtx_REG (Pmode, 10), copy = gen_rtx_REG (Pmode, 11);
+      rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 8);
+      left.record_constant (reg, GEN_INT (32));
+      right.record_constant (reg, GEN_INT (32));
+      if (test == 1)
+	right.record_constant (reg, GEN_INT (64));
+      if (test == 4 || test == 5)
+	left.clear ();
+      if (test == 4 || test == 6)
+	right.clear ();
+      left.remember (group, reg);
+      right.remember (group, reg);
+      if (test == 2)
+	right.clear ();
+      if (test == 3)
+	right.remember (gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 8), reg);
+      if (test == 7)
+	{
+	  right.record_constant (copy, GEN_INT (32));
+	  right.remember (group, copy);
+	  right.invalidate (reg);
+	}
+      if (test == 8)
+	right.invalidate (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 8));
+      left.intersect_constants (right);
+      ASSERT_EQ (test == 0 || test == 7, left.matches (group, GEN_INT (32)));
+      ASSERT_FALSE (left.matches (group, GEN_INT (64)));
+      ASSERT_FALSE (left.redundant_descriptor_p (reg, GEN_INT (32)));
+    }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    local_md_state left, right;
+    rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+    left.record_constant (a, GEN_INT (32));
+    right.record_constant (a, GEN_INT (32));
+    left.record_constant (b, GEN_INT (64));
+    right.record_constant (b, GEN_INT (128));
+    left.note_descriptor_use (a);
+    right.note_descriptor_use (a);
+    left.record_scalar_type (a);
+    right.record_scalar_type (a);
+    left.intersect_constants (right);
+    ASSERT_RTX_EQ (GEN_INT (32), left.descriptor_value (a));
+    ASSERT_RTX_EQ (b, left.descriptor_value (b));
+    ASSERT_FALSE (left.redundant_descriptor_p (a, GEN_INT (32)));
+    ASSERT_TRUE (left.record_scalar_type (a));
+    right.record_scalar_type (b);
+    left.intersect_constants (right);
+    ASSERT_FALSE (left.record_scalar_type (a));
+    left.record_constant (b, GEN_INT (32));
+    left.note_descriptor_use (a);
+    ASSERT_TRUE (left.redundant_descriptor_p (a, GEN_INT (32)));
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+    basic_block arm = BASIC_BLOCK_FOR_FN (cfun, 3);
+    basic_block other = BASIC_BLOCK_FOR_FN (cfun, 4);
+    basic_block join = BASIC_BLOCK_FOR_FN (cfun, 5);
+    edge a = single_succ_edge (arm), b = single_succ_edge (other);
+    ASSERT_TRUE (a->dest == join && b->dest == join
+		 && EDGE_COUNT (join->preds) == 2);
+    rtx jump = gen_rtx_SET (pc_rtx,
+			   gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()));
+    BB_END (arm) = emit_jump_insn_after (jump, BB_END (arm));
+    ASSERT_TRUE (md_preserving_branch_p (BB_END (arm)));
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    const int flags[] = { 0, EDGE_ABNORMAL, EDGE_EH, EDGE_FAKE,
+			 EDGE_DFS_BACK, EDGE_IRREDUCIBLE_LOOP, EDGE_CROSSING };
+    for (int invalid : flags)
+      for (bool far : { false, true })
+	{
+	  a->flags = far ? invalid : 0;
+	  b->flags = EDGE_FALLTHRU | (far ? 0 : invalid);
+	  local_md_path path;
+	  local_md_state state;
+	  state.record_constant (reg, GEN_INT (32));
+	  state.remember (group, reg);
+	  path.leave (arm, state);
+	  path.enter (join, state);
+	  ASSERT_EQ (!invalid, state.matches (group, GEN_INT (32)));
+	  path.enter (join, state);
+	  ASSERT_FALSE (state.matches (group, GEN_INT (32)));
+	}
+    a->flags = 0;
+    b->flags = EDGE_FALLTHRU;
+    for (unsigned int test = 0; test != 3; ++test)
+      {
+	local_md_path path;
+	local_md_state state;
+	state.record_constant (reg, GEN_INT (32));
+	state.remember (group, reg);
+	if (test != 0)
+	  path.leave (arm, state);
+	if (test == 1)
+	  state.clear ();
+	if (test == 2)
+	  {
+	    basic_block extra = create_empty_bb (join);
+	    make_edge (extra, join, 0);
+	  }
+	path.enter (join, state);
+	ASSERT_FALSE (state.matches (group, GEN_INT (32)));
+      }
+  }
   for (unsigned int test = 0; test != 13; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
