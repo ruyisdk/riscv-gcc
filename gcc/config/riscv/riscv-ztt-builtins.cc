@@ -12021,9 +12021,15 @@ public:
 
   rtx constant_value (rtx src)
   {
-    if (contains_mem_rtx_p (src) || side_effects_p (src))
-      return NULL_RTX;
-    rtx value = simplify_replace_fn_rtx (src, NULL_RTX, substitute, this);
+    rtx value = src;
+    if (REG_P (src))
+      value = descriptor_value (src);
+    else if (!CONST_INT_P (src))
+      {
+	if (contains_mem_rtx_p (src) || side_effects_p (src))
+	  return NULL_RTX;
+	value = simplify_replace_fn_rtx (src, NULL_RTX, substitute, this);
+      }
     return CONST_INT_P (value) ? gen_int_mode (INTVAL (value), Pmode) : NULL_RTX;
   }
 
@@ -15663,6 +15669,45 @@ run_md_reuse_selftests ()
     (gen_rtx_COND_EXEC (VOIDmode, const1_rtx, gen_rtx_SET (desc, const0_rtx))));
 
   rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+  {
+    local_md_state values;
+    rtx known[] = { NULL_RTX, const0_rtx, constm1_rtx,
+		    GEN_INT (HOST_WIDE_INT_C (0x180000000)) };
+    rtx inputs[] = {
+      const0_rtx, constm1_rtx, GEN_INT (HOST_WIDE_INT_C (0x180000000)),
+      a, b, gen_rtx_REG (Pmode, GP_REG_FIRST),
+      gen_rtx_REG (QImode, REGNO (a)), gen_rtx_REG (SImode, REGNO (a)),
+      gen_rtx_REG (DFmode, FP_REG_FIRST),
+      gen_rtx_REG (Pmode, FIRST_PSEUDO_REGISTER + 7),
+      gen_rtx_PLUS (Pmode, a, const1_rtx),
+      gen_rtx_ASHIFT (Pmode, a, const1_rtx),
+      gen_rtx_MEM (Pmode, a), gen_rtx_POST_INC (Pmode, a),
+      gen_rtx_PLUS (Pmode, gen_rtx_MEM (Pmode, a), const1_rtx)
+    };
+    for (rtx value : known)
+      {
+	values.clear ();
+	if (value)
+	  values.record_constant (a, gen_int_mode (INTVAL (value), Pmode));
+	for (rtx input : inputs)
+	  {
+	    rtx expected = NULL_RTX;
+	    if (!contains_mem_rtx_p (input) && !side_effects_p (input))
+	      {
+		auto lookup = [] (rtx x, const_rtx, void *data) -> rtx {
+		  return REG_P (x)
+		    ? static_cast<local_md_state *> (data)->descriptor_value (x)
+		    : NULL_RTX;
+		};
+		rtx result = simplify_replace_fn_rtx (input, NULL_RTX, lookup,
+						      &values);
+		if (CONST_INT_P (result))
+		  expected = gen_int_mode (INTVAL (result), Pmode);
+	      }
+	    ASSERT_TRUE (rtx_equal_p (expected, values.constant_value (input)));
+	  }
+      }
+  }
   rtx base = GEN_INT (0x40000000), dtype = GEN_INT (0x40000020);
   state.record_constant (a, base);
   rtx sum = state.constant_value (gen_rtx_PLUS (Pmode, a, GEN_INT (32)));

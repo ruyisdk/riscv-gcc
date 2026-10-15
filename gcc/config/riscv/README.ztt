@@ -461,6 +461,8 @@ Descriptor cleanup after DCE uses the same boundaries; private raw spill
 tracking remains confined to each block.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
+Constant evaluation handles register and integer leaves directly, retaining
+XLEN normalization and the general memory/side-effect checks for expressions.
 Standard thread-fence patterns preserve register and datatype facts, but
 still invalidate private memory reuse.  The fences and user memory accesses
   remain in place.  The operand-free empty asm with only a memory clobber
