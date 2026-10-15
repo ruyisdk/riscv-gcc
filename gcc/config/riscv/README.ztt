@@ -92,6 +92,10 @@ cache, allocating the TC/arity vector only for a used destination type.
 Unused prototypes and destinations allocate no type vector.  Both caches
 end at registration; later lazy declarations do not retain these caches.
 
+Dense matrix, scalar, broadcast, unary, math and exponent declaration tables
+allocate their GC/PCH-visible storage only on first insertion.  Empty
+lookups allocate nothing; populated tables retain direct code indexing.
+
 Datatype name fragments are cached by descriptor and alias kind.  The
 profile-independent cache contains text only; declarations, type nodes
 and availability remain under the existing registration rules.

@@ -1189,6 +1189,28 @@ struct GTY (()) builtin_decl_cache
 
 static GTY (()) builtin_decl_cache mixed_builtin_decls;
 
+/* Keep dense code indexing without scanning unused declaration domains.  */
+struct GTY (()) builtin_decl_table
+{
+  unsigned int length;
+  vec<tree, va_gc> *entries;
+
+  tree get (unsigned int slot) const
+  {
+    gcc_assert (slot < length);
+    return entries ? (*entries)[slot] : NULL_TREE;
+  }
+
+  tree put (unsigned int slot, tree decl)
+  {
+    gcc_assert (slot < length && decl);
+    if (!entries)
+      vec_safe_grow_cleared (entries, length, true);
+    (*entries)[slot] = decl;
+    return decl;
+  }
+};
+
 /* Preserve the range and
    radices originally used by shifts; 24 is a scalar shift count only.  */
 static constexpr unsigned int elementwise_code_base = 1U << 28;
@@ -1393,7 +1415,8 @@ static_assert (large_integer_matrix_code_count < (1U << 20));
 static_assert (integer_unary_code_limit < integer_matrix_code_base);
 static_assert (integer_matrix_code_base + integer_matrix_code_count
 	       < scalar_code_base);
-static GTY (()) tree integer_matrix_decls[integer_matrix_code_count + large_integer_matrix_code_count];
+static GTY (()) builtin_decl_table integer_matrix_decls
+  = { integer_matrix_code_count + large_integer_matrix_code_count, nullptr };
 
 /* Preserve the exact ACC
    type in the signature.  Only M inputs use physical carriers, with their
@@ -1421,7 +1444,8 @@ static_assert (integer_matmul_code_base + integer_matmul_code_count
 	       < integer_broadcast_code_base);
 static_assert (integer_broadcast_code_base + integer_broadcast_code_count
 	       < scalar_code_base);
-static GTY (()) tree integer_broadcast_decls[integer_broadcast_code_count];
+static GTY (()) builtin_decl_table integer_broadcast_decls
+  = { integer_broadcast_code_count, nullptr };
 
 /* Public scalar signatures
    contain TD/shape/TC only.  Internal signatures contain physical carriers;
@@ -1453,7 +1477,8 @@ struct GTY (()) integer_scalar_public_cache
     [integer_scalar_operations * integer_dtype_count * wide_shape_count];
 };
 static GTY (()) integer_scalar_public_cache *integer_scalar_public_decls;
-static GTY (()) tree integer_scalar_decls[integer_scalar_code_count + large_integer_scalar_code_count];
+static GTY (()) builtin_decl_table integer_scalar_decls
+  = { integer_scalar_code_count + large_integer_scalar_code_count, nullptr };
 static const char *const integer_scalar_names[] = {
 #define ZTT_WIDE_SCALAR_OP(OP, NAME, KIND) #NAME,
 #include "riscv-ztt-operations.def"
@@ -1472,7 +1497,8 @@ static_assert (integer_scalar_code_base + integer_scalar_code_count
 	       < floating_unary_code_base);
 static_assert (floating_unary_code_base + floating_unary_code_count
 	       < scalar_code_base);
-static GTY (()) tree floating_unary_decls[floating_unary_code_count + large_floating_unary_code_count];
+static GTY (()) builtin_decl_table floating_unary_decls
+  = { floating_unary_code_count + large_floating_unary_code_count, nullptr };
 
 /* Reuse the matrix carrier
    signature, but keep floating calls outside all integer code intervals.
@@ -1485,7 +1511,8 @@ static_assert (floating_unary_code_base + floating_unary_code_count
 	       < floating_matrix_code_base);
 static_assert (floating_matrix_code_base + floating_matrix_code_count
 	       < scalar_code_base);
-static GTY (()) tree floating_matrix_decls[floating_matrix_code_count + large_floating_matrix_code_count];
+static GTY (()) builtin_decl_table floating_matrix_decls
+  = { floating_matrix_code_count + large_floating_matrix_code_count, nullptr };
 
 /* Mathematics reuses the
    three checked datatype operands without changing earlier signatures.  */
@@ -1497,7 +1524,8 @@ static_assert (large_matrix_math_code_count < (1U << 20));
 static_assert (floating_matrix_code_base + floating_matrix_code_count
 	       < matrix_math_code_base);
 static_assert (matrix_math_code_base + matrix_math_code_count < scalar_code_base);
-static GTY (()) tree matrix_math_decls[matrix_math_code_count + large_matrix_math_code_count];
+static GTY (()) builtin_decl_table matrix_math_decls
+  = { matrix_math_code_count + large_matrix_math_code_count, nullptr };
 
 /* Public signatures contain
    TD/shape/TC; bounded internal signatures carry checked original types.
@@ -1530,7 +1558,8 @@ struct GTY (()) floating_scalar_public_cache
     [floating_scalar_operations * numeric_dtype_count * wide_shape_count];
 };
 static GTY (()) floating_scalar_public_cache *floating_scalar_public_decls;
-static GTY (()) tree floating_scalar_decls[floating_scalar_code_count + large_floating_scalar_code_count];
+static GTY (()) builtin_decl_table floating_scalar_decls
+  = { floating_scalar_code_count + large_floating_scalar_code_count, nullptr };
 
 /* Broadcast carries TD/TC
    in its public signature.  Integer-only declarations keep their old IDs.  */
@@ -1544,7 +1573,8 @@ static_assert (floating_scalar_code_base + floating_scalar_code_count
 	       < floating_broadcast_code_base);
 static_assert (floating_broadcast_code_base + floating_broadcast_code_count
 	       < scalar_code_base);
-static GTY (()) tree floating_broadcast_decls[floating_broadcast_code_count];
+static GTY (()) builtin_decl_table floating_broadcast_decls
+  = { floating_broadcast_code_count, nullptr };
 
 /* Keep integer-only matmul
    signatures unchanged.  Source type IDs travel as checked operands, not
@@ -1569,7 +1599,8 @@ static constexpr unsigned int exponent_code_count = 2 * 5 * 6 * 6;
 static_assert (floating_matmul_code_base + floating_matmul_code_count
 	       < exponent_code_base);
 static_assert (exponent_code_base + exponent_code_count < scalar_code_base);
-static GTY (()) tree exponent_decls[exponent_code_count];
+static GTY (()) builtin_decl_table exponent_decls
+  = { exponent_code_count, nullptr };
 
 /* Nominal scalars are frontend records, not new M types or RTL modes.
    Keep these codes separate from all legacy raw-carrier signatures.  */
@@ -2708,7 +2739,8 @@ integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
 {
   if (in_lto_p)
     return integer_zero_node;
-  tree &decl = integer_broadcast_decls[code - integer_broadcast_code_base];
+  unsigned int slot = code - integer_broadcast_code_base;
+  tree decl = integer_broadcast_decls.get (slot);
   if (!decl && initialize_p)
     {
       char name[160];
@@ -2719,6 +2751,7 @@ integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       decl = simulate_builtin_function_decl
 	(input_location, name, ftype, fullcode, NULL, function_attributes ());
+      integer_broadcast_decls.put (slot, decl);
       if (!((types[dst].descriptor | types[tc].descriptor) & (3U << 27)))
 	{
 	  integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, true);
@@ -3052,7 +3085,8 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p,
 {
   if (in_lto_p)
     return integer_zero_node;
-  tree &decl = floating_broadcast_decls[code - floating_broadcast_code_base];
+  unsigned int slot = code - floating_broadcast_code_base;
+  tree decl = floating_broadcast_decls.get (slot);
   if (!decl && initialize_p)
     {
       unsigned int desc = types[tc].descriptor;
@@ -3064,6 +3098,7 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p,
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       decl = simulate_builtin_function_decl
 	(input_location, name, ftype, fullcode, NULL, function_attributes ());
+      floating_broadcast_decls.put (slot, decl);
       if (default_scalar_rm_p (types[dst].descriptor) && default_scalar_rm_p (desc))
 	{
 	  integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, true);
@@ -3777,6 +3812,28 @@ run_scalar_full_name_selftests ()
 	     TYPE_BF16_RNO_1X1, alias);
 }
 
+static void
+run_decl_table_selftests ()
+{
+  using namespace selftest;
+  builtin_decl_table table = { 9, nullptr }, other = { 9, nullptr };
+  for (unsigned int i = 0; i < table.length; ++i)
+    ASSERT_EQ (table.get (i), NULL_TREE);
+  ASSERT_EQ (table.entries, nullptr);
+  ASSERT_EQ (table.put (0, integer_zero_node), integer_zero_node);
+  ASSERT_EQ (table.put (8, integer_one_node), integer_one_node);
+  auto *entries = table.entries;
+  for (unsigned int i = 0; i < table.length; ++i)
+    ASSERT_EQ (table.get (i), i == 0 ? integer_zero_node
+	       : i == 8 ? integer_one_node : NULL_TREE);
+  ASSERT_EQ (table.put (0, integer_one_node), integer_one_node);
+  ASSERT_EQ (table.entries, entries);
+  ASSERT_EQ (table.get (0), integer_one_node);
+  ASSERT_EQ (other.get (0), NULL_TREE);
+  ASSERT_EQ (other.entries, nullptr);
+  vec_free (table.entries);
+}
+
 void
 run_wide_signature_selftests ()
 {
@@ -3794,6 +3851,7 @@ run_wide_signature_selftests ()
       ASSERT_EQ (cache.get (conversion_code_base + i * 257 + 1), NULL_TREE);
     }
   ASSERT_EQ (other.get (conversion_code_base), integer_zero_node);
+  run_decl_table_selftests ();
   run_matrix_type_index_selftests ();
   run_store_lookup_selftests ();
   run_redirect_lookup_selftests ();
@@ -4519,9 +4577,9 @@ integer_matrix_builtin_decl (unsigned int code)
   if (large)
     slot += domain == MATRIX_MATH ? matrix_math_code_count
       : domain == MATRIX_FLOATING ? floating_matrix_code_count : integer_matrix_code_count;
-  tree &decl = domain == MATRIX_MATH ? matrix_math_decls[slot]
-    : domain == MATRIX_FLOATING ? floating_matrix_decls[slot] : integer_matrix_decls[slot];
-  if (decl)
+  auto &table = domain == MATRIX_MATH ? matrix_math_decls
+    : domain == MATRIX_FLOATING ? floating_matrix_decls : integer_matrix_decls;
+  if (tree decl = table.get (slot))
     return decl;
   tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
   tree lhs = ztt_m_type_nodes[integer_matrix_carrier (s.lhs)];
@@ -4536,10 +4594,10 @@ integer_matrix_builtin_decl (unsigned int code)
   char name[64];
   snprintf (name, sizeof (name), "__builtin_riscv_ztt_%s_matrix_%u",
 	    matrix_domain_name (domain), code);
-  decl = add_builtin_function_ext_scope
+  tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  return decl;
+  return table.put (slot, decl);
 }
 
 /* Revalidate metadata from the streamed call, not from registration order.  */
@@ -4755,7 +4813,8 @@ exponent_builtin_decl (unsigned int code)
     return error_mark_node;
   if (in_lto_p)
     return integer_zero_node;
-  tree &decl = exponent_decls[code - exponent_code_base];
+  unsigned int slot = code - exponent_code_base;
+  tree decl = exponent_decls.get (slot);
   if (!decl)
     {
       tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
@@ -4770,6 +4829,7 @@ exponent_builtin_decl (unsigned int code)
       decl = add_builtin_function_ext_scope
 	(name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
 	 BUILT_IN_MD, NULL, function_attributes ());
+      exponent_decls.put (slot, decl);
     }
   return decl;
 }
@@ -4951,7 +5011,7 @@ floating_unary_builtin_decl (unsigned int code)
   unsigned int slot = code >= large_group_code_base
     ? floating_unary_code_count + code - large_floating_unary_code_base
     : code - floating_unary_code_base;
-  tree &decl = floating_unary_decls[slot];
+  tree decl = floating_unary_decls.get (slot);
   if (!decl)
     {
       tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
@@ -4963,6 +5023,7 @@ floating_unary_builtin_decl (unsigned int code)
       decl = add_builtin_function_ext_scope
 	(name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
 	 BUILT_IN_MD, NULL, function_attributes ());
+      floating_unary_decls.put (slot, decl);
     }
   return decl;
 }
@@ -5136,8 +5197,8 @@ integer_scalar_builtin_decl (unsigned int code)
   unsigned int slot = code - base;
   if (large)
     slot += s.floating ? floating_scalar_code_count : integer_scalar_code_count;
-  tree &decl = s.floating ? floating_scalar_decls[slot] : integer_scalar_decls[slot];
-  if (decl)
+  auto &table = s.floating ? floating_scalar_decls : integer_scalar_decls;
+  if (tree decl = table.get (slot))
     return decl;
   tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
   tree src = ztt_m_type_nodes[integer_matrix_carrier (s.source)];
@@ -5150,10 +5211,10 @@ integer_scalar_builtin_decl (unsigned int code)
   char name[64];
   snprintf (name, sizeof (name), "__builtin_riscv_ztt_%s_scalar_%u",
 	    s.floating ? "floating" : "integer", code);
-  decl = add_builtin_function_ext_scope
+  tree decl = add_builtin_function_ext_scope
     (name, ftype, (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT,
      BUILT_IN_MD, NULL, function_attributes ());
-  return decl;
+  return table.put (slot, decl);
 }
 
 static bool
