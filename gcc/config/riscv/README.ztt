@@ -270,7 +270,7 @@ retain their tied early-clobber alternative.  Live inputs and shared
 data/index values retain their existing allocation choices.
 Fixed-exponent accumulation can also reuse a dying input shared with the
 old destination on optimized runtime profiles.  The complete mode and Md
-must match; live old values and distinct inputs retain their allocation.
+must match; distinct inputs are not unified.
 Data-scalar old-destination operations use this same complete-value rule.
 Their TC setup, ingress conversion flags and arithmetic remain intact.
 Matrix ternary operations can similarly reuse a dying old/source value
@@ -290,6 +290,9 @@ Wide binary and scalar ternary inputs use the same complete-copy proof
 when distinct inputs would exceed the bank.  Whole-bank scalar
 accumulation ties its shared source and old destination as one reload
 operand, including when the original value remains live.
+Optimized runtime fixed-exponent accumulation also uses this shared
+operand outside the bank limit for groups wider than four registers.
+The same complete-copy proof applies; allocation preserves a live original.
 Scalar datatype setup and TC-to-TB conversion remain at the scalar core.
 Bank-limited gather likewise shares identical complete data and index
 values, while keeping the gather operation and its index semantics.

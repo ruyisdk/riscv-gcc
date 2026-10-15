@@ -8212,7 +8212,7 @@ matrix_register (machine_mode mode, tree exp, unsigned int argno)
 }
 
 static bool same_matrix_arguments_p (tree, type_index, unsigned int,
-				     unsigned int = 0);
+				     unsigned int = 0, bool = false);
 static tree matrix_copy_origin (tree, type_index);
 
 /* A scatter result retains
@@ -8330,15 +8330,17 @@ matrix_copy_origin (tree value, type_index type)
   return value;
 }
 
-/* Share complete copies when distinct inputs would exceed the M bank.  */
+/* Share complete copies for bank limits or selected optimizing consumers.  */
 static bool
 same_matrix_arguments_p (tree exp, type_index type, unsigned int inputs,
-			 unsigned int first)
+			 unsigned int first, bool optimize_copies)
 {
   tree a = CALL_EXPR_ARG (exp, first), b = CALL_EXPR_ARG (exp, first + 1);
   if (operand_equal_p (a, b, 0))
     return true;
-  if (!runtime_profile_p () || inputs <= active_profile ()->mregs)
+  if (!runtime_profile_p ()
+      || (!(optimize && optimize_copies)
+	  && inputs <= active_profile ()->mregs))
     return false;
   a = matrix_copy_origin (a, type);
   b = matrix_copy_origin (b, type);
@@ -8531,7 +8533,7 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
 	   > active_profile ()->mregs))
     && modes[0] == modes[1] && rtx_equal_p (dtype[0], dtype[1])
     && same_matrix_arguments_p (exp, indices[0],
-	operation.formation.step[0] + operation.formation.step[1]);
+	operation.formation.step[0] + operation.formation.step[1], 0, exponent);
   rtx source = shared ? old : matrix_register (modes[1], exp, ternary >= 0 ? 1 : 0);
   tree carrier = exponent ? long_integer_type_node : scalar_carrier_type (operation.scalar);
   rtx scalar = expand_normal (CALL_EXPR_ARG (exp, ternary >= 0 ? 2 : 1));
@@ -10976,7 +10978,10 @@ lower_explicit_state ()
 		reuse = reuse
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
-		if (reuse && bank_shared)
+		bool shared_exponent = exponent && nregs > 4 && optimize
+		  && runtime_profile_p ()
+		  && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5));
+		if (reuse && (bank_shared || shared_exponent))
 		  {
 		    emit_insn (gen_ztt_state_scalar_shared
 			       (mode, Pmode, dest, XVECEXP (src, 0, 0),

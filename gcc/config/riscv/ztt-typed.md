@@ -943,7 +943,7 @@
 (define_int_attr ztt_ternary_dest
   [(UNSPECV_ZTT_STATE_TERNARY_X "&Wmr") (UNSPECV_ZTT_STATE_TERNARY_X_REUSE "Wmr")])
 
-;; Reload a whole-bank old/source value only once.
+;; Reload a shared wide old/source value only once.
 (define_insn "@ztt_state_scalar_shared_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
@@ -961,8 +961,10 @@
    (clobber (match_operand 4 "memory_operand" "=A"))
    (clobber (match_scratch:P 7 "=&r"))]
   "TARGET_ZTT && riscv_ztt::runtime_profile_p ()
-   && 2 * riscv_ztt::m_nregs (<ZTT_M:MODE>mode)
-      > riscv_ztt::active_profile ()->mregs
+   && (2 * riscv_ztt::m_nregs (<ZTT_M:MODE>mode)
+       > riscv_ztt::active_profile ()->mregs
+       || (optimize && riscv_ztt::m_nregs (<ZTT_M:MODE>mode) > 4
+           && UINTVAL (operands[10]) == 4))
    && UINTVAL (operands[10]) <= 4
    && !(UINTVAL (operands[8]) & ~3U)
    && (reload_completed || operands[8] == const0_rtx)
