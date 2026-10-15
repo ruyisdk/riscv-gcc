@@ -148,6 +148,8 @@ Ternary and mixed-width consumers keep the concat allocation when both halves
 are single-use.
 Same-mode carrier views replaced by TER do not block this substitution.
 Other intervening M definitions remain boundaries.
+Typed stores can use the same complete-half sources without changing their
+addresses, strides, packet order or alignment-staging paths.
 
 The GIMPLE hook can replace extraction from a single-use concatenation
 with the corresponding complete source value.  Exact types and shape

@@ -8978,6 +8978,12 @@ expand_memory (const builtin_description &d, tree exp, rtx target)
   rtx stride = variant == 1 ? const0_rtx : force_reg (Pmode, scalar_stride);
   rtx value = store_p ? matrix_register (mode, exp, variant == 1 ? 1 : 2)
     : (packets == 1 ? result_register (mode, target) : gen_reg_rtx (mode));
+  rtx sources[2];
+  bool concat = store_p && concat_operand_sources
+    (CALL_EXPR_ARG (exp, variant == 1 ? 1 : 2), d.type, packets, group,
+     sources);
+  if (concat && dump_file)
+    fprintf (dump_file, "Use concat inputs for store\n");
   if (!store_p && packets > 1)
     emit_clobber (value);
 
@@ -9050,7 +9056,8 @@ expand_memory (const builtin_description &d, tree exp, rtx target)
     }
   for (unsigned int i = 0; i < packets; ++i)
     {
-      rtx part = simplify_gen_subreg (part_mode, value, mode, part_size * i);
+      rtx part = concat ? concat_operand_part (sources, packets, group, i)
+	: simplify_gen_subreg (part_mode, value, mode, part_size * i);
       /* A strided access is not a contiguous mode-sized object.  Unknown
 	 BLK extent and alias set zero conservatively cover every segment.  */
       rtx mem = gen_rtx_MEM (BLKmode, address);
@@ -9557,6 +9564,10 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	{
 	  memory = matrix_memory (mode, exp, 0);
 	  lhs = matrix_register (mode, exp, 1);
+	  concat[0] = concat_operand_sources
+	    (CALL_EXPR_ARG (exp, 1), d.type, chunks, group, sources[0]);
+	  if (concat[0] && dump_file)
+	    fprintf (dump_file, "Use concat inputs for store\n");
 	}
       else
 	{
