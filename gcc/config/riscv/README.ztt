@@ -87,8 +87,10 @@ receives its own attribute nodes; option pragmas and declaration-specific
 attributes must not modify the shared inputs.
 
 Ordinary function signatures use a temporary GC-rooted vector for each
-used prototype.  Nominal Scalar signatures retain their separate cache;
-unused prototypes allocate no type vector.  Both caches end at registration.
+used prototype.  Nominal Scalar signatures use a separate destination-block
+cache, allocating the TC/arity vector only for a used destination type.
+Unused prototypes and destinations allocate no type vector.  Both caches
+end at registration; later lazy declarations do not retain these caches.
 
 Datatype name fragments are cached by descriptor and alias kind.  The
 profile-independent cache contains text only; declarations, type nodes

@@ -1592,7 +1592,11 @@ static GTY (()) tree nominal_scalar_decls[3 * numeric_scalar_dtype_count
 					+ 2 * TYPE_MAX];
 static GTY (()) tree nominal_extended_decls[nominal_extended_count];
 static GTY (()) vec<tree, va_gc> *nominal_broadcast_decls;
-static GTY (()) vec<tree, va_gc> *nominal_registration_types;
+struct GTY (()) nominal_registration_cache
+{
+  vec<tree, va_gc> *blocks[TYPE_MAX];
+};
+static GTY (()) nominal_registration_cache *nominal_registration_types;
 
 static bool
 nominal_extended_p (unsigned int code)
@@ -3020,17 +3024,24 @@ nominal_registration_type (type_index dst, unsigned int c, unsigned int nargs)
 {
   gcc_assert (nargs >= 1 && nargs <= 3);
   gcc_assert (c < numeric_scalar_dtype_count && nominal_scalar_types[c]);
-  unsigned int key = (dst * numeric_scalar_dtype_count + c) * 3 + nargs - 1;
-  tree ftype = nominal_registration_types
-    ? (*nominal_registration_types)[key] : NULL_TREE;
+  unsigned int key = c * 3 + nargs - 1;
+  vec<tree, va_gc> *entries = nullptr;
+  if (nominal_registration_types)
+    {
+      vec<tree, va_gc> *&block = nominal_registration_types->blocks[dst];
+      if (!block)
+	vec_safe_grow_cleared (block, numeric_scalar_dtype_count * 3, true);
+      entries = block;
+    }
+  tree ftype = entries ? (*entries)[key] : NULL_TREE;
   if (!ftype)
     {
       tree m = ztt_m_type_nodes[dst], scalar = nominal_scalar_types[c];
       ftype = nargs == 1 ? build_function_type_list (m, scalar, NULL_TREE)
 	: nargs == 2 ? build_function_type_list (m, m, scalar, NULL_TREE)
 	: build_function_type_list (m, m, m, scalar, NULL_TREE);
-      if (nominal_registration_types)
-	(*nominal_registration_types)[key] = ftype;
+      if (entries)
+	(*entries)[key] = ftype;
     }
   return ftype;
 }
@@ -5713,8 +5724,8 @@ register_functions ()
   if (!in_lto_p)
     {
       register_nominal_scalars ();
-      vec_safe_grow_cleared (nominal_registration_types,
-			    TYPE_MAX * numeric_scalar_dtype_count * 3, true);
+      nominal_registration_types
+	= ggc_cleared_alloc<nominal_registration_cache> ();
     }
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
@@ -5828,7 +5839,13 @@ register_functions ()
     }
   for (auto &entries : registration_function_types)
     vec_free (entries);
-  vec_free (nominal_registration_types);
+  if (nominal_registration_types)
+    {
+      for (auto &entries : nominal_registration_types->blocks)
+	vec_free (entries);
+      ggc_free (nominal_registration_types);
+      nominal_registration_types = nullptr;
+    }
   current_optimize_pragma = saved_optimize_pragma;
   functions_registered_p = true;
 }
