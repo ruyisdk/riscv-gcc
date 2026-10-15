@@ -9130,14 +9130,43 @@ expand_matmul (const builtin_description &d, unsigned int lhs_dtype,
 	     && operand_equal_p (CALL_EXPR_ARG (exp, 1),
 			 CALL_EXPR_ARG (exp, 2), 0))
     ? lhs : matrix_register (rhs_mode, exp, 2);
+  const auto &shape = *matmul_shape (d.prototype);
+  type_index lhs_type = matrix_type_index
+    (lhs_dtype, shape.lhs_column ? shape.squares : 1,
+     shape.lhs_column ? 1 : shape.squares);
+  type_index rhs_type = matrix_type_index
+    (rhs_dtype, shape.rhs_column ? shape.squares : 1,
+     shape.rhs_column ? 1 : shape.squares);
+  rtx lhs_sources[2], rhs_sources[2];
+  /* Unequal packet widths can increase spill pressure after substitution.  */
+  bool same_steps = formation.lhs_step == formation.rhs_step;
+  bool lhs_concat = same_steps && concat_operand_sources
+    (CALL_EXPR_ARG (exp, 1), lhs_type, formation.insns, formation.lhs_step,
+     lhs_sources);
+  bool rhs_concat = same_steps && concat_operand_sources
+    (CALL_EXPR_ARG (exp, 2), rhs_type, formation.insns, formation.rhs_step,
+     rhs_sources);
+  if (dump_file)
+    {
+      if (lhs_concat)
+	fprintf (dump_file, "Use concat inputs for matmul operand 1\n");
+      if (rhs_concat)
+	fprintf (dump_file, "Use concat inputs for matmul operand 2\n");
+    }
   rtx descriptor = GEN_INT (dtype);
   rtx variant = GEN_INT (matmul_variant (d.expansion));
   for (unsigned int i = 0; i < formation.insns; ++i)
     {
-      rtx a = simplify_gen_subreg
-	(lhs_part, lhs, lhs_mode, GET_MODE_SIZE (lhs_part) * i);
-      rtx b = simplify_gen_subreg
-	(rhs_part, rhs, rhs_mode, GET_MODE_SIZE (rhs_part) * i);
+      rtx a = lhs_concat
+	? concat_operand_part (lhs_sources, formation.insns,
+			       formation.lhs_step, i)
+	: simplify_gen_subreg
+	    (lhs_part, lhs, lhs_mode, GET_MODE_SIZE (lhs_part) * i);
+      rtx b = rhs_concat
+	? concat_operand_part (rhs_sources, formation.insns,
+			       formation.rhs_step, i)
+	: simplify_gen_subreg
+	    (rhs_part, rhs, rhs_mode, GET_MODE_SIZE (rhs_part) * i);
       if (floating_descriptor_p (dtype | lhs_dtype | rhs_dtype)
 	  || (dtype & (1U << 29)))
 	emit_insn (gen_ztt_typed_acc_mmul_flags

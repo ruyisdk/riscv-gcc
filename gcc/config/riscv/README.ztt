@@ -133,10 +133,12 @@ after profile/type checks.
 Structural folding
 ------------------
 
-Unary, scalar and elementwise operations can read a single-use concat's halves
-when each half contains complete hardware operands in the same local window.
+Unary, scalar, elementwise and matmul operations can read a single-use concat's
+halves when each contains complete hardware operands in the same local window.
 Packet offsets stay within each half and preserve the original operation order.
 Elementwise inputs are checked independently with their own packet widths.
+Matmul inputs retain their row/column shapes, paired windows and ACC fold order.
+Their packet widths must match to avoid mixed-width spill pressure.
 The concat access remains visible to ownership checking; the instruction
 order and destination formation are unchanged.  A single-use same-mode
 carrier view can be traversed when its original type matches exactly.
