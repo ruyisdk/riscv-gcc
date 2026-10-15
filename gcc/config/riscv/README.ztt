@@ -417,9 +417,11 @@ control output and instruction length.  M-to-ACC requires a matching Md
 for every complete transfer packet, including packed ACC groups.  It still
 sets every destination Ad and transfers every source packet.  A whole-group
 fact cannot substitute for separately prepared packets.
-Paired-value zip/unzip similarly requires matching Md for both complete
-square groups.  It keeps the original operation, drops only redundant
-preparation and records the two unchanged descriptors for later consumers.
+Paired-value zip/unzip checks Md separately for both complete square
+groups.  Each matching half skips its save/set/reload; an unmatched half
+retains its full preparation and private storage.  When both match, the
+prepared form drops the private operands.  The tied value, original
+operation and both descriptors remain for subsequent consumers.
 Conversion and structural unary operations also reuse complete source
 packets.  Destination setup remains unless its complete packets already
 match.  The original operation, rounding and status effects remain.  An

@@ -9987,7 +9987,7 @@ common_prepared_length (rtx *operands, int code)
 /* Both tied operands retain
    their full old payload across destructive datatype preparation.  */
 const char *
-output_zip_state (rtx *operands, bool prepared)
+output_zip_state (rtx *operands, unsigned int prepared)
 {
   static const char *const templates[] = {
     "mcolzip.ew\t%0,%1", "mrowzip.ew\t%0,%1",
@@ -9995,26 +9995,28 @@ output_zip_state (rtx *operands, bool prepared)
   };
   unsigned int variant = UINTVAL (operands[5]);
   gcc_assert (variant < ARRAY_SIZE (templates));
-  if (!prepared)
+  gcc_assert (prepared < 4);
+  if (prepared != 3)
     {
       rtx base = XEXP (operands[6], 0);
       bool group = m_nregs (GET_MODE (operands[0])) > 1;
       for (unsigned int i = 0; i < 2; ++i)
-	for (bool load : { false, true })
-	  {
-	    if (group)
-	      {
-		rtx args[] = { operands[8], base };
-		output_asm_insn ("mv\t%0,%1", args);
-	      }
-	    output_acc_m_transfer (operands[i], group ? operands[8] : base,
-				   operands[7], load);
-	    if (!load)
-	      {
-		rtx args[] = { operands[i], operands[4] };
-		output_asm_insn ("msettyp\t%0,%1", args);
-	      }
-	  }
+	if (!(prepared & (1U << i)))
+	  for (bool load : { false, true })
+	    {
+	      if (group)
+		{
+		  rtx args[] = { operands[8], base };
+		  output_asm_insn ("mv\t%0,%1", args);
+		}
+	      output_acc_m_transfer (operands[i], group ? operands[8] : base,
+				     operands[7], load);
+	      if (!load)
+		{
+		  rtx args[] = { operands[i], operands[4] };
+		  output_asm_insn ("msettyp\t%0,%1", args);
+		}
+	    }
     }
   output_asm_insn (templates[variant], operands);
   return "";
@@ -10044,15 +10046,17 @@ output_zip_value_state (rtx *operands, bool prepared)
 		  operands[prepared ? 2 : 3],
 		  prepared ? NULL_RTX : operands[4],
 		  prepared ? NULL_RTX : operands[5],
-		  prepared ? NULL_RTX : operands[6] };
-  return output_zip_state (parts, prepared);
+		  prepared ? NULL_RTX : operands[7] };
+  return output_zip_state (parts, prepared ? 3 : UINTVAL (operands[6]));
 }
 
 unsigned int
 zip_value_length (rtx *operands)
 {
   unsigned int r = m_nregs (GET_MODE (operands[0])) / 2;
-  return 4 * (1 + 2 * (r == 1 ? 3 : 4 * r + 1));
+  unsigned int prepared = UINTVAL (operands[6]);
+  unsigned int pending = 2 - !!(prepared & 1) - !!(prepared & 2);
+  return 4 * (1 + pending * (r == 1 ? 3 : 4 * r + 1));
 }
 
 /* A late zero descriptor marks matching destination packets.  */
@@ -10675,7 +10679,7 @@ lower_explicit_state ()
 	  rtx scratch = replace_equiv_address (slot, address);
 	  emit_insn (gen_ztt_state_zip_value
 	    (mode, Pmode, SET_DEST (value_set), XVECEXP (src, 0, 0), descriptor,
-	     XVECEXP (src, 0, 1), scratch, stride));
+	     XVECEXP (src, 0, 1), scratch, stride, const0_rtx));
 	  rtx_insn *sequence = get_insns ();
 	  end_sequence ();
 	  emit_insn_before (sequence, insn);
@@ -12251,7 +12255,7 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
       mask = XVECLEN (src, 0) == 4 ? 4 : 0;
       break;
     case UNSPECV_ZTT_STATE_ZIP_VALUE:
-      mask = XVECLEN (src, 0) == 4 ? 2 : 0;
+      mask = XVECLEN (src, 0) == 5 ? 2 : 0;
       break;
     case UNSPECV_ZTT_BROADCAST:
     case UNSPECV_ZTT_STATE_ROWCOL:
@@ -12769,24 +12773,40 @@ reuse_local_md ()
 		  continue;
 		case UNSPECV_ZTT_STATE_ZIP_VALUE:
 		  {
-		    if (XVECLEN (src, 0) != 4)
+		    if (XVECLEN (src, 0) != 5)
 		      break;
 		    group = SET_DEST (set);
 		    descriptor = XVECEXP (src, 0, 1);
 		    unsigned int step = m_nregs (GET_MODE (group)) / 2;
 		    gcc_assert (step && rtx_equal_p (group, XVECEXP (src, 0, 0)));
-		    if (state.matches_packets (group, descriptor, step))
+		    unsigned int mask = 0;
+		    for (unsigned int i = 0; i < 2; ++i)
+		      if (state.matches
+			    (gen_rtx_REG (matrix_mode (step),
+					  REGNO (group) + i * step),
+			     descriptor))
+			mask |= 1U << i;
+		    if (mask)
 		      {
-			rtx prepared = gen_ztt_state_zip_value_prepared
-			  (GET_MODE (group), group, group, XVECEXP (src, 0, 2));
-			bool changed = validate_change
-			  (insn, &PATTERN (insn), prepared, false);
+			bool changed;
+			if (mask == 3)
+			  {
+			    rtx prepared = gen_ztt_state_zip_value_prepared
+			      (GET_MODE (group), group, group,
+			       XVECEXP (src, 0, 2));
+			    changed = validate_change
+			      (insn, &PATTERN (insn), prepared, false);
+			  }
+			else
+			  changed = validate_change
+			    (insn, &XVECEXP (src, 0, 4), GEN_INT (mask), false);
 			gcc_assert (changed);
 			df_insn_rescan (insn);
 			cleanup = true;
 			if (dump_file)
-			  fprintf (dump_file, "Reuse Md for zip at insn %d\n",
-				   INSN_UID (insn));
+			  fprintf (dump_file,
+				   "Reuse Md for zip at insn %d: packets %u\n",
+				   INSN_UID (insn), mask);
 		      }
 		    note_stores (insn, invalidate_md_store, &state);
 		    for (unsigned int i = 0; i < 2; ++i)

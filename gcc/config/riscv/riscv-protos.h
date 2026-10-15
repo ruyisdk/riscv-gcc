@@ -966,7 +966,7 @@ unsigned int elementwise_length (rtx *, bool);
 const char *output_indexed_state (rtx *, unsigned int = 0);
 const char *output_shared_scatter_state (rtx *);
 unsigned int shared_scatter_length (rtx *);
-const char *output_zip_state (rtx *, bool = false);
+const char *output_zip_state (rtx *, unsigned int = 0);
 unsigned int zip_length (rtx *);
 const char *output_zip_value_state (rtx *, bool = false);
 unsigned int zip_value_length (rtx *);

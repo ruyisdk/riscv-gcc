@@ -1154,12 +1154,15 @@
           [(match_operand:ZTT_M 1 "register_operand" "0")
            (match_operand:P 2 "register_operand" "r")
            (match_operand 3 "const_int_operand" "n")
-           (match_operand:P 5 "reg_or_0_operand" "rJ")]
+           (match_operand:P 5 "reg_or_0_operand" "rJ")
+           (match_operand 6 "const_int_operand" "n")]
           UNSPECV_ZTT_STATE_ZIP_VALUE))
    (clobber (match_operand 4 "memory_operand" "=A"))
-   (clobber (match_scratch:P 6 "=&r"))]
+   (clobber (match_scratch:P 7 "=&r"))]
   "TARGET_ZTT && riscv_ztt::runtime_profile_p ()
-   && riscv_ztt::m_nregs (<ZTT_M:MODE>mode) >= 2"
+   && riscv_ztt::m_nregs (<ZTT_M:MODE>mode) >= 2
+   && UINTVAL (operands[6]) < 3
+   && (operands[6] == const0_rtx || reload_completed)"
 {
   return riscv_ztt::output_zip_value_state (operands);
 }
