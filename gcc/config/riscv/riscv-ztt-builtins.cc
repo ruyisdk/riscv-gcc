@@ -10232,7 +10232,8 @@ output_acc_to_m (rtx *operands)
       rtx args[] = { gen_rtx_REG (matrix_mode (r), REGNO (operands[0]) + i * r),
 		     GEN_INT (REGNO (operands[1]) - ACC_REG_FIRST + i * packet),
 		     operands[2] };
-      output_asm_insn ("msettyp\t%0,%2", args);
+      if (operands[2] != const0_rtx)
+	output_asm_insn ("msettyp\t%0,%2", args);
       output_asm_insn ("mmov.m.a\t%0,acc%c1", args);
     }
   return "";
@@ -13025,13 +13026,26 @@ reuse_local_md ()
 		    unsigned int step = acc_m_nregs (mode);
 		    unsigned int count = acc_full_m_nregs (mode);
 		    rtx dest = SET_DEST (set);
+		    descriptor = XVECEXP (src, 0, 1);
 		    gcc_assert (m_nregs (GET_MODE (dest)) == count);
+		    if (state.matches_packets (dest, descriptor, step))
+		      {
+			bool changed = validate_change
+			  (insn, &XVECEXP (src, 0, 1), const0_rtx, false);
+			gcc_assert (changed);
+			df_insn_rescan (insn);
+			cleanup = true;
+			if (dump_file)
+			  fprintf (dump_file,
+				   "Reuse Md for ACC-to-M at insn %d\n",
+				   INSN_UID (insn));
+		      }
 		    note_stores (insn, invalidate_md_store, &state);
 		    /* Each transfer packet establishes its own base Md.  */
 		    for (unsigned int i = 0; i < count; i += step)
 		      state.remember
 			(gen_rtx_REG (matrix_mode (step), REGNO (dest) + i),
-			 XVECEXP (src, 0, 1));
+			 descriptor);
 		    continue;
 		  }
 		case UNSPECV_ZTT_ACC_FROM_M:
