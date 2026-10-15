@@ -11964,6 +11964,8 @@ class local_md_state
   bool descriptor_used[32] = {};
   unsigned int next_definition = 0;
   rtx scalar_type = nullptr;
+  /* Some facts may depend on a physical GPR instead of a value identity.  */
+  bool register_descriptors = false;
 
   static rtx substitute (rtx x, const_rtx, void *data)
   {
@@ -11981,12 +11983,14 @@ public:
     memset (descriptor_used, 0, sizeof (descriptor_used));
     next_definition = 0;
     scalar_type = nullptr;
+    register_descriptors = false;
   }
 
   void clear_ame ()
   {
     memset (facts, 0, sizeof (facts));
     scalar_type = nullptr;
+    register_descriptors = false;
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
       if (fixed_regs[GP_REG_FIRST + i] || global_regs[GP_REG_FIRST + i])
 	{
@@ -12003,6 +12007,7 @@ public:
       if (f.group && (f.identity || !CONST_INT_P (f.descriptor)
 		      || !other.matches (f.group, f.descriptor)))
 	f.group = nullptr;
+    register_descriptors = false;
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
       if (constants[i] && (!other.constants[i]
 			  || !rtx_equal_p (constants[i], other.constants[i])))
@@ -12155,13 +12160,19 @@ public:
 
   void invalidate (rtx reg)
   {
-    for (auto &f : facts)
-      if (f.group && (reg_overlap_mentioned_p (reg, f.group)
-		      || (!f.identity
-			  && reg_overlap_mentioned_p (reg, f.descriptor))))
-	f.group = nullptr;
-    unsigned int first = GP_REG_FIRST, end = GP_REG_FIRST + GP_REG_NUM;
     bool direct = REG_P (reg);
+    bool matrix = !direct || (REGNO (reg) < M_REG_FIRST + M_REG_NUM
+			     && END_REGNO (reg) > M_REG_FIRST);
+    bool descriptor = register_descriptors
+      && (!direct || (REGNO (reg) < GP_REG_FIRST + GP_REG_NUM
+		      && END_REGNO (reg) > GP_REG_FIRST));
+    if (matrix || descriptor)
+      for (auto &f : facts)
+	if (f.group && ((matrix && reg_overlap_mentioned_p (reg, f.group))
+		       || (descriptor && !f.identity
+			   && reg_overlap_mentioned_p (reg, f.descriptor))))
+	  f.group = nullptr;
+    unsigned int first = GP_REG_FIRST, end = GP_REG_FIRST + GP_REG_NUM;
     if (direct)
       {
 	first = MAX (first, REGNO (reg));
@@ -12239,8 +12250,9 @@ public:
     gcc_assert (REG_P (group) && M_REG_P (REGNO (group))
 		&& REG_P (descriptor) && GP_REG_P (REGNO (descriptor)));
     invalidate (group);
-    facts[REGNO (group) - M_REG_FIRST]
-      = { group, descriptor_value (descriptor), descriptor_identity (descriptor) };
+    auto &f = facts[REGNO (group) - M_REG_FIRST];
+    f = { group, descriptor_value (descriptor), descriptor_identity (descriptor) };
+    register_descriptors |= !f.identity && REG_P (f.descriptor);
   }
 };
 
@@ -15713,6 +15725,8 @@ run_md_reuse_selftests ()
     rtx wide = gen_rtx_REG (DImode, 10);
     for (rtx reg : { wide, gen_rtx_REG (TImode, 12),
 		     gen_rtx_REG (DFmode, FP_REG_FIRST),
+		     gen_rtx_REG (RVVM1SImode, V_REG_FIRST),
+		     gen_rtx_REG (SImode, FRM_REGNUM),
 		     gen_rtx_REG (ZTTMR16mode, M_REG_FIRST),
 		     gen_rtx_REG (ZTTAR4mode, ACC_REG_FIRST),
 		     gen_rtx_REG (Pmode, FIRST_PSEUDO_REGISTER + 7),
@@ -15732,6 +15746,7 @@ run_md_reuse_selftests ()
 	    rtx reg = gen_rtx_REG (Pmode, GP_REG_FIRST + i);
 	    known.record_constant (reg, GEN_INT (0x40000000 + i));
 	    known.note_descriptor_use (reg);
+	    known.remember (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + i), reg);
 	    dynamic.record_copy (reg, i);
 	    dynamic.remember (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + i), reg);
 	  }
@@ -15747,10 +15762,43 @@ run_md_reuse_selftests ()
 	    if (!fixed_regs[REGNO (reg)] && !global_regs[REGNO (reg)])
 	      ASSERT_EQ (known.redundant_descriptor_p (reg, value), !hit);
 	    rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + i);
+	    ASSERT_EQ (known.matches (group, value),
+		       !reg_overlap_mentioned_p (write, group));
 	    ASSERT_EQ (dynamic.matches (group, reg),
 		       !hit && !reg_overlap_mentioned_p (write, group));
 	  }
       }
+    for (rtx descriptor : { gen_rtx_REG (QImode, 10),
+			    gen_rtx_REG (Pmode, STACK_POINTER_REGNUM) })
+      for (unsigned int count : { 1U, 4U, 16U, 32U })
+	{
+	  rtx matrix = gen_rtx_REG (matrix_mode (count), M_REG_FIRST);
+	  local_md_state original;
+	  original.remember (matrix, descriptor);
+	  for (rtx write : writes)
+	    {
+	      local_md_state copy = original;
+	      copy.invalidate (write);
+	      ASSERT_EQ (copy.matches (matrix, descriptor),
+			 !reg_overlap_mentioned_p (write, matrix)
+			 && !reg_overlap_mentioned_p (write, descriptor));
+	    }
+	  for (unsigned int reset = 0; reset < 3; ++reset)
+	    {
+	      local_md_state copy = original;
+	      if (reset == 0)
+		copy.clear ();
+	      else if (reset == 1)
+		copy.clear_ame ();
+	      else
+		copy.intersect_constants (original);
+	      ASSERT_FALSE (copy.matches (matrix, descriptor));
+	      copy.remember (matrix, descriptor);
+	      ASSERT_TRUE (copy.matches (matrix, descriptor));
+	      copy.invalidate (descriptor);
+	      ASSERT_FALSE (copy.matches (matrix, descriptor));
+	    }
+	}
   }
   for (unsigned int count : { 1U, 2U, 4U, 8U, 16U, 32U })
     for (unsigned int step = 1; step <= count && step <= 16; step *= 2)
