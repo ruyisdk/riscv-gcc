@@ -12432,6 +12432,39 @@ md_read_csr_p (int code)
     }
 }
 
+/* These scalar FP operations do not write Md or amestype.  */
+static bool
+md_preserving_fp_p (int code)
+{
+  switch (code)
+    {
+    case CODE_FOR_copysignhf3:
+    case CODE_FOR_copysignsf3:
+    case CODE_FOR_copysigndf3:
+    case CODE_FOR_fminhf3:
+    case CODE_FOR_fminsf3:
+    case CODE_FOR_fmindf3:
+    case CODE_FOR_fmaxhf3:
+    case CODE_FOR_fmaxsf3:
+    case CODE_FOR_fmaxdf3:
+    case CODE_FOR_fminmhf3:
+    case CODE_FOR_fminmsf3:
+    case CODE_FOR_fminmdf3:
+    case CODE_FOR_fmaxmhf3:
+    case CODE_FOR_fmaxmsf3:
+    case CODE_FOR_fmaxmdf3:
+    case CODE_FOR_fclasshfsi:
+    case CODE_FOR_fclasshfdi:
+    case CODE_FOR_fclasssfsi:
+    case CODE_FOR_fclasssfdi:
+    case CODE_FOR_fclassdfsi:
+    case CODE_FOR_fclassdfdi:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Remember one complete private spill until its inputs or memory change.  */
 class local_raw_spill
 {
@@ -12923,7 +12956,7 @@ reuse_cleaned_descriptors ()
 	    continue;
 	  if (md_preserving_fence_p (code))
 	    continue;
-	  if (md_read_csr_p (code))
+	  if (md_read_csr_p (code) || md_preserving_fp_p (code))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -13175,7 +13208,7 @@ reuse_local_md ()
 			 INSN_UID (insn));
 	      continue;
 	    }
-	  if (md_read_csr_p (code))
+	  if (md_read_csr_p (code) || md_preserving_fp_p (code))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -13820,6 +13853,58 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    const int codes[] = {
+      CODE_FOR_copysignhf3, CODE_FOR_copysignsf3, CODE_FOR_copysigndf3,
+      CODE_FOR_fminhf3, CODE_FOR_fminsf3, CODE_FOR_fmindf3,
+      CODE_FOR_fmaxhf3, CODE_FOR_fmaxsf3, CODE_FOR_fmaxdf3,
+      CODE_FOR_fminmhf3, CODE_FOR_fminmsf3, CODE_FOR_fminmdf3,
+      CODE_FOR_fmaxmhf3, CODE_FOR_fmaxmsf3, CODE_FOR_fmaxmdf3,
+      CODE_FOR_fclasshfsi, CODE_FOR_fclasshfdi, CODE_FOR_fclasssfsi,
+      CODE_FOR_fclasssfdi, CODE_FOR_fclassdfsi, CODE_FOR_fclassdfdi
+    };
+    for (int code : codes)
+      ASSERT_TRUE (md_preserving_fp_p (code));
+    const int excluded[] = { -1, CODE_FOR_nothing, CODE_FOR_riscv_ztt_none,
+			     CODE_FOR_riscv_ztt_release, CODE_FOR_fminrvvm1sf3,
+			     CODE_FOR_fence };
+    for (int code : excluded)
+      ASSERT_FALSE (md_preserving_fp_p (code));
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx copy = gen_rtx_REG (Pmode, 11);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx fp = gen_rtx_REG (SFmode, FP_REG_FIRST);
+    rtx_insn *classify = emit_insn (Pmode == DImode
+      ? gen_fclasssfdi (reg, fp) : gen_fclasssfsi (reg, fp));
+    if (TARGET_HARD_FLOAT)
+      ASSERT_TRUE (md_preserving_fp_p (recog_memoized (classify)));
+    for (bool constant : { false, true })
+      {
+	local_md_state state;
+	if (constant)
+	  {
+	    state.record_constant (reg, GEN_INT (32));
+	    state.record_constant (copy, GEN_INT (32));
+	    ASSERT_FALSE (state.record_scalar_type (copy));
+	  }
+	state.remember (matrix, reg);
+	if (!constant)
+	  state.record_copy (copy, state.descriptor_identity (reg));
+	note_stores (classify, invalidate_md_store, &state);
+	ASSERT_RTX_EQ (state.descriptor_value (reg), reg);
+	ASSERT_TRUE (state.matches (matrix, copy));
+	ASSERT_FALSE (state.matches (matrix, reg));
+	if (constant)
+	  ASSERT_TRUE (state.record_scalar_type (copy));
+      }
+    rtx mem = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 12));
+    set_mem_attrs_for_spill (mem);
+    local_raw_spill spill;
+    ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (mem, matrix)));
+    ASSERT_FALSE (spill.redundant_reload_p (PATTERN (classify)));
+    ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, mem)));
+  }
   {
     const struct { machine_mode full, half, source; } cases[] = {
       { ZTTAR1X2mode, ZTTAR1mode, ZTTMR1mode },

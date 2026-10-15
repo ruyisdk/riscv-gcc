@@ -491,6 +491,9 @@ saved scale register, without materializing an additional zero term.  Early
 expansion, fixed-offset and mixed RVV/AME sizes retain their existing form.
 
 Calls, basic asm, unknown typed operations and unknown UNSPECs clear all facts.
+Recognized scalar copysign, min/max and classification instructions preserve
+Md and amestype facts. Their instructions and floating-point status effects
+remain; any result GPR is invalidated. Private spill rules are unchanged.
 Empty extended asm with only GPR operands and an optional compiler memory
 clobber preserves Md and scalar-datatype facts.  Other extended asm clears
 AME state facts but preserves unchanged ordinary GPR constants and value
