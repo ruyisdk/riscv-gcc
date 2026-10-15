@@ -7796,6 +7796,73 @@ structure_zero_p (tree value, type_index type, gimple **producers,
   return true;
 }
 
+/* Exact integer zero identities retain the other complete operand.  */
+static tree
+binary_zero_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  builtin_description d;
+  elementwise_description operation;
+  bool carrier = integer_matrix_code_p (code);
+  unsigned int nargs = gimple_call_num_args (stmt);
+  if (carrier)
+    {
+      if (nargs != 5)
+	return NULL_TREE;
+      tree args[5];
+      for (unsigned int i = 0; i < 5; ++i)
+	args[i] = gimple_call_arg (stmt, i);
+      if (!describe_integer_matrix (code, nargs, args, d, operation)
+	  || d.type != operation.data || d.type != operation.count)
+	return NULL_TREE;
+    }
+  else if (nargs != 2)
+    return NULL_TREE;
+  else if (code < ZTT_BUILTIN_MAX)
+    d = builtin_description_for (code);
+  else
+    {
+      if (!decode_elementwise_builtin (code, operation))
+	return NULL_TREE;
+      d = builtin_description_for (operation.canonical);
+      if (d.type != operation.data || d.type != operation.count)
+	return NULL_TREE;
+    }
+  bool commutative = d.expansion == EXPAND_MADD_EW
+    || d.expansion == EXPAND_MOR_EW || d.expansion == EXPAND_MXOR_EW;
+  if ((!commutative && d.expansion != EXPAND_MSUB_EW)
+      || d.type == TYPE_MAX || types[d.type].accumulator
+      || !type_nregs (d.type)
+      || floating_descriptor_p (types[d.type].descriptor))
+    return NULL_TREE;
+  tree lhs_type = TREE_TYPE (gimple_call_lhs (stmt));
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      tree value = gimple_call_arg (stmt, i);
+      if (TREE_CODE (value) != SSA_NAME
+	  || TYPE_MODE (TREE_TYPE (value)) != TYPE_MODE (lhs_type)
+	  || (!carrier && type_for_tree (TREE_TYPE (value)) != d.type))
+	return NULL_TREE;
+    }
+  if (!carrier && type_for_tree (lhs_type) != d.type)
+    return NULL_TREE;
+  gimple *producers[6];
+  unsigned int count = 0;
+  /* MSUB computes its second input minus its first.  */
+  unsigned int zero = commutative ? 1 : 0;
+  tree result = gimple_call_arg (stmt, 1 - zero);
+  if (!structure_zero_p (gimple_call_arg (stmt, zero), d.type, producers, count))
+    {
+      if (!commutative
+	  || !structure_zero_p (result, d.type, producers, count))
+	return NULL_TREE;
+      result = gimple_call_arg (stmt, zero);
+    }
+  if (!local_structure_producers_p (gsi, producers, count))
+    return NULL_TREE;
+  return useless_type_conversion_p (lhs_type, TREE_TYPE (result)) ? result
+    : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
+}
+
 /* ID coordinates are nonnegative.  Preserve them through conversions whose
    destination covers that range, retaining calls and constructor checks.  */
 static bool
@@ -7993,10 +8060,10 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
       || !gimple_call_lhs (stmt))
     return nullptr;
   tree lhs = gimple_call_lhs (stmt);
-  tree value;
-  if (code >= ZTT_BUILTIN_MAX)
+  tree value = binary_zero_value (code, gsi, stmt);
+  if (!value && code >= ZTT_BUILTIN_MAX)
     value = identity_indexed_value (code, gsi, stmt);
-  else
+  else if (!value)
     {
       const auto d = builtin_description_for (code);
       bool zip = d.prototype == PROTO_M_M && zip_variant (d.expansion) >= 0;

@@ -215,6 +215,12 @@ Its GIMPLE ownership witnesses remain; ordinary RTL DCE may remove the
 unused zero value.  Loaded zeros, floating addition and arbitrary indices
 do not qualify.
 
+Same-datatype integer addition, OR and XOR reuse the other complete value
+when either operand is an explicit zero.  MSUB computes B-A, so its first
+operand must be zero.  The bounded zero proof applies to grouped M values.  Mixed
+datatypes, floating arithmetic and intervening state boundaries do not
+qualify, and the zero constructor remains an ownership witness.
+
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has
