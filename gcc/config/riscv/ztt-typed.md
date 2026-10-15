@@ -1878,6 +1878,43 @@
   "#"
   [(set_attr "type" "multi")])
 
+(define_insn "@ztt_typed_acc_from_concat_<mode>"
+  [(set (match_operand:ZTT_XA 0 "register_operand" "=War")
+        (unspec:ZTT_XA
+          [(match_operand 1 "register_operand" "Wmr")
+           (match_operand 2 "register_operand" "Wmr")
+           (match_operand 3 "const_int_operand" "n")]
+          UNSPEC_ZTT_ACC_FROM_M))]
+  "TARGET_ZTT && GET_MODE (operands[1]) == GET_MODE (operands[2])
+   && riscv_ztt::acc_concat_mode_p (<ZTT_XA:MODE>mode, GET_MODE (operands[1]))"
+  "#"
+  [(set_attr "type" "multi")])
+
+(define_insn_and_split "@ztt_acc_from_concat_<ZTT_XA:mode>_<P:mode>"
+  [(set (match_operand:ZTT_XA 0 "register_operand" "=War")
+        (unspec_volatile:ZTT_XA
+          [(match_operand 1 "register_operand" "Wmr")
+           (match_operand 2 "register_operand" "Wmr")
+           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 5 "reg_or_0_operand" "rJ")
+           (const_int 0)]
+          UNSPECV_ZTT_ACC_FROM_M))
+   (clobber (match_operand 4 "memory_operand" "=A"))
+   (clobber (match_scratch:P 6 "=&r"))]
+  "TARGET_ZTT && GET_MODE (operands[1]) == GET_MODE (operands[2])
+   && GET_MODE (operands[4]) == GET_MODE (operands[1])
+   && riscv_ztt::acc_concat_mode_p (<ZTT_XA:MODE>mode, GET_MODE (operands[1]))"
+  "#"
+  "&& reload_completed"
+  [(const_int 0)]
+{
+  riscv_ztt::split_acc_from_concat (operands);
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::acc_from_concat_length (operands)"))])
+
 (define_insn "@ztt_acc_from_m_<ZTT_XA:mode>_<P:mode>"
   [(set (match_operand:ZTT_XA 0 "register_operand" "=War")
         (unspec_volatile:ZTT_XA

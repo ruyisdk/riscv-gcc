@@ -150,6 +150,9 @@ Same-mode carrier views replaced by TER do not block this substitution.
 Other intervening M definitions remain boundaries.
 Typed stores can use the same complete-half sources without changing their
 addresses, strides, packet order or alignment-staging paths.
+M-to-ACC can retain separate complete-half sources for a single local ACC
+consumer with room left in the M bank.  The result stays whole until allocation;
+post-reload splitting uses two existing transfers at whole packet boundaries.
 
 The GIMPLE hook can replace extraction from a single-use concatenation
 with the corresponding complete source value.  Exact types and shape

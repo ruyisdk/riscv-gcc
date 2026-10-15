@@ -10,6 +10,7 @@
 #define MP_T(T,S) MP_T_ (T,S)
 #define LOAD(P) MP_NAME (mls_rm,MP_TYPE,1x1) (P)
 #define STORE(P,V) __riscv_ztt_mss_rm (P,V)
+/* The post-transfer barrier keeps the whole-group preparation path.  */
 #define CASE(N,GAP,KEEP) \
 void __attribute__((noipa)) mp_##N \
   (const MP_CARRIER *ia, const MP_CARRIER *ib, MP_CARRIER *out, \
@@ -19,6 +20,7 @@ void __attribute__((noipa)) mp_##N \
   MP_T (MP_TYPE,1x2) p = MP_NAME (mconcat_m,MP_TYPE,1x2) (a,b); \
   GAP; \
   MP_T (MP_TYPE,accx2) acc = MP_NAME (mcopy_m2a,MP_TYPE,accx2) (p); \
+  __asm__ volatile ("" ::: "memory"); \
   STORE (out,MP_NAME (mcopy_a2m,MP_TYPE,1x2) (acc)); \
   KEEP; \
 }

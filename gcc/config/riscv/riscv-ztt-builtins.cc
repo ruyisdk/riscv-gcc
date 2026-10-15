@@ -8725,6 +8725,22 @@ concat_operand_part (rtx *sources, unsigned int insns, unsigned int step,
 			      GET_MODE_SIZE (mode) * (i % half_insns));
 }
 
+/* Avoid extending both recovered halves across an ACC spill boundary.  */
+static bool
+local_acc_result_p ()
+{
+  gimple *producer = currently_expanding_gimple_stmt;
+  tree value = producer ? gimple_get_lhs (producer) : NULL_TREE;
+  use_operand_p use;
+  gimple *consumer;
+  if (!value || TREE_CODE (value) != SSA_NAME
+      || !single_imm_use (value, &use, &consumer)
+      || !is_gimple_call (consumer))
+    return false;
+  gimple_stmt_iterator gsi = gsi_for_stmt (consumer);
+  return local_structure_producers_p (&gsi, &producer, 1);
+}
+
 static rtx
 expand_conversion (const builtin_description &d,
 		   const conversion_description &operation, tree exp)
@@ -9482,10 +9498,31 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 		     : gen_ztt_acc_zero (mode, Pmode, target, descriptor));
 	  return target;
 	case EXPAND_A_FROM_M:
+	{
 	  target = result_register (mode, target);
+	  rtx source = matrix_register (m_mode, exp, 0);
+	  unsigned int squares = types[d.type].columns;
+	  type_index input = matrix_type_index
+	    (dtype, d.prototype == PROTO_A_M_COLUMN ? squares : 1,
+	     d.prototype == PROTO_A_M_COLUMN ? 1 : squares);
+	  rtx sources[2];
+	  if (optimize && runtime_profile_p ()
+	      && acc_nregs (mode) >= 2 * acc_transfer_accs (mode)
+	      && acc_full_m_nregs (mode) < active_profile ()->mregs
+	      && local_acc_result_p ()
+	      && concat_operand_sources (CALL_EXPR_ARG (exp, 0), input,
+					 2, acc_full_m_nregs (mode) / 2, sources))
+	    {
+	      emit_insn (gen_ztt_typed_acc_from_concat
+			 (mode, target, sources[0], sources[1], descriptor));
+	      if (dump_file)
+		fprintf (dump_file, "Use concat inputs for M-to-ACC\n");
+	      return target;
+	    }
 	  emit_insn (gen_ztt_typed_acc_from_m
-		     (mode, target, matrix_register (m_mode, exp, 0), descriptor));
+		     (mode, target, source, descriptor));
 	  return target;
+	}
 	case EXPAND_M_FROM_A:
 	  target = result_register (m_mode, target);
 	  emit_insn (gen_ztt_acc_to_m
@@ -10931,6 +10968,45 @@ acc_from_m_length (rtx *operands)
   return 4 * length;
 }
 
+bool
+acc_concat_mode_p (machine_mode mode, machine_mode source)
+{
+  return acc_mode_supported_p (mode) && m_mode_p (source)
+    && acc_nregs (mode) >= 2 * acc_transfer_accs (mode)
+    && acc_full_m_nregs (mode) == 2 * m_nregs (source);
+}
+
+/* Keep the complete ACC definition until physical registers are assigned.  */
+void
+split_acc_from_concat (rtx *operands)
+{
+  machine_mode mode = GET_MODE (operands[0]);
+  unsigned int half = acc_nregs (mode) / 2;
+  unsigned int bits = acc_m_nregs (mode) * active_profile ()->uds
+		      / acc_transfer_accs (mode);
+  machine_mode part = acc_mode (bits, half);
+  gcc_assert (reload_completed && REG_P (operands[0]));
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      rtx dest = gen_rtx_REG (part, REGNO (operands[0]) + i * half);
+      rtx pattern = gen_ztt_acc_from_m
+	(part, Pmode, dest, operands[i + 1], operands[3], operands[4],
+	 operands[5], const0_rtx);
+      XEXP (XVECEXP (pattern, 0, 2), 0) = operands[6];
+      emit_insn (pattern);
+    }
+}
+
+unsigned int
+acc_from_concat_length (rtx *operands)
+{
+  machine_mode mode = GET_MODE (operands[0]);
+  unsigned int count = acc_nregs (mode) / acc_transfer_accs (mode);
+  unsigned int half_m = m_nregs (GET_MODE (operands[1]));
+  return 4 * (acc_nregs (mode) + 2 * count
+	      + (half_m == 1 ? 4 : 8 * half_m));
+}
+
 unsigned int
 acc_mmul_length (rtx *operands, bool mixed_p)
 {
@@ -11567,9 +11643,15 @@ lower_explicit_state ()
 	    break;
 	  }
 	case UNSPEC_ZTT_ACC_FROM_M:
-	  emit_insn (gen_ztt_acc_from_m
-		     (mode, Pmode, dest, XVECEXP (src, 0, 0), descriptor, scratch,
-		      stride ? stride : const0_rtx, const0_rtx));
+	  if (XVECLEN (src, 0) == 3)
+	    emit_insn (gen_ztt_acc_from_concat
+		       (mode, Pmode, dest, XVECEXP (src, 0, 0),
+			XVECEXP (src, 0, 1), descriptor, scratch,
+			stride ? stride : const0_rtx));
+	  else
+	    emit_insn (gen_ztt_acc_from_m
+		       (mode, Pmode, dest, XVECEXP (src, 0, 0), descriptor, scratch,
+			stride ? stride : const0_rtx, const0_rtx));
 	  break;
 	case UNSPEC_ZTT_ACC_MMUL:
 	  if (mixed_mul)
@@ -13594,6 +13676,26 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    const struct { machine_mode full, half, source; } cases[] = {
+      { ZTTAR1X2mode, ZTTAR1mode, ZTTMR1mode },
+      { ZTTAR4X2mode, ZTTAR4mode, ZTTMR4mode },
+      { ZTTAR1X4mode, ZTTAR1X2mode, ZTTMR2mode },
+      { ZTTAP2X4mode, ZTTAP2X2mode, ZTTMR1mode },
+      { ZTTAP4X16mode, ZTTAP4X8mode, ZTTMR2mode },
+      { ZTTAR16X2mode, ZTTAR16mode, ZTTMR16mode }
+    };
+    for (const auto &c : cases)
+      {
+	rtx operands[6] = {};
+	operands[0] = gen_rtx_REG (c.full, ACC_REG_FIRST);
+	operands[1] = gen_rtx_REG (c.source, M_REG_FIRST);
+	unsigned int length = acc_from_concat_length (operands);
+	operands[0] = gen_rtx_REG (c.half, ACC_REG_FIRST);
+	operands[5] = const0_rtx;
+	ASSERT_EQ (length, 2 * acc_from_m_length (operands));
+      }
+  }
   {
     const struct { machine_mode mode; unsigned int length; } cases[] = {
       { ZTTAR1mode, 20 }, { ZTTAR4mode, 76 }, { ZTTAR1X2mode, 56 },
