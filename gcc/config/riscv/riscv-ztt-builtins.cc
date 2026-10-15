@@ -12058,7 +12058,11 @@ public:
 	      return false;
 	    continue;
 	  }
-	if (++count > 32 || CALL_P (p) || asm_noperands (pat) >= 0
+	if (++count > 32 || CALL_P (p))
+	  return false;
+	if (memory_barrier_p (pat))
+	  continue;
+	if (asm_noperands (pat) >= 0
 	    || GET_CODE (pat) == ASM_INPUT || recog_memoized (p) < 0)
 	  return false;
 	if (p == BB_END (bb) && returnjump_p (p) && !contains_mem_rtx_p (pat))
@@ -12072,7 +12076,8 @@ public:
 	  }
 	int code = INSN_CODE (p);
 	if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
-	    || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
+	    || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi
+	    || md_preserving_fence_p (code) || md_read_csr_p (code))
 	  continue;
 	if (!NONJUMP_INSN_P (p) || GET_CODE (pat) != SET)
 	  return false;
@@ -13685,7 +13690,7 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
-  for (unsigned int test = 0; test != 16; ++test)
+  for (unsigned int test = 0; test != 24; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
       basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
@@ -13739,11 +13744,47 @@ run_md_reuse_selftests ()
 	    (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
 				   mem, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
 	  break;
+	case 16: append (gen_fence ()); break;
+	case 17:
+	  {
+	    rtx memory = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+	    MEM_VOLATILE_P (memory) = 1;
+	    append (TARGET_ZTSO
+		    ? gen_mem_thread_fence_ztso (memory, GEN_INT (MEMMODEL_SEQ_CST))
+		    : gen_mem_thread_fence_rvwmo (memory, GEN_INT (MEMMODEL_SEQ_CST)));
+	    break;
+	  }
+	case 18: case 22: case 23:
+	  {
+	    rtx code = gen_rtx_ASM_OPERANDS
+	      (VOIDmode, "", "", 0, rtvec_alloc (0), rtvec_alloc (0),
+	       rtvec_alloc (0), UNKNOWN_LOCATION);
+	    MEM_VOLATILE_P (code) = 1;
+	    rtx memory = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode));
+	    append (gen_rtx_PARALLEL (VOIDmode, gen_rtvec
+	      (2, code, gen_rtx_CLOBBER (VOIDmode, memory))));
+	    if (test == 22)
+	      append (gen_rtx_SET (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST), mem));
+	    else if (test == 23)
+	      append (gen_rtx_ASM_INPUT (VOIDmode, ""));
+	    break;
+	  }
+	case 19:
+	  append (Pmode == DImode ? gen_riscv_ztt_read_amefflags_di (value)
+		  : gen_riscv_ztt_read_amefflags_si (value));
+	  break;
+	case 20:
+	  append (Pmode == DImode ? gen_riscv_ztt_read_amenlen_di (value)
+		  : gen_riscv_ztt_read_amenlen_si (value));
+	  break;
+	case 21: append (gen_fence_i ()); break;
 	}
       BB_END (bb) = emit_jump_insn_after
 	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
 	 BB_END (bb));
-      ASSERT_EQ (test == 0 || test == 1 || test == 12,
+      ASSERT_EQ (test == 0 || test == 1 || test == 12
+		 || (test >= 16 && test <= 18)
+		 || ((test == 19 || test == 20) && TARGET_ZTT && TARGET_ZICSR),
 		 spill.remove_dead_store ());
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;

@@ -491,8 +491,10 @@ remains; frame operations, fixed/global register definitions, memory or
 matrix operations and unknown patterns end this spill fact.  After removing
 a reload, a bounded same-block return-tail scan can also remove its private
 store.  It requires the canonical spill alias set and no possible reads,
-including debug locations, before a normal return.  Calls, asm, unknown
-operations and exceptional/nonlocal paths retain the store.
+including debug locations, before a normal return.  Known memory fences,
+operand-free empty memory barriers and AME CSR reads do not read private
+slots; they remain in place while the dead-store scan continues.  Calls,
+other asm, unknown operations and exceptional/nonlocal paths retain the store.
 A fallback searches up to 64 local instructions for a matching private
 save across interleaved raw members.  Intervening stores must have provably
 disjoint spill-slot ranges; reloads must not overwrite the target register.
