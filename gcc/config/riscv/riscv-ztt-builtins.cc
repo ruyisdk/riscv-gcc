@@ -8741,6 +8741,36 @@ local_acc_result_p ()
   return local_structure_producers_p (&gsi, &producer, 1);
 }
 
+static unsigned int integer_zero_width (rtx);
+static unsigned int floating_zero_width (rtx);
+
+/* A local constructor proves both the payload and the actual Ad.  */
+static bool
+local_zero_acc_p (tree value, type_index type, rtx descriptor)
+{
+  if (!optimize || !runtime_profile_p ()
+      || !currently_expanding_gimple_stmt
+      || (!integer_zero_width (descriptor)
+	  && !floating_zero_width (descriptor)))
+    return false;
+  gimple *producers[2];
+  unsigned int count = 0;
+  if (TREE_CODE (value) != SSA_NAME
+      || !strip_structure_view (value, type, producers, count))
+    return false;
+  gimple *producer = SSA_NAME_DEF_STMT (value);
+  unsigned int code = structure_builtin_code (producer, 0);
+  if (code >= ZTT_BUILTIN_MAX)
+    return false;
+  const auto d = builtin_description_for (code);
+  if (d.type != type
+      || (d.expansion != EXPAND_ACLEAR && d.expansion != EXPAND_AZERO))
+    return false;
+  producers[count++] = producer;
+  gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
+  return local_structure_producers_p (&gsi, producers, count);
+}
+
 static rtx
 expand_conversion (const builtin_description &d,
 		   const conversion_description &operation, tree exp)
@@ -9524,6 +9554,23 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  return target;
 	}
 	case EXPAND_M_FROM_A:
+	  if (local_zero_acc_p (CALL_EXPR_ARG (exp, 0), d.type, descriptor))
+	    {
+	      unsigned int step = acc_m_nregs (mode);
+	      machine_mode part = matrix_mode (step);
+	      target = gen_reg_rtx (m_mode);
+	      emit_clobber (target);
+	      for (unsigned int i = 0; i < acc_full_m_nregs (mode) / step; ++i)
+		{
+		  rtx dst = simplify_gen_subreg
+		    (part, target, m_mode, GET_MODE_SIZE (part) * i);
+		  emit_insn (gen_ztt_typed_msettyp_p0
+			     (part, Pmode, dst, force_reg (Pmode, descriptor)));
+		}
+	      if (dump_file)
+		fprintf (dump_file, "Forward zero ACC to M\n");
+	      return target;
+	    }
 	  target = result_register (m_mode, target);
 	  emit_insn (gen_ztt_acc_to_m
 		     (mode, Pmode, target, matrix_register (mode, exp, 0),

@@ -16,6 +16,7 @@ void __attribute__((noipa)) dp_##N \
 { \
   PRE; \
   TYPE (DP_TYPE,DP_ACC) acc = NAME (mzero_acc,DP_TYPE,DP_ACC) (); \
+  __asm__ volatile ("" ::: "memory"); \
   GAP; \
   __riscv_ztt_mss_rm (out,NAME (mcopy_a2m,DP_TYPE,DP_WHOLE) (acc)); \
   POST; \
