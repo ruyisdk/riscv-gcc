@@ -12071,14 +12071,24 @@ public:
 		      || (!f.identity
 			  && reg_overlap_mentioned_p (reg, f.descriptor))))
 	f.group = nullptr;
-    for (unsigned int i = 0; i < GP_REG_NUM; ++i)
-      if ((constants[i] || identities[i])
-	  && reg_overlap_mentioned_p (reg, gen_rtx_REG (Pmode, GP_REG_FIRST + i)))
-	{
-	  constants[i] = NULL_RTX;
-	  identities[i] = 0;
-	  descriptor_used[i] = false;
-	}
+    unsigned int first = GP_REG_FIRST, end = GP_REG_FIRST + GP_REG_NUM;
+    bool direct = REG_P (reg);
+    if (direct)
+      {
+	first = MAX (first, REGNO (reg));
+	end = MIN (end, END_REGNO (reg));
+      }
+    for (unsigned int r = first; r < end; ++r)
+      {
+	unsigned int i = r - GP_REG_FIRST;
+	if ((constants[i] || identities[i])
+	    && (direct || reg_overlap_mentioned_p (reg, gen_rtx_REG (Pmode, r))))
+	  {
+	    constants[i] = NULL_RTX;
+	    identities[i] = 0;
+	    descriptor_used[i] = false;
+	  }
+      }
   }
 
   bool matches (rtx group, rtx descriptor) const
@@ -14942,6 +14952,53 @@ run_md_reuse_selftests ()
   ASSERT_FALSE (state.matches (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1), desc));
   const char *saved_profile = riscv_ztt_profile_string;
   riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+  {
+    /* Compare direct ranges and partial writes with the general matcher.  */
+    auto_vec<rtx, 48> writes;
+    for (unsigned int i = GP_REG_FIRST; i < GP_REG_FIRST + GP_REG_NUM; ++i)
+      writes.safe_push (gen_rtx_REG (Pmode, i));
+    rtx wide = gen_rtx_REG (DImode, 10);
+    for (rtx reg : { wide, gen_rtx_REG (TImode, 12),
+		     gen_rtx_REG (DFmode, FP_REG_FIRST),
+		     gen_rtx_REG (ZTTMR16mode, M_REG_FIRST),
+		     gen_rtx_REG (ZTTAR4mode, ACC_REG_FIRST),
+		     gen_rtx_REG (Pmode, FIRST_PSEUDO_REGISTER + 7),
+		     gen_rtx_SUBREG (QImode, wide, 0),
+		     gen_rtx_SUBREG (Pmode, gen_rtx_REG (TImode, 12),
+				     GET_MODE_SIZE (Pmode)),
+		     gen_rtx_STRICT_LOW_PART (VOIDmode,
+					gen_rtx_SUBREG (HImode, wide, 0)),
+		     gen_rtx_ZERO_EXTRACT (SImode, wide, GEN_INT (8), const0_rtx),
+		     gen_rtx_SCRATCH (Pmode) })
+      writes.safe_push (reg);
+    for (rtx write : writes)
+      {
+	local_md_state known, dynamic;
+	for (unsigned int i = 1; i < GP_REG_NUM; ++i)
+	  {
+	    rtx reg = gen_rtx_REG (Pmode, GP_REG_FIRST + i);
+	    known.record_constant (reg, GEN_INT (0x40000000 + i));
+	    known.note_descriptor_use (reg);
+	    dynamic.record_copy (reg, i);
+	    dynamic.remember (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + i), reg);
+	  }
+	known.invalidate (write);
+	dynamic.invalidate (write);
+	for (unsigned int i = 1; i < GP_REG_NUM; ++i)
+	  {
+	    rtx reg = gen_rtx_REG (Pmode, GP_REG_FIRST + i);
+	    rtx value = GEN_INT (0x40000000 + i);
+	    bool hit = reg_overlap_mentioned_p (write, reg);
+	    ASSERT_TRUE (rtx_equal_p (known.descriptor_value (reg),
+				     hit ? reg : value));
+	    if (!fixed_regs[REGNO (reg)] && !global_regs[REGNO (reg)])
+	      ASSERT_EQ (known.redundant_descriptor_p (reg, value), !hit);
+	    rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + i);
+	    ASSERT_EQ (dynamic.matches (group, reg),
+		       !hit && !reg_overlap_mentioned_p (write, group));
+	  }
+      }
+  }
   for (unsigned int count : { 1U, 2U, 4U, 8U, 16U, 32U })
     for (unsigned int step = 1; step <= count && step <= 16; step *= 2)
       {

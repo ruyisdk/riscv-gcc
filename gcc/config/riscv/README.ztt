@@ -495,6 +495,9 @@ Full Pmode GPR single SETs establish constants through RTL simplification.
 Prepared groups retain constant snapshots after the original GPR changes;
 unknown descriptors follow full-width ordinary GPR copies using local value
 identities.  Overwriting one copy does not invalidate a surviving copy.
+Direct register writes visit only overlapping GPR cache slots, using the
+RTL register span.  Partial and compound writes retain the general overlap
+matcher; complete M/ACC writes do not scan unrelated GPR slots.
 Partial/parallel definitions invalidate affected register identities and
 constants; memory contents are not tracked.
 Typed loads and subsequent state operations can use an earlier-defined
