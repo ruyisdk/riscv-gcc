@@ -1189,24 +1189,37 @@ struct GTY (()) builtin_decl_cache
 
 static GTY (()) builtin_decl_cache mixed_builtin_decls;
 
-/* Keep dense code indexing without scanning unused declaration domains.  */
+static constexpr unsigned int builtin_decl_page_size = 256;
+
+struct GTY (()) builtin_decl_page
+{
+  tree entries[builtin_decl_page_size];
+};
+
+/* Keep code indexing, allocating only pages that contain declarations.  */
 struct GTY (()) builtin_decl_table
 {
   unsigned int length;
-  vec<tree, va_gc> *entries;
+  vec<builtin_decl_page *, va_gc> *entries;
 
   tree get (unsigned int slot) const
   {
     gcc_assert (slot < length);
-    return entries ? (*entries)[slot] : NULL_TREE;
+    if (!entries)
+      return NULL_TREE;
+    auto *page = (*entries)[slot / builtin_decl_page_size];
+    return page ? page->entries[slot % builtin_decl_page_size] : NULL_TREE;
   }
 
   tree put (unsigned int slot, tree decl)
   {
     gcc_assert (slot < length && decl);
     if (!entries)
-      vec_safe_grow_cleared (entries, length, true);
-    (*entries)[slot] = decl;
+      vec_safe_grow_cleared (entries, CEIL (length, builtin_decl_page_size), true);
+    auto *&page = (*entries)[slot / builtin_decl_page_size];
+    if (!page)
+      page = ggc_cleared_alloc<builtin_decl_page> ();
+    page->entries[slot % builtin_decl_page_size] = decl;
     return decl;
   }
 };
@@ -3816,21 +3829,37 @@ static void
 run_decl_table_selftests ()
 {
   using namespace selftest;
-  builtin_decl_table table = { 9, nullptr }, other = { 9, nullptr };
+  const unsigned int last = 2 * builtin_decl_page_size + 4;
+  builtin_decl_table table = { last + 1, nullptr }, other = { last + 1, nullptr };
   for (unsigned int i = 0; i < table.length; ++i)
     ASSERT_EQ (table.get (i), NULL_TREE);
   ASSERT_EQ (table.entries, nullptr);
   ASSERT_EQ (table.put (0, integer_zero_node), integer_zero_node);
-  ASSERT_EQ (table.put (8, integer_one_node), integer_one_node);
+  ASSERT_EQ (table.put (last, integer_one_node), integer_one_node);
   auto *entries = table.entries;
+  auto *first_page = (*entries)[0];
+  ASSERT_EQ (entries->length (), 3U);
+  ASSERT_EQ ((*entries)[1], nullptr);
   for (unsigned int i = 0; i < table.length; ++i)
     ASSERT_EQ (table.get (i), i == 0 ? integer_zero_node
-	       : i == 8 ? integer_one_node : NULL_TREE);
+	       : i == last ? integer_one_node : NULL_TREE);
+  ASSERT_EQ ((*entries)[1], nullptr);
+  ASSERT_EQ (table.put (builtin_decl_page_size - 1, integer_one_node),
+	     integer_one_node);
+  ASSERT_EQ ((*entries)[0], first_page);
+  ASSERT_EQ ((*entries)[1], nullptr);
+  ASSERT_EQ (table.put (builtin_decl_page_size, integer_zero_node),
+	     integer_zero_node);
+  ASSERT_EQ (table.get (builtin_decl_page_size - 1), integer_one_node);
+  ASSERT_EQ (table.get (builtin_decl_page_size), integer_zero_node);
+  ASSERT_EQ (table.get (builtin_decl_page_size + 1), NULL_TREE);
   ASSERT_EQ (table.put (0, integer_one_node), integer_one_node);
   ASSERT_EQ (table.entries, entries);
   ASSERT_EQ (table.get (0), integer_one_node);
   ASSERT_EQ (other.get (0), NULL_TREE);
   ASSERT_EQ (other.entries, nullptr);
+  for (auto *page : *table.entries)
+    ggc_free (page);
   vec_free (table.entries);
 }
 
