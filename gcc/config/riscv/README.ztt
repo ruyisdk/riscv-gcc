@@ -608,6 +608,9 @@ including debug locations, before a normal return.  Known memory fences,
 operand-free empty memory barriers and AME CSR reads do not read private
 slots; they remain in place while the dead-store scan continues.  Calls,
 other asm, unknown operations and exceptional/nonlocal paths retain the store.
+Known scalar FP operations without memory operands also allow this scan
+to continue, as do plain GPR/FPR USE markers.  Their results, liveness
+markers and floating-point status effects remain.
 A fallback searches up to 64 local instructions for a matching private
 save across interleaved raw members.  Intervening stores must have provably
 disjoint spill-slot ranges; reloads must not overwrite the target register.

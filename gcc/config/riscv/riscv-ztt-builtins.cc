@@ -13018,6 +13018,10 @@ public:
 	  return false;
 	if (memory_barrier_p (pat))
 	  continue;
+	if (GET_CODE (pat) == USE && REG_P (XEXP (pat, 0))
+	    && (GP_REG_P (REGNO (XEXP (pat, 0)))
+		|| FP_REG_P (REGNO (XEXP (pat, 0)))))
+	  continue;
 	if (asm_noperands (pat) >= 0
 	    || GET_CODE (pat) == ASM_INPUT || recog_memoized (p) < 0)
 	  return false;
@@ -13034,6 +13038,8 @@ public:
 	if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	    || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi
 	    || md_preserving_fence_p (code) || md_read_csr_p (code))
+	  continue;
+	if (md_preserving_fp_p (code, pat) && !contains_mem_rtx_p (pat))
 	  continue;
 	if (!NONJUMP_INSN_P (p) || GET_CODE (pat) != SET)
 	  return false;
@@ -15198,7 +15204,7 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
-  for (unsigned int test = 0; test != 24; ++test)
+  for (unsigned int test = 0; test != 36; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
       basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
@@ -15286,13 +15292,46 @@ run_md_reuse_selftests ()
 		  : gen_riscv_ztt_read_amenlen_si (value));
 	  break;
 	case 21: append (gen_fence_i ()); break;
+	case 24: case 25: case 26: case 27: case 28: case 29:
+	  {
+	    rtx a = gen_rtx_REG (SFmode, FP_REG_FIRST + 10);
+	    rtx b = gen_rtx_REG (SFmode, FP_REG_FIRST + 11);
+	    append (test == 25 ? gen_copysignsf3 (a, a, b)
+		    : test == 26 ? (Pmode == DImode
+				    ? gen_fclasssfdi (value, a)
+				    : gen_fclasssfsi (value, a))
+		    : gen_fminsf3 (a, a, b));
+	    if (test == 27)
+	      append (gen_rtx_SET (value, read));
+	    else if (test == 28)
+	      BB_END (bb) = emit_debug_insn_after
+		(gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				       mem, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+	    else if (test == 29)
+	      flag_non_call_exceptions = 1;
+	    append (gen_rtx_USE (VOIDmode, a));
+	    break;
+	  }
+	case 30: append (gen_riscv_fsflags (gen_rtx_REG (SImode, 11))); break;
+	case 31: append (gen_riscv_frflags (gen_rtx_REG (SImode, 11))); break;
+	case 32: append (gen_rtx_USE (VOIDmode, value)); break;
+	case 33:
+	  append (gen_rtx_USE (VOIDmode, gen_rtx_REG (SFmode, FP_REG_FIRST)));
+	  break;
+	case 34: append (gen_rtx_USE (VOIDmode, read)); break;
+	case 35:
+	  append (gen_rtx_USE (VOIDmode, gen_rtx_SYMBOL_REF (Pmode, "unknown")));
+	  break;
 	}
       BB_END (bb) = emit_jump_insn_after
 	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
 	 BB_END (bb));
       ASSERT_EQ (test == 0 || test == 1 || test == 12
 		 || (test >= 16 && test <= 18)
-		 || ((test == 19 || test == 20) && TARGET_ZTT && TARGET_ZICSR),
+		 || ((test == 19 || test == 20) && TARGET_ZTT && TARGET_ZICSR)
+		 || (((test >= 24 && test <= 26) || test == 30 || test == 31)
+		     && TARGET_HARD_FLOAT)
+		 || test == 32 || test == 33,
 		 spill.remove_dead_store ());
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;
