@@ -108,6 +108,10 @@ Dense matrix, scalar, broadcast, unary, math and exponent declaration tables
 use GC/PCH-visible pages of 256 declarations, allocated on first insertion
 into each page.  Empty lookups allocate nothing.  Code indexing uses the
 page number and slot; unused pages allocate no declaration storage.
+The public catalog and nominal constructor/operation tables use the same
+layout.  Unregistered tables expose only empty directory roots to GC,
+rather than scanning their full code ranges.  Availability
+checks still precede nominal cache lookup.
 
 Public Scalar declaration blocks omit leading TC slots owned by older
 declaration domains.  The storage offset does not change public code radices,

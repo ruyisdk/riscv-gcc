@@ -1119,7 +1119,6 @@ matmul_shape (prototype_index prototype)
 
 static GTY (()) tree ztt_m_type_nodes[TYPE_MAX];
 static GTY (()) tree ztt_storage128_types[2];
-static GTY (()) tree builtin_decls[ZTT_BUILTIN_MAX];
 /* Root temporary prototypes until all language declarations are registered.  */
 static GTY (()) vec<tree, va_gc> *registration_function_types[PROTO_MAX];
 static bool functions_registered_p;
@@ -1244,6 +1243,9 @@ struct GTY (()) builtin_decl_table
     return decl;
   }
 };
+
+static GTY (()) builtin_decl_table builtin_decls
+  = { ZTT_BUILTIN_MAX, nullptr };
 
 /* Preserve the range and
    radices originally used by shifts; 24 is a scalar shift count only.  */
@@ -1666,9 +1668,10 @@ static_assert (nominal_extended_base + nominal_extended_count
 	       < elementwise_code_base);
 static GTY (()) tree nominal_scalar_types[numeric_scalar_dtype_count];
 static GTY (()) hash_map<tree_type_hash, unsigned> *nominal_scalar_indices;
-static GTY (()) tree nominal_scalar_decls[3 * numeric_scalar_dtype_count
-					+ 2 * TYPE_MAX];
-static GTY (()) tree nominal_extended_decls[nominal_extended_count];
+static GTY (()) builtin_decl_table nominal_scalar_decls
+  = { 3 * numeric_scalar_dtype_count + 2 * TYPE_MAX, nullptr };
+static GTY (()) builtin_decl_table nominal_extended_decls
+  = { nominal_extended_count, nullptr };
 static GTY (()) builtin_decl_table nominal_broadcast_decls
   = { TYPE_MAX * numeric_scalar_dtype_count, nullptr };
 struct GTY (()) nominal_registration_cache
@@ -5949,15 +5952,16 @@ register_functions ()
       char name[160];
       const char *canonical_name = in_lto_p ? nullptr
 	: canonical_builtin_name (d, name);
-      builtin_decls[i] = (in_lto_p
+      tree decl = (in_lto_p
 	? integer_zero_node
 	: simulate_builtin_function_decl (input_location, canonical_name,
 					  registration_function_type (prototype, type),
 					  code, NULL, function_attributes ()));
+      builtin_decls.put (i, decl);
       char alias[160];
       if (!in_lto_p && default_builtin_alias (d, canonical_name, alias))
 	simulate_builtin_function_decl (input_location, alias,
-					TREE_TYPE (builtin_decls[i]), code,
+					TREE_TYPE (decl), code,
 					NULL, function_attributes ());
     }
   if (runtime_profile_p () && !in_lto_p)
@@ -6088,10 +6092,14 @@ builtin_decl (unsigned int code, bool initialize_p)
     return scalar_builtin_decl (code, initialize_p);
   if (code >= ZTT_BUILTIN_MAX)
     return error_mark_node;
-  if (builtin_decls[code] == NULL_TREE && initialize_p
+  tree decl = builtin_decls.get (code);
+  if (!decl && initialize_p
       && TARGET_ZTT && typed_profile_p ())
-    register_functions ();
-  return builtin_decls[code] ? builtin_decls[code] : error_mark_node;
+    {
+      register_functions ();
+      decl = builtin_decls.get (code);
+    }
+  return decl ? decl : error_mark_node;
 }
 
 /* Reject lossy implicit entry into the XLEN-bit carrier.  A caller can
@@ -6290,7 +6298,10 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
   unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
   const char *dtype;
   tree ftype;
-  tree *slot;
+  bool extended = nominal_extended_p (code);
+  auto &decls = extended ? nominal_extended_decls : nominal_scalar_decls;
+  unsigned int slot = code - (extended ? nominal_extended_base
+			     : nominal_scalar_base);
   if (code < nominal_operation_base)
     {
       unsigned int n = (code - nominal_scalar_base) % numeric_scalar_dtype_count;
@@ -6299,9 +6310,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int d = types[tc].descriptor;
       if (!nominal_scalar_types[n] || (kind == 0 && (d & 0xff) > BITS_PER_WORD))
 	return error_mark_node;
-      slot = &nominal_scalar_decls[code - nominal_scalar_base];
-      if (*slot || !initialize_p)
-	return *slot ? *slot : error_mark_node;
+      tree decl = decls.get (slot);
+      if (decl || !initialize_p)
+	return decl ? decl : error_mark_node;
       dtype = scalar_datatype_name (d, false);
       static const char *const names[] = { "make", "from_bits", "bits" };
       snprintf (name, sizeof (name), "__riscv_ztt_scalar_%s_%s", names[kind], dtype);
@@ -6318,11 +6329,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int op = nominal_operation (code, t);
       if (!nominal_result_p (op, t))
 	return error_mark_node;
-      slot = nominal_extended_p (code)
-	? &nominal_extended_decls[code - nominal_extended_base]
-	: &nominal_scalar_decls[code - nominal_scalar_base];
-      if (*slot || !initialize_p)
-	return *slot ? *slot : error_mark_node;
+      tree decl = decls.get (slot);
+      if (decl || !initialize_p)
+	return decl ? decl : error_mark_node;
       dtype = scalar_datatype_name (types[t].descriptor, false);
       snprintf (name, sizeof (name), "__riscv_ztt_%s_%s_%ux%u",
 		op == floating_scalar_operations ? "mbcast_m_x"
@@ -6350,8 +6359,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
 	(n, add_builtin_function_ext_scope (name, ftype, fullcode, BUILT_IN_MD,
 					    NULL, function_attributes ()));
     }
-  *slot = simulate_builtin_function_decl (input_location, name, ftype, fullcode,
-					 NULL, function_attributes ());
+  tree decl = simulate_builtin_function_decl (input_location, name, ftype,
+					     fullcode, NULL, function_attributes ());
+  decls.put (slot, decl);
   if (nominal_operation_p (code))
     {
       type_index t;
@@ -6367,7 +6377,7 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
 					  NULL, function_attributes ());
 	}
     }
-  return *slot;
+  return decl;
 }
 
 static unsigned int
