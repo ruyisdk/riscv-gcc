@@ -13041,6 +13041,10 @@ public:
 	  continue;
 	if (md_preserving_fp_p (code, pat) && !contains_mem_rtx_p (pat))
 	  continue;
+	if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
+	    && md_preserving_vector_p (get_attr_type (p), pat)
+	    && !spill_read_p (pat))
+	  continue;
 	if (!NONJUMP_INSN_P (p) || GET_CODE (pat) != SET)
 	  return false;
 	rtx src = SET_SRC (pat), dest = SET_DEST (pat);
@@ -15204,7 +15208,7 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
-  for (unsigned int test = 0; test != 36; ++test)
+  for (unsigned int test = 0; test != 42; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
       basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
@@ -15322,6 +15326,27 @@ run_md_reuse_selftests ()
 	case 35:
 	  append (gen_rtx_USE (VOIDmode, gen_rtx_SYMBOL_REF (Pmode, "unknown")));
 	  break;
+	case 36: case 37: case 38: case 39: case 40: case 41:
+	  append (TARGET_64BIT
+		  ? gen_vsetvldi (value, addr, GEN_INT (32), const0_rtx,
+				 const1_rtx, const1_rtx, const0_rtx)
+		  : gen_vsetvlsi (value, addr, GEN_INT (32), const0_rtx,
+				 const1_rtx, const1_rtx, const0_rtx));
+	  if (test == 37 || test == 38 || test == 39)
+	    {
+	      rtx input = gen_rtx_MEM (RVVM1SImode, addr);
+	      if (test == 38 || test == 39)
+		set_mem_alias_set (input, new_alias_set ());
+	      if (test == 39)
+		MEM_VOLATILE_P (input) = 1;
+	      append (gen_rtx_SET (gen_rtx_REG (RVVM1SImode, V_REG_FIRST),
+				  input));
+	    }
+	  else if (test == 40)
+	    append (gen_rtx_SET (value, read));
+	  else if (test == 41)
+	    flag_non_call_exceptions = 1;
+	  break;
 	}
       BB_END (bb) = emit_jump_insn_after
 	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
@@ -15329,9 +15354,13 @@ run_md_reuse_selftests ()
       ASSERT_EQ (test == 0 || test == 1 || test == 12
 		 || (test >= 16 && test <= 18)
 		 || ((test == 19 || test == 20) && TARGET_ZTT && TARGET_ZICSR)
-		 || (((test >= 24 && test <= 26) || test == 30 || test == 31)
-		     && TARGET_HARD_FLOAT)
-		 || test == 32 || test == 33,
+		 || (test == 24 && HAVE_fminsf3)
+		 || (test == 25 && HAVE_copysignsf3)
+		 || (test == 26 && TARGET_HARD_FLOAT)
+		 || ((test == 30 || test == 31) && HAVE_riscv_frflags)
+		 || test == 32 || test == 33
+		 || ((test == 36 || test == 38)
+		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 spill.remove_dead_store ());
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;

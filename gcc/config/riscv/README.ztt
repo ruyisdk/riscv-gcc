@@ -611,6 +611,9 @@ other asm, unknown operations and exceptional/nonlocal paths retain the store.
 Known scalar FP operations without memory operands also allow this scan
 to continue, as do plain GPR/FPR USE markers.  Their results, liveness
 markers and floating-point status effects remain.
+Standard RVV operations also allow this scan to continue when none of their
+memory operands can read the private slot.  Vector memory effects, VL and
+rounding/status operations remain; unknown or volatile memory stops the scan.
 A fallback searches up to 64 local instructions for a matching private
 save across interleaved raw members.  Intervening stores must have provably
 disjoint spill-slot ranges; reloads must not overwrite the target register.
