@@ -11329,6 +11329,38 @@ md_scalar_insn_p (rtx pattern)
   return true;
 }
 
+/* Ordinary ACC moves expose their M scratch; borrowed-bank moves do not.  */
+static bool
+md_acc_transfer_p (rtx pattern)
+{
+  if (GET_CODE (pattern) != PARALLEL || XVECLEN (pattern, 0) != 6)
+    return false;
+  rtx set = XVECEXP (pattern, 0, 0);
+  if (GET_CODE (set) != SET || !acc_mode_p (GET_MODE (SET_DEST (set)))
+      || GET_MODE (SET_SRC (set)) != GET_MODE (SET_DEST (set)))
+    return false;
+  for (rtx operand : { SET_DEST (set), SET_SRC (set) })
+    if (!(REG_P (operand) && ACC_REG_P (REGNO (operand))) && !MEM_P (operand))
+      return false;
+  if (MEM_P (SET_DEST (set)) && MEM_P (SET_SRC (set)))
+    return false;
+  for (unsigned int i = 1; i != 5; ++i)
+    {
+      rtx clobber = XVECEXP (pattern, 0, i);
+      if (GET_CODE (clobber) != CLOBBER)
+	return false;
+      rtx reg = XEXP (clobber, 0);
+      if (i == 1
+	  ? !REG_P (reg) || !M_REG_P (REGNO (reg)) || !m_mode_p (GET_MODE (reg))
+	  : GET_MODE (reg) != Pmode
+	    || (!local_md_state::full_gpr_p (reg) && GET_CODE (reg) != SCRATCH))
+	return false;
+    }
+  rtx use = XVECEXP (pattern, 0, 5);
+  return GET_CODE (use) == USE
+    && rtx_equal_p (XEXP (use, 0), gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM));
+}
+
 static bool
 md_normal_edge_p (edge incoming)
 {
@@ -11808,6 +11840,11 @@ reuse_cleaned_descriptors ()
 	    }
 	  else
 	    spill.clear ();
+	  if (explicit_state && code >= 0 && md_acc_transfer_p (PATTERN (insn)))
+	    {
+	      note_stores (insn, invalidate_md_store, &state);
+	      continue;
+	    }
 	  if (md_preserving_branch_p (insn))
 	    continue;
 	  if (invalidate_asm_md (insn, state))
@@ -12030,8 +12067,13 @@ reuse_local_md ()
 	    }
 	  if (invalidate_asm_md (insn, state))
 	    continue;
-	  /* These zero-length scheduling barriers do not alter Md or GPRs.  */
 	  int code = recog_memoized (insn);
+	  if (explicit_state && code >= 0 && md_acc_transfer_p (PATTERN (insn)))
+	    {
+	      note_stores (insn, invalidate_md_store, &state);
+	      continue;
+	    }
+	  /* These zero-length scheduling barriers do not alter Md or GPRs.  */
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
@@ -12628,6 +12670,59 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  for (unsigned int test = 0; test != 13; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx a = gen_rtx_REG (ZTTAR2mode, ACC_REG_FIRST);
+      rtx b = gen_rtx_REG (ZTTAR2mode, ACC_REG_FIRST + 1);
+      rtx addr = gen_rtx_REG (Pmode, 10), known = gen_rtx_REG (Pmode, 14);
+      rtx scratch = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
+      rtx disjoint = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 2);
+      rtx mem = gen_rtx_MEM (ZTTAR2mode, addr);
+      rtvec parts = gen_rtvec
+	(6, gen_rtx_SET (a, b), gen_rtx_CLOBBER (VOIDmode, scratch),
+	 gen_rtx_CLOBBER (VOIDmode, addr),
+	 gen_rtx_CLOBBER (VOIDmode, gen_rtx_SCRATCH (Pmode)),
+	 gen_rtx_CLOBBER (VOIDmode, gen_rtx_SCRATCH (Pmode)),
+	 gen_rtx_USE (VOIDmode, gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM)));
+      switch (test)
+	{
+	case 1: SET_SRC (RTVEC_ELT (parts, 0)) = mem; break;
+	case 2: SET_DEST (RTVEC_ELT (parts, 0)) = mem; break;
+	case 3: XEXP (RTVEC_ELT (parts, 1), 0) = mem; break;
+	case 4:
+	  SET_SRC (RTVEC_ELT (parts, 0))
+	    = gen_rtx_UNSPEC_VOLATILE (ZTTAR2mode, gen_rtvec (1, b), UNSPECV_ZTT);
+	  break;
+	case 5: SET_DEST (RTVEC_ELT (parts, 0)) = addr; break;
+	case 6: SET_SRC (RTVEC_ELT (parts, 0)) = scratch; break;
+	case 7: XEXP (RTVEC_ELT (parts, 1), 0) = gen_rtx_REG (SImode, M_REG_FIRST); break;
+	case 8: XEXP (RTVEC_ELT (parts, 5), 0) = addr; break;
+	case 9:
+	  SET_DEST (RTVEC_ELT (parts, 0)) = SET_SRC (RTVEC_ELT (parts, 0)) = mem;
+	  break;
+	case 10: RTVEC_ELT (parts, 1) = gen_rtx_USE (VOIDmode, scratch); break;
+	case 11: XEXP (RTVEC_ELT (parts, 2), 0) = gen_rtx_REG (QImode, 10); break;
+	case 12: RTVEC_ELT (parts, 5) = gen_rtx_CLOBBER (VOIDmode, addr); break;
+	}
+      rtx pattern = gen_rtx_PARALLEL (VOIDmode, parts);
+      ASSERT_EQ (test < 3, md_acc_transfer_p (pattern));
+      if (test < 3)
+	{
+	  local_md_state state;
+	  state.record_constant (addr, GEN_INT (32));
+	  state.record_constant (known, GEN_INT (32));
+	  state.remember (scratch, known);
+	  state.remember (disjoint, known);
+	  ASSERT_FALSE (state.record_scalar_type (known));
+	  note_stores (emit_insn (pattern), invalidate_md_store, &state);
+	  ASSERT_FALSE (state.matches (scratch, known));
+	  ASSERT_TRUE (state.matches (disjoint, known));
+	  ASSERT_RTX_EQ (addr, state.descriptor_value (addr));
+	  ASSERT_RTX_EQ (GEN_INT (32), state.descriptor_value (known));
+	  ASSERT_TRUE (state.record_scalar_type (known));
+	}
+    }
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
     auto assembly = [] (machine_mode mode) {

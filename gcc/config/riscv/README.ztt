@@ -400,6 +400,10 @@ Complete M constructor SETs also preserve descriptor GPR facts.  Their
 datatype setters, scalar inputs and construction instructions remain.
 Recognized singleton raw loads/stores preserve descriptor GPR facts in
 this scan, as in the main Md scan.
+Ordinary ACC register moves and spill transfers preserve Md and descriptor
+facts outside their explicit M/GPR clobbers in both scans. The transfer,
+actual Ad handling and full payload remain unchanged. Borrowed-bank moves
+retain the state boundary because their internal M writes are not clobbers.
 The scan also removes a singleton raw reload of the unchanged register
 from its most recent private spill.  Both accesses must be nonvolatile,
 nontrapping spill-slot MEMs with equal addresses and known full sizes
