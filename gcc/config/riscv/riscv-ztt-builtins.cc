@@ -12642,10 +12642,11 @@ md_preserving_atomic_p (int code, rtx pat)
   return true;
 }
 
-/* Standard RVV integer instructions use a separate architectural state.  */
+/* Standard RVV instructions use a separate architectural state.  */
 static bool
 md_preserving_vector_p (enum attr_type type, rtx pat)
 {
+  bool floating = false;
   switch (type)
     {
     case TYPE_RDVLENB: case TYPE_RDVL: case TYPE_WRVXRM: case TYPE_VSETVL:
@@ -12667,6 +12668,19 @@ md_preserving_vector_p (enum attr_type type, rtx pat)
     case TYPE_VISLIDE1UP: case TYPE_VISLIDE1DOWN:
     case TYPE_VGATHER: case TYPE_VCOMPRESS:
       break;
+    case TYPE_WRFRM: case TYPE_RDFRM:
+    case TYPE_VFALU: case TYPE_VFWALU: case TYPE_VFMUL: case TYPE_VFDIV:
+    case TYPE_VFWMUL: case TYPE_VFMULADD: case TYPE_VFWMULADD:
+    case TYPE_VFSQRT: case TYPE_VFRECP: case TYPE_VFCMP: case TYPE_VFMINMAX:
+    case TYPE_VFSGNJ: case TYPE_VFCLASS: case TYPE_VFMERGE: case TYPE_VFMOV:
+    case TYPE_VFCVTITOF: case TYPE_VFCVTFTOI:
+    case TYPE_VFWCVTITOF: case TYPE_VFWCVTFTOI: case TYPE_VFWCVTFTOF:
+    case TYPE_VFNCVTITOF: case TYPE_VFNCVTFTOI: case TYPE_VFNCVTFTOF:
+    case TYPE_VFREDU: case TYPE_VFREDO: case TYPE_VFWREDU: case TYPE_VFWREDO:
+    case TYPE_VFMOVVF: case TYPE_VFMOVFV:
+    case TYPE_VFSLIDE1UP: case TYPE_VFSLIDE1DOWN:
+      floating = true;
+      break;
     default:
       return false;
     }
@@ -12677,8 +12691,11 @@ md_preserving_vector_p (enum attr_type type, rtx pat)
 	unsigned int regno = REGNO (*iter), end = END_REGNO (*iter);
 	if (!(GP_REG_P (regno) && end <= GP_REG_FIRST + GP_REG_NUM)
 	    && !(V_REG_P (regno) && end <= V_REG_FIRST + V_REG_NUM)
+	    && !(floating && FP_REG_P (regno)
+		 && end <= FP_REG_FIRST + FP_REG_NUM)
 	    && !((VL_REG_P (regno) || VTYPE_REG_P (regno) || VXRM_REG_P (regno))
-		 && end == regno + 1))
+		 && end == regno + 1)
+	    && !(floating && FRM_REG_P (regno) && end == regno + 1))
 	  return false;
       }
   return true;
@@ -14364,8 +14381,29 @@ run_md_reuse_selftests ()
 	  }
       }
     for (enum attr_type type : { TYPE_UNKNOWN, TYPE_CALL, TYPE_MULTI,
-	 TYPE_VECTOR, TYPE_VFALU, TYPE_VFMUL, TYPE_SF_VQMACC, TYPE_VAESDF })
+	 TYPE_VECTOR, TYPE_SF_VQMACC, TYPE_VAESDF, TYPE_SF_VFNRCLIP })
       ASSERT_FALSE (md_preserving_vector_p (type, load));
+    rtx fp = gen_rtx_REG (SFmode, FP_REG_FIRST);
+    rtx frm = gen_rtx_REG (SImode, FRM_REGNUM);
+    rtx floating = gen_rtx_PARALLEL (VOIDmode,
+	gen_rtvec (3, load, gen_rtx_USE (VOIDmode, fp),
+		   gen_rtx_USE (VOIDmode, frm)));
+    ASSERT_FALSE (md_preserving_vector_p (TYPE_VIALU, floating));
+    for (enum attr_type type : { TYPE_WRFRM, TYPE_RDFRM, TYPE_VFALU,
+	 TYPE_VFMUL, TYPE_VFMULADD, TYPE_VFCMP, TYPE_VFMINMAX, TYPE_VFSGNJ,
+	 TYPE_VFCVTITOF, TYPE_VFCVTFTOI, TYPE_VFNCVTFTOF, TYPE_VFREDO,
+	 TYPE_VFMOVVF, TYPE_VFMOVFV, TYPE_VFSLIDE1UP })
+      {
+	ASSERT_TRUE (md_preserving_vector_p (type, floating));
+	for (unsigned int regno : { M_REG_FIRST, ACC_REG_FIRST,
+				   FIRST_PSEUDO_REGISTER + 1 })
+	  {
+	    rtx bad = gen_rtx_PARALLEL (VOIDmode,
+	      gen_rtvec (2, floating, gen_rtx_CLOBBER
+		(VOIDmode, gen_rtx_REG (SImode, regno))));
+	    ASSERT_FALSE (md_preserving_vector_p (type, bad));
+	  }
+      }
     rtx pattern = TARGET_64BIT
       ? gen_vsetvldi (result, address, GEN_INT (32), const0_rtx,
 		     const1_rtx, const1_rtx, const0_rtx)
@@ -14389,6 +14427,18 @@ run_md_reuse_selftests ()
     ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (slot, matrix)));
     ASSERT_FALSE (spill.redundant_reload_p (load));
     ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, slot)));
+    rtx round_result = gen_rtx_REG (SImode, REGNO (result));
+    rtx backup = gen_fsrmsi_backup (round_result, GEN_INT (3));
+    ASSERT_TRUE (md_preserving_vector_p (TYPE_WRFRM, backup));
+    state.record_constant (result, GEN_INT (64));
+    state.remember (dynamic, result);
+    note_stores (emit_insn (backup), invalidate_md_store, &state);
+    ASSERT_FALSE (state.matches (dynamic, result));
+    ASSERT_EQ (state.constant_value (result), NULL_RTX);
+    ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+    ASSERT_TRUE (state.record_scalar_type (address));
+    ASSERT_TRUE (md_preserving_vector_p (TYPE_WRFRM,
+					gen_fsrmsi_restore (round_result)));
   }
   {
     const struct { machine_mode full, half, source; } cases[] = {
