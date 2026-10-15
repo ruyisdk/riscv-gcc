@@ -7776,6 +7776,26 @@ strip_structure_view (tree &value, type_index type, gimple **producers,
   return true;
 }
 
+static bool
+structure_zero_p (tree value, type_index type, gimple **producers,
+		  unsigned int &count)
+{
+  unsigned int end = count;
+  if (!strip_structure_view (value, type, producers, end)
+      || !strip_structure_copies (value, type, producers, end, false, true))
+    return false;
+  gimple *producer = SSA_NAME_DEF_STMT (value);
+  unsigned int code = structure_builtin_code (producer, 0);
+  if (code >= ZTT_BUILTIN_MAX)
+    return false;
+  const auto d = builtin_description_for (code);
+  if (d.type != type || d.expansion != EXPAND_MZERO_2D_M)
+    return false;
+  producers[end++] = producer;
+  count = end;
+  return true;
+}
+
 /* ID coordinates are nonnegative.  Preserve them through conversions whose
    destination covers that range, retaining calls and constructor checks.  */
 static bool
@@ -7854,10 +7874,12 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
     return NULL_TREE;
   tree data = gimple_call_arg (stmt, scatter ? 1 : 0);
   tree index = gimple_call_arg (stmt, scatter ? 2 : 1);
-  /* Integer max with the same value cannot round, saturate or alter flags.  */
+  bool scatter_add = d.expansion == EXPAND_MCOLSCATADD_EW
+    || d.expansion == EXPAND_MROWSCATADD_EW;
+  /* Exact integer identities cannot round, saturate or alter flags.  */
   if (scatter
       && ((d.expansion != EXPAND_MCOLSCATMAX_EW
-	   && d.expansion != EXPAND_MROWSCATMAX_EW)
+	   && d.expansion != EXPAND_MROWSCATMAX_EW && !scatter_add)
 	  || d.type != operation.data
 	  || floating_descriptor_p (types[d.type].descriptor)))
     return NULL_TREE;
@@ -7870,7 +7892,17 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
   gimple *producers[16];
   unsigned int count = 0;
   tree result = data;
-  if (scatter && data != gimple_call_arg (stmt, 0))
+  if (scatter_add)
+    {
+      if (!structure_zero_p (gimple_call_arg (stmt, 0), d.type,
+			     producers, count))
+	{
+	  if (!structure_zero_p (data, d.type, producers, count))
+	    return NULL_TREE;
+	  result = gimple_call_arg (stmt, 0);
+	}
+    }
+  else if (scatter && data != gimple_call_arg (stmt, 0))
     {
       tree old = gimple_call_arg (stmt, 0), input = data;
       result = old;
@@ -7900,6 +7932,7 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
   if (source.type != index_type
       || (d.expansion == EXPAND_MCOLGATHER_EW
 	  || d.expansion == EXPAND_MCOLSCATMAX_EW
+	  || d.expansion == EXPAND_MCOLSCATADD_EW
 	  ? source.expansion != EXPAND_MCOLID_EW
 	  : source.expansion != EXPAND_MROWID_EW)
       || !local_structure_producers_p (gsi, producers, count))

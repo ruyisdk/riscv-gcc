@@ -208,6 +208,13 @@ participate in the same local-window check as the index constructor.
 One same-mode carrier view per operand is unwrapped using its exact nominal
 type, as for the index; the views remain part of that local proof.
 
+Integer scatter-add with a matching-axis ID reuses its other operand when
+the old or data input is a zero constructor of the exact datatype.  Up to
+four complete copies and one carrier view may follow that constructor.
+Its GIMPLE ownership witnesses remain; ordinary RTL DCE may remove the
+unused zero value.  Loaded zeros, floating addition and arbitrary indices
+do not qualify.
+
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has
