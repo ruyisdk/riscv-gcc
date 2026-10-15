@@ -136,8 +136,9 @@ Structural folding
 Two-packet unary operations can read a single-use concat's original halves
 when each half is a complete hardware operand in the same local window.
 The concat access remains visible to ownership checking; the unary instruction
-order and destination formation are unchanged.  Intervening M definitions
-also prevent this expansion-time substitution.
+order and destination formation are unchanged.  A single-use same-mode
+carrier view can be traversed when its original type matches exactly.
+Other intervening M definitions prevent this expansion-time substitution.
 
 The GIMPLE hook can replace extraction from a single-use concatenation
 with the corresponding complete source value.  Exact types and shape

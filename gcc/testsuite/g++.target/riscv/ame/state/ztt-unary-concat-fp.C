@@ -6,4 +6,4 @@
 #define UP_ALT f32_rtz
 #define UP_CARRIER float
 #include "../../../../gcc.target/riscv/ame/state/ztt-unary-concat.h"
-/* { dg-final { scan-rtl-dump-not "Use concat inputs for unary" "expand" } } */
+/* { dg-final { scan-rtl-dump-times "Use concat inputs for unary" 12 "expand" } } */

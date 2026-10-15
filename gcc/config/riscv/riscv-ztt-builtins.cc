@@ -8631,9 +8631,13 @@ unary_concat_sources (const conversion_description &operation, tree exp,
       || !currently_expanding_gimple_stmt)
     return false;
   tree pair = CALL_EXPR_ARG (exp, 0);
+  gimple *producers[2];
+  unsigned int count = 0;
   if (TREE_CODE (pair) != SSA_NAME || !has_single_use (pair)
-      || type_for_tree (TREE_TYPE (pair)) != operation.source)
+      || !strip_structure_view (pair, operation.source, producers, count)
+      || !has_single_use (pair))
     return false;
+  gimple *view = count ? producers[0] : nullptr;
   gimple *producer = SSA_NAME_DEF_STMT (pair);
   unsigned int code = structure_builtin_code (producer);
   if (code >= ZTT_BUILTIN_MAX)
@@ -8646,14 +8650,16 @@ unary_concat_sources (const conversion_description &operation, tree exp,
       || type_nregs (d.type) != 2 * type_nregs (half))
     return false;
   gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
-  if (!local_structure_producers_p (&gsi, &producer, 1))
+  producers[count++] = producer;
+  if (!local_structure_producers_p (&gsi, producers, count))
     return false;
   /* SSA partitions are already assigned; do not cross a new M definition.  */
   for (gsi_prev_nondebug (&gsi); gsi_stmt (gsi) != producer;
        gsi_prev_nondebug (&gsi))
-    if (tree lhs = gimple_get_lhs (gsi_stmt (gsi)))
-      if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs))))
-	return false;
+    if (gsi_stmt (gsi) != view)
+      if (tree lhs = gimple_get_lhs (gsi_stmt (gsi)))
+	if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs))))
+	  return false;
   for (unsigned int i = 0; i < 2; ++i)
     if (TREE_CODE (gimple_call_arg (producer, i)) != SSA_NAME
 	|| type_for_tree (TREE_TYPE (gimple_call_arg (producer, i))) != half)
