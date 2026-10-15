@@ -31,6 +31,7 @@ with GCC; see the file COPYING3.  If not see
 #include "hash-map.h"
 #include "memmodel.h"
 #include "insn-codes.h"
+#include "insn-attr.h"
 #include "optabs.h"
 #include "recog.h"
 #include "diagnostic-core.h"
@@ -1117,7 +1118,7 @@ matmul_shape (prototype_index prototype)
   return nullptr;
 }
 
-static GTY (()) tree ztt_m_type_nodes[TYPE_MAX];
+static GTY (()) tree ztt_m_type_nodes[riscv_ztt::TYPE_MAX];
 static GTY (()) tree ztt_storage128_types[2];
 /* Root temporary prototypes until all language declarations are registered.  */
 static GTY (()) vec<tree, va_gc> *registration_function_types[PROTO_MAX];
@@ -1676,7 +1677,7 @@ static GTY (()) builtin_decl_table nominal_broadcast_decls
   = { TYPE_MAX * numeric_scalar_dtype_count, nullptr };
 struct GTY (()) nominal_registration_cache
 {
-  vec<tree, va_gc> *blocks[TYPE_MAX];
+  vec<tree, va_gc> *blocks[riscv_ztt::TYPE_MAX];
 };
 static GTY (()) nominal_registration_cache *nominal_registration_types;
 
@@ -12641,6 +12642,48 @@ md_preserving_atomic_p (int code, rtx pat)
   return true;
 }
 
+/* Standard RVV integer instructions use a separate architectural state.  */
+static bool
+md_preserving_vector_p (enum attr_type type, rtx pat)
+{
+  switch (type)
+    {
+    case TYPE_RDVLENB: case TYPE_RDVL: case TYPE_WRVXRM: case TYPE_VSETVL:
+    case TYPE_VLDE: case TYPE_VSTE: case TYPE_VLDM: case TYPE_VSTM:
+    case TYPE_VLDS: case TYPE_VSTS: case TYPE_VLDUX: case TYPE_VLDOX:
+    case TYPE_VSTUX: case TYPE_VSTOX: case TYPE_VLDFF:
+    case TYPE_VLDR: case TYPE_VSTR: case TYPE_VLSEGDE: case TYPE_VSSEGTE:
+    case TYPE_VLSEGDS: case TYPE_VSSEGTS: case TYPE_VLSEGDUX: case TYPE_VLSEGDOX:
+    case TYPE_VSSEGTUX: case TYPE_VSSEGTOX: case TYPE_VLSEGDFF:
+    case TYPE_VIALU: case TYPE_VIWALU: case TYPE_VEXT: case TYPE_VICALU:
+    case TYPE_VSHIFT: case TYPE_VNSHIFT: case TYPE_VICMP: case TYPE_VIMINMAX:
+    case TYPE_VIMUL: case TYPE_VIDIV: case TYPE_VIWMUL: case TYPE_VIMULADD:
+    case TYPE_VIWMULADD: case TYPE_VIMERGE: case TYPE_VIMOV: case TYPE_VMOV:
+    case TYPE_VSALU: case TYPE_VAALU: case TYPE_VSMUL: case TYPE_VSSHIFT:
+    case TYPE_VNCLIP: case TYPE_VIRED: case TYPE_VIWRED: case TYPE_VMALU:
+    case TYPE_VMPOP: case TYPE_VMFFS: case TYPE_VMSFS: case TYPE_VMIOTA:
+    case TYPE_VMIDX: case TYPE_VIMOVVX: case TYPE_VIMOVXV:
+    case TYPE_VSLIDEUP: case TYPE_VSLIDEDOWN:
+    case TYPE_VISLIDE1UP: case TYPE_VISLIDE1DOWN:
+    case TYPE_VGATHER: case TYPE_VCOMPRESS:
+      break;
+    default:
+      return false;
+    }
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, pat, NONCONST)
+    if (REG_P (*iter))
+      {
+	unsigned int regno = REGNO (*iter), end = END_REGNO (*iter);
+	if (!(GP_REG_P (regno) && end <= GP_REG_FIRST + GP_REG_NUM)
+	    && !(V_REG_P (regno) && end <= V_REG_FIRST + V_REG_NUM)
+	    && !((VL_REG_P (regno) || VTYPE_REG_P (regno) || VXRM_REG_P (regno))
+		 && end == regno + 1))
+	  return false;
+      }
+  return true;
+}
+
 /* Remember one complete private spill until its inputs or memory change.  */
 class local_raw_spill
 {
@@ -13134,7 +13177,9 @@ reuse_cleaned_descriptors ()
 	    continue;
 	  if (md_read_csr_p (code)
 	      || md_preserving_fp_p (code, PATTERN (insn))
-	      || md_preserving_atomic_p (code, PATTERN (insn)))
+	      || md_preserving_atomic_p (code, PATTERN (insn))
+	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
+		  && md_preserving_vector_p (get_attr_type (insn), PATTERN (insn))))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -13388,7 +13433,9 @@ reuse_local_md ()
 	    }
 	  if (md_read_csr_p (code)
 	      || md_preserving_fp_p (code, PATTERN (insn))
-	      || md_preserving_atomic_p (code, PATTERN (insn)))
+	      || md_preserving_atomic_p (code, PATTERN (insn))
+	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
+		  && md_preserving_vector_p (get_attr_type (insn), PATTERN (insn))))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -14294,6 +14341,54 @@ run_md_reuse_selftests ()
 	(Pmode, gen_rtvec (1, cached), UNSPECV_FSNVSNAN));
     ASSERT_FALSE (md_preserving_atomic_p (CODE_FOR_atomic_load_rvwmosi,
 					 unrelated));
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx address = gen_rtx_REG (Pmode, 10), result = gen_rtx_REG (Pmode, 11);
+    rtx vector = gen_rtx_REG (RVVM1SImode, V_REG_FIRST);
+    rtx load = gen_rtx_SET (vector, gen_rtx_MEM (RVVM1SImode, address));
+    for (enum attr_type type : { TYPE_VSETVL, TYPE_RDVL, TYPE_RDVLENB,
+	 TYPE_WRVXRM, TYPE_VLDE, TYPE_VSTE, TYPE_VLDR, TYPE_VSTR,
+	 TYPE_VLSEGDE, TYPE_VLDFF, TYPE_VIALU, TYPE_VIWALU, TYPE_VIMUL,
+	 TYPE_VSALU, TYPE_VNCLIP, TYPE_VIRED, TYPE_VMPOP, TYPE_VIMOVXV,
+	 TYPE_VGATHER, TYPE_VCOMPRESS })
+      {
+	ASSERT_TRUE (md_preserving_vector_p (type, load));
+	for (unsigned int regno : { FP_REG_FIRST, M_REG_FIRST, ACC_REG_FIRST,
+				   FIRST_PSEUDO_REGISTER + 1 })
+	  {
+	    rtx bad = gen_rtx_PARALLEL
+	      (VOIDmode, gen_rtvec (2, load, gen_rtx_CLOBBER
+		(VOIDmode, gen_rtx_REG (SImode, regno))));
+	    ASSERT_FALSE (md_preserving_vector_p (type, bad));
+	  }
+      }
+    for (enum attr_type type : { TYPE_UNKNOWN, TYPE_CALL, TYPE_MULTI,
+	 TYPE_VECTOR, TYPE_VFALU, TYPE_VFMUL, TYPE_SF_VQMACC, TYPE_VAESDF })
+      ASSERT_FALSE (md_preserving_vector_p (type, load));
+    rtx pattern = TARGET_64BIT
+      ? gen_vsetvldi (result, address, GEN_INT (32), const0_rtx,
+		     const1_rtx, const1_rtx, const0_rtx)
+      : gen_vsetvlsi (result, address, GEN_INT (32), const0_rtx,
+		     const1_rtx, const1_rtx, const0_rtx);
+    ASSERT_TRUE (md_preserving_vector_p (TYPE_VSETVL, pattern));
+    local_md_state state;
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx dynamic = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+    state.record_constant (address, GEN_INT (32));
+    state.remember (matrix, address);
+    state.remember (dynamic, result);
+    ASSERT_FALSE (state.record_scalar_type (address));
+    note_stores (emit_insn (pattern), invalidate_md_store, &state);
+    ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+    ASSERT_FALSE (state.matches (dynamic, result));
+    ASSERT_TRUE (state.record_scalar_type (address));
+    rtx slot = gen_rtx_MEM (ZTTMR1mode, address);
+    set_mem_attrs_for_spill (slot);
+    local_raw_spill spill;
+    ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (slot, matrix)));
+    ASSERT_FALSE (spill.redundant_reload_p (load));
+    ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, slot)));
   }
   {
     const struct { machine_mode full, half, source; } cases[] = {

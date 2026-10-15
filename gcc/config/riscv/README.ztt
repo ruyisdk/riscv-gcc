@@ -526,6 +526,12 @@ Recognized CPU atomic loads, stores and read-modify-write patterns preserve
 Md and amestype as well. Their GPR results and scratch clobbers invalidate
 descriptor facts; memory effects still stop private spill tracking. Atomic
 instructions, fences and memory orders remain unchanged.
+Recognized standard RVV integer, configuration and memory instructions also
+preserve Md and amestype. Only GPRs, vector registers and VL/VTYPE/VXRM may
+occur in these patterns; result GPRs still invalidate descriptor facts.
+RVV memory accesses still stop private spill tracking. Vector instructions,
+VL, masks and fixed-point flags remain unchanged. Floating, vendor and
+unclassified vector instructions retain the existing boundary behavior.
 Empty extended asm with only GPR operands and an optional compiler memory
 clobber preserves Md and scalar-datatype facts.  Other extended asm clears
 AME state facts but preserves unchanged ordinary GPR constants and value
