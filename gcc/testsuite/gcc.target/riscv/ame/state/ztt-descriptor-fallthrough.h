@@ -22,7 +22,7 @@ CHAIN (fp_row, f32_rne, float, mrowbcast_ew_x, (void) 0)
 CHAIN (shift, i32_rnu, __INT32_TYPE__, mcolshift_ew_x, (void) 0)
 CHAIN (fp_call, f32_rne, float, mrowbcast_ew_x, descriptor_callee ())
 CHAIN (fp_asm, f32_rne, float, mrowbcast_ew_x,
-       __asm__ volatile ("" ::: "memory"))
+       __asm__ volatile ("# AME state boundary" ::: "memory"))
 CHAIN (fp_join, f32_rne, float, mrowbcast_ew_x,
        if (index) descriptor_callee ())
 #undef CHAIN

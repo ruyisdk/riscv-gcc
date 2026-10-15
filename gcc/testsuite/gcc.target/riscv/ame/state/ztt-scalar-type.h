@@ -48,9 +48,9 @@ void NAME (__INT32_TYPE__ *out, const __INT32_TYPE__ *in, \
   a = IOP (mmul, i32_rne, a, y); \
   __riscv_ztt_mss_rm (out, a); \
 }
-BOUNDARY (tc_asm, __asm__ volatile ("" ::: "memory"))
+BOUNDARY (tc_asm, __asm__ volatile ("# AME state boundary" ::: "memory"))
 BOUNDARY (tc_call, tc_callee ())
-BOUNDARY (tc_join, if (tc_condition) __asm__ volatile ("" ::: "memory"))
+BOUNDARY (tc_join, if (tc_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 BOUNDARY (tc_write, __asm__ volatile ("csrw\tamestype,%0" : : "r" (y) : "memory"))
 BOUNDARY (tc_unknown, __asm__ volatile ("" : "+Wmr" (a)))
 #undef BOUNDARY

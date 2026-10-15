@@ -41,10 +41,10 @@ BCAST (ctor_rdn, rdn, CTOR_SHAPE, (void) 0, SUM (rdn, CTOR_SHAPE))
 BCAST (ctor_rod, rod, CTOR_SHAPE, (void) 0, SUM (rod, CTOR_SHAPE))
 BCAST (ctor_pair, rnu, CTOR_PAIR, (void) 0, SUM (rnu, CTOR_PAIR))
 BCAST (ctor_asm, rnu, CTOR_SHAPE,
-       __asm__ volatile ("" ::: "memory"), SUM (rnu, CTOR_SHAPE))
+       __asm__ volatile ("# AME state boundary" ::: "memory"), SUM (rnu, CTOR_SHAPE))
 BCAST (ctor_call, rnu, CTOR_SHAPE, binary_callee (), SUM (rnu, CTOR_SHAPE))
 BCAST (ctor_join, rnu, CTOR_SHAPE,
-       if (binary_condition) __asm__ volatile ("" ::: "memory"),
+       if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"),
        SUM (rnu, CTOR_SHAPE))
 #if __riscv_ztt_uds <= 32
 BCAST (ctor_acc, rnu, 1, (void) 0,

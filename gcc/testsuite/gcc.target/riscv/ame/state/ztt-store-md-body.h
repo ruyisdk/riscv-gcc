@@ -11,7 +11,7 @@ void NAME (const __INT32_TYPE__ *in, __INT32_TYPE__ *out, \
            __INT32_TYPE__ *live, __INT32_TYPE__ *stored, unsigned long stride) \
 { \
   __riscv_ztt_i32_1x1_t a = __riscv_ztt_mls_rm_i32_1x1 (in); \
-  __asm__ volatile ("" ::: "memory"); \
+  __asm__ volatile ("# AME state boundary" ::: "memory"); \
   STORE; \
   BARRIER; \
   __riscv_ztt_i32_accx1_t d = __riscv_ztt_mcopy_m2a_i32_accx1 (a); \
@@ -23,10 +23,10 @@ STORE_MD (store_md_cm, __riscv_ztt_mss_cm (stored, a), (void) 0)
 STORE_MD (store_md_st, __riscv_ztt_mss_st (stored, stride, a), (void) 0)
 STORE_MD (store_md_tst, __riscv_ztt_mss_tst (stored, stride, a), (void) 0)
 STORE_MD (store_md_asm, __riscv_ztt_mss_rm (stored, a),
-          __asm__ volatile ("" ::: "memory"))
+          __asm__ volatile ("# AME state boundary" ::: "memory"))
 STORE_MD (store_md_call, __riscv_ztt_mss_rm (stored, a), store_md_callee ())
 STORE_MD (store_md_join, __riscv_ztt_mss_rm (stored, a),
-          if (store_md_condition) __asm__ volatile ("" ::: "memory"))
+          if (store_md_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef STORE_MD
 #ifdef __cplusplus
 }

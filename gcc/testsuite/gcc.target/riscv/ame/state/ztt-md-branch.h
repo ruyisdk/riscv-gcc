@@ -36,7 +36,7 @@ void split_call (const element *in, element *out, int flag)
 void split_asm (const element *in, element *out, int flag)
 {
   __riscv_ztt_i32_1x1_t a = __riscv_ztt_mls_rm_i32_1x1 (in);
-  __asm__ volatile ("" ::: "memory");
+  __asm__ volatile ("# AME state boundary" ::: "memory");
   if (flag)
     __riscv_ztt_mss_rm (out, __riscv_ztt_madd_ew_i32_1x1 (a, a));
   else

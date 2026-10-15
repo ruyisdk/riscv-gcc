@@ -35,7 +35,7 @@ CASE (sa_index, LOAD (input), COPY (d), (void) 0, __riscv_ztt_mss_rm (saved, d))
 CASE (sa_all, COPY (d), COPY (d), (void) 0, __riscv_ztt_mss_rm (saved, d))
 CASE (sa_dead, COPY (d), COPY (d), (void) 0, (void) 0)
 CASE (sa_call, COPY (d), COPY (d), sa_callee (), __riscv_ztt_mss_rm (saved, d))
-CASE (sa_asm, COPY (d), COPY (d), __asm__ volatile ("" ::: "memory"), __riscv_ztt_mss_rm (saved, d))
+CASE (sa_asm, COPY (d), COPY (d), __asm__ volatile ("# AME state boundary" ::: "memory"), __riscv_ztt_mss_rm (saved, d))
 #ifdef __cplusplus
 }
 #endif

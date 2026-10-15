@@ -7,7 +7,7 @@ acc_barrier (const float *a, const float *b, const float *old,
   __riscv_ztt_f32_1x1_t x = __riscv_ztt_mls_rm_f32_1x1 (a);
   __riscv_ztt_f32_1x1_t y = __riscv_ztt_mls_rm_f32_1x1 (b);
   __riscv_ztt_f32_1x1_t d = __riscv_ztt_mls_rm_f32_1x1 (old);
-  __asm__ volatile ("" ::: "memory");
+  __asm__ volatile ("# AME state boundary" ::: "memory");
   __riscv_ztt_f32_1x1_t z = __riscv_ztt_mmulacc_ew_f32_1x1 (d, x, y);
   __riscv_ztt_mss_rm (out, z);
   __riscv_ztt_mss_rm (ca, x);

@@ -84,7 +84,7 @@ OB_FN (observe_then_asm)
 {
   OB_LOAD;
   unsigned long value = __riscv_ztt_get_amefflags ();
-  __asm__ volatile ("" ::: "memory");
+  __asm__ volatile ("# AME state boundary" ::: "memory");
   OB_STORE;
   return value;
 }

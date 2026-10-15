@@ -11636,6 +11636,25 @@ invalidate_md_store (rtx reg, const_rtx, void *data)
     static_cast<local_md_state *> (data)->invalidate (reg);
 }
 
+/* Match the operand-free compiler memory barrier, not arbitrary empty asm.  */
+static bool
+md_memory_barrier_p (rtx pattern)
+{
+  if (GET_CODE (pattern) != PARALLEL || XVECLEN (pattern, 0) != 2)
+    return false;
+  rtx code = XVECEXP (pattern, 0, 0), clobber = XVECEXP (pattern, 0, 1);
+  if (GET_CODE (code) != ASM_OPERANDS || GET_MODE (code) != VOIDmode
+      || !MEM_VOLATILE_P (code) || ASM_OPERANDS_TEMPLATE (code)[0]
+      || ASM_OPERANDS_OUTPUT_CONSTRAINT (code)[0]
+      || ASM_OPERANDS_OUTPUT_IDX (code) || ASM_OPERANDS_INPUT_LENGTH (code)
+      || XVECLEN (code, 4) || ASM_OPERANDS_LABEL_LENGTH (code)
+      || GET_CODE (clobber) != CLOBBER)
+    return false;
+  rtx mem = XEXP (clobber, 0);
+  return MEM_P (mem) && GET_MODE (mem) == BLKmode
+    && GET_CODE (XEXP (mem, 0)) == SCRATCH;
+}
+
 /* Extended asm describes its GPR writes, but not its AME state changes.  */
 static bool
 invalidate_asm_md (rtx_insn *insn, local_md_state &state)
@@ -11643,7 +11662,11 @@ invalidate_asm_md (rtx_insn *insn, local_md_state &state)
   if (!NONJUMP_INSN_P (insn) || !extract_asm_operands (PATTERN (insn))
       || asm_noperands (PATTERN (insn)) < 0)
     return false;
-  state.clear_ame ();
+  if (!md_memory_barrier_p (PATTERN (insn)))
+    state.clear_ame ();
+  else if (dump_file)
+    fprintf (dump_file, "Preserve Md across memory barrier at insn %d\n",
+	     INSN_UID (insn));
   note_stores (insn, invalidate_md_store, &state);
   return true;
 }
@@ -13179,6 +13202,57 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  for (unsigned int test = 0; test != 12; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx code = gen_rtx_ASM_OPERANDS (VOIDmode, "", "", 0, rtvec_alloc (0),
+				     rtvec_alloc (0), rtvec_alloc (0),
+				     UNKNOWN_LOCATION);
+      MEM_VOLATILE_P (code) = 1;
+      rtx mem = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode));
+      rtx clobber = gen_rtx_CLOBBER (VOIDmode, mem);
+      rtx pattern = gen_rtx_PARALLEL (VOIDmode, gen_rtvec (2, code, clobber));
+      switch (test)
+	{
+	case 1: ASM_OPERANDS_TEMPLATE (code) = "# unknown"; break;
+	case 2: ASM_OPERANDS_INPUT_VEC (code) = gen_rtvec (1, const0_rtx); break;
+	case 3: ASM_OPERANDS_OUTPUT_CONSTRAINT (code) = "=r"; break;
+	case 4:
+	  ASM_OPERANDS_LABEL_VEC (code)
+	    = gen_rtvec (1, gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()));
+	  break;
+	case 5: XEXP (clobber, 0) = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST); break;
+	case 6: XEXP (mem, 0) = gen_rtx_REG (Pmode, 10); break;
+	case 7: PUT_MODE (mem, SImode); break;
+	case 8:
+	  pattern = gen_rtx_PARALLEL
+	    (VOIDmode, gen_rtvec (3, code, clobber,
+				 gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 10))));
+	  break;
+	case 9: pattern = gen_rtx_SET (gen_rtx_REG (Pmode, 10), code); break;
+	case 10: pattern = gen_rtx_ASM_INPUT_loc (VOIDmode, "", UNKNOWN_LOCATION); break;
+	case 11: MEM_VOLATILE_P (code) = 0; break;
+	}
+      ASSERT_EQ (!test, md_memory_barrier_p (pattern));
+      if (!test)
+	{
+	  local_md_state state;
+	  rtx reg = gen_rtx_REG (Pmode, 10);
+	  rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+	  state.record_constant (reg, GEN_INT (32));
+	  state.remember (group, reg);
+	  state.record_scalar_type (reg);
+	  ASSERT_TRUE (invalidate_asm_md (emit_insn (pattern), state));
+	  ASSERT_TRUE (state.matches (group, GEN_INT (32)));
+	  ASSERT_TRUE (state.record_scalar_type (reg));
+	  local_raw_spill spill;
+	  rtx slot = gen_rtx_MEM (ZTTMR1mode, reg);
+	  set_mem_attrs_for_spill (slot);
+	  ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (slot, group)));
+	  ASSERT_FALSE (spill.redundant_reload_p (pattern));
+	  ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (group, slot)));
+	}
+    }
   ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_fence));
   ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_mem_thread_fence_rvwmo));
   ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_mem_thread_fence_ztso));

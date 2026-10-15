@@ -15,7 +15,7 @@ NAME (const element_t *old, const element_t *input, \
   __riscv_ztt_mss_rm (saved, d); \
 }
 TAIL_CASE (sa_tail_call, sa_callee ())
-TAIL_CASE (sa_tail_asm, __asm__ volatile ("" ::: "memory"))
+TAIL_CASE (sa_tail_asm, __asm__ volatile ("# AME state boundary" ::: "memory"))
 #ifdef __cplusplus
 }
 #endif

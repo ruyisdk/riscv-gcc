@@ -29,7 +29,7 @@ RD_CASE(colbcast, mcolbcast_ew_x, )
 RD_CASE(rowshift, mrowshift_ew_x, )
 RD_CASE(colshift, mcolshift_ew_x, )
 RD_CASE(call, mrowshift_ew_x, rd_callee ())
-RD_CASE(barrier, mrowshift_ew_x, __asm__ volatile ("" ::: "memory"))
+RD_CASE(barrier, mrowshift_ew_x, __asm__ volatile ("# AME state boundary" ::: "memory"))
 RD_CASE(join, mrowshift_ew_x, if (control & 1) rd_callee ())
 __attribute__((noipa)) void rd_unknown (RD_ARGS)
 {

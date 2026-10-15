@@ -31,7 +31,7 @@ MATMUL_CHAIN (descriptor_bt, mmulbtacc, f32_rne, float, (void) 0)
 MATMUL_CHAIN (descriptor_btneg, mmulbtaccneg, f32_rne, float, (void) 0)
 MATMUL_CHAIN (descriptor_integer, mmulacc, i32_rnu, __INT32_TYPE__, (void) 0)
 MATMUL_CHAIN (descriptor_asm, mmulacc, f32_rne, float,
-              __asm__ volatile ("" ::: "memory"))
+              __asm__ volatile ("# AME state boundary" ::: "memory"))
 MATMUL_CHAIN (descriptor_call, mmulacc, f32_rne, float,
               matmul_descriptor_callee ())
 MATMUL_CHAIN (descriptor_join, mmulacc, f32_rne, float,

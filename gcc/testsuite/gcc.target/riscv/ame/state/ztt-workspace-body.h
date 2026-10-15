@@ -36,7 +36,7 @@ FN void workspace_call (elem *out, const elem *in)
 FN void workspace_asm (elem *out, const elem *in)
 {
   __riscv_ztt_i32_1x1_t a = LOAD (in);
-  __asm__ volatile ("" ::: "memory");
+  __asm__ volatile ("# AME state boundary" ::: "memory");
   STORE (out, a);
 }
 

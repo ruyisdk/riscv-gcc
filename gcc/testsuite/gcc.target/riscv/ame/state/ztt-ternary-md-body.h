@@ -58,10 +58,10 @@ TN (tn_narrow, mmulacc, i16, rod, i32, rne, i16, rdn, TN_MIXED, y, (void) 0)
 TN (tn_pair, mmulacc, i32, rnu, i32, rnu, i32, rnu, TN_PAIR, y, (void) 0)
 TN (tn_shared, mmulacc, i32, rnu, i32, rnu, i32, rnu, TN_BASIC, x, (void) 0)
 TN (tn_asm, mmulacc, i32, rnu, i32, rnu, i32, rnu, TN_BASIC, y,
-    __asm__ volatile ("" ::: "memory"))
+    __asm__ volatile ("# AME state boundary" ::: "memory"))
 TN (tn_call, mmulacc, i32, rnu, i32, rnu, i32, rnu, TN_BASIC, y, binary_callee ())
 TN (tn_join, mmulacc, i32, rnu, i32, rnu, i32, rnu, TN_BASIC, y,
-    if (binary_condition) __asm__ volatile ("" ::: "memory"))
+    if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 TN_LIVE (tn_oldlive, mmulacc, i32, rnu, i32, rnu, i32, rnu, TN_BASIC, y, (void) 0)
 #undef TN
 #undef TN_

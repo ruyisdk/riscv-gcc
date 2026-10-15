@@ -393,7 +393,9 @@ Descriptor cleanup after DCE uses the same boundaries; private raw spill
 tracking remains confined to each block.
 Standard thread-fence patterns preserve register and datatype facts, but
 still invalidate private memory reuse.  The fences and user memory accesses
-remain in place; inline asm and unknown operations keep their usual kills.
+  remain in place.  The operand-free empty asm with only a memory clobber
+  also preserves register facts, but invalidates private memory reuse.
+  Other inline asm and unknown operations keep their usual kills.
 Recognized AME CSR reads preserve Md and scalar-datatype facts while
 invalidating the result GPR.  The volatile read and its order are unchanged;
 CSR writes, raw operations, acquire/release and asm retain their boundaries.

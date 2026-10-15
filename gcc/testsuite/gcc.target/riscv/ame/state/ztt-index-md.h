@@ -28,7 +28,7 @@ __attribute__((noipa)) void ix_##F##_##NAME (IX_ARGS) \
 IX_CASE(F,repeat,IX_TYPE, , ) \
 IX_CASE(F,changed,IX_ALT, , ) \
 IX_CASE(F,call,IX_TYPE,ix_callee (), ) \
-IX_CASE(F,barrier,IX_TYPE,__asm__ volatile ("" ::: "memory"), ) \
+IX_CASE(F,barrier,IX_TYPE,__asm__ volatile ("# AME state boundary" ::: "memory"), ) \
 IX_CASE(F,join,IX_TYPE,if (control) ix_callee (), ) \
 IX_CASE(F,live,IX_TYPE, ,__riscv_ztt_mss_rm (saved,a)) \
 __attribute__((noipa)) void ix_##F##_unknown (IX_ARGS) \

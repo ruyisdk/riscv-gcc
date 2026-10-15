@@ -7,7 +7,7 @@ __attribute__((noinline, noclone)) \
 void max_##D##_##OP (const E *a, E *out) \
 { \
   __riscv_ztt_##D##_1x##COUNT##_t x = __riscv_ztt_mls_rm_##D##_1x##COUNT (a); \
-  __asm__ volatile ("" ::: "memory"); \
+  __asm__ volatile ("# AME state boundary" ::: "memory"); \
   __riscv_ztt_mss_rm (out, __riscv_ztt_m##OP##_ew_##D##_1x##COUNT (x, x)); \
 }
 MAX_VALUE (u64, __UINT64_TYPE__, 4, add)

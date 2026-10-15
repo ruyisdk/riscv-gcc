@@ -37,7 +37,7 @@ __attribute__((noipa)) void cd_##NAME (CD_ARGS) \
 CD_CASE(repeat, CD_DST, )
 CD_CASE(changed, CD_ALT, )
 CD_CASE(call, CD_DST, cd_callee ())
-CD_CASE(barrier, CD_DST, __asm__ volatile ("" ::: "memory"))
+CD_CASE(barrier, CD_DST, __asm__ volatile ("# AME state boundary" ::: "memory"))
 CD_CASE(join, CD_DST, if (control & 1) cd_callee ())
 __attribute__((noipa)) void cd_unknown (CD_ARGS)
 {

@@ -25,7 +25,7 @@ ACC_CHAIN (acc_descriptor_pair, f32_rne, float, 2,
 ACC_CHAIN (acc_descriptor_int, i32_rnu, __INT32_TYPE__, 1,
            __riscv_ztt_mzero_acc_i32_rnu_accx1 (), (void) 0)
 ACC_CHAIN (acc_descriptor_asm, f32_rne, float, 1, ZF,
-           __asm__ volatile ("" ::: "memory"))
+           __asm__ volatile ("# AME state boundary" ::: "memory"))
 ACC_CHAIN (acc_descriptor_call, f32_rne, float, 1, ZF,
            acc_descriptor_callee ())
 ACC_CHAIN (acc_descriptor_join, f32_rne, float, 1, ZF,

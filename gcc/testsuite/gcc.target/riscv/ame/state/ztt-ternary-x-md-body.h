@@ -74,10 +74,10 @@ TX (tx_exp, TX_EXP, mldexpacc, i32, rnu, i32, rnu, TX_BASIC, x, (void) 0)
 TX (tx_exp_same, TX_EXP, mldexpacc, i32, rnu, i32, rnu, TX_REUSE, d, (void) 0)
 TX (tx_exp_distinct, TX_EXP, mldexpacc, i32, rnu, i32, rnu, TX_REUSE, x, (void) 0)
 TX (tx_asm, TX_DATA, mmulacc, i32, rnu, i32, rnu, TX_BASIC, x,
-    __asm__ volatile ("" ::: "memory"))
+    __asm__ volatile ("# AME state boundary" ::: "memory"))
 TX (tx_call, TX_DATA, mmulacc, i32, rnu, i32, rnu, TX_BASIC, x, binary_callee ())
 TX (tx_join, TX_DATA, mmulacc, i32, rnu, i32, rnu, TX_BASIC, x,
-    if (binary_condition) __asm__ volatile ("" ::: "memory"))
+    if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 TX_LIVE (tx_oldlive, TX_DATA, mmulacc, i32, rnu, i32, rnu, TX_BASIC, x, (void) 0)
 #undef TX
 #undef TX_

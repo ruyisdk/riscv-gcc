@@ -37,10 +37,10 @@ UNARY (unary_abs, mabs_ew, rnu, UNARY_COUNT, (void) 0)
 UNARY (unary_reduce, mreduceadd_row, rnu, UNARY_COUNT, (void) 0)
 UNARY (unary_prefix, mprefixadd_col, rnu, UNARY_COUNT, (void) 0)
 UNARY (unary_asm, mabs_ew, rnu, UNARY_COUNT,
-       __asm__ volatile ("" ::: "memory"))
+       __asm__ volatile ("# AME state boundary" ::: "memory"))
 UNARY (unary_call, mabs_ew, rnu, UNARY_COUNT, binary_callee ())
 UNARY (unary_join, mabs_ew, rnu, UNARY_COUNT,
-       if (binary_condition) __asm__ volatile ("" ::: "memory"))
+       if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 #if __riscv_ztt_uds <= 32
 UNARY (unary_packets, mabs_ew, rnu, 2, (void) 0)
 #endif

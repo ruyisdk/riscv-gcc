@@ -31,14 +31,14 @@ void NAME (const binary_element *a, const binary_element *b, \
 #define EXPAND_PREP(...) PREP_ (__VA_ARGS__)
 #define PREP(NAME, SIDE, BARRIER, CHAIN, SAME) \
   EXPAND_PREP (NAME, PREP_COUNT, SIDE, BARRIER, CHAIN, SAME)
-PREP (binary_left, 1, __asm__ volatile ("" ::: "memory"), 0, 0)
-PREP (binary_right, 2, __asm__ volatile ("" ::: "memory"), 0, 0)
-PREP (binary_unknown, 0, __asm__ volatile ("" ::: "memory"), 0, 0)
+PREP (binary_left, 1, __asm__ volatile ("# AME state boundary" ::: "memory"), 0, 0)
+PREP (binary_right, 2, __asm__ volatile ("# AME state boundary" ::: "memory"), 0, 0)
+PREP (binary_unknown, 0, __asm__ volatile ("# AME state boundary" ::: "memory"), 0, 0)
 PREP (binary_call_before, 0, binary_callee (), 0, 0)
 PREP (binary_join_before, 0,
-      if (binary_condition) __asm__ volatile ("" ::: "memory"), 0, 0)
-PREP (binary_chain, 1, __asm__ volatile ("" ::: "memory"), 1, 0)
-PREP (binary_same_unknown, 0, __asm__ volatile ("" ::: "memory"), 0, 1)
+      if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"), 0, 0)
+PREP (binary_chain, 1, __asm__ volatile ("# AME state boundary" ::: "memory"), 1, 0)
+PREP (binary_same_unknown, 0, __asm__ volatile ("# AME state boundary" ::: "memory"), 0, 1)
 #undef PREP
 #undef EXPAND_PREP
 #undef PREP_

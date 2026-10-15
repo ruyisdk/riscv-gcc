@@ -26,7 +26,7 @@ void NAME (const element *in, element *out, unsigned flag) \
 NESTED (nested_binary, (void) 0, __riscv_ztt_mmul_ew_i32_1x1 (a, a))
 NESTED (nested_rowcol, (void) 0, __riscv_ztt_mcolbcast_ew_x_i32_1x1 (a, 1))
 NESTED (nested_call, nested_callee (), __riscv_ztt_mmul_ew_i32_1x1 (a, a))
-NESTED (nested_asm, __asm__ volatile ("" ::: "memory"),
+NESTED (nested_asm, __asm__ volatile ("# AME state boundary" ::: "memory"),
         __riscv_ztt_mmul_ew_i32_1x1 (a, a))
 #undef NESTED
 

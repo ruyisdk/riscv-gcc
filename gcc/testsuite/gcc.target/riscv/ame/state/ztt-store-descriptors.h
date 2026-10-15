@@ -23,7 +23,7 @@ CHAIN (store_load_fp, __riscv_ztt_mss_rm (out, a),
        a = __riscv_ztt_mls_rm_f32_1x1 (out))
 CHAIN (store_call_fp, __riscv_ztt_mss_rm (out, a), descriptor_callee ())
 CHAIN (store_asm_fp, __riscv_ztt_mss_rm (out, a),
-       __asm__ volatile ("" ::: "memory"))
+       __asm__ volatile ("# AME state boundary" ::: "memory"))
 CHAIN (store_join_fp, __riscv_ztt_mss_rm (out, a),
        if (flag) descriptor_callee ())
 #undef CHAIN

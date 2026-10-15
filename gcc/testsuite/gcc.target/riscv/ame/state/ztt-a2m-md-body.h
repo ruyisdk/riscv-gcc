@@ -61,10 +61,10 @@ void NAME (const a2m_element *in, a2m_element *out) \
   BARRIER; \
   __riscv_ztt_mss_rm (out, m); \
 }
-A2M_BARRIER (a2m_asm, __asm__ volatile ("" ::: "memory"))
+A2M_BARRIER (a2m_asm, __asm__ volatile ("# AME state boundary" ::: "memory"))
 A2M_BARRIER (a2m_call, a2m_callee ())
 A2M_BARRIER (a2m_join,
-             if (a2m_condition) __asm__ volatile ("" ::: "memory"))
+             if (a2m_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef A2M_BARRIER
 #endif
 #undef A2M_COPY

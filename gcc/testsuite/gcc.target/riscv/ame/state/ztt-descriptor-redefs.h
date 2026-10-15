@@ -32,7 +32,7 @@ CHAIN (chain_rne, add, rne, (void) 0)
 CHAIN (chain_rdn, add, rdn, (void) 0)
 CHAIN (chain_rod, add, rod, (void) 0)
 CHAIN (chain_call, add, rnu, redefs_callee ())
-CHAIN (chain_asm, add, rnu, __asm__ volatile ("" ::: "memory"))
+CHAIN (chain_asm, add, rnu, __asm__ volatile ("# AME state boundary" ::: "memory"))
 CHAIN (chain_join, add, rnu, if (redefs_condition) redefs_callee ())
 #undef OP
 #undef CHAIN

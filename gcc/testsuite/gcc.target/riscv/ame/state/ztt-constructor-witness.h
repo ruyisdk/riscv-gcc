@@ -32,7 +32,7 @@ CHAIN (witness_load, f32, float,
        __riscv_ztt_mls_rm_f32_1x1 (in), (void) 0)
 CHAIN (witness_call, f32, float, ZERO, descriptor_callee ())
 CHAIN (witness_asm, f32, float, ZERO,
-       __asm__ volatile ("" ::: "memory"))
+       __asm__ volatile ("# AME state boundary" ::: "memory"))
 CHAIN (witness_join, f32, float, ZERO,
        if (flag) descriptor_callee ())
 #undef ZERO

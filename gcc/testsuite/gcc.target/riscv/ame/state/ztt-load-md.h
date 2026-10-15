@@ -31,7 +31,7 @@ __attribute__((noipa)) void ld_##NAME (LD_ARGS) \
 LD_CASE(repeat,LD_TYPE, )
 LD_CASE(changed,LD_ALT, )
 LD_CASE(call,LD_TYPE,ld_callee ())
-LD_CASE(barrier,LD_TYPE,__asm__ volatile ("" ::: "memory"))
+LD_CASE(barrier,LD_TYPE,__asm__ volatile ("# AME state boundary" ::: "memory"))
 LD_CASE(join,LD_TYPE,if (control) ld_callee ())
 __attribute__((noipa)) void ld_live (LD_ARGS)
 {

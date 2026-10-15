@@ -10,7 +10,7 @@ void NAME (const __INT32_TYPE__ *in, __INT32_TYPE__ *out, \
 { \
   __riscv_ztt_i32_1x1_t a = __riscv_ztt_mls_rm_i32_1x1 (in); \
   __riscv_ztt_i32_accx1_t d = __riscv_ztt_mcopy_m2a_i32_accx1 (a); \
-  __asm__ volatile ("" ::: "memory"); \
+  __asm__ volatile ("# AME state boundary" ::: "memory"); \
   STORE; \
   __riscv_ztt_i32_1x1_t b = LOAD; \
   d = __riscv_ztt_mmulacc_2d_i32_accx1 (d, a, b); \

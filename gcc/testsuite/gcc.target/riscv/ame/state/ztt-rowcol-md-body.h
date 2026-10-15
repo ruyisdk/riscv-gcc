@@ -37,10 +37,10 @@ ROWCOL (rowcol_rod, mcolbcast, rod, (void) 0)
 ROWCOL (rowcol_row, mrowbcast, rnu, (void) 0)
 ROWCOL (rowcol_colshift, mcolshift, rnu, (void) 0)
 ROWCOL (rowcol_rowshift, mrowshift, rnu, (void) 0)
-ROWCOL (rowcol_asm, mcolshift, rnu, __asm__ volatile ("" ::: "memory"))
+ROWCOL (rowcol_asm, mcolshift, rnu, __asm__ volatile ("# AME state boundary" ::: "memory"))
 ROWCOL (rowcol_call, mcolshift, rnu, binary_callee ())
 ROWCOL (rowcol_join, mcolshift, rnu,
-        if (binary_condition) __asm__ volatile ("" ::: "memory"))
+        if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef ROWCOL
 #undef ROWCOL_EXPAND
 #undef ROWCOL_

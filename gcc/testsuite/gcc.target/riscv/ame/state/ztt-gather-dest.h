@@ -35,7 +35,7 @@ __attribute__((noipa)) void gd_##name (GD_ARGS) \
 GD_CASE(pair, mcolgather_ew, mrowgather_ew, )
 GD_CASE(reverse, mrowgather_ew, mcolgather_ew, )
 GD_CASE(call, mcolgather_ew, mrowgather_ew, gd_callee ())
-GD_CASE(barrier, mcolgather_ew, mrowgather_ew, __asm__ volatile ("" ::: "memory"))
+GD_CASE(barrier, mcolgather_ew, mrowgather_ew, __asm__ volatile ("# AME state boundary" ::: "memory"))
 __attribute__((noipa)) void gd_unknown (GD_ARGS)
 {
   GD_LOAD;

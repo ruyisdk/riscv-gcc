@@ -51,10 +51,10 @@ EW (ew_pair, mmul, i32, rnu, i32, rnu, i32, rnu, EW_PAIR, y, (void) 0)
 EW (ew_shift, msll, i32, rnu, i32, rnu, u32, rnu, EW_BASIC, y, (void) 0)
 EW (ew_add, madd, i32, rne, i32, rnu, i32, rod, EW_BASIC, y, (void) 0)
 EW (ew_asm, mmul, i32, rnu, i32, rnu, i32, rnu, EW_BASIC, y,
-    __asm__ volatile ("" ::: "memory"))
+    __asm__ volatile ("# AME state boundary" ::: "memory"))
 EW (ew_call, mmul, i32, rnu, i32, rnu, i32, rnu, EW_BASIC, y, binary_callee ())
 EW (ew_join, mmul, i32, rnu, i32, rnu, i32, rnu, EW_BASIC, y,
-    if (binary_condition) __asm__ volatile ("" ::: "memory"))
+    if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef EW
 #undef EW_
 #undef EW_C_i16

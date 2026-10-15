@@ -32,7 +32,7 @@ void NAME (const shared_element *a, const shared_element *b, \
 #define SHARED(...) SHARED_ (__VA_ARGS__)
 #define SHARED_OP(OP) \
   SHARED (shared_##OP, OP, rnu, SHARED_COUNT, \
-          __asm__ volatile ("" ::: "memory"))
+          __asm__ volatile ("# AME state boundary" ::: "memory"))
 SHARED_OP (add)
 SHARED_OP (sub)
 SHARED_OP (min)
@@ -44,15 +44,15 @@ SHARED_OP (ornot)
 SHARED_OP (xor)
 SHARED (shared_call, add, rnu, SHARED_COUNT, binary_callee ())
 SHARED (shared_join, add, rnu, SHARED_COUNT,
-        if (binary_condition) __asm__ volatile ("" ::: "memory"))
+        if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 SHARED (shared_rne, add, rne, SHARED_COUNT,
-        __asm__ volatile ("" ::: "memory"))
+        __asm__ volatile ("# AME state boundary" ::: "memory"))
 SHARED (shared_rdn, add, rdn, SHARED_COUNT,
-        __asm__ volatile ("" ::: "memory"))
+        __asm__ volatile ("# AME state boundary" ::: "memory"))
 SHARED (shared_rod, add, rod, SHARED_COUNT,
-        __asm__ volatile ("" ::: "memory"))
+        __asm__ volatile ("# AME state boundary" ::: "memory"))
 SHARED (shared_pair, add, rnu, SHARED_PAIR,
-        __asm__ volatile ("" ::: "memory"))
+        __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef SHARED_OP
 #undef SHARED
 #undef SHARED_

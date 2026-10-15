@@ -45,10 +45,10 @@ M2A_COPY (m2a_rdn, i32_rdn, 2, m2a_element, (void) 0)
 M2A_COPY (m2a_rod, i32_rod, 2, m2a_element, (void) 0)
 M2A_COPY (m2a_quad, i32_rnu, 4, m2a_element, (void) 0)
 M2A_COPY (m2a_asm, i32_rnu, 2, m2a_element,
-          __asm__ volatile ("" ::: "memory"))
+          __asm__ volatile ("# AME state boundary" ::: "memory"))
 M2A_COPY (m2a_call, i32_rnu, 2, m2a_element, m2a_callee ())
 M2A_COPY (m2a_join, i32_rnu, 2, m2a_element,
-          if (m2a_condition) __asm__ volatile ("" ::: "memory"))
+          if (m2a_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 void m2a_disjoint (const m2a_element *in, m2a_element *out, m2a_element *live)
 {
   __riscv_ztt_i32_rne_1x1_t other = __riscv_ztt_mls_rm_i32_rne_1x1 (in);

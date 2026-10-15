@@ -50,7 +50,7 @@ __attribute__((noipa)) void ed_##NAME (ED_ARGS) \
 ED_CASE(matrix, ED_DST, )
 ED_CASE(changed, ED_ALT, )
 ED_CASE(call, ED_DST, ed_callee ())
-ED_CASE(barrier, ED_DST, __asm__ volatile ("" ::: "memory"))
+ED_CASE(barrier, ED_DST, __asm__ volatile ("# AME state boundary" ::: "memory"))
 ED_CASE(join, ED_DST, if (control & 1) ed_callee ())
 #define ED_SCALAR_CASE(NAME, TC, BETWEEN) \
 __attribute__((noipa)) void ed_##NAME (ED_ARGS) \

@@ -33,7 +33,7 @@ CHAIN (constructor_load, f32, float, 1x1,
        __riscv_ztt_mls_rm_f32_1x1 (out), (void) 0)
 CHAIN (constructor_call, f32, float, 1x1, ZERO, descriptor_callee ())
 CHAIN (constructor_asm, f32, float, 1x1, ZERO,
-       __asm__ volatile ("" ::: "memory"))
+       __asm__ volatile ("# AME state boundary" ::: "memory"))
 CHAIN (constructor_join, f32, float, 1x1, ZERO,
        if (flag) descriptor_callee ())
 #undef ZERO

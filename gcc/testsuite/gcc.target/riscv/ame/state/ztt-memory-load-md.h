@@ -37,7 +37,7 @@ __attribute__((noipa)) void ml_##LAYOUT##_##NAME (ML_ARGS) \
 ML_CASE(LAYOUT,repeat,LD_TYPE,LOAD, , ) \
 ML_CASE(LAYOUT,changed,LD_ALT,LOAD, , ) \
 ML_CASE(LAYOUT,call,LD_TYPE,LOAD,ml_callee (), ) \
-ML_CASE(LAYOUT,barrier,LD_TYPE,LOAD,__asm__ volatile ("" ::: "memory"), ) \
+ML_CASE(LAYOUT,barrier,LD_TYPE,LOAD,__asm__ volatile ("# AME state boundary" ::: "memory"), ) \
 ML_CASE(LAYOUT,join,LD_TYPE,LOAD,if (control) ml_callee (), ) \
 ML_CASE(LAYOUT,live,LD_TYPE,LOAD, ,__riscv_ztt_mss_rm (saved,a)) \
 __attribute__((noipa)) void ml_##LAYOUT##_unknown (ML_ARGS) \

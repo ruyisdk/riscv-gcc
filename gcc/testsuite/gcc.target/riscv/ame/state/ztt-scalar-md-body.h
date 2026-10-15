@@ -55,10 +55,10 @@ SX (sx_pair, SX_DATA, mmul, i32, rnu, i32, rnu, SX_PAIR, (void) 0)
 SX (sx_shift, SX_SHIFT, msll, i32, rnu, i32, rnu, SX_BASIC, (void) 0)
 SX (sx_add, SX_DATA, madd, i32, rne, i32, rnu, SX_BASIC, (void) 0)
 SX (sx_asm, SX_DATA, mmul, i32, rnu, i32, rnu, SX_BASIC,
-    __asm__ volatile ("" ::: "memory"))
+    __asm__ volatile ("# AME state boundary" ::: "memory"))
 SX (sx_call, SX_DATA, mmul, i32, rnu, i32, rnu, SX_BASIC, binary_callee ())
 SX (sx_join, SX_DATA, mmul, i32, rnu, i32, rnu, SX_BASIC,
-    if (binary_condition) __asm__ volatile ("" ::: "memory"))
+    if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef SX
 #undef SX_
 #undef SX_DATA

@@ -27,7 +27,7 @@ ZIP_CHAIN (unzip_row_fp, f32_rne, float, mrowunzip_ew, (void) 0, (void) 0)
 ZIP_CHAIN (zip_cross_axis, i32_rnu, __INT32_TYPE__, mcolzip_ew,
            a = __riscv_ztt_mrowzip_ew_i32_rnu_1x2 (a), (void) 0)
 ZIP_CHAIN (zip_asm, i32_rnu, __INT32_TYPE__, mcolzip_ew, (void) 0,
-           __asm__ volatile ("" ::: "memory"))
+           __asm__ volatile ("# AME state boundary" ::: "memory"))
 ZIP_CHAIN (zip_call, i32_rnu, __INT32_TYPE__, mcolzip_ew, (void) 0,
            zip_descriptor_callee ())
 ZIP_CHAIN (zip_join, i32_rnu, __INT32_TYPE__, mcolzip_ew, (void) 0,

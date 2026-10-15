@@ -40,10 +40,10 @@ TEST (reduce_max, f32_rne, f32_rne, 1x2, float, mreducemax_col, (void) 0)
 TEST (prefix_add, i32_rnu, i32_rnu, 1x2, int32_t, mprefixadd_col, (void) 0)
 TEST (sqrt_fp, f32_rne, f32_rne, 1x2, float, msqrt_ew, (void) 0)
 TEST (asm_boundary, i32_rnu, i32_rnu, 1x2, int32_t, mabs_ew,
-      __asm__ volatile ("" ::: "memory"))
+      __asm__ volatile ("# AME state boundary" ::: "memory"))
 TEST (call_boundary, i32_rnu, i32_rnu, 1x2, int32_t, mabs_ew, external_call ())
 TEST (join_boundary, i32_rnu, i32_rnu, 1x2, int32_t, mabs_ew,
-      if (condition) __asm__ volatile ("" ::: "memory"))
+      if (condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 
 void live_source (const int32_t *in)
 {

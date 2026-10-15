@@ -29,7 +29,7 @@ NAME (const element_t *in, const element_t *other, element_t *out, \
 CASE (am_same, m, (void) 0)
 CASE (am_distinct, n, (void) 0)
 CASE (am_call, n, am_callee ())
-CASE (am_asm, n, __asm__ volatile ("" ::: "memory"))
+CASE (am_asm, n, __asm__ volatile ("# AME state boundary" ::: "memory"))
 #ifdef __cplusplus
 }
 #endif

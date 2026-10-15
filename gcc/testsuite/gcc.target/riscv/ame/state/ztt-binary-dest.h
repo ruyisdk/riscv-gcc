@@ -43,7 +43,7 @@ BD_CASE(ornot, BD_TYPE, mornot_ew, b, )
 BD_CASE(xor, BD_TYPE, mxor_ew, b, )
 BD_CASE(same, BD_TYPE, msub_ew, a, )
 BD_CASE(call, BD_TYPE, msub_ew, b, bd_callee ())
-BD_CASE(barrier, BD_TYPE, msub_ew, b, __asm__ volatile ("" ::: "memory"))
+BD_CASE(barrier, BD_TYPE, msub_ew, b, __asm__ volatile ("# AME state boundary" ::: "memory"))
 BD_CASE(join, BD_TYPE, msub_ew, b, if (*in & 1) bd_callee ())
 BD_CASE(changed, BD_OTHER, msub_ew, b, )
 

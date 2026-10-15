@@ -50,10 +50,10 @@ BINARY (binary_rne, add, rne, BINARY_COUNT, 0, (void) 0)
 BINARY (binary_rdn, add, rdn, BINARY_COUNT, 0, (void) 0)
 BINARY (binary_rod, add, rod, BINARY_COUNT, 0, (void) 0)
 BINARY (binary_asm, add, rnu, BINARY_COUNT, 0,
-        __asm__ volatile ("" ::: "memory"))
+        __asm__ volatile ("# AME state boundary" ::: "memory"))
 BINARY (binary_call, add, rnu, BINARY_COUNT, 0, binary_callee ())
 BINARY (binary_join, add, rnu, BINARY_COUNT, 0,
-        if (binary_condition) __asm__ volatile ("" ::: "memory"))
+        if (binary_condition) __asm__ volatile ("# AME state boundary" ::: "memory"))
 
 #define BINARY_ACC_(COUNT) \
 void binary_acc (const binary_element *a, const binary_element *b, \

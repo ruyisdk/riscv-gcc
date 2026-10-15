@@ -8,7 +8,7 @@ extern "C" {
 #endif
 #define LOAD(P) __riscv_ztt_mls_rm_i32_rnu_1x1 (P)
 #define KEEP(V) __asm__ volatile ("" : : "Wmr" (V))
-#define BARRIER() __asm__ volatile ("" ::: "memory")
+#define BARRIER() __asm__ volatile ("# AME state boundary" ::: "memory")
 #define INDEXED(NAME, OP, OLD) \
 void NAME (const __INT32_TYPE__ *a, const __INT32_TYPE__ *b) \
 { \

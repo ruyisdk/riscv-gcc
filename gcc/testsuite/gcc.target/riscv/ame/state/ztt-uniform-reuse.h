@@ -47,7 +47,7 @@ UB_CASE(same_dead, madd_ew, a, a, , )
 UB_CASE(same_live, madd_ew, a, a, , UB_SAVE)
 UB_CASE(call_dead, msub_ew, a, b, ub_callee (), )
 UB_CASE(call_live, msub_ew, a, b, ub_callee (), UB_SAVE)
-UB_CASE(barrier, madd_ew, a, b, __asm__ volatile ("" ::: "memory"), )
+UB_CASE(barrier, madd_ew, a, b, __asm__ volatile ("# AME state boundary" ::: "memory"), )
 
 void ub_reference (UB_ARGS)
 {

@@ -23,7 +23,7 @@ unsigned long asm_##NAME (AD_ARGS) \
   __riscv_ztt_mss_rm (last, a); \
   return token; \
 }
-AD_CHAIN (memory, __asm__ volatile ("" ::: "memory"))
+AD_CHAIN (memory, __asm__ volatile ("# AME state boundary" ::: "memory"))
 AD_CHAIN (gpr, __asm__ volatile ("li t0,7\n\tli t1,9" ::: "t0", "t1", "memory"))
 AD_CHAIN (output, __asm__ volatile ("li %0,9" : "=r" (token) : : "memory"))
 AD_CHAIN (readwrite, __asm__ volatile ("addi %0,%0,1" : "+r" (token) : : "memory"))

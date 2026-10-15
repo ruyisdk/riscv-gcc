@@ -54,7 +54,7 @@ FN void NAME (elem *out0, elem *out1, const elem *in0, const elem *in1) \
   __riscv_ztt_mss_rm (out1, RM (in1)); \
 }
 BOUNDARY (call_boundary, descriptor_boundary ())
-BOUNDARY (asm_boundary, __asm__ volatile ("" ::: "memory"))
+BOUNDARY (asm_boundary, __asm__ volatile ("# AME state boundary" ::: "memory"))
 BOUNDARY (asm_gpr_boundary,
           __asm__ volatile ("" ::: "a0", "a1", "a2", "a3", "memory"))
 BOUNDARY (join_boundary, if (descriptor_condition) descriptor_boundary ())

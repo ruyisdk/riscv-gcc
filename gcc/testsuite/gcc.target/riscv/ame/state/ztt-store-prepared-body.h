@@ -44,11 +44,11 @@ void NAME (const prepared_element *in, prepared_element *out) \
   BARRIER; \
   __riscv_ztt_mss_rm (out, a); \
 }
-PREPARED_BARRIER (prepared_asm, __asm__ volatile ("" ::: "memory"))
+PREPARED_BARRIER (prepared_asm, __asm__ volatile ("# AME state boundary" ::: "memory"))
 PREPARED_BARRIER (prepared_call, prepared_store_callee ())
 PREPARED_BARRIER (prepared_join,
                  if (prepared_store_condition)
-                   __asm__ volatile ("" ::: "memory"))
+                   __asm__ volatile ("# AME state boundary" ::: "memory"))
 #undef PREPARED_BARRIER
 #ifdef __cplusplus
 }
