@@ -12815,7 +12815,7 @@ reuse_local_md ()
 			bool convert = XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT
 			  || XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT_REUSE;
 			rtx setup = XVECEXP (src, 0, 1);
-			if (convert && state.matches_packets
+			if (state.matches_packets
 			    (SET_DEST (set), setup, datatype_step (UINTVAL (steps), 0)))
 			  setup = const0_rtx;
 			rtx prepared = gen_ztt_state_unary_prepared

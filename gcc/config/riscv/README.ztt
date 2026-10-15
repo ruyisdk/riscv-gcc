@@ -581,9 +581,9 @@ Typed broadcast and index constructors establish their complete result
 group's Md for later consumers in the same block.
 Conversions and structural unary operations establish source and result Md
 per datatype packet.  Do not combine adjacent packets into a larger fact.
-Prepared conversions omit destination setters when every destination packet
-already has the requested Md.  Conversion and its status effects remain;
-structural unary operations retain their existing destination setup rules.
+Prepared conversions and structural unary operations omit destination setters
+when every source and destination packet already has the requested Md.  The
+complete result writes, rounding and status effects remain.
 Prepared matrix/scalar elementwise operations and gathers omit known destination
 setters after all input packets match.  Destination reuse and scalar TC reuse
 are independent; old-destination operations keep their preservation rules.
