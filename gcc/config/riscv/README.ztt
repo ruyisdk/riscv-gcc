@@ -221,6 +221,13 @@ operand must be zero.  The bounded zero proof applies to grouped M values.  Mixe
 datatypes, floating arithmetic and intervening state boundaries do not
 qualify, and the zero constructor remains an ownership witness.
 
+Integer min/max/and/or of the same complete value reuse the first operand.
+The inputs must have identical datatypes and shapes, and may follow up to
+four complete copies each.  Exact carrier views and the common typed
+producer must be in the local structural window.  The producer and copies
+remain visible to ownership checking; floating values and state boundaries
+do not qualify.
+
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has

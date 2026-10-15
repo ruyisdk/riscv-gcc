@@ -7796,9 +7796,41 @@ structure_zero_p (tree value, type_index type, gimple **producers,
   return true;
 }
 
-/* Exact integer zero identities retain the other complete operand.  */
+/* Retain the common producer as a local ownership witness.  */
+static bool
+same_structure_value_p (tree left, tree right, type_index type,
+			gimple **producers, unsigned int &count)
+{
+  if (!strip_structure_view (left, type, producers, count)
+      || !strip_structure_view (right, type, producers, count)
+      || !strip_structure_copies (left, type, producers, count, false, true)
+      || !strip_structure_copies (right, type, producers, count, false, true)
+      || left != right)
+    return false;
+  gimple *producer = SSA_NAME_DEF_STMT (left);
+  if (is_gimple_assign (producer)
+      && gimple_assign_rhs_code (producer) == VIEW_CONVERT_EXPR
+      && !gimple_vuse (producer) && !gimple_has_side_effects (producer))
+    {
+      tree source = TREE_OPERAND (gimple_assign_rhs1 (producer), 0);
+      if (TREE_CODE (source) != SSA_NAME
+	  || type_for_tree (TREE_TYPE (source)) == TYPE_MAX
+	  || TYPE_MODE (TREE_TYPE (source)) != TYPE_MODE (TREE_TYPE (left)))
+	return false;
+      producers[count++] = producer;
+      producer = SSA_NAME_DEF_STMT (source);
+    }
+  if (!is_gimple_call (producer)
+      || structure_builtin_code (producer, gimple_call_num_args (producer))
+	 == ZTT_BUILTIN_MAX)
+    return false;
+  producers[count++] = producer;
+  return true;
+}
+
+/* Exact integer identities retain a complete input value.  */
 static tree
-binary_zero_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
   builtin_description d;
   elementwise_description operation;
@@ -7829,7 +7861,10 @@ binary_zero_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
     }
   bool commutative = d.expansion == EXPAND_MADD_EW
     || d.expansion == EXPAND_MOR_EW || d.expansion == EXPAND_MXOR_EW;
-  if ((!commutative && d.expansion != EXPAND_MSUB_EW)
+  bool idempotent = d.expansion == EXPAND_MMIN_EW
+    || d.expansion == EXPAND_MMAX_EW || d.expansion == EXPAND_MAND_EW
+    || d.expansion == EXPAND_MOR_EW;
+  if ((!commutative && !idempotent && d.expansion != EXPAND_MSUB_EW)
       || d.type == TYPE_MAX || types[d.type].accumulator
       || !type_nregs (d.type)
       || floating_descriptor_p (types[d.type].descriptor))
@@ -7845,17 +7880,28 @@ binary_zero_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
     }
   if (!carrier && type_for_tree (lhs_type) != d.type)
     return NULL_TREE;
-  gimple *producers[6];
+  gimple *producers[12];
   unsigned int count = 0;
-  /* MSUB computes its second input minus its first.  */
-  unsigned int zero = commutative ? 1 : 0;
-  tree result = gimple_call_arg (stmt, 1 - zero);
-  if (!structure_zero_p (gimple_call_arg (stmt, zero), d.type, producers, count))
+  tree result = gimple_call_arg (stmt, 0);
+  bool same = idempotent
+    && same_structure_value_p (result, gimple_call_arg (stmt, 1), d.type,
+			       producers, count);
+  if (!same)
     {
-      if (!commutative
-	  || !structure_zero_p (result, d.type, producers, count))
+      /* MSUB computes its second input minus its first.  */
+      if (!commutative && d.expansion != EXPAND_MSUB_EW)
 	return NULL_TREE;
-      result = gimple_call_arg (stmt, zero);
+      count = 0;
+      unsigned int zero = commutative ? 1 : 0;
+      result = gimple_call_arg (stmt, 1 - zero);
+      if (!structure_zero_p (gimple_call_arg (stmt, zero), d.type,
+			    producers, count))
+	{
+	  if (!commutative
+	      || !structure_zero_p (result, d.type, producers, count))
+	    return NULL_TREE;
+	  result = gimple_call_arg (stmt, zero);
+	}
     }
   if (!local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
@@ -8060,7 +8106,7 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
       || !gimple_call_lhs (stmt))
     return nullptr;
   tree lhs = gimple_call_lhs (stmt);
-  tree value = binary_zero_value (code, gsi, stmt);
+  tree value = binary_identity_value (code, gsi, stmt);
   if (!value && code >= ZTT_BUILTIN_MAX)
     value = identity_indexed_value (code, gsi, stmt);
   else if (!value)
