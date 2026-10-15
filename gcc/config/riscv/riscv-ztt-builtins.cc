@@ -12556,6 +12556,54 @@ md_preserving_fp_p (int code, rtx pat = nullptr)
     }
 }
 
+/* CPU atomics change memory and GPRs, not the AME register state.  */
+static bool
+md_preserving_atomic_p (int code, rtx pat)
+{
+  if (code < 0 || code == CODE_FOR_nothing
+      || (GET_CODE (pat) != SET && GET_CODE (pat) != PARALLEL))
+    return false;
+  bool atomic = false;
+  int count = GET_CODE (pat) == PARALLEL ? XVECLEN (pat, 0) : 1;
+  for (int i = 0; i < count; ++i)
+    {
+      rtx set = GET_CODE (pat) == PARALLEL ? XVECEXP (pat, 0, i) : pat;
+      if (GET_CODE (set) != SET)
+	continue;
+      rtx src = SET_SRC (set);
+      if (GET_CODE (src) == SIGN_EXTEND || GET_CODE (src) == ZERO_EXTEND)
+	src = XEXP (src, 0);
+      if (GET_CODE (src) != UNSPEC_VOLATILE)
+	continue;
+      switch (XINT (src, 1))
+	{
+	case UNSPECV_ATOMIC_LOAD:
+	case UNSPECV_ATOMIC_STORE:
+	case UNSPECV_SYNC_OLD_OP:
+	case UNSPECV_SYNC_OLD_OP_SUBWORD:
+	case UNSPECV_SYNC_OLD_OP_ZABHA:
+	case UNSPECV_SYNC_EXCHANGE:
+	case UNSPECV_SYNC_EXCHANGE_SUBWORD:
+	case UNSPECV_SYNC_EXCHANGE_ZABHA:
+	case UNSPECV_COMPARE_AND_SWAP:
+	case UNSPECV_COMPARE_AND_SWAP_SUBWORD:
+	  atomic = true;
+	  break;
+	default:
+	  return false;
+	}
+    }
+  if (!atomic)
+    return false;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, pat, NONCONST)
+    if (REG_P (*iter)
+	&& (!GP_REG_P (REGNO (*iter))
+	    || END_REGNO (*iter) > GP_REG_FIRST + GP_REG_NUM))
+      return false;
+  return true;
+}
+
 /* Remember one complete private spill until its inputs or memory change.  */
 class local_raw_spill
 {
@@ -13048,7 +13096,8 @@ reuse_cleaned_descriptors ()
 	  if (md_preserving_fence_p (code))
 	    continue;
 	  if (md_read_csr_p (code)
-	      || md_preserving_fp_p (code, PATTERN (insn)))
+	      || md_preserving_fp_p (code, PATTERN (insn))
+	      || md_preserving_atomic_p (code, PATTERN (insn)))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -13301,7 +13350,8 @@ reuse_local_md ()
 	      continue;
 	    }
 	  if (md_read_csr_p (code)
-	      || md_preserving_fp_p (code, PATTERN (insn)))
+	      || md_preserving_fp_p (code, PATTERN (insn))
+	      || md_preserving_atomic_p (code, PATTERN (insn)))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -14134,6 +14184,83 @@ run_md_reuse_selftests ()
 			     gen_rtvec (1, fp), UNSPEC_LOAD_GOT));
 	    ASSERT_FALSE (md_preserving_fp_p (code, bad));
 	  }
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx cached = gen_rtx_REG (Pmode, 10);
+    rtx address = gen_rtx_REG (Pmode, 12);
+    rtx model = GEN_INT (MEMMODEL_SEQ_CST);
+    for (machine_mode mode : { SImode, DImode })
+      {
+	if (mode == DImode && !TARGET_64BIT)
+	  continue;
+	bool wide = mode == DImode;
+	rtx reg = gen_rtx_REG (mode, 10), input = gen_rtx_REG (mode, 11);
+	rtx scratch = gen_rtx_REG (mode, 13);
+	rtx mem = gen_rtx_MEM (mode, address);
+	MEM_VOLATILE_P (mem) = 1;
+	insn_code load = TARGET_ZTSO
+	  ? (wide ? CODE_FOR_atomic_load_ztsodi : CODE_FOR_atomic_load_ztsosi)
+	  : (wide ? CODE_FOR_atomic_load_rvwmodi : CODE_FOR_atomic_load_rvwmosi);
+	insn_code store = TARGET_ZTSO
+	  ? (wide ? CODE_FOR_atomic_store_ztsodi : CODE_FOR_atomic_store_ztsosi)
+	  : (wide ? CODE_FOR_atomic_store_rvwmodi : CODE_FOR_atomic_store_rvwmosi);
+	rtx patterns[] = {
+	  GEN_FCN (load) (reg, mem, model),
+	  GEN_FCN (store) (mem, input, model),
+	  wide ? gen_amo_atomic_adddi (mem, input, model)
+	       : gen_amo_atomic_addsi (mem, input, model),
+	  wide ? gen_amo_atomic_fetch_adddi (reg, mem, input, model)
+	       : gen_amo_atomic_fetch_addsi (reg, mem, input, model),
+	  wide ? gen_amo_atomic_exchangedi (reg, mem, input, model)
+	       : gen_amo_atomic_exchangesi (reg, mem, input, model),
+	  wide ? gen_zalrsc_atomic_cas_value_strongdi
+		   (reg, mem, input, const0_rtx, model, model)
+	       : gen_zalrsc_atomic_cas_value_strongsi
+		   (reg, mem, input, const0_rtx, model, model)
+	};
+	XEXP (XVECEXP (patterns[5], 0, 2), 0) = scratch;
+	for (unsigned int i = 0; i < ARRAY_SIZE (patterns); ++i)
+	  {
+	    rtx pat = patterns[i];
+	    rtx_insn *insn = emit_insn (pat);
+	    int code = recog_memoized (insn);
+	    bool supported = i < 2 || (i == 5 ? TARGET_ZALRSC : TARGET_ZAAMO);
+	    ASSERT_EQ (md_preserving_atomic_p (code, pat), supported);
+	    ASSERT_FALSE (md_preserving_atomic_p (-1, pat));
+	    ASSERT_FALSE (md_preserving_atomic_p (CODE_FOR_nothing, pat));
+	    ASSERT_FALSE (md_scalar_insn_p (pat));
+	    local_md_state state;
+	    state.record_constant (cached, GEN_INT (32));
+	    rtx scratch_value = gen_rtx_REG (Pmode, 13);
+	    state.record_constant (scratch_value, GEN_INT (64));
+	    state.remember (matrix, cached);
+	    ASSERT_FALSE (state.record_scalar_type (GEN_INT (32)));
+	    note_stores (insn, invalidate_md_store, &state);
+	    ASSERT_EQ (state.matches (matrix, cached), i == 1 || i == 2);
+	    ASSERT_EQ (state.constant_value (scratch_value),
+		       i == 5 ? NULL_RTX : GEN_INT (64));
+	    ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+	    ASSERT_TRUE (state.record_scalar_type (GEN_INT (32)));
+	    rtx slot = gen_rtx_MEM (ZTTMR1mode, address);
+	    set_mem_attrs_for_spill (slot);
+	    local_raw_spill spill;
+	    ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (slot, matrix)));
+	    ASSERT_FALSE (spill.redundant_reload_p (pat));
+	    ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, slot)));
+	    rtx bad = gen_rtx_PARALLEL (VOIDmode,
+	      gen_rtvec (2, pat, gen_rtx_CLOBBER (VOIDmode, matrix)));
+	    ASSERT_FALSE (md_preserving_atomic_p (code, bad));
+	    bad = replace_rtx (copy_rtx (pat), address,
+			       gen_rtx_REG (Pmode, M_REG_FIRST));
+	    ASSERT_FALSE (md_preserving_atomic_p (code, bad));
+	  }
+      }
+    rtx unrelated = gen_rtx_SET (cached, gen_rtx_UNSPEC_VOLATILE
+	(Pmode, gen_rtvec (1, cached), UNSPECV_FSNVSNAN));
+    ASSERT_FALSE (md_preserving_atomic_p (CODE_FOR_atomic_load_rvwmosi,
+					 unrelated));
   }
   {
     const struct { machine_mode full, half, source; } cases[] = {

@@ -502,6 +502,10 @@ flag helpers and scalar rounding/conversion patterns also preserve these
 facts. Rounding accepts only known tags and scalar CPU registers, including
 sign-extended integer results. Their instructions and status effects remain; any
 result GPR is invalidated. Private spill rules are unchanged.
+Recognized CPU atomic loads, stores and read-modify-write patterns preserve
+Md and amestype as well. Their GPR results and scratch clobbers invalidate
+descriptor facts; memory effects still stop private spill tracking. Atomic
+instructions, fences and memory orders remain unchanged.
 Empty extended asm with only GPR operands and an optional compiler memory
 clobber preserves Md and scalar-datatype facts.  Other extended asm clears
 AME state facts but preserves unchanged ordinary GPR constants and value
