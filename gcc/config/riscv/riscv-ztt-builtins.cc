@@ -8624,19 +8624,19 @@ expand_elementwise (unsigned int code, tree exp)
 
 /* Use complete concat halves without moving the original ownership access.  */
 static bool
-unary_concat_sources (const conversion_description &operation, tree exp,
-		      rtx *sources)
+concat_operand_sources (tree pair, type_index type,
+			const elementwise_formation &formation, rtx *sources,
+			bool shared_input = false)
 {
-  unsigned int half_insns = operation.formation.insns / 2;
+  unsigned int half_insns = formation.insns / 2;
   if (!optimize || !runtime_profile_p () || !half_insns
-      || operation.formation.insns % 2
+      || formation.insns % 2
       || !currently_expanding_gimple_stmt)
     return false;
-  tree pair = CALL_EXPR_ARG (exp, 0);
   gimple *producers[2];
   unsigned int count = 0;
   if (TREE_CODE (pair) != SSA_NAME || !has_single_use (pair)
-      || !strip_structure_view (pair, operation.source, producers, count)
+      || !strip_structure_view (pair, type, producers, count)
       || !has_single_use (pair))
     return false;
   gimple *view = count ? producers[0] : nullptr;
@@ -8645,11 +8645,11 @@ unary_concat_sources (const conversion_description &operation, tree exp,
   if (code >= ZTT_BUILTIN_MAX)
     return false;
   const auto d = builtin_description_for (code);
-  if (d.expansion != EXPAND_MCONCAT || d.type != operation.source)
+  if (d.expansion != EXPAND_MCONCAT || d.type != type)
     return false;
   type_index half = m_utility_source_type (d.prototype, d.type);
   if (half == TYPE_MAX
-      || type_nregs (half) != half_insns * operation.formation.step[1]
+      || type_nregs (half) != half_insns * formation.step[1]
       || type_nregs (d.type) != 2 * type_nregs (half))
     return false;
   gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
@@ -8667,12 +8667,25 @@ unary_concat_sources (const conversion_description &operation, tree exp,
     if (TREE_CODE (gimple_call_arg (producer, i)) != SSA_NAME
 	|| type_for_tree (TREE_TYPE (gimple_call_arg (producer, i))) != half)
       return false;
+  /* Keep the concat allocation when both ternary inputs are single-use.  */
+  if (shared_input && has_single_use (gimple_call_arg (producer, 0))
+      && has_single_use (gimple_call_arg (producer, 1)))
+    return false;
   for (unsigned int i = 0; i < 2; ++i)
     sources[i] = force_reg (type_mode (half),
 			    expand_normal (gimple_call_arg (producer, i)));
-  if (dump_file)
-    fprintf (dump_file, "Use concat inputs for unary\n");
   return true;
+}
+
+static rtx
+concat_operand_part (rtx *sources, const elementwise_formation &formation,
+		     unsigned int i)
+{
+  unsigned int half_insns = formation.insns / 2;
+  rtx group = sources[i / half_insns];
+  machine_mode mode = matrix_mode (formation.step[1]);
+  return simplify_gen_subreg (mode, group, GET_MODE (group),
+			      GET_MODE_SIZE (mode) * (i % half_insns));
 }
 
 static rtx
@@ -8701,23 +8714,18 @@ expand_conversion (const builtin_description &d,
     }
   const auto &f = operation.formation;
   rtx sources[2];
-  bool concat = unary_concat_sources (operation, exp, sources);
+  bool concat = concat_operand_sources (CALL_EXPR_ARG (exp, 0),
+					operation.source, f, sources);
+  if (concat && dump_file)
+    fprintf (dump_file, "Use concat inputs for unary\n");
   emit_clobber (result);
   for (unsigned int i = 0; i < f.insns; ++i)
     {
       machine_mode dm = matrix_mode (f.step[0]);
       machine_mode sm = matrix_mode (f.step[1]);
       rtx dst = simplify_gen_subreg (dm, result, modes[0], GET_MODE_SIZE (dm) * i);
-      rtx src;
-      if (concat)
-	{
-	  unsigned int half_insns = f.insns / 2;
-	  rtx group = sources[i / half_insns];
-	  src = simplify_gen_subreg (sm, group, GET_MODE (group),
-				    GET_MODE_SIZE (sm) * (i % half_insns));
-	}
-      else
-	src = simplify_gen_subreg (sm, source, modes[1], GET_MODE_SIZE (sm) * i);
+      rtx src = concat ? concat_operand_part (sources, f, i)
+	: simplify_gen_subreg (sm, source, modes[1], GET_MODE_SIZE (sm) * i);
       int variant = structural_variant (d.expansion);
       /* FP exceptions accrue in amefflags, independently of scalar fast-math
 	 and fenv options.  FP exponent bits must not be read as integer SAT.  */
@@ -8786,6 +8794,11 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
   rtx scalar_descriptor = exponent ? const0_rtx : GEN_INT (types[operation.scalar].descriptor);
   rtx result = gen_reg_rtx (modes[0]);
   const auto &f = operation.formation;
+  rtx sources[2];
+  bool concat = concat_operand_sources (CALL_EXPR_ARG (exp, ternary >= 0 ? 1 : 0),
+					operation.source, f, sources, ternary >= 0);
+  if (concat && dump_file)
+    fprintf (dump_file, "Use concat inputs for scalar\n");
   /* Scalar ingress converts TC to TB before computing the result in TD.
      Either conversion can saturate, even when the result is unused.  */
   bool flags = floating_descriptor_p (UINTVAL (dtype[0]))
@@ -8797,6 +8810,8 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
     {
       auto part = [&] (unsigned int operand, rtx value)
 	{
+	  if (concat && operand == 1)
+	    return concat_operand_part (sources, f, i);
 	  machine_mode mode = matrix_mode (f.step[operand]);
 	  return simplify_gen_subreg
 	    (mode, value, modes[operand], GET_MODE_SIZE (mode) * i);
