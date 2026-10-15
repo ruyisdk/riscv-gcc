@@ -11780,8 +11780,9 @@ class local_raw_spill
     return true;
   }
 
-  /* Compare address values before STORE through at most sixteen definitions.  */
-  bool same_address_p (rtx src, rtx_insn *load) const
+  /* Compare address values before STORE within a bounded local window.  */
+  bool same_address_p (rtx src, rtx_insn *load,
+		       bool interleaved = false) const
   {
     if (!store || !load)
       return false;
@@ -11795,13 +11796,18 @@ class local_raw_spill
 	  return false;
 	if (!NONDEBUG_INSN_P (p))
 	  continue;
-	if (++count > 16)
+	if (++count > (interleaved ? 64U : 16U))
 	  return false;
 	if (p == store)
 	  before_store = true;
 	else
 	  {
 	    rtx pat = PATTERN (p);
+	    if (interleaved && NONJUMP_INSN_P (p)
+		&& !RTX_FRAME_RELATED_P (p) && md_raw_transfer_p (pat)
+		&& private_slot_p (MEM_P (SET_DEST (pat))
+				   ? SET_DEST (pat) : SET_SRC (pat)))
+	      continue;
 	    if (!NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
 		|| GET_CODE (pat) != SET
 		|| !local_md_state::full_gpr_p (SET_DEST (pat))
@@ -11841,6 +11847,62 @@ class local_raw_spill
 
 public:
   void clear () { reg = mem = nullptr; store = nullptr; }
+
+  /* Other members of a split spill may separate a save from its reload.  */
+  static bool interleaved_reload_p (rtx_insn *load)
+  {
+    rtx pattern = PATTERN (load);
+    if (!md_raw_transfer_p (pattern) || !private_slot_p (SET_SRC (pattern)))
+      return false;
+    rtx value = SET_DEST (pattern), slot = SET_SRC (pattern);
+    unsigned int count = 0;
+    for (rtx_insn *p = PREV_INSN (load); p; p = PREV_INSN (p))
+      {
+	if (LABEL_P (p) || BARRIER_P (p)
+	    || (NOTE_P (p) && NOTE_KIND (p) == NOTE_INSN_BASIC_BLOCK))
+	  return false;
+	if (!NONDEBUG_INSN_P (p))
+	  continue;
+	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p))
+	  return false;
+	rtx pat = PATTERN (p);
+	if (md_raw_transfer_p (pat))
+	  {
+	    rtx dest = SET_DEST (pat), src = SET_SRC (pat);
+	    rtx other = MEM_P (dest) ? dest : src;
+	    if (!private_slot_p (other)
+		|| MEM_ADDR_SPACE (other) != MEM_ADDR_SPACE (slot))
+	      return false;
+	    if (REG_P (dest))
+	      {
+		if (reg_overlap_mentioned_p (value, dest))
+		  return false;
+		continue;
+	      }
+	    if (known_eq (MEM_OFFSET (slot), MEM_OFFSET (dest))
+		&& rtx_equal_p (src, value) && GET_MODE (slot) == GET_MODE (dest))
+	      {
+		local_raw_spill saved;
+		saved.reg = src;
+		saved.mem = dest;
+		saved.store = p;
+		return saved.same_address_p (slot, load, true);
+	      }
+	    if (!known_le (MEM_OFFSET (slot) + MEM_SIZE (slot), MEM_OFFSET (dest))
+		&& !known_le (MEM_OFFSET (dest) + MEM_SIZE (dest), MEM_OFFSET (slot)))
+	      return false;
+	    continue;
+	  }
+	if (GET_CODE (pat) != SET
+	    || !local_md_state::full_gpr_p (SET_DEST (pat))
+	    || fixed_regs[REGNO (SET_DEST (pat))]
+	    || global_regs[REGNO (SET_DEST (pat))]
+	    || REGNO (SET_DEST (pat)) == HARD_FRAME_POINTER_REGNUM
+	    || !address_expr_p (SET_SRC (pat)))
+	  return false;
+      }
+    return false;
+  }
 
   /* A private spill is dead if the remaining return tail cannot read it.  */
   bool remove_dead_store ()
@@ -12111,13 +12173,15 @@ reuse_cleaned_descriptors ()
 	  if (explicit_state && NONJUMP_INSN_P (insn)
 	      && !RTX_FRAME_RELATED_P (insn) && code >= 0)
 	    {
-	      if (spill.redundant_reload_p (PATTERN (insn), insn))
+	      bool direct = spill.redundant_reload_p (PATTERN (insn), insn);
+	      if (direct || local_raw_spill::interleaved_reload_p (insn))
 		{
 		  if (dump_file)
-		    fprintf (dump_file, "Drop redundant raw reload at insn %d\n",
-			     INSN_UID (insn));
+		    fprintf (dump_file, "Drop %s raw reload at insn %d\n",
+			     direct ? "redundant" : "interleaved", INSN_UID (insn));
 		  delete_insn (insn);
-		  spill.remove_dead_store ();
+		  if (direct)
+		    spill.remove_dead_store ();
 		  changed = true;
 		  continue;
 		}
@@ -13386,6 +13450,76 @@ run_md_reuse_selftests ()
       visit (gen_rtx_SET (d, gen_rtx_PLUS (Pmode, c, hard_frame_pointer_rtx)));
       ASSERT_EQ (test == 0 || test == 14,
 		 visit (gen_rtx_SET (m, other)));
+    }
+  for (unsigned int test = 0; test != 25; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+      rtx c = gen_rtx_REG (Pmode, 12), d = gen_rtx_REG (Pmode, 13);
+      rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx member = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, a);
+      set_mem_attrs_for_spill (slot);
+      rtx other = copy_rtx (slot), source = copy_rtx (slot);
+      XEXP (other, 0) = b;
+      set_mem_offset (other, GET_MODE_SIZE (ZTTMR1mode));
+      if (test == 1)
+	set_mem_offset (other, 0);
+      if (test == 2)
+	MEM_VOLATILE_P (other) = 1;
+      if (test == 3)
+	MEM_NOTRAP_P (other) = 0;
+      if (test == 4)
+	set_mem_expr (other, NULL_TREE);
+      if (test == 22)
+	set_mem_offset (other, 8);
+      if (test == 23)
+	clear_mem_size (other);
+      if (test == 21)
+	emit_insn (gen_rtx_SET (d, a));
+      emit_insn (gen_rtx_SET (slot, value));
+      emit_insn (gen_rtx_SET (other, member));
+      emit_insn (gen_rtx_SET (test == 5 ? value : member, other));
+      switch (test)
+	{
+	case 6: emit_insn (gen_rtx_ASM_INPUT (VOIDmode, "")); break;
+	case 7:
+	  emit_insn (gen_rtx_UNSPEC_VOLATILE
+	    (VOIDmode, gen_rtvec (1, value), UNSPECV_ZTT));
+	  break;
+	case 8: emit_label (gen_label_rtx ()); break;
+	case 9: emit_barrier (); break;
+	case 10: emit_insn (gen_rtx_SET (a, const0_rtx)); break;
+	case 11:
+	  RTX_FRAME_RELATED_P (emit_insn (gen_rtx_SET (c, const0_rtx))) = 1;
+	  break;
+	case 12: emit_insn (gen_rtx_SET (c, gen_rtx_MULT (Pmode, a, b))); break;
+	case 13: set_mem_expr (source, NULL_TREE); break;
+	case 14: MEM_VOLATILE_P (source) = 1; break;
+	case 15:
+	  emit_insn (gen_rtx_SET (gen_rtx_MEM (Pmode, c), const0_rtx));
+	  break;
+	case 16: case 17:
+	  for (unsigned int i = 0; i != (test == 16 ? 61U : 62U); ++i)
+	    emit_insn (gen_rtx_SET (c, GEN_INT (i)));
+	  break;
+	case 18:
+	  emit_insn (gen_rtx_SET (member, gen_rtx_MEM (ZTTMR1mode, b)));
+	  break;
+	case 19: emit_insn (gen_rtx_SET (hard_frame_pointer_rtx, a)); break;
+	case 20: XEXP (source, 0) = d; break;
+	case 21:
+	  emit_insn (gen_rtx_SET (a, const0_rtx));
+	  XEXP (source, 0) = d;
+	  break;
+	case 24:
+	  emit_call_insn (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, c),
+				      const0_rtx));
+	  break;
+	}
+      rtx_insn *load = emit_insn (gen_rtx_SET (value, source));
+      ASSERT_EQ (test == 0 || test == 16 || test == 21,
+		 local_raw_spill::interleaved_reload_p (load));
     }
   for (int code : { UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT,
 		   UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT })
