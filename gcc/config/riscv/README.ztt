@@ -192,13 +192,14 @@ The index may pass through up to four same-type M copies in that window.
 The constructor and copies remain as ownership witnesses.  Inner copy
 inputs require a single value use; other uses of the final index remain.
 
-Consecutive integer row/column broadcasts with the same axis and complete
+Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has
 constant zero low 32 bits.  Index zero is valid for every positive N.
-The first broadcast retains its range
-and ownership checks.  Other differing controls, floating types and
-intervening state or memory operations do not qualify.
+The first broadcast retains its range and ownership checks.  Floating
+broadcasts copy element bits without conversion or rounding, preserving
+NaN payloads and signed zeros.  Other differing controls and intervening
+state or memory operations do not qualify.
 
 The bounded copy search also recognizes zero-offset row/column shifts of
 complete basic Squares, using their existing full-value copy semantics.

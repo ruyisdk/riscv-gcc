@@ -7823,7 +7823,8 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     : build1 (VIEW_CONVERT_EXPR, lhs_type, data);
 }
 
-/* The first broadcast retains the control-range and ownership checks.  */
+/* Broadcasts copy bits, including floating NaN payloads.  The first call
+   retains the control-range and ownership checks.  */
 static tree
 repeated_broadcast_value (const builtin_description &d,
 			  gimple_stmt_iterator *gsi, gcall *stmt)
@@ -7831,8 +7832,7 @@ repeated_broadcast_value (const builtin_description &d,
   if (d.type == TYPE_MAX || types[d.type].accumulator
       || types[d.type].rows != 1 || types[d.type].columns != 1
       || !type_nregs (d.type)
-      || (types[d.type].descriptor & 0xff) < active_profile ()->uds
-      || floating_descriptor_p (types[d.type].descriptor))
+      || (types[d.type].descriptor & 0xff) < active_profile ()->uds)
     return NULL_TREE;
   tree value = gimple_call_arg (stmt, 0);
   if (TREE_CODE (value) != SSA_NAME
