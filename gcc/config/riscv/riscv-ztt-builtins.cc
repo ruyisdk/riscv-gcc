@@ -8744,7 +8744,7 @@ local_acc_result_p ()
 static unsigned int integer_zero_width (rtx);
 static unsigned int floating_zero_width (rtx);
 
-/* Follow at most two complete transfers to a local zero constructor.  */
+/* Follow at most two complete copies or transfers to a local zero.  */
 static bool
 local_zero_value_p (tree value, type_index type, rtx descriptor)
 {
@@ -8779,6 +8779,12 @@ local_zero_value_p (tree value, type_index type, rtx descriptor)
 	  gimple_stmt_iterator gsi
 	    = gsi_for_stmt (currently_expanding_gimple_stmt);
 	  return local_structure_producers_p (&gsi, producers, count);
+	}
+      if (depth < 2 && nargs == 1 && d.type == type
+	  && d.expansion == EXPAND_MCOPY_M2M && d.prototype == PROTO_M_M)
+	{
+	  value = gimple_call_arg (producer, 0);
+	  continue;
 	}
       if (depth == 2 || nargs != 1 || d.type == TYPE_MAX
 	  || !types[d.type].accumulator
