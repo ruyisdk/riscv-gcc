@@ -7751,8 +7751,8 @@ inverse_zip_value (const builtin_description &d,
   return parent;
 }
 
-/* ID coordinates are nonnegative.  A wider integer preserves them regardless
-   of signedness; retain every conversion and the constructor's range check.  */
+/* ID coordinates are nonnegative.  Preserve them through conversions whose
+   destination covers that range, retaining calls and constructor checks.  */
 static bool
 strip_gather_index (tree &value, type_index &type, gimple **producers,
 		    unsigned int &count)
@@ -7776,13 +7776,17 @@ strip_gather_index (tree &value, type_index &type, gimple **producers,
 	  source = conversion.source;
 	  const auto &dst = types[type];
 	  const auto &src = types[source];
+	  unsigned int dst_bits = (dst.descriptor & 0xff)
+	    - ((dst.descriptor >> 30) & 1);
+	  unsigned int src_bits = (src.descriptor & 0xff)
+	    - ((src.descriptor >> 30) & 1);
 	  if (d.expansion != EXPAND_MCONV_EW || d.type != type
 	      || src.accumulator || dst.accumulator
 	      || src.rows != 1 || src.columns != 1
 	      || dst.rows != 1 || dst.columns != 1
 	      || floating_descriptor_p (src.descriptor | dst.descriptor)
 	      || (src.descriptor & 0xff) < active_profile ()->uds
-	      || (src.descriptor & 0xff) >= (dst.descriptor & 0xff))
+	      || src_bits > dst_bits)
 	    return false;
 	}
       if (count - start == 4)
