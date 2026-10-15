@@ -600,7 +600,10 @@ nontrapping spill-slot MEMs with equal addresses and known full sizes
 and offsets.  Different address GPRs may match through at most sixteen
 local pointer-width definitions, with address expressions capped at
 sixteen nodes.  Only unrelated ordinary GPR SETs may intervene.  The store
-remains; frame operations, fixed/global register definitions, memory or
+address proof also accepts pointer-width products, including non-power-of-two
+private workspace strides; both input values must match through the same
+bounded walk.  Other modes, memory operands and division remain excluded.
+The store remains; frame operations, fixed/global register definitions, memory or
 matrix operations and unknown patterns end this spill fact.  After removing
 a reload, a bounded same-block return-tail scan can also remove its private
 store.  It requires the canonical spill alias set and no possible reads,

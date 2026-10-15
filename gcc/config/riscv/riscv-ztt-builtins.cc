@@ -12853,7 +12853,8 @@ class local_raw_spill
 	  continue;
 	if (GET_MODE (part) != Pmode
 	    || (GET_CODE (part) != PLUS && GET_CODE (part) != MINUS
-		&& GET_CODE (part) != NEG && GET_CODE (part) != ASHIFT))
+		&& GET_CODE (part) != NEG && GET_CODE (part) != ASHIFT
+		&& GET_CODE (part) != MULT))
 	  return false;
 	if (GET_CODE (part) == ASHIFT
 	    && (!CONST_INT_P (XEXP (part, 1))
@@ -15459,7 +15460,7 @@ run_md_reuse_selftests ()
       riscv_ztt_profile_string = saved_profile;
       flag_strict_aliasing = strict_aliasing;
     }
-  for (unsigned int test = 0; test != 15; ++test)
+  for (unsigned int test = 0; test != 24; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       local_raw_spill spill;
@@ -15470,15 +15471,31 @@ run_md_reuse_selftests ()
       rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
       rtx c = gen_rtx_REG (Pmode, 12), d = gen_rtx_REG (Pmode, 13);
       rtx input = gen_rtx_REG (Pmode, 14);
+      rtx factor = gen_rtx_REG (Pmode, 15);
       rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
       rtx mem = gen_rtx_MEM (ZTTMR1mode, b);
       set_mem_attrs_for_spill (mem);
-      visit (gen_rtx_SET (a, gen_rtx_PLUS (Pmode, input, GEN_INT (-32))));
+      rtx left = gen_rtx_PLUS (Pmode, input, GEN_INT (-32));
+      rtx right = gen_rtx_PLUS (Pmode, input, GEN_INT (test == 1 ? -16 : -32));
+      if (test >= 15)
+	{
+	  rtx scale = test == 21 || test == 22
+	    ? factor : GEN_INT (test == 23 ? 0 : -192);
+	  left = gen_rtx_MULT (Pmode, input, scale);
+	  right = gen_rtx_MULT (test == 18 ? HImode : Pmode, input,
+			       test == 16 ? GEN_INT (-128) : scale);
+	  if (test == 19)
+	    XEXP (right, 1) = gen_rtx_MEM (Pmode, factor);
+	  if (test == 20)
+	    right = gen_rtx_DIV (Pmode, input, scale);
+	}
+      visit (gen_rtx_SET (a, left));
       visit (gen_rtx_SET (b, gen_rtx_PLUS (Pmode, a, hard_frame_pointer_rtx)));
       if (test == 12)
 	visit (gen_rtx_ASM_INPUT (VOIDmode, ""));
-      visit (gen_rtx_SET (c, gen_rtx_PLUS
-	(Pmode, input, GEN_INT (test == 1 ? -16 : -32))));
+      if (test == 22)
+	visit (gen_rtx_SET (factor, GEN_INT (7)));
+      visit (gen_rtx_SET (c, right));
       ASSERT_FALSE (visit (gen_rtx_SET (mem, m)));
       rtx other = copy_rtx (mem);
       XEXP (other, 0) = d;
@@ -15502,13 +15519,14 @@ run_md_reuse_selftests ()
 	  visit (gen_rtx_SET (c, gen_rtx_ASHIFT
 	    (Pmode, input, GEN_INT (GET_MODE_BITSIZE (Pmode)))));
 	  break;
-	case 14:
+	case 14: case 17:
 	  /* Changing an expression input does not change its computed addresses.  */
 	  visit (gen_rtx_SET (input, const0_rtx));
 	  break;
 	}
       visit (gen_rtx_SET (d, gen_rtx_PLUS (Pmode, c, hard_frame_pointer_rtx)));
-      ASSERT_EQ (test == 0 || test == 14,
+      ASSERT_EQ (test == 0 || test == 14 || test == 15 || test == 17
+		 || test == 21 || test == 23,
 		 visit (gen_rtx_SET (m, other)));
     }
   for (unsigned int test = 0; test != 35; ++test)
@@ -15615,7 +15633,7 @@ run_md_reuse_selftests ()
 	case 33: RTX_FRAME_RELATED_P (vset (c)) = 1; break;
 	}
       rtx_insn *load = emit_insn (gen_rtx_SET (value, source));
-      ASSERT_EQ (test == 0 || test == 16 || test == 21
+      ASSERT_EQ (test == 0 || test == 12 || test == 16 || test == 21
 		 || ((test == 25 || test == 29)
 		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 local_raw_spill::interleaved_reload_p (load));
