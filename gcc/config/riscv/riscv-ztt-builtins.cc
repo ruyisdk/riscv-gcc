@@ -12893,6 +12893,9 @@ reuse_local_md ()
 				 INSN_UID (insn));
 		    }
 		  note_stores (insn, invalidate_md_store, &state);
+		  if ((store || memory_store)
+		      && reg_mentioned_p (descriptor, PATTERN (insn)))
+		    state.note_descriptor_use (descriptor);
 		  state.remember (group, descriptor);
 		  continue;
 		}

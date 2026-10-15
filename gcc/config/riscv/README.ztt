@@ -427,6 +427,9 @@ load.  Fixed/global registers and instruction clobbers are excluded.  Multiple
 descriptor substitutions in one consumer are validated together, including
 full scalar TC values; control operands are unchanged.  Dead materialization
 and register notes are updated after substitution.
+Typed stores with a retained descriptor also establish a constant-use
+witness after their explicit clobbers are invalidated.  Following stores
+and calculations can reuse the surviving GPR without repeating its setup.
 After dead workspace calculations are removed, one further descriptor scan
 handles prepared common, unary and same-type binary SETs.  It can recover
 constants hidden by removed GPR definitions; calls, basic asm, other parallel and unknown
