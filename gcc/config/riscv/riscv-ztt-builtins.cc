@@ -7404,7 +7404,8 @@ structure_copy_p (gimple *stmt, type_index type)
 /* Collect at most four same-type copies per input, without deleting witnesses.  */
 static bool
 strip_structure_copies (tree &value, type_index type, gimple **copies,
-			unsigned int &count, bool shared_input = false)
+			unsigned int &count, bool shared_input = false,
+			bool shared_chain = false)
 {
   if (type == TYPE_MAX || types[type].accumulator || !type_nregs (type))
     return false;
@@ -7412,7 +7413,8 @@ strip_structure_copies (tree &value, type_index type, gimple **copies,
   for (;;)
     {
       if (TREE_CODE (value) != SSA_NAME
-	  || (!has_single_use (value) && !(shared_input && count == start))
+	  || (!shared_chain && !has_single_use (value)
+	      && !(shared_input && count == start))
 	  || type_for_tree (TREE_TYPE (value)) != type)
 	return false;
       gimple *producer = SSA_NAME_DEF_STMT (value);
@@ -7751,6 +7753,29 @@ inverse_zip_value (const builtin_description &d,
   return parent;
 }
 
+static bool
+strip_structure_view (tree &value, type_index type, gimple **producers,
+		      unsigned int &count)
+{
+  if (TREE_CODE (value) != SSA_NAME)
+    return false;
+  if (type_for_tree (TREE_TYPE (value)) == type)
+    return true;
+  gimple *view = SSA_NAME_DEF_STMT (value);
+  if (!is_gimple_assign (view)
+      || gimple_assign_rhs_code (view) != VIEW_CONVERT_EXPR
+      || gimple_vuse (view) || gimple_has_side_effects (view))
+    return false;
+  tree source = TREE_OPERAND (gimple_assign_rhs1 (view), 0);
+  if (TREE_CODE (source) != SSA_NAME
+      || type_for_tree (TREE_TYPE (source)) != type
+      || TYPE_MODE (TREE_TYPE (source)) != TYPE_MODE (TREE_TYPE (value)))
+    return false;
+  producers[count++] = view;
+  value = source;
+  return true;
+}
+
 /* ID coordinates are nonnegative.  Preserve them through conversions whose
    destination covers that range, retaining calls and constructor checks.  */
 static bool
@@ -7834,8 +7859,7 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
       && ((d.expansion != EXPAND_MCOLSCATMAX_EW
 	   && d.expansion != EXPAND_MROWSCATMAX_EW)
 	  || d.type != operation.data
-	  || floating_descriptor_p (types[d.type].descriptor)
-	  || data != gimple_call_arg (stmt, 0)))
+	  || floating_descriptor_p (types[d.type].descriptor)))
     return NULL_TREE;
   tree lhs_type = TREE_TYPE (gimple_call_lhs (stmt));
   if (TREE_CODE (data) != SSA_NAME || TREE_CODE (index) != SSA_NAME
@@ -7843,22 +7867,25 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
       || (!carrier && (type_for_tree (TREE_TYPE (data)) != d.type
 		      || type_for_tree (lhs_type) != d.type)))
     return NULL_TREE;
-  gimple *producers[6];
+  gimple *producers[16];
   unsigned int count = 0;
-  if (carrier && type_for_tree (TREE_TYPE (index)) != operation.count)
+  tree result = data;
+  if (scatter && data != gimple_call_arg (stmt, 0))
     {
-      gimple *view = SSA_NAME_DEF_STMT (index);
-      if (!is_gimple_assign (view)
-	  || gimple_assign_rhs_code (view) != VIEW_CONVERT_EXPR
-	  || gimple_vuse (view) || gimple_has_side_effects (view))
+      tree old = gimple_call_arg (stmt, 0), input = data;
+      result = old;
+      /* Both inputs are already live; retain an operand, not its ancestor.  */
+      if (!strip_structure_view (old, d.type, producers, count)
+	  || !strip_structure_view (input, d.type, producers, count)
+	  || !strip_structure_copies (old, d.type, producers, count, false, true)
+	  || !strip_structure_copies (input, d.type, producers, count,
+				      false, true)
+	  || old != input)
 	return NULL_TREE;
-      tree source = TREE_OPERAND (gimple_assign_rhs1 (view), 0);
-      if (TREE_CODE (source) != SSA_NAME
-	  || TYPE_MODE (TREE_TYPE (source)) != TYPE_MODE (TREE_TYPE (index)))
-	return NULL_TREE;
-      producers[count++] = view;
-      index = source;
     }
+  if (carrier && !strip_structure_view (index, operation.count,
+				       producers, count))
+    return NULL_TREE;
   if (type_for_tree (TREE_TYPE (index)) != operation.count)
     return NULL_TREE;
   type_index index_type = operation.count;
@@ -7877,8 +7904,8 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
 	  : source.expansion != EXPAND_MROWID_EW)
       || !local_structure_producers_p (gsi, producers, count))
     return NULL_TREE;
-  return useless_type_conversion_p (lhs_type, TREE_TYPE (data)) ? data
-    : build1 (VIEW_CONVERT_EXPR, lhs_type, data);
+  return useless_type_conversion_p (lhs_type, TREE_TYPE (result)) ? result
+    : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
 }
 
 /* Broadcasts copy bits, including floating NaN payloads.  The first call

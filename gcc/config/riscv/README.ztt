@@ -201,6 +201,12 @@ Integer scatter-max with identical old/data SSA inputs and exact datatypes
 also reuses that value when the index is a matching row/column ID.  It uses
 the same bounded index search and retains constructor checks.  Scatter-add,
 floating scatter-max, distinct old values and loaded indices are unchanged.
+Old/data operands may each pass through four complete same-type copies from
+a common origin.  Shared copies remain live, and the old operand replaces
+the result without extending the common ancestor's lifetime.  These copies
+participate in the same local-window check as the index constructor.
+One same-mode carrier view per operand is unwrapped using its exact nominal
+type, as for the index; the views remain part of that local proof.
 
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
