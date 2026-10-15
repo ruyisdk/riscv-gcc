@@ -249,6 +249,11 @@ live.  The other inner input must feed a subsequent complete local store,
 retaining its producers and loads.  The same type, copy-depth and local-window
 checks apply.  Ownership witnesses remain; floating pairs do not qualify.
 
+An integer XOR pair cancels a repeated input, returning the other inner
+input.  The inner result and intervening copies must have single uses,
+and the repeated input must feed a complete local store so that its loads
+remain.  Exact datatypes and the same bounded local proof are required.
+
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has
