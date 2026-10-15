@@ -180,13 +180,13 @@ the original value live across the fold.  The forward window crosses only
 typed stores and local scalar assignments.  Earlier stores, nonlocal uses,
 live intermediates and later ownership-only witnesses do not qualify.
 
-Integer column/row gathers with the matching column/row index constructor
+Column/row gathers with the matching integer column/row index constructor
 can reuse their data input.  The constructor remains for ownership and
 index-range checks.  It must be in the preceding 16-statement local window;
 calls, memory accesses, asm and state changes prevent the fold.  The data
-and result must have the same complete basic-square type.  Floating and
-metadata-carrier calls, opposite axes and externally supplied indices keep
-their existing lowering.
+and result must have the same complete basic-square type.  Floating data
+is selected bitwise, without conversion or rounding.  Opposite axes and
+externally supplied indices keep their existing lowering.
 
 The index may pass through up to four same-type M copies in that window.
 The constructor and copies remain as ownership witnesses.  Inner copy
@@ -214,7 +214,7 @@ access; floating conversions and other unary operations are unchanged.
 The bounded structural-copy search recognizes these integer conversions
 through their extended builtin codes.  Matched conversions remain as
 ownership witnesses, including unused parent and terminal conversions.
-Integer-matrix identity gathers use their explicit datatype metadata, not
+Integer and floating matrix identity gathers use their datatype metadata, not
 the physical carrier's type.  The index may have one same-mode carrier
 view before the bounded copy chain; its constructor remains in place.
 When a separate destination would exceed the profile's M register count,

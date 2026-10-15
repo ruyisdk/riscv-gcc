@@ -7757,7 +7757,7 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
 {
   builtin_description d;
   elementwise_description operation;
-  bool carrier = integer_matrix_code_p (code);
+  bool carrier = integer_matrix_code_p (code) || floating_matrix_code_p (code);
   if (carrier)
     {
       tree args[5];
@@ -7776,7 +7776,6 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
       d = builtin_description_for (operation.canonical);
     }
   if (d.prototype != PROTO_M_GATHER
-      || floating_descriptor_p (types[d.type].descriptor)
       || floating_descriptor_p (types[operation.count].descriptor))
     return NULL_TREE;
   tree data = gimple_call_arg (stmt, 0);
