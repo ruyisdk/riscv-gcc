@@ -12475,7 +12475,7 @@ md_read_csr_p (int code)
 
 /* These scalar FP operations do not write Md or amestype.  */
 static bool
-md_preserving_fp_p (int code)
+md_preserving_fp_p (int code, rtx pat = nullptr)
 {
   switch (code)
     {
@@ -12506,7 +12506,10 @@ md_preserving_fp_p (int code)
     case CODE_FOR_fclassdfdi:
       return true;
     default:
-      return false;
+      /* The sNaN flag helper has an anonymous instruction pattern.  */
+      return code >= 0 && code != CODE_FOR_nothing && pat
+	&& GET_CODE (pat) == UNSPEC_VOLATILE
+	&& XINT (pat, 1) == UNSPECV_FSNVSNAN;
     }
 }
 
@@ -13001,7 +13004,8 @@ reuse_cleaned_descriptors ()
 	    continue;
 	  if (md_preserving_fence_p (code))
 	    continue;
-	  if (md_read_csr_p (code) || md_preserving_fp_p (code))
+	  if (md_read_csr_p (code)
+	      || md_preserving_fp_p (code, PATTERN (insn)))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -13253,7 +13257,8 @@ reuse_local_md ()
 			 INSN_UID (insn));
 	      continue;
 	    }
-	  if (md_read_csr_p (code) || md_preserving_fp_p (code))
+	  if (md_read_csr_p (code)
+	      || md_preserving_fp_p (code, PATTERN (insn)))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
@@ -13976,6 +13981,36 @@ run_md_reuse_selftests ()
 	note_stores (read, invalidate_md_store, &state);
 	ASSERT_FALSE (state.matches (matrix, full));
 	ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+      }
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (machine_mode mode : { SFmode, DFmode })
+      {
+	rtx fp = gen_rtx_REG (mode, FP_REG_FIRST);
+	rtx pat = gen_rtx_UNSPEC_VOLATILE (mode, gen_rtvec (2, fp, fp),
+					 UNSPECV_FSNVSNAN);
+	rtx_insn *insn = emit_insn (pat);
+	if (TARGET_HARD_FLOAT)
+	  ASSERT_TRUE (md_preserving_fp_p (recog_memoized (insn), pat));
+	ASSERT_FALSE (md_preserving_fp_p (-1, pat));
+	ASSERT_FALSE (md_preserving_fp_p (CODE_FOR_nothing, pat));
+	ASSERT_FALSE (md_scalar_insn_p (pat));
+	local_md_state state;
+	state.record_constant (reg, GEN_INT (32));
+	state.remember (matrix, reg);
+	ASSERT_FALSE (state.record_scalar_type (reg));
+	note_stores (insn, invalidate_md_store, &state);
+	ASSERT_TRUE (state.matches (matrix, reg));
+	ASSERT_TRUE (state.record_scalar_type (reg));
+	rtx mem = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 12));
+	set_mem_attrs_for_spill (mem);
+	local_raw_spill spill;
+	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (mem, matrix)));
+	ASSERT_FALSE (spill.redundant_reload_p (pat));
+	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, mem)));
       }
   }
   {
