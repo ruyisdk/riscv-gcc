@@ -127,6 +127,9 @@ private slot; destination Ad setup and ACC transfers remain unchanged.
 Datatype name fragments are cached by descriptor and alias kind.  The
 profile-independent cache contains text only; declarations, type nodes
 and availability remain under the existing registration rules.
+Complete Scalar names reuse the existing M type-name datatype/shape fragment.
+ACC shapes and aliases without a catalog spelling retain segmented assembly.
+No extra complete-name or shape-name cache is allocated.
 
 Type register counts are cached for the active profile and cleared when
 it changes.  The cache contains counts only, not trees or modes.

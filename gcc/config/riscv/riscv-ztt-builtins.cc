@@ -2753,30 +2753,41 @@ static void
 integer_scalar_name (char *name, size_t size, const char *operation,
 		     type_index dst, type_index tc, bool alias)
 {
-  unsigned int d = types[dst].descriptor, c = types[tc].descriptor;
-  const char *dtype = scalar_datatype_name (d, alias);
-  const char *ctype = scalar_datatype_name (c, alias);
+  const auto &type = types[dst];
+  const char *type_name = alias ? type.default_name : type.name;
+  const char *ctype = scalar_datatype_name (types[tc].descriptor, alias);
   auto dimension = [] (unsigned int n) {
     static const char *const names[] = { "1", "2", "4", "8", "16", "32" };
     int index = exact_log2 (n);
     gcc_assert (index >= 0 && static_cast<unsigned> (index) < ARRAY_SIZE (names));
     return names[index];
   };
-  auto append = [&] (const char *part) {
-    size_t length = strlen (part);
+  auto append_span = [&] (const char *part, size_t length) {
     gcc_assert (length < size);
     memcpy (name, part, length);
     name += length;
     size -= length;
   };
+  auto append = [&] (const char *part) { append_span (part, strlen (part)); };
   append ("__riscv_ztt_");
   append (operation);
   append ("_");
-  append (dtype);
-  append ("_");
-  append (dimension (types[dst].rows));
-  append ("x");
-  append (dimension (types[dst].columns));
+  if (!type.accumulator && type_name)
+    {
+      /* M type names already contain the datatype and logical shape.  */
+      constexpr size_t prefix = sizeof ("__riscv_ztt_") - 1;
+      size_t length = strlen (type_name);
+      gcc_assert (length > prefix + 2);
+      append_span (type_name + prefix, length - prefix - 2);
+    }
+  else
+    {
+      append (scalar_datatype_name (type.descriptor, alias));
+      append ("_");
+      append (dimension (type.rows));
+      append ("x");
+      append (dimension (type.columns));
+    }
   append ("_");
   append (ctype);
   *name = '\0';
@@ -3892,10 +3903,18 @@ run_scalar_full_name_selftests ()
     ASSERT_EQ (actual[length + 2], '#');
   };
   for (unsigned int t = 0; t < TYPE_MAX; ++t)
-    for (unsigned int n = 0; n < numeric_dtype_count; ++n)
-      for (unsigned int alias = 0; alias < 2; ++alias)
-	check (numeric_scalar_name (n % floating_scalar_operations),
-	       static_cast<type_index> (t), sources[n], alias);
+    {
+      for (const char *name : { types[t].name, types[t].default_name })
+	if (name && !types[t].accumulator)
+	  {
+	    ASSERT_TRUE (startswith (name, "__riscv_ztt_"));
+	    ASSERT_STREQ (name + strlen (name) - 2, "_t");
+	  }
+      for (unsigned int n = 0; n < numeric_dtype_count; ++n)
+	for (unsigned int alias = 0; alias < 2; ++alias)
+	  check (numeric_scalar_name (n % floating_scalar_operations),
+		 static_cast<type_index> (t), sources[n], alias);
+    }
   for (unsigned int op = 0; op <= floating_scalar_operations; ++op)
     for (unsigned int alias = 0; alias < 2; ++alias)
       check (op == floating_scalar_operations ? "mbcast_m_x"
