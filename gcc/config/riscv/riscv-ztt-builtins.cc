@@ -12162,7 +12162,7 @@ reuse_local_md ()
 				: (scalar ? UNSPECV_ZTT_STATE_ELEMENTWISE_X
 				   : UNSPECV_ZTT_STATE_ELEMENTWISE_M);
 			    rtx setup = descriptors[0];
-			    if (!old_dest && code != UNSPECV_ZTT_STATE_GATHER
+			    if (!old_dest
 				&& state.matches_packets
 				   (regs[0], setup, datatype_step (UINTVAL (steps), 0)))
 			      setup = const0_rtx;
@@ -12948,6 +12948,16 @@ run_md_reuse_selftests ()
   common[3] = const0_rtx;
   ASSERT_EQ (common_prepared_length
 	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_M), 4U);
+  rtx gather[] = { gen_rtx_REG (ZTTMR2mode, M_REG_FIRST),
+		   gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 4),
+		   gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 8),
+		   gen_rtx_REG (Pmode, 10), gen_rtx_REG (Pmode, 10),
+		   gen_rtx_REG (Pmode, 11), const0_rtx,
+		   GEN_INT (pack_datatype_steps (2, 2, 1)) };
+  ASSERT_TRUE (common_prepared_operands_p (gather, false));
+  ASSERT_EQ (common_prepared_length (gather, UNSPECV_ZTT_STATE_GATHER), 8U);
+  gather[3] = const0_rtx;
+  ASSERT_EQ (common_prepared_length (gather, UNSPECV_ZTT_STATE_GATHER), 4U);
   common[0] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 4);
   ASSERT_FALSE (common_prepared_operands_p (common, false));
   common[0] = common[1];
