@@ -12518,10 +12518,41 @@ md_preserving_fp_p (int code, rtx pat = nullptr)
     case CODE_FOR_fclassdfdi:
       return true;
     default:
-      /* The sNaN flag helper has an anonymous instruction pattern.  */
-      return code >= 0 && code != CODE_FOR_nothing && pat
-	&& GET_CODE (pat) == UNSPEC_VOLATILE
-	&& XINT (pat, 1) == UNSPECV_FSNVSNAN;
+      break;
+    }
+  if (code < 0 || code == CODE_FOR_nothing || !pat)
+    return false;
+  /* These helpers include anonymous scalar instruction patterns.  */
+  if (GET_CODE (pat) == UNSPEC_VOLATILE)
+    return XINT (pat, 1) == UNSPECV_FSNVSNAN;
+  if (GET_CODE (pat) != SET)
+    return false;
+  rtx dest = SET_DEST (pat), src = SET_SRC (pat);
+  if (GET_CODE (src) == SIGN_EXTEND)
+    src = XEXP (src, 0);
+  if (GET_CODE (src) != UNSPEC || XVECLEN (src, 0) != 1)
+    return false;
+  rtx input = XVECEXP (src, 0, 0);
+  for (rtx reg : { dest, input })
+    if (!REG_P (reg)
+	|| !(GP_REG_P (REGNO (reg)) || FP_REG_P (REGNO (reg))))
+      return false;
+  machine_mode mode = GET_MODE (input);
+  if (mode != HFmode && mode != SFmode && mode != DFmode)
+    return false;
+  switch (XINT (src, 1))
+    {
+    case UNSPEC_ROUND:
+    case UNSPEC_FLOOR:
+    case UNSPEC_CEIL:
+    case UNSPEC_BTRUNC:
+    case UNSPEC_ROUNDEVEN:
+    case UNSPEC_NEARBYINT:
+    case UNSPEC_RINT:
+    case UNSPEC_LRINT:
+      return true;
+    default:
+      return false;
     }
 }
 
@@ -14055,6 +14086,54 @@ run_md_reuse_selftests ()
 	  ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
 	  ASSERT_FALSE (md_scalar_insn_p (pat));
 	}
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx reg = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    const int tags[] = { UNSPEC_ROUND, UNSPEC_FLOOR, UNSPEC_CEIL,
+			UNSPEC_BTRUNC, UNSPEC_ROUNDEVEN, UNSPEC_NEARBYINT,
+			UNSPEC_RINT, UNSPEC_LRINT };
+    for (machine_mode mode : { HFmode, SFmode, DFmode })
+      for (int tag : tags)
+	for (int kind = 0; kind != (TARGET_64BIT ? 3 : 2); ++kind)
+	  {
+	    if ((!kind && tag == UNSPEC_LRINT)
+		|| (kind && tag == UNSPEC_RINT))
+	      continue;
+	    rtx fp = gen_rtx_REG (mode, FP_REG_FIRST);
+	    rtx dest = kind ? reg : gen_rtx_REG (mode, FP_REG_FIRST + 1);
+	    rtx src = gen_rtx_UNSPEC (kind == 2 ? SImode : GET_MODE (dest),
+				    gen_rtvec (1, fp), tag);
+	    if (kind == 2)
+	      src = gen_rtx_SIGN_EXTEND (DImode, src);
+	    rtx pat = gen_rtx_SET (dest, src);
+	    rtx_insn *insn = emit_insn (pat);
+	    int code = recog_memoized (insn);
+	    bool supported = mode == HFmode ? TARGET_ZFH || TARGET_ZHINX
+	      : mode == DFmode ? TARGET_DOUBLE_FLOAT || TARGET_ZDINX
+	      : TARGET_HARD_FLOAT || TARGET_ZFINX;
+	    supported &= kind || (TARGET_HARD_FLOAT && TARGET_ZFA);
+	    ASSERT_EQ (md_preserving_fp_p (code, pat), supported);
+	    ASSERT_FALSE (md_preserving_fp_p (-1, pat));
+	    ASSERT_FALSE (md_scalar_insn_p (pat));
+	    local_md_state state;
+	    state.record_constant (reg, GEN_INT (32));
+	    state.remember (matrix, reg);
+	    ASSERT_FALSE (state.record_scalar_type (GEN_INT (32)));
+	    note_stores (insn, invalidate_md_store, &state);
+	    ASSERT_EQ (state.matches (matrix, reg), kind == 0);
+	    ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+	    ASSERT_TRUE (state.record_scalar_type (GEN_INT (32)));
+	    rtx bad = gen_rtx_SET (matrix, src);
+	    ASSERT_FALSE (md_preserving_fp_p (code, bad));
+	    bad = gen_rtx_SET (reg, gen_rtx_UNSPEC (Pmode,
+			     gen_rtvec (1, matrix), tag));
+	    ASSERT_FALSE (md_preserving_fp_p (code, bad));
+	    bad = gen_rtx_SET (reg, gen_rtx_UNSPEC (Pmode,
+			     gen_rtvec (1, fp), UNSPEC_LOAD_GOT));
+	    ASSERT_FALSE (md_preserving_fp_p (code, bad));
+	  }
   }
   {
     const struct { machine_mode full, half, source; } cases[] = {
