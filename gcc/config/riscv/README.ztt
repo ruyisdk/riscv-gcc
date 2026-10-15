@@ -485,11 +485,13 @@ saved scale register, without materializing an additional zero term.  Early
 expansion, fixed-offset and mixed RVV/AME sizes retain their existing form.
 
 Calls, basic asm, unknown typed operations and unknown UNSPECs clear all facts.
-Extended asm clears AME state facts but preserves unchanged ordinary GPR
-constants and value identities.  Outputs, partial writes and clobbers
+Empty extended asm with only GPR operands and an optional compiler memory
+clobber preserves Md and scalar-datatype facts.  Other extended asm clears
+AME state facts but preserves unchanged ordinary GPR constants and value
+identities.  Outputs, partial writes and clobbers
 invalidate overlapping GPR facts; fixed/global registers are excluded.
-Asm goto remains a control-flow boundary.  Neither descriptor scan carries
-Md or the scalar-type CSR through any asm, and spill tracking still stops.
+Asm goto remains a control-flow boundary.  Private spill tracking stops at
+every asm; the workspace predicate still accepts only operand-free barriers.
 Register definitions invalidate dependent descriptors and overlapping groups.
 Full Pmode GPR single SETs establish constants through RTL simplification.
 Prepared groups retain constant snapshots after the original GPR changes;

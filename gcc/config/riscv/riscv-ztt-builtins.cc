@@ -12176,17 +12176,45 @@ memory_barrier_p (rtx pattern)
     && GET_CODE (XEXP (mem, 0)) == SCRATCH;
 }
 
-/* Extended asm describes its GPR writes, but not its AME state changes.  */
+/* Only GPR operands and the compiler memory clobber accompany this asm.  */
+static bool
+md_preserving_asm_p (rtx pattern)
+{
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, pattern, NONCONST)
+    {
+      const_rtx x = *iter;
+      if (GET_CODE (x) == ASM_OPERANDS
+	  && (ASM_OPERANDS_TEMPLATE (x)[0] || ASM_OPERANDS_LABEL_LENGTH (x)
+	      || ASM_OPERANDS_INPUT_LENGTH (x) != XVECLEN (x, 4)
+	      || (GET_MODE (x) == VOIDmode
+		  && (ASM_OPERANDS_OUTPUT_CONSTRAINT (x)[0]
+		      || ASM_OPERANDS_OUTPUT_IDX (x)))))
+	return false;
+      if (REG_P (x)
+	  && (!GP_REG_P (REGNO (x))
+	      || END_REGNO (x) > GP_REG_FIRST + GP_REG_NUM))
+	return false;
+      if (MEM_P (x)
+	  && (GET_MODE (x) != BLKmode
+	      || GET_CODE (XEXP (x, 0)) != SCRATCH))
+	return false;
+    }
+  return true;
+}
+
+/* Nonempty extended asm need not describe its AME state changes.  */
 static bool
 invalidate_asm_md (rtx_insn *insn, local_md_state &state)
 {
   if (!NONJUMP_INSN_P (insn) || !extract_asm_operands (PATTERN (insn))
       || asm_noperands (PATTERN (insn)) < 0)
     return false;
-  if (!memory_barrier_p (PATTERN (insn)))
+  if (!md_preserving_asm_p (PATTERN (insn)))
     state.clear_ame ();
   else if (dump_file)
-    fprintf (dump_file, "Preserve Md across memory barrier at insn %d\n",
+    fprintf (dump_file, "Preserve Md across %s at insn %d\n",
+	     memory_barrier_p (PATTERN (insn)) ? "memory barrier" : "scalar empty asm",
 	     INSN_UID (insn));
   note_stores (insn, invalidate_md_store, &state);
   return true;
@@ -13882,6 +13910,69 @@ run_md_reuse_selftests ()
 	  ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (group, slot)));
 	}
     }
+  for (unsigned int test = 0; test != 14; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx reg = gen_rtx_REG (Pmode, 10), copy = gen_rtx_REG (Pmode, 11);
+      rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx dynamic = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+      rtx code = gen_rtx_ASM_OPERANDS (VOIDmode, "", "", 0, rtvec_alloc (0),
+				     rtvec_alloc (0), rtvec_alloc (0),
+				     UNKNOWN_LOCATION);
+      MEM_VOLATILE_P (code) = 1;
+      rtx clobber = gen_rtx_CLOBBER
+	(VOIDmode, gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (VOIDmode)));
+      rtx first = code;
+      if (test == 1 || test == 9 || test == 13)
+	{
+	  ASM_OPERANDS_INPUT_VEC (code)
+	    = gen_rtvec (1, test == 9 ? gen_rtx_MEM (Pmode, reg) : reg);
+	  if (test != 13)
+	    ASM_OPERANDS_INPUT_CONSTRAINT_VEC (code)
+	      = gen_rtvec (1, gen_rtx_ASM_INPUT_loc (Pmode, "r", UNKNOWN_LOCATION));
+	}
+      if (test == 2 || test == 3 || test == 5)
+	{
+	  PUT_MODE (code, test == 3 ? QImode : Pmode);
+	  ASM_OPERANDS_OUTPUT_CONSTRAINT (code) = "=r";
+	  first = gen_rtx_SET
+	    (test == 3 ? gen_rtx_SUBREG (QImode, reg, 0) : reg, code);
+	  if (test == 5)
+	    clobber = gen_rtx_SET (copy, shallow_copy_rtx (code));
+	}
+      if (test == 4 || test == 7 || test == 8 || test == 11 || test == 12)
+	XEXP (clobber, 0) = test == 4 ? reg : test == 7 ? group
+	  : gen_rtx_REG (Pmode, test == 8 ? FP_REG_FIRST
+			 : test == 11 ? FIRST_PSEUDO_REGISTER + 1
+			 : V_REG_FIRST);
+      if (test == 6)
+	ASM_OPERANDS_TEMPLATE (code) = "# boundary";
+      if (test == 10)
+	ASM_OPERANDS_LABEL_VEC (code)
+	  = gen_rtvec (1, gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()));
+      rtx pattern = gen_rtx_PARALLEL (VOIDmode, gen_rtvec (2, first, clobber));
+      ASSERT_EQ (md_preserving_asm_p (pattern), test < 6);
+      if (test < 6)
+	{
+	  local_md_state state;
+	  state.record_constant (copy, GEN_INT (32));
+	  state.remember (group, copy);
+	  state.remember (dynamic, reg);
+	  ASSERT_FALSE (state.record_scalar_type (copy));
+	  ASSERT_TRUE (invalidate_asm_md (emit_insn (pattern), state));
+	  ASSERT_TRUE (state.matches (group, GEN_INT (32)));
+	  ASSERT_EQ (state.matches (dynamic, reg), test < 2);
+	  ASSERT_RTX_EQ (state.descriptor_value (copy), test == 5 ? copy : GEN_INT (32));
+	  if (test != 5)
+	    ASSERT_TRUE (state.record_scalar_type (copy));
+	  local_raw_spill spill;
+	  rtx slot = gen_rtx_MEM (ZTTMR1mode, reg);
+	  set_mem_attrs_for_spill (slot);
+	  ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (slot, group)));
+	  ASSERT_FALSE (spill.redundant_reload_p (pattern));
+	  ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (group, slot)));
+	}
+    }
   ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_fence));
   ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_mem_thread_fence_rvwmo));
   ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_mem_thread_fence_ztso));
@@ -14073,7 +14164,7 @@ run_md_reuse_selftests ()
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
     auto assembly = [] (machine_mode mode) {
-      return gen_rtx_ASM_OPERANDS (mode, "", "=r", 0, rtvec_alloc (0),
+      return gen_rtx_ASM_OPERANDS (mode, "# boundary", "=r", 0, rtvec_alloc (0),
 				  rtvec_alloc (0), rtvec_alloc (0),
 				  UNKNOWN_LOCATION);
     };
