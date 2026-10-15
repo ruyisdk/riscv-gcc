@@ -228,6 +228,12 @@ producer must be in the local structural window.  The producer and copies
 remain visible to ownership checking; floating values and state boundaries
 do not qualify.
 
+The same integer operations reuse an inner result when the other outer
+input repeats either inner input.  Both operators and datatypes must match.
+Up to four complete copies may occur on each path, within the same local
+window.  The inner operation, its loads and the copies remain; different
+operators, unrelated inputs and state boundaries keep the outer operation.
+
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has

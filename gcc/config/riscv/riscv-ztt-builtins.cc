@@ -7828,6 +7828,48 @@ same_structure_value_p (tree left, tree right, type_index type,
   return true;
 }
 
+/* Repeating an inner input leaves an integer min/max/and/or result intact.  */
+static tree
+repeated_binary_value (gcall *stmt, const builtin_description &d,
+		       gimple_stmt_iterator *gsi)
+{
+  for (unsigned int side = 0; side < 2; ++side)
+    {
+      tree result = gimple_call_arg (stmt, side), value = result;
+      gimple *producers[16];
+      unsigned int count = 0;
+      if (!strip_structure_view (value, d.type, producers, count)
+	  || !strip_structure_copies (value, d.type, producers, count,
+				      false, true))
+	continue;
+      gimple *inner = SSA_NAME_DEF_STMT (value);
+      unsigned int code = structure_builtin_code (inner);
+      if (code >= ZTT_BUILTIN_MAX)
+	continue;
+      const auto source = builtin_description_for (code);
+      if (source.type != d.type || source.expansion != d.expansion
+	  || source.prototype != PROTO_M_M_M)
+	continue;
+      producers[count++] = inner;
+      for (unsigned int input = 0; input < 2; ++input)
+	{
+	  tree left = gimple_call_arg (stmt, 1 - side);
+	  tree right = gimple_call_arg (inner, input);
+	  unsigned int end = count;
+	  if (strip_structure_view (left, d.type, producers, end)
+	      && strip_structure_view (right, d.type, producers, end)
+	      && strip_structure_copies (left, d.type, producers, end,
+					false, true)
+	      && strip_structure_copies (right, d.type, producers, end,
+					false, true)
+	      && left == right
+	      && local_structure_producers_p (gsi, producers, end))
+	    return result;
+	}
+    }
+  return NULL_TREE;
+}
+
 /* Exact integer identities retain a complete input value.  */
 static tree
 binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
@@ -7886,6 +7928,10 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
   bool same = idempotent
     && same_structure_value_p (result, gimple_call_arg (stmt, 1), d.type,
 			       producers, count);
+  if (idempotent && !same)
+    if (tree repeated = repeated_binary_value (stmt, d, gsi))
+      return useless_type_conversion_p (lhs_type, TREE_TYPE (repeated))
+	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
   if (!same)
     {
       /* MSUB computes its second input minus its first.  */
