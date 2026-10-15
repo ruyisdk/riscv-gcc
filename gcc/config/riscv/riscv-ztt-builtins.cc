@@ -11841,7 +11841,15 @@ class local_raw_spill
 	  && (MEM_VOLATILE_P (*iter)
 	      || alias_sets_conflict_p (MEM_ALIAS_SET (mem),
 					MEM_ALIAS_SET (*iter))))
-	return true;
+	{
+	  rtx read = const_cast<rtx> (*iter);
+	  if (private_slot_p (read)
+	      && MEM_ADDR_SPACE (read) == MEM_ADDR_SPACE (mem)
+	      && (known_le (MEM_OFFSET (mem) + MEM_SIZE (mem), MEM_OFFSET (read))
+		  || known_le (MEM_OFFSET (read) + MEM_SIZE (read), MEM_OFFSET (mem))))
+	    continue;
+	  return true;
+	}
     return false;
   }
 
@@ -11966,6 +11974,32 @@ public:
 	  return false;
       }
     return false;
+  }
+
+  /* Revisit split members after all reloads in the return tail are cleaned.  */
+  static bool remove_dead_tail (basic_block bb)
+  {
+    if (!single_succ_p (bb)
+	|| single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun))
+      return false;
+    bool changed = false;
+    unsigned int count = 0;
+    rtx_insn *insn, *prev;
+    FOR_BB_INSNS_REVERSE_SAFE (bb, insn, prev)
+      {
+	if (!NONDEBUG_INSN_P (insn))
+	  continue;
+	if (++count > 32)
+	  break;
+	if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	    || !md_raw_transfer_p (PATTERN (insn))
+	    || !private_slot_p (SET_DEST (PATTERN (insn))))
+	  continue;
+	local_raw_spill spill;
+	spill.redundant_reload_p (PATTERN (insn), insn);
+	changed |= spill.remove_dead_store ();
+      }
+    return changed;
   }
 
   bool redundant_reload_p (rtx pattern, rtx_insn *insn = nullptr)
@@ -12312,6 +12346,8 @@ reuse_cleaned_descriptors ()
 	    state.clear ();
 	}
       path.leave (bb, state);
+      if (explicit_state)
+	changed |= local_raw_spill::remove_dead_tail (bb);
     }
   return changed;
 }
@@ -13397,6 +13433,83 @@ run_md_reuse_selftests ()
       ASSERT_EQ (test == 0 || test == 1 || test == 12,
 		 spill.remove_dead_store ());
       flag_non_call_exceptions = non_call;
+      flag_strict_aliasing = strict_aliasing;
+    }
+  for (unsigned int test = 0; test != 24; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+      basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+      make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      int strict_aliasing = flag_strict_aliasing;
+      flag_strict_aliasing = test != 10;
+      const char *saved_profile = riscv_ztt_profile_string;
+      riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+      rtx addr = gen_rtx_REG (Pmode, 10), other_addr = gen_rtx_REG (Pmode, 11);
+      rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      bool raw = TARGET_ZTT && typed_profile_p () && riscv_ztt_explicit_state_p ();
+      machine_mode read_mode = raw ? ZTTMR1mode : Pmode;
+      rtx member = gen_rtx_REG (read_mode, raw ? M_REG_FIRST + 1 : 12);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (slot);
+      rtx read = gen_rtx_MEM (read_mode, other_addr);
+      set_mem_attrs_for_spill (read);
+      set_mem_offset (read, GET_MODE_SIZE (ZTTMR1mode));
+      switch (test)
+	{
+	case 1: set_mem_offset (read, -GET_MODE_SIZE (ZTTMR1mode)); break;
+	case 2: case 11: set_mem_offset (read, 0); break;
+	case 3: set_mem_offset (read, 1); break;
+	case 4:
+	  read = gen_rtx_MEM (ZTTMR2mode, other_addr);
+	  set_mem_attrs_for_spill (read);
+	  set_mem_offset (read, -GET_MODE_SIZE (ZTTMR1mode));
+	  member = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 2);
+	  break;
+	case 5: clear_mem_offset (read); break;
+	case 6: clear_mem_size (read); break;
+	case 7: set_mem_expr (read, NULL_TREE); break;
+	case 8: MEM_VOLATILE_P (read) = 1; break;
+	case 9: MEM_NOTRAP_P (read) = 0; break;
+	case 13: cfun->has_nonlocal_label = true; break;
+	case 14: crtl->calls_eh_return = true; break;
+	case 19: set_mem_offset (read, GET_MODE_SIZE (ZTTMR1mode) - 1); break;
+	case 20: set_mem_alias_set (slot, 0); break;
+	case 21: MEM_VOLATILE_P (slot) = 1; break;
+	case 22: MEM_NOTRAP_P (slot) = 0; break;
+	case 23:
+	  read = gen_rtx_MEM (Pmode, other_addr);
+	  member = addr;
+	  break;
+	}
+      auto append = [&] (rtx pattern) {
+	rtx_insn *p = emit_insn_after (pattern, BB_END (bb));
+	BB_END (bb) = p;
+	return p;
+      };
+      rtx_insn *store = append (gen_rtx_SET (slot, value));
+      if (test == 15)
+	RTX_FRAME_RELATED_P (store) = 1;
+      if (test == 16 || test == 17)
+	for (unsigned int i = 0; i != (test == 16 ? 30U : 31U); ++i)
+	  append (gen_rtx_SET (other_addr, GEN_INT (i)));
+      else if (test == 11 || test == 12)
+	BB_END (bb) = emit_debug_insn_after
+	  (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				 read, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+      else
+	{
+	  if (test == 18)
+	    append (gen_rtx_SET (read, member));
+	  append (gen_rtx_SET (member, read));
+	}
+      BB_END (bb) = emit_jump_insn_after
+	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
+	 BB_END (bb));
+      ASSERT_EQ (test == 0 || test == 1 || test == 10 || test == 12
+		 || test == 16 || test == 18,
+		 local_raw_spill::remove_dead_tail (bb));
+      ASSERT_FALSE (local_raw_spill::remove_dead_tail (bb));
+      riscv_ztt_profile_string = saved_profile;
       flag_strict_aliasing = strict_aliasing;
     }
   for (unsigned int test = 0; test != 15; ++test)
