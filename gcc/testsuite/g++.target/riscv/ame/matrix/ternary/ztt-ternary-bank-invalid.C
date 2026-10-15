@@ -1,6 +1,6 @@
 /* { dg-do compile } */
-/* { dg-options "-O2 -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u8-m16-a16" { target rv32 } } */
-/* { dg-options "-O2 -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u8-m16-a16" { target rv64 } } */
+/* { dg-options "-ffat-lto-objects -O2 -march=rv32im_zicsr_ztt0p6 -mabi=ilp32 -mztt-profile=gcc-runtime-u8-m16-a16" { target rv32 } } */
+/* { dg-options "-ffat-lto-objects -O2 -march=rv64im_zicsr_ztt0p6 -mabi=lp64 -mztt-profile=gcc-runtime-u8-m16-a16" { target rv64 } } */
 #include <riscv_ztt.h>
 void test (const __INT64_TYPE__ *a, const __UINT64_TYPE__ *b,
            const __INT64_TYPE__ *old, __INT64_TYPE__ *out)
