@@ -97,6 +97,10 @@ use GC/PCH-visible pages of 256 declarations, allocated on first insertion
 into each page.  Empty lookups allocate nothing.  Code indexing uses the
 page number and slot; unused pages allocate no declaration storage.
 
+M-to-ACC preparation reuses each complete source packet's known Md.
+Unknown packets retain their payload across datatype setup using the existing
+private slot; destination Ad setup and ACC transfers remain unchanged.
+
 Datatype name fragments are cached by descriptor and alias kind.  The
 profile-independent cache contains text only; declarations, type nodes
 and availability remain under the existing registration rules.

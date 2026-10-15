@@ -925,6 +925,7 @@ unsigned int acc_mmul_length (rtx *, bool);
 const char *output_acc_clear (rtx *, bool);
 const char *output_acc_to_m (rtx *);
 const char *output_acc_from_m (rtx *);
+unsigned int acc_from_m_length (rtx *);
 bool value_mode_p (machine_mode);
 const profile_info *active_profile ();
 void validate_profile (struct gcc_options *);

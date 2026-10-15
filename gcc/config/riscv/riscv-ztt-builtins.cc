@@ -10671,8 +10671,7 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
   rtx stride = operands[mul_p ? 6 : 4];
   rtx address = operands[mul_p ? (mixed_p ? 10 : 9) : 6];
   unsigned int prepared = UINTVAL (operands[mul_p ? (mixed_p ? 9 : 8) : 5]);
-  gcc_assert (mul_p || !prepared
-	      || (prepared == 1 && acc_nregs (mode) == 1));
+  gcc_assert (mul_p || prepared < (1U << count));
   auto transfer = [&] (rtx group, bool load_p)
     {
       bool group_p = m_nregs (GET_MODE (group)) > 1;
@@ -10683,11 +10682,11 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
 	}
       output_acc_m_transfer (group, group_p ? address : base, stride, load_p);
     };
-  auto preserve = [&] (rtx group, rtx group_descriptor)
+  auto preserve = [&] (rtx group, rtx group_descriptor, unsigned int packets)
     {
       transfer (group, false);
-      unsigned int group_r = mul_p ? m_nregs (GET_MODE (group)) : r;
-      for (unsigned int i = 0; i < count; ++i)
+      unsigned int group_r = m_nregs (GET_MODE (group)) / packets;
+      for (unsigned int i = 0; i < packets; ++i)
 	{
 	  rtx args[] = { gen_rtx_REG (matrix_mode (group_r),
 				     REGNO (group) + i * group_r),
@@ -10696,17 +10695,42 @@ output_acc_state (rtx *operands, bool mul_p, bool mixed_p)
 	}
       transfer (group, true);
     };
-  if (!(prepared & 1))
-    preserve (source, descriptor);
+  if (!mul_p && prepared)
+    {
+      /* Reuse the private slot for each unprepared complete packet.  */
+      for (unsigned int i = 0; i < count; ++i)
+	if (!(prepared & (1U << i)))
+	  preserve (gen_rtx_REG (matrix_mode (r), REGNO (source) + i * r),
+		    descriptor, 1);
+    }
+  else if (!(prepared & 1))
+    preserve (source, descriptor, count);
   if (mul_p)
     {
       if (!(prepared & 2) && !acc_shared_source_p (operands, mixed_p))
-	preserve (operands[3], mixed_p ? operands[8] : descriptor);
+	preserve (operands[3], mixed_p ? operands[8] : descriptor, 1);
       output_asm_insn (acc_mmul_template (UINTVAL (operands[7])), operands);
     }
   else
     return output_acc_from_m (operands);
   return "";
+}
+
+unsigned int
+acc_from_m_length (rtx *operands)
+{
+  machine_mode mode = GET_MODE (operands[0]);
+  unsigned int count = acc_nregs (mode) / acc_transfer_accs (mode);
+  unsigned int r = acc_m_nregs (mode);
+  unsigned int mask = UINTVAL (operands[5]);
+  unsigned int length = acc_nregs (mode) + count;
+  if (!mask)
+    length += count + (r * count == 1 ? 2 : 4 * r * count);
+  else
+    for (unsigned int i = 0; i < count; ++i)
+      if (!(mask & (1U << i)))
+	length += r == 1 ? 3 : 4 * r + 1;
+  return 4 * length;
 }
 
 unsigned int
@@ -13167,12 +13191,25 @@ reuse_local_md ()
 		      descriptor = XVECEXP (src, 0, 1);
 		      unsigned int count = m_nregs (GET_MODE (group));
 		      gcc_assert (count == acc_full_m_nregs (mode));
-		      if (state.matches_packets (group, descriptor, step))
+		      unsigned int mask = 0;
+		      for (unsigned int i = 0; i < count / step; ++i)
+			if (state.matches
+			      (gen_rtx_REG (matrix_mode (step),
+					    REGNO (group) + i * step), descriptor))
+			  mask |= 1U << i;
+		      if (mask)
 			{
-			  rtx prepared = gen_ztt_acc_from_m_prepared
-			    (mode, Pmode, SET_DEST (set), group, descriptor);
-			  bool changed = validate_change
-			    (insn, &PATTERN (insn), prepared, false);
+			  bool changed;
+			  if (mask == (1U << (count / step)) - 1)
+			    {
+			      rtx prepared = gen_ztt_acc_from_m_prepared
+				(mode, Pmode, SET_DEST (set), group, descriptor);
+			      changed = validate_change
+				(insn, &PATTERN (insn), prepared, false);
+			    }
+			  else
+			    changed = validate_change
+			      (insn, &XVECEXP (src, 0, 3), GEN_INT (mask), false);
 			  gcc_assert (changed);
 			  df_insn_rescan (insn);
 			  cleanup = true;
@@ -13351,6 +13388,33 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    const struct { machine_mode mode; unsigned int length; } cases[] = {
+      { ZTTAR1mode, 20 }, { ZTTAR4mode, 76 }, { ZTTAR1X2mode, 56 },
+      { ZTTAR4X2mode, 152 }, { ZTTAR2X16mode, 704 },
+      { ZTTAP4X4mode, 32 }, { ZTTAP4X16mode, 160 },
+      { ZTTAP16X16mode, 80 }, { ZTTAR16X2mode, 536 }
+    };
+    for (const auto &c : cases)
+      {
+	rtx operands[6] = {};
+	operands[0] = gen_rtx_REG (c.mode, ACC_REG_FIRST);
+	operands[5] = const0_rtx;
+	ASSERT_EQ (acc_from_m_length (operands), c.length);
+	unsigned int count = acc_nregs (c.mode) / acc_transfer_accs (c.mode);
+	unsigned int all = (1U << count) - 1;
+	unsigned int base = 4 * (acc_nregs (c.mode) + count);
+	unsigned int step = acc_m_nregs (c.mode);
+	for (unsigned int mask : { 1U, 1U << (count - 1), all, all ^ 1U })
+	  if (mask)
+	    {
+	      operands[5] = GEN_INT (mask);
+	      unsigned int missing = count - popcount_hwi (mask);
+	      unsigned int expected = base + missing * (step == 1 ? 12 : 16 * step + 4);
+	      ASSERT_EQ (acc_from_m_length (operands), expected);
+	    }
+      }
+  }
   for (unsigned int test = 0; test != 12; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
