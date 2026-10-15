@@ -8744,12 +8744,12 @@ local_acc_result_p ()
 static unsigned int integer_zero_width (rtx);
 static unsigned int floating_zero_width (rtx);
 
-/* A local constructor proves both the payload and the actual Ad.  */
+/* A local constructor proves the zero payload and its datatype state.  */
 static bool
-local_zero_acc_p (tree value, type_index type, rtx descriptor)
+local_zero_constructor_p (tree value, type_index type, rtx descriptor)
 {
   if (!optimize || !runtime_profile_p ()
-      || !currently_expanding_gimple_stmt
+      || !currently_expanding_gimple_stmt || type == TYPE_MAX
       || (!integer_zero_width (descriptor)
 	  && !floating_zero_width (descriptor)))
     return false;
@@ -8763,8 +8763,12 @@ local_zero_acc_p (tree value, type_index type, rtx descriptor)
   if (code >= ZTT_BUILTIN_MAX)
     return false;
   const auto d = builtin_description_for (code);
+  expansion_index clear = types[type].accumulator
+    ? EXPAND_ACLEAR : EXPAND_MCLEAR_M;
+  expansion_index zero = types[type].accumulator
+    ? EXPAND_AZERO : EXPAND_MZERO_2D_M;
   if (d.type != type
-      || (d.expansion != EXPAND_ACLEAR && d.expansion != EXPAND_AZERO))
+      || (d.expansion != clear && d.expansion != zero))
     return false;
   producers[count++] = producer;
   gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
@@ -9535,6 +9539,14 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  type_index input = matrix_type_index
 	    (dtype, d.prototype == PROTO_A_M_COLUMN ? squares : 1,
 	     d.prototype == PROTO_A_M_COLUMN ? 1 : squares);
+	  if (local_zero_constructor_p (CALL_EXPR_ARG (exp, 0), input, descriptor))
+	    {
+	      emit_insn (gen_ztt_acc_clear
+			 (mode, Pmode, target, force_reg (Pmode, descriptor)));
+	      if (dump_file)
+		fprintf (dump_file, "Forward zero M to ACC\n");
+	      return target;
+	    }
 	  rtx sources[2];
 	  if (optimize && runtime_profile_p ()
 	      && acc_nregs (mode) >= 2 * acc_transfer_accs (mode)
@@ -9554,7 +9566,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  return target;
 	}
 	case EXPAND_M_FROM_A:
-	  if (local_zero_acc_p (CALL_EXPR_ARG (exp, 0), d.type, descriptor))
+	  if (local_zero_constructor_p (CALL_EXPR_ARG (exp, 0), d.type, descriptor))
 	    {
 	      unsigned int step = acc_m_nregs (mode);
 	      machine_mode part = matrix_mode (step);
