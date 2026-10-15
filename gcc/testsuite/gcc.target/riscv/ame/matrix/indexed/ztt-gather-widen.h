@@ -16,6 +16,10 @@ typedef GI_CARRIER gi_element;
 typedef GI_INDEX_CARRIER gi_index;
 #define GI_ARGS const gi_element *in, const gi_index *indices, \
   gi_element *out, gi_index *extra
+#ifndef GI_COL_OP
+#define GI_COL_OP(a, i) GI_NAME(mcolgather_ew, GI_TYPE) (a, i)
+#define GI_ROW_OP(a, i) GI_NAME(mrowgather_ew, GI_TYPE) (a, i)
+#endif
 #define GI_LOAD GI_T(GI_TYPE) a = GI_NAME(mls_rm, GI_TYPE) (in)
 #define GI_COL GI_T(GI_SOURCE) s = GI_NAME(mcolid_ew, GI_SOURCE) (); \
   GI_T(GI_INDEX) i = GI_NAME(mconv_ew, GI_INDEX) (s)
@@ -39,21 +43,21 @@ void gid_col (GI_ARGS)
   GI_T(GI_SOURCE) t = GI_NAME(mcopy_m2m, GI_SOURCE) (s);
   GI_T(GI_INDEX) i = GI_NAME(mconv_ew, GI_INDEX) (t);
   GI_COPY1;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 
 void gid_row (GI_ARGS)
 {
   GI_LOAD; GI_ROW; GI_COPY2;
-  GI_T(GI_TYPE) b = GI_NAME(mrowgather_ew, GI_TYPE) (a, k);
+  GI_T(GI_TYPE) b = GI_ROW_OP (a, k);
   __riscv_ztt_mss_rm (out, b);
 }
 
 void gid_shared (GI_ARGS)
 {
   GI_LOAD; GI_COL; GI_COPY3;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, l);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, l);
   __riscv_ztt_mss_rm (out, b);
   __riscv_ztt_mss_rm (extra, l);
 }
@@ -62,7 +66,7 @@ void gid_query (GI_ARGS)
 {
   GI_LOAD; GI_COL; GI_COPY2;
   unsigned long n = __riscv_ztt_get_amenlen ();
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, k);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, k);
   __riscv_ztt_mss_rm (out, b);
   gid_observed = n;
 }
@@ -70,7 +74,7 @@ void gid_query (GI_ARGS)
 void gid_cross (GI_ARGS)
 {
   GI_LOAD; GI_ROW; GI_COPY1;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 
@@ -79,7 +83,7 @@ void gid_call (GI_ARGS)
   GI_LOAD; GI_COL; GI_COPY1;
   gid_callee ();
   GI_COPY(k, j);
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, k);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, k);
   __riscv_ztt_mss_rm (out, b);
 }
 
@@ -87,7 +91,7 @@ void gid_asm (GI_ARGS)
 {
   GI_LOAD; GI_COL; GI_COPY1;
   asm volatile ("" ::: "memory");
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 
@@ -95,7 +99,7 @@ void gid_memory (GI_ARGS)
 {
   GI_LOAD; GI_COL; GI_COPY1;
   gid_observed = gid_observed + 1;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 
@@ -104,14 +108,14 @@ void gid_external (GI_ARGS)
   GI_LOAD;
   GI_T(GI_INDEX) i = GI_NAME(mls_rm, GI_INDEX) (indices);
   GI_COPY1;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 
 void gid_before (GI_ARGS)
 {
   GI_COL; GI_COPY1; GI_LOAD;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 
@@ -124,14 +128,14 @@ void gid_reference (GI_ARGS)
 void gid_limit (GI_ARGS)
 {
   GI_LOAD; GI_COL; GI_COPY4;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, m);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, m);
   __riscv_ztt_mss_rm (out, b);
 }
 
 void gid_inner (GI_ARGS)
 {
   GI_LOAD; GI_COL; GI_COPY2;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, k);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, k);
   __riscv_ztt_mss_rm (out, b);
   __riscv_ztt_mss_rm (extra, j);
 }
@@ -143,7 +147,7 @@ void gid_chain (GI_ARGS)
   GI_T(GI_MIDDLE) t = GI_NAME(mconv_ew, GI_MIDDLE) (s);
   GI_T(GI_INDEX) i = GI_NAME(mconv_ew, GI_INDEX) (t);
   GI_COPY1;
-  GI_T(GI_TYPE) b = GI_NAME(mcolgather_ew, GI_TYPE) (a, j);
+  GI_T(GI_TYPE) b = GI_COL_OP (a, j);
   __riscv_ztt_mss_rm (out, b);
 }
 #ifdef __cplusplus

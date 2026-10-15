@@ -7754,8 +7754,8 @@ inverse_zip_value (const builtin_description &d,
 /* ID coordinates are nonnegative.  Preserve them through conversions whose
    destination covers that range, retaining calls and constructor checks.  */
 static bool
-strip_gather_index (tree &value, type_index &type, gimple **producers,
-		    unsigned int &count)
+strip_identity_index (tree &value, type_index &type, gimple **producers,
+		      unsigned int &count)
 {
   unsigned int start = count;
   for (;;)
@@ -7799,33 +7799,44 @@ strip_gather_index (tree &value, type_index &type, gimple **producers,
 
 /* Keep the index constructor, including its range and ownership checks.  */
 static tree
-identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
+identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
   builtin_description d;
   elementwise_description operation;
   bool carrier = integer_matrix_code_p (code) || floating_matrix_code_p (code);
   if (carrier)
     {
-      tree args[5];
-      if (gimple_call_num_args (stmt) != ARRAY_SIZE (args))
+      tree args[6];
+      unsigned int nargs = gimple_call_num_args (stmt);
+      if (nargs != 5 && nargs != 6)
 	return NULL_TREE;
-      for (unsigned int i = 0; i < ARRAY_SIZE (args); ++i)
+      for (unsigned int i = 0; i < nargs; ++i)
 	args[i] = gimple_call_arg (stmt, i);
-      if (!describe_integer_matrix (code, ARRAY_SIZE (args), args, d, operation))
+      if (!describe_integer_matrix (code, nargs, args, d, operation))
 	return NULL_TREE;
     }
   else
     {
-      if (gimple_call_num_args (stmt) != 2
+      if ((gimple_call_num_args (stmt) != 2
+	   && gimple_call_num_args (stmt) != 3)
 	  || !decode_elementwise_builtin (code, operation))
 	return NULL_TREE;
       d = builtin_description_for (operation.canonical);
     }
-  if (d.prototype != PROTO_M_GATHER
+  bool scatter = d.prototype == PROTO_M_SCATTER;
+  if ((!scatter && d.prototype != PROTO_M_GATHER)
       || floating_descriptor_p (types[operation.count].descriptor))
     return NULL_TREE;
-  tree data = gimple_call_arg (stmt, 0);
-  tree index = gimple_call_arg (stmt, 1);
+  tree data = gimple_call_arg (stmt, scatter ? 1 : 0);
+  tree index = gimple_call_arg (stmt, scatter ? 2 : 1);
+  /* Integer max with the same value cannot round, saturate or alter flags.  */
+  if (scatter
+      && ((d.expansion != EXPAND_MCOLSCATMAX_EW
+	   && d.expansion != EXPAND_MROWSCATMAX_EW)
+	  || d.type != operation.data
+	  || floating_descriptor_p (types[d.type].descriptor)
+	  || data != gimple_call_arg (stmt, 0)))
+    return NULL_TREE;
   tree lhs_type = TREE_TYPE (gimple_call_lhs (stmt));
   if (TREE_CODE (data) != SSA_NAME || TREE_CODE (index) != SSA_NAME
       || TYPE_MODE (TREE_TYPE (data)) != TYPE_MODE (lhs_type)
@@ -7851,7 +7862,7 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
   if (type_for_tree (TREE_TYPE (index)) != operation.count)
     return NULL_TREE;
   type_index index_type = operation.count;
-  if (!strip_gather_index (index, index_type, producers, count))
+  if (!strip_identity_index (index, index_type, producers, count))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (index);
   unsigned int source_code = structure_builtin_code (producer, 0);
@@ -7861,6 +7872,7 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
   const auto source = builtin_description_for (source_code);
   if (source.type != index_type
       || (d.expansion == EXPAND_MCOLGATHER_EW
+	  || d.expansion == EXPAND_MCOLSCATMAX_EW
 	  ? source.expansion != EXPAND_MCOLID_EW
 	  : source.expansion != EXPAND_MROWID_EW)
       || !local_structure_producers_p (gsi, producers, count))
@@ -7923,7 +7935,7 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
   tree lhs = gimple_call_lhs (stmt);
   tree value;
   if (code >= ZTT_BUILTIN_MAX)
-    value = identity_gather_value (code, gsi, stmt);
+    value = identity_indexed_value (code, gsi, stmt);
   else
     {
       const auto d = builtin_description_for (code);

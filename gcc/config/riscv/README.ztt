@@ -197,6 +197,11 @@ conversions and copies remain as GIMPLE ownership witnesses.  Narrowing,
 equal-width unsigned-to-signed and floating conversions do not qualify.  Inner
 inputs require a single value use; other uses of the final index remain.
 
+Integer scatter-max with identical old/data SSA inputs and exact datatypes
+also reuses that value when the index is a matching row/column ID.  It uses
+the same bounded index search and retains constructor checks.  Scatter-add,
+floating scatter-max, distinct old values and loaded indices are unchanged.
+
 Consecutive row/column broadcasts with the same axis and complete
 basic-square type reuse the first result within that local window when their
 controls match, their constant low 32 bits match, or the second control has
