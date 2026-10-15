@@ -247,22 +247,28 @@
   [(set_attr "type" "multi")
    (set_attr "length" "8")])
 
-;; Settyp defines the entire
-;; formed group before broadcast.  The source datatype is a GPR value;
-;; neither amestype nor an existing M value is an input.
+;; A late zero descriptor reuses established Md.  The broadcast writes
+;; every element; its source datatype is explicit rather than amestype.
 (define_insn "@ztt_typed_broadcast_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "r")
            (match_operand:P 2 "register_operand" "r")
-           (match_operand:P 3 "register_operand" "r")]
+           (match_operand:P 3 "reg_or_0_operand" "rJ")]
           UNSPECV_ZTT_BROADCAST))]
   "TARGET_ZTT && riscv_ztt::typed_profile_p ()
+   && (REG_P (operands[3]) || reload_completed)
    && (GET_MODE (operands[1]) == QImode || GET_MODE (operands[1]) == HImode
        || GET_MODE (operands[1]) == SImode || GET_MODE (operands[1]) == Pmode)"
-  "msettyp\t%0,%3\;mbcast.m.x\t%0,%1,%2"
+{
+  if (operands[3] != const0_rtx)
+    output_asm_insn ("msettyp\t%0,%3", operands);
+  return "mbcast.m.x\t%0,%1,%2";
+}
   [(set_attr "type" "multi")
-   (set_attr "length" "8")])
+   (set (attr "length")
+        (if_then_else (match_test "operands[3] == const0_rtx")
+                      (const_int 4) (const_int 8)))])
 
 ;; The call-site range check precedes the complete index construction.
 (define_insn "@ztt_typed_index_construct_<ZTT_M:mode>_<P:mode>"
