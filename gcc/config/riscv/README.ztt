@@ -310,6 +310,11 @@ For an inner A & ~B, outer AND with A reuses the inner result; outer OR
 with A reuses A under the absorption conditions above.  Only the first
 inner operand matches: AND-NOT is not commutative.
 
+Integer AND and unsigned min with an explicit zero reuse that complete
+zero value.  The other input must feed a complete local store, preserving
+its producers and loads.  Exact datatypes and the bounded local zero proof
+are required; signed min and floating operations do not qualify.
+
 An integer XOR pair cancels a repeated input, returning the other inner
 input.  The inner result and intervening copies must have single uses,
 and the repeated input must feed a complete local store so that its loads

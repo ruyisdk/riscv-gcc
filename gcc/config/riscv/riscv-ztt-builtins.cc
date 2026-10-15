@@ -8179,6 +8179,19 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     if (tree repeated = combined_binary_value (stmt, d, gsi))
       return useless_type_conversion_p (lhs_type, TREE_TYPE (repeated))
 	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
+  if (!same && (d.expansion == EXPAND_MAND_EW
+		|| (d.expansion == EXPAND_MMIN_EW
+		    && !(types[d.type].descriptor & (1U << 30)))))
+    for (unsigned int side = 0; side < 2; ++side)
+      {
+	count = 0;
+	tree zero = gimple_call_arg (stmt, side);
+	if (structure_zero_p (zero, d.type, producers, count)
+	    && stored_binary_input_p (gimple_call_arg (stmt, 1 - side), gsi)
+	    && local_structure_producers_p (gsi, producers, count))
+	  return useless_type_conversion_p (lhs_type, TREE_TYPE (zero)) ? zero
+	    : build1 (VIEW_CONVERT_EXPR, lhs_type, zero);
+      }
   if (!same)
     {
       /* MSUB computes B-A, whereas AND-NOT computes A & ~B.  */
