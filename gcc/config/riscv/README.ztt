@@ -422,8 +422,8 @@ single-SET ACC clears and M/ACC transfers, invalidating the written result.
 Prepared single-SET ACC matmul, value zip/unzip and indexed operations
 retain those GPR facts.
 Matching matmul and M-to-ACC sources skip save/set/reload; internal operands
-control output and instruction length.  M-to-ACC requires a matching Md
-for every complete transfer packet, including packed ACC groups.  It still
+control output and instruction length.  M-to-ACC checks Md independently
+for each complete transfer packet, including packed ACC groups.  It still
 sets every destination Ad and transfers every source packet.  A whole-group
 fact cannot substitute for separately prepared packets.
 Paired-value zip/unzip checks Md separately for both complete square
@@ -566,8 +566,8 @@ store kind and volatile state operation; the store itself stays in place.
 ACC-to-M moves establish Md separately for each transfer packet.  Track
 those subgroups independently, including packed ACC packets, rather than
 treating a multiple-packet destination as one larger prepared group.
-When all destination packets already have the required Md, omit their
-setters but retain every full ACC-to-M transfer.  Unknown or mismatching
+When a destination packet already has the required Md, omit its setter
+but retain every full ACC-to-M transfer.  Unknown or mismatching
 packets retain the complete setup; actual Ad and packed transfers are
 unchanged.
 Grouped M-to-ACC moves also establish source Md per transfer packet.

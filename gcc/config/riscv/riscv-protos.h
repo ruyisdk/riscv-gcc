@@ -924,6 +924,7 @@ const char *acc_mmul_template (unsigned int);
 unsigned int acc_mmul_length (rtx *, bool);
 const char *output_acc_clear (rtx *, bool);
 const char *output_acc_to_m (rtx *);
+unsigned int acc_to_m_length (rtx *);
 const char *output_acc_from_m (rtx *);
 unsigned int acc_from_m_length (rtx *);
 bool value_mode_p (machine_mode);

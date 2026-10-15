@@ -1849,12 +1849,13 @@
   [(set_attr "type" "multi")
    (set_attr "length" "<ztt_acc_zero_length>")])
 
-;; A zero descriptor reuses Md for every complete destination packet.
+;; The mask reuses individual packets; a zero descriptor reuses all Md.
 (define_insn "@ztt_acc_to_m_<ZTT_XA:mode>_<P:mode>"
   [(set (match_operand:<ztt_acc_full_m> 0 "register_operand" "=Wmr")
         (unspec_volatile:<ztt_acc_full_m>
           [(match_operand:ZTT_XA 1 "register_operand" "War")
-           (match_operand:P 2 "reg_or_0_operand" "rJ")]
+           (match_operand:P 2 "reg_or_0_operand" "rJ")
+           (match_operand 3 "const_int_operand" "n")]
           UNSPECV_ZTT_ACC_TO_M))]
   "TARGET_ZTT && riscv_ztt::acc_mode_supported_p (<ZTT_XA:MODE>mode)
    && (REG_P (operands[2]) || reload_completed)"
@@ -1863,7 +1864,7 @@
 }
   [(set_attr "type" "multi")
    (set (attr "length")
-        (symbol_ref "(operands[2] == const0_rtx ? 4 : 8) * riscv_ztt::acc_nregs (GET_MODE (operands[1])) / riscv_ztt::acc_transfer_accs (GET_MODE (operands[1]))"))])
+        (symbol_ref "riscv_ztt::acc_to_m_length (operands)"))])
 
 ;; The state pass supplies explicit private memory before IRA.  Never
 ;; clear a live M operand just to prepare its descriptor for an ACC move.

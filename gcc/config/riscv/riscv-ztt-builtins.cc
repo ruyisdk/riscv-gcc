@@ -9319,7 +9319,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  target = result_register (m_mode, target);
 	  emit_insn (gen_ztt_acc_to_m
 		     (mode, Pmode, target, matrix_register (mode, exp, 0),
-		      force_reg (Pmode, descriptor)));
+		      force_reg (Pmode, descriptor), const0_rtx));
 	  return target;
 	case EXPAND_A_MMUL:
 	case EXPAND_A_MMULNEG:
@@ -10326,11 +10326,20 @@ output_acc_to_m (rtx *operands)
       rtx args[] = { gen_rtx_REG (matrix_mode (r), REGNO (operands[0]) + i * r),
 		     GEN_INT (REGNO (operands[1]) - ACC_REG_FIRST + i * packet),
 		     operands[2] };
-      if (operands[2] != const0_rtx)
+      if (operands[2] != const0_rtx && !(UINTVAL (operands[3]) & (1U << i)))
 	output_asm_insn ("msettyp\t%0,%2", args);
       output_asm_insn ("mmov.m.a\t%0,acc%c1", args);
     }
   return "";
+}
+
+unsigned int
+acc_to_m_length (rtx *operands)
+{
+  machine_mode mode = GET_MODE (operands[1]);
+  unsigned int count = acc_nregs (mode) / acc_transfer_accs (mode);
+  unsigned int ready = popcount_hwi (UINTVAL (operands[3]));
+  return (operands[2] == const0_rtx ? 4 : 8) * count - 4 * ready;
 }
 
 const char *
@@ -13162,10 +13171,18 @@ reuse_local_md ()
 		    rtx dest = SET_DEST (set);
 		    descriptor = XVECEXP (src, 0, 1);
 		    gcc_assert (m_nregs (GET_MODE (dest)) == count);
-		    if (state.matches_packets (dest, descriptor, step))
+		    unsigned int mask = 0;
+		    for (unsigned int i = 0; i < count / step; ++i)
+		      if (state.matches
+			    (gen_rtx_REG (matrix_mode (step),
+					  REGNO (dest) + i * step), descriptor))
+			mask |= 1U << i;
+		    if (mask)
 		      {
+			bool all = mask == (1U << (count / step)) - 1;
 			bool changed = validate_change
-			  (insn, &XVECEXP (src, 0, 1), const0_rtx, false);
+			  (insn, &XVECEXP (src, 0, all ? 1 : 2),
+			   all ? const0_rtx : GEN_INT (mask), false);
 			gcc_assert (changed);
 			df_insn_rescan (insn);
 			cleanup = true;
@@ -13397,12 +13414,15 @@ run_md_reuse_selftests ()
     };
     for (const auto &c : cases)
       {
+	rtx to[4] = { NULL_RTX, gen_rtx_REG (c.mode, ACC_REG_FIRST),
+		      gen_rtx_REG (SImode, 10), const0_rtx };
 	rtx operands[6] = {};
 	operands[0] = gen_rtx_REG (c.mode, ACC_REG_FIRST);
 	operands[5] = const0_rtx;
 	ASSERT_EQ (acc_from_m_length (operands), c.length);
 	unsigned int count = acc_nregs (c.mode) / acc_transfer_accs (c.mode);
 	unsigned int all = (1U << count) - 1;
+	ASSERT_EQ (acc_to_m_length (to), 8 * count);
 	unsigned int base = 4 * (acc_nregs (c.mode) + count);
 	unsigned int step = acc_m_nregs (c.mode);
 	for (unsigned int mask : { 1U, 1U << (count - 1), all, all ^ 1U })
@@ -13410,9 +13430,13 @@ run_md_reuse_selftests ()
 	    {
 	      operands[5] = GEN_INT (mask);
 	      unsigned int missing = count - popcount_hwi (mask);
+	      to[3] = GEN_INT (mask);
+	      ASSERT_EQ (acc_to_m_length (to), 4 * (count + missing));
 	      unsigned int expected = base + missing * (step == 1 ? 12 : 16 * step + 4);
 	      ASSERT_EQ (acc_from_m_length (operands), expected);
 	    }
+	to[2] = to[3] = const0_rtx;
+	ASSERT_EQ (acc_to_m_length (to), 4 * count);
       }
   }
   for (unsigned int test = 0; test != 12; ++test)
