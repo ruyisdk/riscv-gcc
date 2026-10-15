@@ -1635,7 +1635,8 @@ static GTY (()) tree nominal_scalar_types[numeric_scalar_dtype_count];
 static GTY (()) tree nominal_scalar_decls[3 * numeric_scalar_dtype_count
 					+ 2 * TYPE_MAX];
 static GTY (()) tree nominal_extended_decls[nominal_extended_count];
-static GTY (()) vec<tree, va_gc> *nominal_broadcast_decls;
+static GTY (()) builtin_decl_table nominal_broadcast_decls
+  = { TYPE_MAX * numeric_scalar_dtype_count, nullptr };
 struct GTY (()) nominal_registration_cache
 {
   vec<tree, va_gc> *blocks[TYPE_MAX];
@@ -6238,6 +6239,7 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
   if (in_lto_p)
     return integer_zero_node;
   char name[160];
+  unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
   const char *dtype;
   tree ftype;
   tree *slot;
@@ -6293,26 +6295,18 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
       unsigned int t = n / numeric_scalar_dtype_count, c = n % numeric_scalar_dtype_count;
       if (types[t].accumulator || !ztt_m_type_nodes[t])
 	return error_mark_node;
-      if (!nominal_broadcast_decls)
-	{
-	  if (!initialize_p)
-	    return error_mark_node;
-	  vec_safe_grow_cleared (nominal_broadcast_decls,
-				TYPE_MAX * numeric_scalar_dtype_count, true);
-	}
-      slot = &(*nominal_broadcast_decls)[n];
-      if (*slot || !initialize_p)
-	return *slot ? *slot : error_mark_node;
+      tree decl = nominal_broadcast_decls.get (n);
+      if (decl || !initialize_p)
+	return decl ? decl : error_mark_node;
       snprintf (name, sizeof (name), "__builtin_riscv_ztt_nominal_broadcast_%u", n);
       ftype = build_function_type_list (ztt_m_type_nodes[t],
 					scalar_carrier_type (nominal_scalar_type_index (c)), NULL_TREE);
+      return nominal_broadcast_decls.put
+	(n, add_builtin_function_ext_scope (name, ftype, fullcode, BUILT_IN_MD,
+					    NULL, function_attributes ()));
     }
-  unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
-  *slot = nominal_raw_broadcast_p (code)
-    ? add_builtin_function_ext_scope (name, ftype, fullcode, BUILT_IN_MD,
-				     NULL, function_attributes ())
-    : simulate_builtin_function_decl (input_location, name, ftype, fullcode,
-				      NULL, function_attributes ());
+  *slot = simulate_builtin_function_decl (input_location, name, ftype, fullcode,
+					 NULL, function_attributes ());
   if (nominal_operation_p (code))
     {
       type_index t;

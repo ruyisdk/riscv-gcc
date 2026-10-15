@@ -114,6 +114,8 @@ it changes.  The cache contains counts only, not trees or modes.
 
 Nominal Scalar lookups check availability before returning a cached
 declaration, without rebuilding its name or function type.
+Internal nominal broadcast declarations use the same paged table; public
+constructors and overload declarations retain their existing storage.
 
 Scalar registration keeps one temporary entry per destination type/shape,
 with a shared decoded TC array.  Operations expand each group's TC range in
