@@ -11810,6 +11810,15 @@ public:
   }
 };
 
+/* Standard memory fences do not write registers or AME state.  */
+static bool
+md_preserving_fence_p (int code)
+{
+  return code == CODE_FOR_fence
+    || code == CODE_FOR_mem_thread_fence_rvwmo
+    || code == CODE_FOR_mem_thread_fence_ztso;
+}
+
 /* Only the result GPR changes; the volatile CSR observation remains.  */
 static bool
 md_read_csr_p (int code)
@@ -12320,6 +12329,8 @@ reuse_cleaned_descriptors ()
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
+	  if (md_preserving_fence_p (code))
+	    continue;
 	  if (md_read_csr_p (code))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
@@ -12565,6 +12576,13 @@ reuse_local_md ()
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
 	      || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
 	    continue;
+	  if (md_preserving_fence_p (code))
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Preserve Md across fence at insn %d\n",
+			 INSN_UID (insn));
+	      continue;
+	    }
 	  if (md_read_csr_p (code))
 	    {
 	      note_stores (insn, invalidate_md_store, &state);
@@ -13161,6 +13179,32 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_fence));
+  ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_mem_thread_fence_rvwmo));
+  ASSERT_TRUE (md_preserving_fence_p (CODE_FOR_mem_thread_fence_ztso));
+  ASSERT_FALSE (md_preserving_fence_p (-1));
+  ASSERT_FALSE (md_preserving_fence_p (CODE_FOR_fence_i));
+  ASSERT_FALSE (md_preserving_fence_p (CODE_FOR_riscv_pause));
+  for (unsigned int test = 0; test != 2; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx addr = gen_rtx_REG (Pmode, 10);
+      rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (slot);
+      rtx memory = gen_rtx_MEM (BLKmode, gen_rtx_SCRATCH (Pmode));
+      MEM_VOLATILE_P (memory) = 1;
+      rtx barrier = !test ? gen_fence ()
+	: TARGET_ZTSO ? gen_mem_thread_fence_ztso
+	    (memory, GEN_INT (MEMMODEL_SEQ_CST))
+	: gen_mem_thread_fence_rvwmo (memory, GEN_INT (MEMMODEL_SEQ_CST));
+      rtx_insn *insn = emit_insn (barrier);
+      ASSERT_TRUE (md_preserving_fence_p (recog_memoized (insn)));
+      local_raw_spill spill;
+      ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (slot, value)));
+      ASSERT_FALSE (spill.redundant_reload_p (barrier));
+      ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (value, slot)));
+    }
   for (unsigned int test = 0; test != 9; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
