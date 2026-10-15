@@ -962,12 +962,14 @@ void run_wide_signature_selftests ();
 #endif
 const char *output_elementwise_state (rtx *, bool);
 unsigned int elementwise_length (rtx *, bool);
-const char *output_indexed_state (rtx *);
+const char *output_indexed_state (rtx *, unsigned int = 0);
+const char *output_shared_scatter_state (rtx *);
+unsigned int shared_scatter_length (rtx *);
 const char *output_zip_state (rtx *, bool = false);
 unsigned int zip_length (rtx *);
 const char *output_zip_value_state (rtx *, bool = false);
 unsigned int zip_value_length (rtx *);
-unsigned int indexed_length (rtx *);
+unsigned int indexed_length (rtx *, unsigned int = 0);
 const char *output_ternary_state (rtx *, unsigned int = 12);
 unsigned int ternary_length (rtx *, unsigned int = 12);
 const char *output_shared_ternary_state (rtx *, bool = false);

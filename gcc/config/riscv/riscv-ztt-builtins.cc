@@ -7932,6 +7932,7 @@ matrix_register (machine_mode mode, tree exp, unsigned int argno)
 
 static bool same_matrix_arguments_p (tree, type_index, unsigned int,
 				     unsigned int = 0);
+static tree matrix_copy_origin (tree, type_index);
 
 /* A scatter result retains
    the old destination as an explicit input, including untouched elements.  */
@@ -7952,16 +7953,31 @@ expand_indexed (const builtin_description &d,
     }
   gcc_assert (operation.formation.insns == 1
 	      && types[d.type].rows == 1 && types[d.type].columns == 1);
-  rtx old = scatter ? matrix_register (modes[0], exp, 0) : NULL_RTX;
-  rtx data = matrix_register (modes[1], exp, scatter ? 1 : 0);
   unsigned int inputs = operation.formation.step[1]
     + operation.formation.step[2]
     + (scatter ? operation.formation.step[0] : 0);
-  bool shared = runtime_profile_p ()
-    && inputs > active_profile ()->mregs
+  bool bank_limited = runtime_profile_p ()
+    && inputs > active_profile ()->mregs;
+  auto same_old = [&] (unsigned int i)
+    {
+      if (!scatter || !bank_limited || modes[0] != modes[i]
+	  || !rtx_equal_p (dtype[0], dtype[i]))
+	return false;
+      tree a = CALL_EXPR_ARG (exp, 0), b = CALL_EXPR_ARG (exp, i);
+      if (operand_equal_p (a, b, 0))
+	return true;
+      a = matrix_copy_origin (a, indices[0]);
+      b = matrix_copy_origin (b, indices[i]);
+      return TREE_CODE (a) == SSA_NAME && a == b;
+    };
+  rtx old = scatter ? matrix_register (modes[0], exp, 0) : NULL_RTX;
+  rtx data = same_old (1) ? old
+    : matrix_register (modes[1], exp, scatter ? 1 : 0);
+  bool shared = bank_limited
     && modes[1] == modes[2] && rtx_equal_p (dtype[1], dtype[2])
     && same_matrix_arguments_p (exp, indices[1], inputs, scatter ? 1 : 0);
-  rtx index = shared ? data : matrix_register (modes[2], exp, scatter ? 2 : 1);
+  rtx index = shared ? data : same_old (2) ? old
+    : matrix_register (modes[2], exp, scatter ? 2 : 1);
   rtx result = gen_reg_rtx (modes[0]);
   rtx variant = GEN_INT (indexed_variant (d.expansion));
   bool flags = floating_descriptor_p (types[d.type].descriptor)
@@ -9383,7 +9399,7 @@ elementwise_length (rtx *operands, bool scalar)
 /* Scatter must preserve the
    tied old destination across settyp as well as both immutable sources.  */
 const char *
-output_indexed_state (rtx *operands)
+output_indexed_state (rtx *operands, unsigned int mask_operand)
 {
   static const char *const templates[] = {
     "mcolgather.ew\t%0,%1,%2", "mrowgather.ew\t%0,%1,%2",
@@ -9392,18 +9408,22 @@ output_indexed_state (rtx *operands)
   };
   unsigned int variant = UINTVAL (operands[8]);
   gcc_assert (variant < ARRAY_SIZE (templates));
+  if (!mask_operand)
+    mask_operand = variant >= 2 ? 12 : 11;
   prepare_elementwise_state (operands, false, variant >= 2,
-			     UINTVAL (operands[variant >= 2 ? 12 : 11]));
+			     UINTVAL (operands[mask_operand]));
   output_asm_insn (templates[variant], operands);
   return "";
 }
 
 unsigned int
-indexed_length (rtx *operands)
+indexed_length (rtx *operands, unsigned int mask_operand)
 {
   bool old_dest = UINTVAL (operands[8]) >= 2;
+  if (!mask_operand)
+    mask_operand = old_dest ? 12 : 11;
   return elementwise_base_length (operands, false, old_dest,
-				  UINTVAL (operands[old_dest ? 12 : 11]));
+				  UINTVAL (operands[mask_operand]));
 }
 
 /* The tied destination
@@ -9439,6 +9459,22 @@ unpack_shared_ternary (rtx *full, rtx *operands, bool scalar)
   const unsigned int scalar_indices[] = { 0, 1, 2, 3, 3, 9, 4, 5, 10, 6, 7, 1, 8 };
   for (unsigned int i = 0; i < ARRAY_SIZE (indices); ++i)
     full[i] = operands[scalar ? scalar_indices[i] : indices[i]];
+}
+
+const char *
+output_shared_scatter_state (rtx *operands)
+{
+  rtx full[13];
+  unpack_shared_ternary (full, operands, false);
+  return output_indexed_state (full);
+}
+
+unsigned int
+shared_scatter_length (rtx *operands)
+{
+  rtx full[13];
+  unpack_shared_ternary (full, operands, false);
+  return indexed_length (full);
 }
 
 const char *
@@ -9494,7 +9530,9 @@ common_old_dest_p (int code)
     || code == UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT
     || code == UNSPECV_ZTT_STATE_TERNARY_X
     || code == UNSPECV_ZTT_STATE_TERNARY_X_REUSE
-    || code == UNSPECV_ZTT_STATE_SCATTER;
+    || code == UNSPECV_ZTT_STATE_SCATTER
+    || code == UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT
+    || code == UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT;
 }
 
 static bool
@@ -10428,6 +10466,7 @@ lower_explicit_state ()
 	  continue;
 	}
       unsigned int matrix_inputs = 0;
+      bool scatter_bank_reuse = false;
       if ((code == UNSPEC_ZTT_ELEMENTWISE_M || indexed_p)
 	  && runtime_profile_p ()
 	  && (nregs > 4 || m_nregs (mode) > 4))
@@ -10441,8 +10480,21 @@ lower_explicit_state ()
 	  bool independent_dest = false;
 	  if (code == UNSPEC_ZTT_SCATTER)
 	    {
-	      required += m_nregs (mode);
-	      independent_dest = true;
+	      rtx old = XVECEXP (src, 0, 5);
+	      rtx dtype = XVECEXP (src, 0, 6);
+	      bool shared_old = (mode == GET_MODE (lhs)
+		&& rtx_equal_p (old, lhs)
+		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3)))
+		|| (mode == GET_MODE (rhs)
+		    && rtx_equal_p (old, rhs)
+		    && rtx_equal_p (dtype, XVECEXP (src, 0, 4)));
+	      scatter_bank_reuse = required + m_nregs (mode)
+		> active_profile ()->mregs;
+	      if (!shared_old)
+		{
+		  required += m_nregs (mode);
+		  independent_dest = true;
+		}
 	    }
 	  if (code == UNSPEC_ZTT_ELEMENTWISE_M
 	      && required <= active_profile ()->mregs
@@ -10725,6 +10777,43 @@ lower_explicit_state ()
 	      }
 	    if (indexed_p)
 	      {
+		if (code == UNSPEC_ZTT_SCATTER)
+		  {
+		    bool dead_old = optimize && runtime_profile_p ()
+		      && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5));
+		    bool left = mode == GET_MODE (XVECEXP (src, 0, 0))
+		      && rtx_equal_p (dtype, XVECEXP (src, 0, 3));
+		    bool right = mode == GET_MODE (XVECEXP (src, 0, 1))
+		      && rtx_equal_p (dtype, XVECEXP (src, 0, 4));
+		    bool old_left = left && rtx_equal_p (XVECEXP (src, 0, 5),
+						       XVECEXP (src, 0, 0));
+		    bool old_right = right && rtx_equal_p (XVECEXP (src, 0, 5),
+							XVECEXP (src, 0, 1));
+		    if ((dead_old || scatter_bank_reuse)
+			&& (old_left || old_right))
+		      {
+			if (old_left && old_right)
+			  emit_insn (gen_ztt_state_scatter_shared
+			    (mode, Pmode, dest, XVECEXP (src, 0, 0), descriptor,
+			     scratch, stride ? stride : const0_rtx,
+			     XVECEXP (src, 0, 2), GEN_INT (steps),
+			     gen_rtx_SCRATCH (Pmode), const0_rtx));
+			else
+			  emit_insn (gen_ztt_state_scatter_tied
+			    (old_left ? UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT
+				      : UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT,
+			     mode, Pmode, dest, XVECEXP (src, 0, 0),
+			     XVECEXP (src, 0, 1), descriptor,
+			     left ? descriptor
+				  : force_reg (Pmode, XVECEXP (src, 0, 3)),
+			     right ? descriptor
+				   : force_reg (Pmode, XVECEXP (src, 0, 4)),
+			     scratch, stride ? stride : const0_rtx,
+			     XVECEXP (src, 0, 2), GEN_INT (steps),
+			     gen_rtx_SCRATCH (Pmode), const0_rtx));
+			break;
+		      }
+		  }
 		bool bank_reuse = nregs > 4
 		  && matrix_inputs
 		  && m_nregs (mode) + matrix_inputs > active_profile ()->mregs;
@@ -11498,6 +11587,8 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_GATHER_REUSE:
     case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
     case UNSPECV_ZTT_STATE_SCATTER:
+    case UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT:
+    case UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT:
       mask = 28;
       break;
     case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
@@ -12033,6 +12124,8 @@ reuse_local_md ()
 		case UNSPECV_ZTT_STATE_GATHER_REUSE:
 		case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
 		case UNSPECV_ZTT_STATE_SCATTER:
+		case UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT:
+		case UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT:
 		  {
 		    bool old_dest = common_old_dest_p (XINT (src, 1));
 		    bool scalar = common_scalar_p (XINT (src, 1));
@@ -12057,6 +12150,10 @@ reuse_local_md ()
 			    if (code == UNSPECV_ZTT_STATE_GATHER_REUSE
 				|| code == UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH)
 			      code = UNSPECV_ZTT_STATE_GATHER;
+			    if (code == UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT
+				|| code
+				   == UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT)
+			      code = UNSPECV_ZTT_STATE_SCATTER;
 			    if (code != UNSPECV_ZTT_STATE_GATHER
 				&& code != UNSPECV_ZTT_STATE_SCATTER)
 			      code = old_dest
