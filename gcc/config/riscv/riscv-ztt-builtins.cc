@@ -1124,6 +1124,7 @@ static GTY (()) tree ztt_storage128_types[2];
 static GTY (()) vec<tree, va_gc> *registration_function_types[PROTO_MAX];
 static bool functions_registered_p;
 static bool types_registered_p;
+static const profile_info *lto_registration_profile;
 
 /* Reserve a disjoint, decodable
    code range: declaration order must not affect C/C++ or LTO identity.  */
@@ -3418,6 +3419,7 @@ encode_conversion_builtin (unsigned int canonical, type_index source)
 static void run_large_matrix_signature_selftests ();
 static void run_acc_shared_source_selftests ();
 static void run_md_reuse_selftests ();
+static void run_lto_registration_selftests ();
 
 static type_index
 linear_matrix_type (unsigned int descriptor, unsigned int rows,
@@ -3966,6 +3968,7 @@ run_wide_signature_selftests ()
   run_scalar_datatype_name_selftests ();
   run_scalar_full_name_selftests ();
   run_scalar_registration_group_selftests ();
+  run_lto_registration_selftests ();
   run_acc_shared_source_selftests ();
   run_md_reuse_selftests ();
   for (unsigned int i = 0; i < exponent_type_count; ++i)
@@ -5873,6 +5876,66 @@ default_builtin_alias (const builtin_description &d, const char *canonical_name,
   return changed;
 }
 
+/* LTO validates streamed declarations against the original registration
+   profile; it does not need to materialize the public catalog.  */
+static bool
+registration_signature (unsigned int code, const profile_info &profile,
+			type_index &type, prototype_index &prototype)
+{
+  const auto &d = builtin_description_for (code);
+  bool runtime = profile.n == 0;
+  if (exponent_p (d.expansion) && !runtime)
+    return false;
+  type = d.type;
+  if (!ztt_m_type_nodes[type])
+    {
+      /* The overloaded store can use another available M type as its anchor.  */
+      if (!store_dispatch_p (code))
+	return false;
+      for (unsigned int j = 0; j < TYPE_MAX; ++j)
+	if (ztt_m_type_nodes[j] && !types[j].accumulator)
+	  {
+	    type = static_cast<type_index> (j);
+	    break;
+	  }
+    }
+  prototype = d.prototype;
+  if (zip_variant (d.expansion) >= 0 && prototype == PROTO_M_M
+      && (!runtime || (types[type].descriptor & 0xff) < profile.uds))
+    return false;
+  if (prototype == PROTO_A_M || prototype == PROTO_A_M_COLUMN
+      || prototype == PROTO_M_A || prototype == PROTO_M_A_COLUMN)
+    {
+      bool column = prototype == PROTO_A_M_COLUMN
+	|| prototype == PROTO_M_A_COLUMN;
+      if (!acc_matrix_type (type, column ? types[type].columns : 1,
+			   column ? 1 : types[type].columns))
+	return false;
+    }
+  if (const auto *shape = matmul_shape (prototype))
+    {
+      unsigned int bits = types[type].descriptor & 0xff;
+      if (prototype == PROTO_A_A_M_M && bits < profile.uds)
+	{
+	  /* Packed outputs use an available M shape as the dispatch anchor.  */
+	  unsigned int q = profile.uds / bits;
+	  unsigned int anchor = 1 + 3 * (exact_log2 (q) - 1)
+	    + (matmul_variant (d.expansion) >= 2 ? 1 : 0);
+	  prototype = matmul_prototype (anchor);
+	}
+      else if (bits < profile.uds
+	       || !m_shape_nregs (bits, shape->squares, profile.uds, profile.mregs))
+	return false;
+    }
+  if (d.expansion == EXPAND_MCONCAT || d.expansion == EXPAND_MEXTRACT)
+    {
+      type_index src = m_utility_source_type (d.prototype, type);
+      if (!runtime || src == TYPE_MAX || !ztt_m_type_nodes[src])
+	return false;
+    }
+  return true;
+}
+
 static void
 register_functions ()
 {
@@ -5887,85 +5950,37 @@ register_functions ()
   current_optimize_pragma = NULL_TREE;
   register_builtin_type ();
   register_storage128_types ();
-  if (!in_lto_p)
+  if (in_lto_p)
     {
-      nominal_registration_types
-	= ggc_cleared_alloc<nominal_registration_cache> ();
-      register_nominal_scalars ();
+      lto_registration_profile = active_profile ();
+      current_optimize_pragma = saved_optimize_pragma;
+      functions_registered_p = true;
+      return;
     }
+  nominal_registration_types
+    = ggc_cleared_alloc<nominal_registration_cache> ();
+  register_nominal_scalars ();
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const builtin_description &d = builtin_description_for (i);
-      if (exponent_p (d.expansion) && !runtime_profile_p ())
+      type_index type;
+      prototype_index prototype;
+      if (!registration_signature (i, *active_profile (), type, prototype))
 	continue;
-      type_index type = d.type;
-      if (!ztt_m_type_nodes[type])
-	{
-	  /* The overloaded store's stable dispatch code is not itself an
-	     i8_1x1 availability promise.  Give it a legal anchor prototype.  */
-	  if (!store_dispatch_p (i))
-	    continue;
-	  for (unsigned int j = 0; j < TYPE_MAX; ++j)
-	    if (ztt_m_type_nodes[j] && !types[j].accumulator)
-	      {
-		type = static_cast<type_index> (j);
-		break;
-	      }
-	}
-      prototype_index prototype = d.prototype;
-      if (zip_variant (d.expansion) >= 0 && prototype == PROTO_M_M
-	  && (!runtime_profile_p ()
-	      || (types[type].descriptor & 0xff) < active_profile ()->uds))
-	continue;
-      if (prototype == PROTO_A_M || prototype == PROTO_A_M_COLUMN
-	  || prototype == PROTO_M_A || prototype == PROTO_M_A_COLUMN)
-	{
-	  bool column = prototype == PROTO_A_M_COLUMN
-	    || prototype == PROTO_M_A_COLUMN;
-	  if (!acc_matrix_type (type, column ? types[type].columns : 1,
-				column ? 1 : types[type].columns))
-	    continue;
-	}
-      if (const auto *shape = matmul_shape (prototype))
-	{
-	  unsigned int bits = types[type].descriptor & 0xff;
-	  if (prototype == PROTO_A_A_M_M && bits < active_profile ()->uds)
-	    {
-	      /* A packed output need not have a same-type 1x1 M type.
-		 This is a legal dispatch anchor, not a fixed operand shape.  */
-	      unsigned int q = active_profile ()->uds / bits;
-	      unsigned int anchor = 1 + 3 * (exact_log2 (q) - 1)
-		+ (matmul_variant (d.expansion) >= 2 ? 1 : 0);
-	      prototype = matmul_prototype (anchor);
-	    }
-	  else if (bits < active_profile ()->uds
-		   || !m_shape_nregs (bits, shape->squares, active_profile ()->uds,
-				      active_profile ()->mregs))
-	    continue;
-	}
-      if (d.expansion == EXPAND_MCONCAT || d.expansion == EXPAND_MEXTRACT)
-	{
-	  type_index src = m_utility_source_type (d.prototype, type);
-	  if (!runtime_profile_p () || src == TYPE_MAX || !ztt_m_type_nodes[src])
-	    continue;
-	}
       unsigned int code = (i << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       char name[160];
-      const char *canonical_name = in_lto_p ? nullptr
-	: canonical_builtin_name (d, name);
-      tree decl = (in_lto_p
-	? integer_zero_node
-	: simulate_builtin_function_decl (input_location, canonical_name,
-					  registration_function_type (prototype, type),
-					  code, NULL, function_attributes ()));
+      const char *canonical_name = canonical_builtin_name (d, name);
+      tree decl = simulate_builtin_function_decl
+	(input_location, canonical_name, registration_function_type (prototype, type),
+	 code, NULL, function_attributes ());
       builtin_decls.put (i, decl);
       char alias[160];
-      if (!in_lto_p && default_builtin_alias (d, canonical_name, alias))
+      if (default_builtin_alias (d, canonical_name, alias))
 	simulate_builtin_function_decl (input_location, alias,
 					TREE_TYPE (decl), code,
 					NULL, function_attributes ());
     }
-  if (runtime_profile_p () && !in_lto_p)
+  if (runtime_profile_p ())
     {
       auto_vec<scalar_registration_group> integer_candidates, floating_candidates;
       collect_scalar_registration_groups (integer_candidates, false);
@@ -6093,6 +6108,18 @@ builtin_decl (unsigned int code, bool initialize_p)
     return scalar_builtin_decl (code, initialize_p);
   if (code >= ZTT_BUILTIN_MAX)
     return error_mark_node;
+  if (in_lto_p)
+    {
+      if (!functions_registered_p && initialize_p
+	  && TARGET_ZTT && typed_profile_p ())
+	register_functions ();
+      type_index type;
+      prototype_index prototype;
+      return (lto_registration_profile
+	      && registration_signature (code, *lto_registration_profile,
+					 type, prototype))
+	? integer_zero_node : error_mark_node;
+    }
   tree decl = builtin_decls.get (code);
   if (!decl && initialize_p
       && TARGET_ZTT && typed_profile_p ())
@@ -6102,6 +6129,55 @@ builtin_decl (unsigned int code, bool initialize_p)
     }
   return decl ? decl : error_mark_node;
 }
+
+#if CHECKING_P
+static void
+run_lto_registration_selftests ()
+{
+  using namespace selftest;
+  tree saved_types[TYPE_MAX];
+  memcpy (saved_types, ztt_m_type_nodes, sizeof (saved_types));
+  auto saved_in_lto = in_lto_p;
+  bool saved_registered = functions_registered_p;
+  const auto *saved_lto_profile = lto_registration_profile;
+  const char *saved_profile = riscv_ztt_profile_string;
+  auto *saved_entries = builtin_decls.entries;
+  in_lto_p = true;
+  functions_registered_p = true;
+  lto_registration_profile = nullptr;
+  ASSERT_EQ (builtin_decl (0, false), error_mark_node);
+
+  /* Later target options must not change the registration-time domain.  */
+  riscv_ztt_profile_string = nullptr;
+  unsigned int accepted = 0, rejected = 0;
+  for (const auto &profile : profiles)
+    {
+      lto_registration_profile = &profile;
+      for (unsigned int i = 0; i < TYPE_MAX; ++i)
+	ztt_m_type_nodes[i]
+	  = type_nregs_for_profile (static_cast<type_index> (i), profile)
+	    ? integer_zero_node : NULL_TREE;
+      for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; i += 97)
+	{
+	  type_index type;
+	  prototype_index prototype;
+	  bool present = registration_signature (i, profile, type, prototype);
+	  tree expected = present ? integer_zero_node : error_mark_node;
+	  ASSERT_EQ (builtin_decl (i, false), expected);
+	  ASSERT_EQ (builtin_decl (i, true), expected);
+	  present ? ++accepted : ++rejected;
+	}
+      ASSERT_EQ (builtin_decl (ZTT_BUILTIN_MAX, false), error_mark_node);
+    }
+  ASSERT_TRUE (accepted && rejected);
+  ASSERT_EQ (builtin_decls.entries, saved_entries);
+  memcpy (ztt_m_type_nodes, saved_types, sizeof (saved_types));
+  in_lto_p = saved_in_lto;
+  functions_registered_p = saved_registered;
+  lto_registration_profile = saved_lto_profile;
+  riscv_ztt_profile_string = saved_profile;
+}
+#endif
 
 /* Reject lossy implicit entry into the XLEN-bit carrier.  A caller can
    explicitly construct that bit pattern; it is not a full wide C value.  */

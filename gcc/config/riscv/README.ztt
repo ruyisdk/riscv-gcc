@@ -112,6 +112,9 @@ The public catalog and nominal constructor/operation tables use the same
 layout.  Unregistered tables expose only empty directory roots to GC,
 rather than scanning their full code ranges.  Availability
 checks still precede nominal cache lookup.
+LTO validates public codes on demand with the registration-time profile,
+using the same signature eligibility rules as header registration.  Streamed
+declarations need no full public-catalog scan or placeholder table.
 
 Public Scalar declaration blocks omit leading TC slots owned by older
 declaration domains.  The storage offset does not change public code radices,
