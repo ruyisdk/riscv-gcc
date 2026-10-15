@@ -6140,23 +6140,23 @@ check_broadcast_carrier (location_t loc, tree arg, type_index tc)
    Explicit type instances stay distinct even though their RTL mode is shared.  */
 static tree
 resolve_integer_scalar (location_t loc, unsigned int op, type_index dst,
-			type_index tc, vec<tree, va_gc> *args,
+			type_index tc, array_slice<const tree> args,
 			bool raw_bits = false)
 {
   bool old = integer_scalar_old_p (op);
   unsigned int values = old ? 3 : 2;
-  if (args->length () != values)
+  if (args.size () != values)
     return NULL_TREE;
-  for (tree arg : *args)
+  for (tree arg : args)
     if (arg == error_mark_node || TREE_TYPE (arg) == error_mark_node)
       return error_mark_node;
-  if (old && type_for_tree (TREE_TYPE ((*args)[0])) != dst)
+  if (old && type_for_tree (TREE_TYPE (args[0])) != dst)
     {
       error_at (loc, "AME/Ztt scalar ternary arithmetic requires old_d "
 		    "to have the exact result datatype and shape");
       return error_mark_node;
     }
-  tree scalar = (*args)[values - 1];
+  tree scalar = args[values - 1];
   tree public_carrier = scalar_public_carrier_type (tc);
   bool fp_carrier = !raw_bits && TREE_CODE (public_carrier) == REAL_TYPE;
   if (fp_carrier
@@ -6172,7 +6172,7 @@ resolve_integer_scalar (location_t loc, unsigned int op, type_index dst,
     }
   if (!check_scalar_carrier (loc, scalar, tc))
     return error_mark_node;
-  type_index source = type_for_tree (TREE_TYPE ((*args)[values - 2]));
+  type_index source = type_for_tree (TREE_TYPE (args[values - 2]));
   type_index t[] = { dst, source, tc };
   bool floating = floating_descriptor_p (types[dst].descriptor)
     || floating_descriptor_p (types[tc].descriptor)
@@ -6200,7 +6200,7 @@ resolve_integer_scalar (location_t loc, unsigned int op, type_index dst,
 	   : fold_convert (scalar_carrier_type (tc), scalar))
 	: build1 (VIEW_CONVERT_EXPR,
 		  ztt_m_type_nodes[integer_matrix_carrier
-		    (exact_log2 (f.nregs[old && i == 0 ? 0 : 1]))], (*args)[i]);
+		    (exact_log2 (f.nregs[old && i == 0 ? 0 : 1]))], args[i]);
       operands.safe_push (value);
     }
   for (type_index type : t)
@@ -6487,13 +6487,12 @@ resolve_nominal_scalar (location_t loc, unsigned int code, vec<tree, va_gc> *arg
   tree bits = fold_convert (scalar_carrier_type (tc), nominal_scalar_bits (value));
   if (op != floating_scalar_operations)
     {
-      vec<tree, va_gc> *resolved = NULL;
+      tree resolved[3];
       for (unsigned int i = 0; i < nargs - 1; ++i)
-	vec_safe_push (resolved, (*args)[i]);
-      vec_safe_push (resolved, bits);
-      tree result = resolve_integer_scalar (loc, op, dst, tc, resolved, true);
-      vec_free (resolved);
-      return result;
+	resolved[i] = (*args)[i];
+      resolved[nargs - 1] = bits;
+      return resolve_integer_scalar (loc, op, dst, tc,
+				     make_array_slice (resolved, nargs), true);
     }
   unsigned int raw = nominal_broadcast_base + dst * numeric_scalar_dtype_count + c;
   return build_call_expr_loc (loc, nominal_builtin_decl (raw, true), 1, bits);

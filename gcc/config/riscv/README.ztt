@@ -100,6 +100,9 @@ The GC/PCH-visible reverse index grows only through the catalog prefix
 needed by a lookup.  Repeated calls avoid rescanning that prefix; unrelated
 record types remain invalid, and non-record arguments allocate no index.
 Type UIDs provide stable hashes across PCH restore; equality remains exact.
+Scalar arithmetic resolution consumes a read-only argument view.  Nominal
+calls unwrap their payload into at most three stack-local argument slots,
+without allocating a temporary GC vector or modifying the caller's list.
 
 Dense matrix, scalar, broadcast, unary, math and exponent declaration tables
 use GC/PCH-visible pages of 256 declarations, allocated on first insertion
