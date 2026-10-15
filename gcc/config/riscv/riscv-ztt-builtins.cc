@@ -12831,6 +12831,15 @@ class local_raw_spill
   rtx mem = nullptr;
   rtx_insn *store = nullptr;
 
+  static bool register_vector_p (rtx_insn *insn)
+  {
+    return TARGET_VECTOR && !TARGET_XTHEADVECTOR
+      && NONJUMP_INSN_P (insn) && !RTX_FRAME_RELATED_P (insn)
+      && recog_memoized (insn) >= 0
+      && md_preserving_vector_p (get_attr_type (insn), PATTERN (insn))
+      && !contains_mem_rtx_p (PATTERN (insn));
+  }
+
   static bool address_expr_p (rtx x)
   {
     unsigned int count = 0;
@@ -12877,6 +12886,12 @@ class local_raw_spill
 	else
 	  {
 	    rtx pat = PATTERN (p);
+	    if (interleaved && register_vector_p (p))
+	      {
+		if (modified_in_p (lhs, p) || modified_in_p (rhs, p))
+		  return false;
+		continue;
+	      }
 	    if (interleaved && NONJUMP_INSN_P (p)
 		&& !RTX_FRAME_RELATED_P (p) && md_raw_transfer_p (pat)
 		&& private_slot_p (MEM_P (SET_DEST (pat))
@@ -12948,6 +12963,8 @@ public:
 	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p))
 	  return false;
 	rtx pat = PATTERN (p);
+	if (register_vector_p (p))
+	  continue;
 	if (md_raw_transfer_p (pat))
 	  {
 	    rtx dest = SET_DEST (pat), src = SET_SRC (pat);
@@ -15494,7 +15511,7 @@ run_md_reuse_selftests ()
       ASSERT_EQ (test == 0 || test == 14,
 		 visit (gen_rtx_SET (m, other)));
     }
-  for (unsigned int test = 0; test != 25; ++test)
+  for (unsigned int test = 0; test != 35; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
@@ -15518,8 +15535,21 @@ run_md_reuse_selftests ()
 	set_mem_offset (other, 8);
       if (test == 23)
 	clear_mem_size (other);
-      if (test == 21)
+      if (test == 21 || test == 27 || test == 34)
 	emit_insn (gen_rtx_SET (d, a));
+      auto vset = [&] (rtx dest) {
+	return emit_insn
+	  (TARGET_64BIT
+	   ? gen_vsetvldi (dest, b, GEN_INT (32), const0_rtx,
+			   const1_rtx, const1_rtx, const0_rtx)
+	   : gen_vsetvlsi (dest, b, GEN_INT (32), const0_rtx,
+			   const1_rtx, const1_rtx, const0_rtx));
+      };
+      if (test == 34)
+	{
+	  vset (a);
+	  XEXP (source, 0) = d;
+	}
       emit_insn (gen_rtx_SET (slot, value));
       emit_insn (gen_rtx_SET (other, member));
       emit_insn (gen_rtx_SET (test == 5 ? value : member, other));
@@ -15559,9 +15589,35 @@ run_md_reuse_selftests ()
 	  emit_call_insn (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, c),
 				      const0_rtx));
 	  break;
+	case 25: vset (c); break;
+	case 26: vset (a); break;
+	case 27:
+	  vset (d);
+	  XEXP (source, 0) = d;
+	  break;
+	case 28:
+	  vset (c);
+	  emit_insn (gen_rtx_SET (a, c));
+	  break;
+	case 29:
+	  emit_insn (gen_rtx_SET (gen_rtx_REG (RVVM1SImode, V_REG_FIRST),
+				gen_rtx_REG (RVVM1SImode, V_REG_FIRST + 1)));
+	  break;
+	case 30: case 31: case 32:
+	  {
+	    rtx v = gen_rtx_REG (RVVM1SImode, V_REG_FIRST);
+	    rtx m = gen_rtx_MEM (RVVM1SImode, b);
+	    if (test == 31)
+	      set_mem_alias_set (m, new_alias_set ());
+	    emit_insn (test == 32 ? gen_rtx_SET (m, v) : gen_rtx_SET (v, m));
+	    break;
+	  }
+	case 33: RTX_FRAME_RELATED_P (vset (c)) = 1; break;
 	}
       rtx_insn *load = emit_insn (gen_rtx_SET (value, source));
-      ASSERT_EQ (test == 0 || test == 16 || test == 21,
+      ASSERT_EQ (test == 0 || test == 16 || test == 21
+		 || ((test == 25 || test == 29)
+		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 local_raw_spill::interleaved_reload_p (load));
     }
   for (int code : { UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT,

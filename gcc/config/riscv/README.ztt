@@ -618,6 +618,9 @@ A fallback searches up to 64 local instructions for a matching private
 save across interleaved raw members.  Intervening stores must have provably
 disjoint spill-slot ranges; reloads must not overwrite the target register.
 Address equality is proved separately through bounded pointer expressions.
+Known register-only standard RVV instructions may intervene; their GPR
+outputs must leave both evolving address expressions unchanged.  Vector
+memory instructions still stop this fallback, regardless of alias metadata.
 Calls, asm, state setters, unknown memory, frame changes and control-flow
 boundaries stop the search.  This fallback retains the private stores.
 After reload cleanup, the last 32 instructions of a return block are
