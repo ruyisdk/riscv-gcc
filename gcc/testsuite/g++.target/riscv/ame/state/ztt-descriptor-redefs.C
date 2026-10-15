@@ -4,5 +4,6 @@
 /* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
 #include "../../../../gcc.target/riscv/ame/state/ztt-descriptor-redefs.h"
 /* { dg-final { scan-rtl-dump-times "Reuse typed descriptors" 26 "ztt_md_reuse" } } */
-/* { dg-final { scan-assembler-times {\tm(add|sub|min|max|and|andnot|or|ornot|xor)\.ew\t} 45 } } */
+/* { dg-final { scan-assembler-times {\tm(add|sub|min|max|and|andnot|or|ornot|xor)\.ew\t} 37 } } */
 /* { dg-final { scan-rtl-dump-times "Remove unused AME workspace" 12 "ztt_md_reuse" } } */
+/* { dg-final { scan-assembler-times {\tm(min|max|and|or)\.ew\t} 4 } } */

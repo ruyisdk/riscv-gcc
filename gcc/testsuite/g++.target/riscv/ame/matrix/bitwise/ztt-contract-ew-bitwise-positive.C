@@ -8,200 +8,200 @@
 extern "C" {
 /* Observable legal counterpart of mand_ew:01.  */
 void
-positive_mand_ew_01 (void *out)
+positive_mand_ew_01 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mand_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mand_ew:02.  */
 void
-positive_mand_ew_02 (void *out)
+positive_mand_ew_02 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mand_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mand_ew:03.  */
 void
-positive_mand_ew_03 (void *out)
+positive_mand_ew_03 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mand_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mand_ew:04.  */
 void
-positive_mand_ew_04 (void *out)
+positive_mand_ew_04 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mand_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mandnot_ew:01.  */
 void
-positive_mandnot_ew_01 (void *out)
+positive_mandnot_ew_01 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mandnot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mandnot_ew:02.  */
 void
-positive_mandnot_ew_02 (void *out)
+positive_mandnot_ew_02 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mandnot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mandnot_ew:03.  */
 void
-positive_mandnot_ew_03 (void *out)
+positive_mandnot_ew_03 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mandnot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mandnot_ew:04.  */
 void
-positive_mandnot_ew_04 (void *out)
+positive_mandnot_ew_04 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mandnot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mor_ew:01.  */
 void
-positive_mor_ew_01 (void *out)
+positive_mor_ew_01 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mor_ew:02.  */
 void
-positive_mor_ew_02 (void *out)
+positive_mor_ew_02 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mor_ew:03.  */
 void
-positive_mor_ew_03 (void *out)
+positive_mor_ew_03 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mor_ew:04.  */
 void
-positive_mor_ew_04 (void *out)
+positive_mor_ew_04 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mornot_ew:01.  */
 void
-positive_mornot_ew_01 (void *out)
+positive_mornot_ew_01 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mornot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mornot_ew:02.  */
 void
-positive_mornot_ew_02 (void *out)
+positive_mornot_ew_02 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mornot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mornot_ew:03.  */
 void
-positive_mornot_ew_03 (void *out)
+positive_mornot_ew_03 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mornot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mornot_ew:04.  */
 void
-positive_mornot_ew_04 (void *out)
+positive_mornot_ew_04 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mornot_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mxor_ew:01.  */
 void
-positive_mxor_ew_01 (void *out)
+positive_mxor_ew_01 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mxor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mxor_ew:02.  */
 void
-positive_mxor_ew_02 (void *out)
+positive_mxor_ew_02 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mxor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mxor_ew:03.  */
 void
-positive_mxor_ew_03 (void *out)
+positive_mxor_ew_03 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mxor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }
 
 /* Observable legal counterpart of mxor_ew:04.  */
 void
-positive_mxor_ew_04 (void *out)
+positive_mxor_ew_04 (void *out, const int32_t *in1, const int32_t *in2)
 {
-  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
-  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mzero_m_i32_1x2 ();
+  __riscv_ztt_i32_1x2_t src1_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in1);
+  __riscv_ztt_i32_1x2_t src2_i32_1x2 = __riscv_ztt_mls_rm_i32_1x2 (in2);
   __riscv_ztt_i32_1x2_t value = __riscv_ztt_mxor_ew_i32_1x2 (src1_i32_1x2, src2_i32_1x2);
   __riscv_ztt_mss_rm ((int32_t *) out, value);
 }

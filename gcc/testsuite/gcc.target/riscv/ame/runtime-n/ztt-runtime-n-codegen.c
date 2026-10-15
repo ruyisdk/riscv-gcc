@@ -15,10 +15,11 @@
 #endif
 
 void
-runtime_add (const signed char *input, signed char *output)
+runtime_add (const signed char *input, const signed char *other,
+             signed char *output)
 {
   __riscv_ztt_i8_rne_1x1_t a = __riscv_ztt_mls_rm_i8_rne_1x1 (input);
-  __riscv_ztt_i8_rne_1x1_t b = __riscv_ztt_mzero_2d_m_i8_rne_1x1 ();
+  __riscv_ztt_i8_rne_1x1_t b = __riscv_ztt_mls_rm_i8_rne_1x1 (other);
   __riscv_ztt_mss_rm (output, __riscv_ztt_madd_ew_i8_rne_1x1 (a, b));
 }
 
