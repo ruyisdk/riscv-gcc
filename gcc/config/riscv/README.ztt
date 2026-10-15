@@ -472,6 +472,8 @@ Md invalidation skips unrelated register banks. A conservative flag records
 facts that depend directly on a GPR; constants and versioned descriptors do
 not require a fact scan for GPR writes. Partial writes retain overlap checks,
 and the separate GPR value cache is still invalidated.
+Cache-block clean, flush, invalidate and zero preserve Md and amestype.
+Their memory operations remain in place and stop private spill reuse.
 Standard thread-fence patterns preserve register and datatype facts, but
 still invalidate private memory reuse.  The fences and user memory accesses
   remain in place.  The operand-free empty asm with only a memory clobber

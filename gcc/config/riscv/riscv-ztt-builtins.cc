@@ -12497,6 +12497,22 @@ md_preserving_fence_p (int code)
     || code == CODE_FOR_mem_thread_fence_ztso;
 }
 
+/* Cache-block operations affect memory, not AME register state.  */
+static bool
+md_preserving_cache_p (int code)
+{
+  switch (code)
+    {
+    case CODE_FOR_riscv_clean_si: case CODE_FOR_riscv_clean_di:
+    case CODE_FOR_riscv_flush_si: case CODE_FOR_riscv_flush_di:
+    case CODE_FOR_riscv_inval_si: case CODE_FOR_riscv_inval_di:
+    case CODE_FOR_riscv_zero_si: case CODE_FOR_riscv_zero_di:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Only the result GPR changes; the volatile CSR observation remains.  */
 static bool
 md_read_csr_p (int code)
@@ -13204,7 +13220,7 @@ reuse_cleaned_descriptors ()
 	    continue;
 	  if (md_preserving_fence_p (code))
 	    continue;
-	  if (md_read_csr_p (code)
+	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -13460,7 +13476,7 @@ reuse_local_md ()
 			 INSN_UID (insn));
 	      continue;
 	    }
-	  if (md_read_csr_p (code)
+	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -14105,6 +14121,41 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    const insn_code codes[] = {
+      CODE_FOR_riscv_clean_si, CODE_FOR_riscv_clean_di,
+      CODE_FOR_riscv_flush_si, CODE_FOR_riscv_flush_di,
+      CODE_FOR_riscv_inval_si, CODE_FOR_riscv_inval_di,
+      CODE_FOR_riscv_zero_si, CODE_FOR_riscv_zero_di
+    };
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx descriptor = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx mem = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 12));
+    set_mem_attrs_for_spill (mem);
+    for (unsigned int i = 0; i < ARRAY_SIZE (codes); ++i)
+      {
+	ASSERT_TRUE (md_preserving_cache_p (codes[i]));
+	rtx address = gen_rtx_REG (i % 2 ? DImode : SImode, 11);
+	rtx_insn *insn = emit_insn (GEN_FCN (codes[i]) (address));
+	local_md_state state;
+	state.record_constant (descriptor, GEN_INT (32));
+	state.remember (matrix, descriptor);
+	ASSERT_FALSE (state.record_scalar_type (descriptor));
+	note_stores (insn, invalidate_md_store, &state);
+	ASSERT_TRUE (state.matches (matrix, descriptor));
+	ASSERT_TRUE (state.record_scalar_type (descriptor));
+	local_raw_spill spill;
+	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (mem, matrix)));
+	ASSERT_FALSE (spill.redundant_reload_p (PATTERN (insn)));
+	ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, mem)));
+      }
+    for (int code : { -1, (int) CODE_FOR_nothing,
+		     (int) CODE_FOR_riscv_ztt_none,
+		     (int) CODE_FOR_riscv_ztt_release,
+		     (int) CODE_FOR_riscv_pause })
+      ASSERT_FALSE (md_preserving_cache_p (code));
+  }
   {
     const int codes[] = {
       CODE_FOR_riscv_frcsr, CODE_FOR_riscv_fscsr,
