@@ -56,6 +56,8 @@ with GCC; see the file COPYING3.  If not see
 #include "cfghooks.h"
 #include "df.h"
 #include "dce.h"
+#include "alias.h"
+#include "varasm.h"
 #include "output.h"
 #include "selftest.h"
 #include "selftest-rtl.h"
@@ -11509,8 +11511,84 @@ class local_raw_spill
       && known_eq (MEM_SIZE (x), GET_MODE_SIZE (GET_MODE (x)));
   }
 
+  bool spill_read_p (rtx x) const
+  {
+    subrtx_iterator::array_type array;
+    FOR_EACH_SUBRTX (iter, array, x, NONCONST)
+      if (MEM_P (*iter)
+	  && (MEM_VOLATILE_P (*iter)
+	      || alias_sets_conflict_p (MEM_ALIAS_SET (mem),
+					MEM_ALIAS_SET (*iter))))
+	return true;
+    return false;
+  }
+
 public:
   void clear () { reg = mem = nullptr; store = nullptr; }
+
+  /* A private spill is dead if the remaining return tail cannot read it.  */
+  bool remove_dead_store ()
+  {
+    if (!store || cfun->stdarg || cfun->calls_setjmp || cfun->has_nonlocal_label
+	|| crtl->calls_eh_return || flag_non_call_exceptions)
+      return false;
+    rtx canonical = DECL_RTL_IF_SET (MEM_EXPR (mem));
+    if (!canonical || !MEM_P (canonical) || !MEM_ALIAS_SET (mem)
+	|| MEM_ALIAS_SET (mem) != MEM_ALIAS_SET (canonical))
+      return false;
+    basic_block bb = BLOCK_FOR_INSN (store);
+    if (!bb || !single_succ_p (bb)
+	|| single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun)
+	|| !md_normal_edge_p (single_succ_edge (bb)))
+      return false;
+    unsigned int count = 0;
+    for (rtx_insn *p = NEXT_INSN (store); p && p != NEXT_INSN (BB_END (bb));
+	 p = NEXT_INSN (p))
+      {
+	if (!INSN_P (p))
+	  continue;
+	rtx pat = PATTERN (p);
+	if (DEBUG_INSN_P (p))
+	  {
+	    if (spill_read_p (pat))
+	      return false;
+	    continue;
+	  }
+	if (++count > 32 || CALL_P (p) || asm_noperands (pat) >= 0
+	    || GET_CODE (pat) == ASM_INPUT || recog_memoized (p) < 0)
+	  return false;
+	if (p == BB_END (bb) && returnjump_p (p) && !contains_mem_rtx_p (pat))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "Drop dead private spill at insn %d\n",
+		       INSN_UID (store));
+	    delete_insn (store);
+	    clear ();
+	    return true;
+	  }
+	int code = INSN_CODE (p);
+	if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
+	    || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi)
+	  continue;
+	if (!NONJUMP_INSN_P (p) || GET_CODE (pat) != SET)
+	  return false;
+	rtx src = SET_SRC (pat), dest = SET_DEST (pat);
+	bool prepared_store = MEM_P (dest) && GET_CODE (src) == UNSPEC_VOLATILE
+	  && ((XINT (src, 1) == UNSPECV_ZTT_STATE_STORE && XVECLEN (src, 0) == 1)
+	      || (XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE
+		  && XVECLEN (src, 0) == 3));
+	if (!prepared_store
+	    && ((!md_raw_transfer_p (pat) && !md_scalar_insn_p (pat))
+		|| side_effects_p (pat)))
+	  return false;
+	if (spill_read_p (src)
+	    || (MEM_P (dest)
+		? MEM_VOLATILE_P (dest) || spill_read_p (XEXP (dest, 0))
+		: !REG_P (dest)))
+	  return false;
+      }
+    return false;
+  }
 
   bool redundant_reload_p (rtx pattern, rtx_insn *insn = nullptr)
   {
@@ -11723,6 +11801,7 @@ reuse_cleaned_descriptors ()
 		    fprintf (dump_file, "Drop redundant raw reload at insn %d\n",
 			     INSN_UID (insn));
 		  delete_insn (insn);
+		  spill.remove_dead_store ();
 		  changed = true;
 		  continue;
 		}
@@ -12793,6 +12872,69 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
+  for (unsigned int test = 0; test != 16; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+      basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+      make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      int strict_aliasing = flag_strict_aliasing;
+      flag_strict_aliasing = test != 15;
+      rtx addr = gen_rtx_REG (Pmode, 10), value = gen_rtx_REG (Pmode, 11);
+      rtx mem = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (mem);
+      if (test == 14)
+	set_mem_alias_set (mem, 0);
+      auto append = [&] (rtx pattern) {
+	rtx_insn *p = emit_insn_after (pattern, BB_END (bb));
+	BB_END (bb) = p;
+	return p;
+      };
+      rtx pat = gen_rtx_SET (mem, gen_rtx_REG (ZTTMR1mode, M_REG_FIRST));
+      local_raw_spill spill;
+      ASSERT_FALSE (spill.redundant_reload_p (pat, append (pat)));
+      rtx read = gen_rtx_MEM (Pmode, addr);
+      if (test == 1 || test == 11 || test == 15)
+	set_mem_alias_set (read, new_alias_set ());
+      if (test == 2)
+	set_mem_attrs_for_spill (read);
+      int non_call = flag_non_call_exceptions;
+      switch (test)
+	{
+	case 1: case 2: case 3: case 15:
+	  append (gen_rtx_SET (value, read));
+	  break;
+	case 4: append (gen_rtx_ASM_INPUT (VOIDmode, "")); break;
+	case 5:
+	  append (gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, addr),
+					 UNSPECV_ZTT));
+	  break;
+	case 6: single_succ_edge (bb)->flags |= EDGE_EH; break;
+	case 7: cfun->stdarg = true; break;
+	case 8: cfun->calls_setjmp = true; break;
+	case 9: flag_non_call_exceptions = 1; break;
+	case 10:
+	  for (unsigned int i = 0; i != 32; ++i)
+	    append (gen_rtx_SET (value, GEN_INT (i)));
+	  break;
+	case 11:
+	  MEM_VOLATILE_P (read) = 1;
+	  append (gen_rtx_SET (value, read));
+	  break;
+	case 12: append (gen_rtx_SET (read, value)); break;
+	case 13:
+	  BB_END (bb) = emit_debug_insn_after
+	    (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				   mem, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+	  break;
+	}
+      BB_END (bb) = emit_jump_insn_after
+	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
+	 BB_END (bb));
+      ASSERT_EQ (test == 0 || test == 1 || test == 12,
+		 spill.remove_dead_store ());
+      flag_non_call_exceptions = non_call;
+      flag_strict_aliasing = strict_aliasing;
+    }
   for (unsigned int test = 0; test != 15; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
