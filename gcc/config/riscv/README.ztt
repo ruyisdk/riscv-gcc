@@ -97,6 +97,10 @@ use GC/PCH-visible pages of 256 declarations, allocated on first insertion
 into each page.  Empty lookups allocate nothing.  Code indexing uses the
 page number and slot; unused pages allocate no declaration storage.
 
+Public Scalar declaration blocks omit leading TC slots owned by older
+declaration domains.  The storage offset does not change public code radices,
+registration order or nominal type identity.
+
 M-to-ACC preparation reuses each complete source packet's known Md.
 Unknown packets retain their payload across datatype setup using the existing
 private slot; destination Ad setup and ACC transfers remain unchanged.

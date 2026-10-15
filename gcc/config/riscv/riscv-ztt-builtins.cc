@@ -2644,6 +2644,14 @@ integer_broadcast_code (unsigned int dst, unsigned int shape, unsigned int tc)
     + (dst * wide_shape_count + shape) * integer_scalar_dtype_count + tc;
 }
 
+/* Leading TC codes owned by older declaration domains have no cache slots.  */
+static unsigned int
+scalar_registration_first_tc (unsigned int dst, bool floating)
+{
+  return floating ? (dst < integer_dtype_count ? integer_scalar_dtype_count : 0)
+    : (dst < 40 ? 40 : 0);
+}
+
 static bool
 decode_integer_broadcast (unsigned int code, type_index &dst, type_index &tc)
 {
@@ -2817,15 +2825,19 @@ integer_scalar_public_decl (unsigned int code, bool initialize_p,
 	= ggc_cleared_alloc<integer_scalar_public_cache> ();
     }
   unsigned int index = code - integer_scalar_public_base;
+  unsigned int first = scalar_registration_first_tc
+    (index / integer_scalar_dtype_count / wide_shape_count % integer_dtype_count,
+     false);
+  gcc_assert (index % integer_scalar_dtype_count >= first);
   auto &block
     = integer_scalar_public_decls->blocks[index / integer_scalar_dtype_count];
   if (!block)
     {
       if (!initialize_p)
 	return error_mark_node;
-      vec_safe_grow_cleared (block, integer_scalar_dtype_count, true);
+      vec_safe_grow_cleared (block, integer_scalar_dtype_count - first, true);
     }
-  tree &decl = (*block)[index % integer_scalar_dtype_count];
+  tree &decl = (*block)[index % integer_scalar_dtype_count - first];
   if (!decl && initialize_p)
     {
       bool old = integer_scalar_old_p (op);
@@ -3030,8 +3042,7 @@ collect_scalar_registration_groups (vec<scalar_registration_group> &groups,
 	if (dst == TYPE_MAX || !ztt_m_type_nodes[dst])
 	  continue;
 	/* Integer legacy entries retain their original declarations.  */
-	unsigned int first_tc = floating ? (d < integer_dtype_count ? 80 : 0)
-	  : (d < 40 ? 40 : 0);
+	unsigned int first_tc = scalar_registration_first_tc (d, floating);
 	groups.safe_push ({ (d * wide_shape_count + shape) * scalar_count,
 			    dst, first_tc });
       }
@@ -3145,15 +3156,19 @@ floating_scalar_public_decl (unsigned int code, bool initialize_p,
 	= ggc_cleared_alloc<floating_scalar_public_cache> ();
     }
   unsigned int index = code - floating_scalar_public_base;
+  unsigned int first = scalar_registration_first_tc
+    (index / numeric_scalar_dtype_count / wide_shape_count % numeric_dtype_count,
+     true);
+  gcc_assert (index % numeric_scalar_dtype_count >= first);
   auto &block
     = floating_scalar_public_decls->blocks[index / numeric_scalar_dtype_count];
   if (!block)
     {
       if (!initialize_p)
 	return error_mark_node;
-      vec_safe_grow_cleared (block, numeric_scalar_dtype_count, true);
+      vec_safe_grow_cleared (block, numeric_scalar_dtype_count - first, true);
     }
-  tree &decl = (*block)[index % numeric_scalar_dtype_count];
+  tree &decl = (*block)[index % numeric_scalar_dtype_count - first];
   if (!decl && initialize_p)
     {
       bool old = integer_scalar_old_p (op);
@@ -3734,6 +3749,14 @@ static void
 run_scalar_registration_group_selftests ()
 {
   using namespace selftest;
+  ASSERT_EQ (scalar_registration_first_tc (0, false), 40U);
+  ASSERT_EQ (scalar_registration_first_tc (39, false), 40U);
+  ASSERT_EQ (scalar_registration_first_tc (40, false), 0U);
+  ASSERT_EQ (scalar_registration_first_tc (95, false), 0U);
+  ASSERT_EQ (scalar_registration_first_tc (0, true), 80U);
+  ASSERT_EQ (scalar_registration_first_tc (95, true), 80U);
+  ASSERT_EQ (scalar_registration_first_tc (96, true), 0U);
+  ASSERT_EQ (scalar_registration_first_tc (119, true), 0U);
   if (!TARGET_ZTT)
     return;
   const char *saved_profile = riscv_ztt_profile_string;
