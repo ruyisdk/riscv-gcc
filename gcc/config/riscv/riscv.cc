@@ -9729,7 +9729,8 @@ riscv_ztt_remove_unused_workspace ()
       if (!INSN_P (insn))
 	continue;
       rtx pat = PATTERN (insn);
-      if (CALL_P (insn) || asm_noperands (pat) >= 0
+      if (CALL_P (insn)
+	  || (asm_noperands (pat) >= 0 && !riscv_ztt::memory_barrier_p (pat))
 	  || GET_CODE (pat) == ASM_INPUT)
 	return false;
       if (!prologue_epilogue_contains (insn)

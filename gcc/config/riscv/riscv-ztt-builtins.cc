@@ -11637,8 +11637,8 @@ invalidate_md_store (rtx reg, const_rtx, void *data)
 }
 
 /* Match the operand-free compiler memory barrier, not arbitrary empty asm.  */
-static bool
-md_memory_barrier_p (rtx pattern)
+bool
+memory_barrier_p (rtx pattern)
 {
   if (GET_CODE (pattern) != PARALLEL || XVECLEN (pattern, 0) != 2)
     return false;
@@ -11662,7 +11662,7 @@ invalidate_asm_md (rtx_insn *insn, local_md_state &state)
   if (!NONJUMP_INSN_P (insn) || !extract_asm_operands (PATTERN (insn))
       || asm_noperands (PATTERN (insn)) < 0)
     return false;
-  if (!md_memory_barrier_p (PATTERN (insn)))
+  if (!memory_barrier_p (PATTERN (insn)))
     state.clear_ame ();
   else if (dump_file)
     fprintf (dump_file, "Preserve Md across memory barrier at insn %d\n",
@@ -13233,7 +13233,7 @@ run_md_reuse_selftests ()
 	case 10: pattern = gen_rtx_ASM_INPUT_loc (VOIDmode, "", UNKNOWN_LOCATION); break;
 	case 11: MEM_VOLATILE_P (code) = 0; break;
 	}
-      ASSERT_EQ (!test, md_memory_barrier_p (pattern));
+      ASSERT_EQ (!test, memory_barrier_p (pattern));
       if (!test)
 	{
 	  local_md_state state;
