@@ -189,6 +189,10 @@ is selected bitwise, without conversion or rounding.  Opposite axes and
 externally supplied indices keep their existing lowering.
 
 The index may pass through up to four same-type M copies in that window.
+Integer widening conversions may also occupy these four steps: ID coordinates
+are nonnegative and remain exact in a strictly wider integer type.  Both types
+must describe an unpacked basic square.  Constructors, conversions and copies
+remain as witnesses; narrowing and floating conversions do not qualify.
 The constructor and copies remain as ownership witnesses.  Inner copy
 inputs require a single value use; other uses of the final index remain.
 

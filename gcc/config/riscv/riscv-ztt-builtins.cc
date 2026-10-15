@@ -7751,6 +7751,48 @@ inverse_zip_value (const builtin_description &d,
   return parent;
 }
 
+/* ID coordinates are nonnegative.  A wider integer preserves them regardless
+   of signedness; retain every conversion and the constructor's range check.  */
+static bool
+strip_gather_index (tree &value, type_index &type, gimple **producers,
+		    unsigned int &count)
+{
+  unsigned int start = count;
+  for (;;)
+    {
+      if (TREE_CODE (value) != SSA_NAME
+	  || (!has_single_use (value) && count != start)
+	  || type_for_tree (TREE_TYPE (value)) != type)
+	return false;
+      gimple *producer = SSA_NAME_DEF_STMT (value);
+      type_index source = type;
+      if (!structure_copy_p (producer, type))
+	{
+	  unsigned int code = structure_builtin_code (producer, 1);
+	  conversion_description conversion;
+	  if (!decode_conversion_builtin (code, conversion))
+	    return true;
+	  const auto d = builtin_description_for (conversion.canonical);
+	  source = conversion.source;
+	  const auto &dst = types[type];
+	  const auto &src = types[source];
+	  if (d.expansion != EXPAND_MCONV_EW || d.type != type
+	      || src.accumulator || dst.accumulator
+	      || src.rows != 1 || src.columns != 1
+	      || dst.rows != 1 || dst.columns != 1
+	      || floating_descriptor_p (src.descriptor | dst.descriptor)
+	      || (src.descriptor & 0xff) < active_profile ()->uds
+	      || (src.descriptor & 0xff) >= (dst.descriptor & 0xff))
+	    return false;
+	}
+      if (count - start == 4)
+	return false;
+      producers[count++] = producer;
+      value = gimple_call_arg (producer, 0);
+      type = source;
+    }
+}
+
 /* Keep the index constructor, including its range and ownership checks.  */
 static tree
 identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
@@ -7804,7 +7846,8 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     }
   if (type_for_tree (TREE_TYPE (index)) != operation.count)
     return NULL_TREE;
-  if (!strip_structure_copies (index, operation.count, producers, count, true))
+  type_index index_type = operation.count;
+  if (!strip_gather_index (index, index_type, producers, count))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (index);
   unsigned int source_code = structure_builtin_code (producer, 0);
@@ -7812,7 +7855,7 @@ identity_gather_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     return NULL_TREE;
   producers[count++] = producer;
   const auto source = builtin_description_for (source_code);
-  if (source.type != operation.count
+  if (source.type != index_type
       || (d.expansion == EXPAND_MCOLGATHER_EW
 	  ? source.expansion != EXPAND_MCOLID_EW
 	  : source.expansion != EXPAND_MROWID_EW)
