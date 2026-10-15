@@ -139,6 +139,11 @@ descriptors and a shared type axis.  Expansion remains operation-major,
 type-minor to preserve builtin codes and LTO identities.  Names are built
 after profile/type checks.
 
+The static builtin catalog stores prototype, expansion and type ordinals
+as unsigned shorts, with compile-time range checks.  Lookup restores the
+original enum types and builtin identities.  Code-limit scans use the stored
+records directly; exponent families do not belong to either anchor domain.
+
 Structural folding
 ------------------
 

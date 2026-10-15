@@ -692,6 +692,7 @@ enum expansion_index
   EXPAND_MSUBLOG2_EW_X,
   EXPAND_MLDEXP_EW_X,
   EXPAND_MLDEXPACC_EW_X,
+  EXPAND_MAX
 };
 
 /* Conditional selection
@@ -979,7 +980,18 @@ static_assert (ZTT_BUILTIN_MLDEXPACC_EW_X_F64_RNO_32X1
 static_assert (ZTT_BUILTIN_MLS_RM_I128_RNU_1X1
 	       == exponent_first + exponent_count);
 
-static constexpr builtin_description stored_builtin_descriptions[] =
+/* Keep the large static catalog compact without changing enum identities.  */
+struct stored_builtin_description
+{
+  const char *name;
+  unsigned short prototype;
+  unsigned short expansion;
+  unsigned short type;
+};
+static_assert (PROTO_MAX <= USHRT_MAX && EXPAND_MAX <= USHRT_MAX
+	       && TYPE_MAX <= USHRT_MAX);
+
+static constexpr stored_builtin_description stored_builtin_descriptions[] =
 {
 #define ZTT_EXPONENT_FAMILY(OP, SPELLING, PROTO)
 #define ZTT_INTRINSIC(ID, NAME, PROTO, EXPAND, TYPE) \
@@ -1003,8 +1015,11 @@ builtin_description_for (unsigned int code)
       d.type = exponent_types[offset % exponent_type_count];
       return d;
     }
-  return stored_builtin_descriptions
+  const auto &d = stored_builtin_descriptions
     [code < exponent_first ? code : code - exponent_count];
+  return { d.name, static_cast<prototype_index> (d.prototype),
+	   static_cast<expansion_index> (d.expansion),
+	   static_cast<type_index> (d.type) };
 }
 
 /* Keep the original RM
@@ -1133,17 +1148,20 @@ matmul_code_limit ()
   unsigned int limit = 0;
   /* Bound each constexpr loop independently of the growing public table,
      without raising the host compiler's default loop-iteration limit.  */
-  for (unsigned int base = 0; base < ZTT_BUILTIN_MAX; base += 1024)
-    for (unsigned int i = base; i < ZTT_BUILTIN_MAX && i < base + 1024; ++i)
+  for (unsigned int base = 0;
+       base < ARRAY_SIZE (stored_builtin_descriptions); base += 1024)
+    for (unsigned int i = base;
+	 i < ARRAY_SIZE (stored_builtin_descriptions) && i < base + 1024; ++i)
       {
-	expansion_index e = builtin_description_for (i).expansion;
+	const auto &d = stored_builtin_descriptions[i];
+	unsigned int e = d.expansion;
 	if ((e == EXPAND_A_MMUL
 	     || (e >= EXPAND_A_MMULNEG && e <= EXPAND_A_MMULBTNEG))
-	    && (types[builtin_description_for (i).type].descriptor & 0xff) >= 8
-	    && (types[builtin_description_for (i).type].descriptor & 0xff) <= 32
-	    && !(types[builtin_description_for (i).type].descriptor
+	    && (types[d.type].descriptor & 0xff) >= 8
+	    && (types[d.type].descriptor & 0xff) <= 32
+	    && !(types[d.type].descriptor
 		 & ((1U << 8) | (1U << 29))))
-	  limit = i + 1;
+	  limit = i + 1 + (i < exponent_first ? 0 : exponent_count);
       }
   return limit;
 }
@@ -1234,12 +1252,12 @@ static constexpr unsigned int elementwise_code_base = 1U << 28;
    must not enlarge the legacy 24-by-25 signature interval.  Use the same
    eligibility check at encoding and when recovering a streamed call.  */
 static constexpr bool
-legacy_elementwise_anchor_p (unsigned int i)
+legacy_elementwise_description_p (unsigned int expansion,
+				 unsigned int prototype, unsigned int type)
 {
-  const auto &d = builtin_description_for (i);
-  if (d.expansion >= EXPAND_MFRINTM_EW)
+  if (expansion >= EXPAND_MFRINTM_EW)
     return false;
-  switch (d.prototype)
+  switch (prototype)
     {
     case PROTO_M_M_M:
     case PROTO_M_SHIFT_M:
@@ -1252,19 +1270,31 @@ legacy_elementwise_anchor_p (unsigned int i)
     default:
       return false;
     }
-  unsigned int descriptor = types[d.type].descriptor;
+  unsigned int descriptor = types[type].descriptor;
   return (descriptor & 0xff) >= 8 && (descriptor & 0xff) <= 32
     && !(descriptor & ((1U << 8) | (1U << 29)));
+}
+
+static constexpr bool
+legacy_elementwise_anchor_p (unsigned int i)
+{
+  const auto &d = builtin_description_for (i);
+  return legacy_elementwise_description_p (d.expansion, d.prototype, d.type);
 }
 
 static constexpr unsigned int
 elementwise_code_limit ()
 {
   unsigned int limit = 0;
-  for (unsigned int base = 0; base < ZTT_BUILTIN_MAX; base += 1024)
-    for (unsigned int i = base; i < ZTT_BUILTIN_MAX && i < base + 1024; ++i)
-      if (legacy_elementwise_anchor_p (i))
-	limit = i + 1;
+  for (unsigned int base = 0;
+       base < ARRAY_SIZE (stored_builtin_descriptions); base += 1024)
+    for (unsigned int i = base;
+	 i < ARRAY_SIZE (stored_builtin_descriptions) && i < base + 1024; ++i)
+      {
+	const auto &d = stored_builtin_descriptions[i];
+	if (legacy_elementwise_description_p (d.expansion, d.prototype, d.type))
+	  limit = i + 1 + (i < exponent_first ? 0 : exponent_count);
+      }
   return limit;
 }
 
@@ -3587,6 +3617,7 @@ run_decoder_anchor_selftests ()
   ASSERT_EQ (canonical, ZTT_BUILTIN_MCONV_EW_I8_RNU_1X1);
 
   auto_vec<unsigned int> wide, unary;
+  unsigned int matmul_limit = 0, elementwise_limit = 0;
   wide.safe_grow_cleared (WIDE_MAX * wide_shape_count * wide_dtype_count);
   unary.safe_grow_cleared
     (integer_unary_operations * wide_shape_count * integer_dtype_count);
@@ -3596,6 +3627,14 @@ run_decoder_anchor_selftests ()
       const auto d = builtin_description_for (i);
       int op = wide_operation (d.expansion);
       const auto &t = types[d.type];
+      if ((d.expansion == EXPAND_A_MMUL
+	   || (d.expansion >= EXPAND_A_MMULNEG
+	       && d.expansion <= EXPAND_A_MMULBTNEG))
+	  && (t.descriptor & 0xff) >= 8 && (t.descriptor & 0xff) <= 32
+	  && !(t.descriptor & ((1U << 8) | (1U << 29))))
+	matmul_limit = i + 1;
+      if (legacy_elementwise_anchor_p (i))
+	elementwise_limit = i + 1;
       if (op < 0 || t.accumulator || floating_descriptor_p (t.descriptor))
 	continue;
       unsigned int q = exact_log2 (t.rows * t.columns);
@@ -3617,6 +3656,8 @@ run_decoder_anchor_selftests ()
 	    unary[key] = i + 1;
 	}
     }
+  ASSERT_EQ (matmul_limit, matmul_anchor_limit);
+  ASSERT_EQ (elementwise_limit, elementwise_anchor_limit);
   for (unsigned int key = 0; key < wide.length (); ++key)
     {
       unsigned int dst = key % wide_dtype_count;
