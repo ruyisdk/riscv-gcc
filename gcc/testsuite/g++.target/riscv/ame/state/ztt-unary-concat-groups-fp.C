@@ -1,0 +1,11 @@
+/* { dg-do compile } */
+/* { dg-options "-O2 -fdump-rtl-expand -mztt-profile=gcc-runtime-u32-m32-a16" } */
+/* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
+/* { dg-additional-options "-march=rv32im_zicsr_ztt0p6 -mabi=ilp32" { target rv32 } } */
+#define UP_TYPE f32_rne
+#define UP_ALT f32_rtz
+#define UP_CARRIER float
+#define UP_UNIT 1x2
+#define UP_WHOLE 1x4
+#include "../../../../gcc.target/riscv/ame/state/ztt-unary-concat.h"
+/* { dg-final { scan-rtl-dump-times "Use concat inputs for unary" 12 "expand" } } */

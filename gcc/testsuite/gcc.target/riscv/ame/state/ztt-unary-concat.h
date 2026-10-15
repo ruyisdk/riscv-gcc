@@ -4,6 +4,10 @@
 #define UP_ALT i32_rod
 #define UP_CARRIER __INT32_TYPE__
 #endif
+#ifndef UP_UNIT
+#define UP_UNIT 1x1
+#define UP_WHOLE 1x2
+#endif
 #define T_(D,S) __riscv_ztt_##D##_##S##_t
 #define T(D,S) T_ (D,S)
 #define F_(OP,D,S) __riscv_ztt_##OP##_##D##_##S
@@ -14,11 +18,11 @@ __attribute__((noipa)) void up_##OP##_##N \
   (const UP_CARRIER *ia, const UP_CARRIER *ib, \
    UP_CARRIER *out, UP_CARRIER *old_a, UP_CARRIER *old_b) \
 { \
-  T (UP_TYPE,1x1) a = F (mls_rm,UP_TYPE,1x1) (ia); \
-  T (UP_TYPE,1x1) b = F (mls_rm,UP_TYPE,1x1) (ib); \
-  T (UP_TYPE,1x2) p = F (mconcat_m,UP_TYPE,1x2) (a,b); \
+  T (UP_TYPE,UP_UNIT) a = F (mls_rm,UP_TYPE,UP_UNIT) (ia); \
+  T (UP_TYPE,UP_UNIT) b = F (mls_rm,UP_TYPE,UP_UNIT) (ib); \
+  T (UP_TYPE,UP_WHOLE) p = F (mconcat_m,UP_TYPE,UP_WHOLE) (a,b); \
   GAP; \
-  T (D,1x2) result = F (OP,D,1x2) (p); \
+  T (D,UP_WHOLE) result = F (OP,D,UP_WHOLE) (p); \
   STORE (out,result); \
   KEEP; \
 }

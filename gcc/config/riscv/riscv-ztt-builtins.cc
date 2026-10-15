@@ -8627,7 +8627,9 @@ static bool
 unary_concat_sources (const conversion_description &operation, tree exp,
 		      rtx *sources)
 {
-  if (!optimize || !runtime_profile_p () || operation.formation.insns != 2
+  unsigned int half_insns = operation.formation.insns / 2;
+  if (!optimize || !runtime_profile_p () || !half_insns
+      || operation.formation.insns % 2
       || !currently_expanding_gimple_stmt)
     return false;
   tree pair = CALL_EXPR_ARG (exp, 0);
@@ -8646,7 +8648,8 @@ unary_concat_sources (const conversion_description &operation, tree exp,
   if (d.expansion != EXPAND_MCONCAT || d.type != operation.source)
     return false;
   type_index half = m_utility_source_type (d.prototype, d.type);
-  if (half == TYPE_MAX || type_nregs (half) != operation.formation.step[1]
+  if (half == TYPE_MAX
+      || type_nregs (half) != half_insns * operation.formation.step[1]
       || type_nregs (d.type) != 2 * type_nregs (half))
     return false;
   gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
@@ -8705,8 +8708,16 @@ expand_conversion (const builtin_description &d,
       machine_mode dm = matrix_mode (f.step[0]);
       machine_mode sm = matrix_mode (f.step[1]);
       rtx dst = simplify_gen_subreg (dm, result, modes[0], GET_MODE_SIZE (dm) * i);
-      rtx src = concat ? sources[i]
-	: simplify_gen_subreg (sm, source, modes[1], GET_MODE_SIZE (sm) * i);
+      rtx src;
+      if (concat)
+	{
+	  unsigned int half_insns = f.insns / 2;
+	  rtx group = sources[i / half_insns];
+	  src = simplify_gen_subreg (sm, group, GET_MODE (group),
+				    GET_MODE_SIZE (sm) * (i % half_insns));
+	}
+      else
+	src = simplify_gen_subreg (sm, source, modes[1], GET_MODE_SIZE (sm) * i);
       int variant = structural_variant (d.expansion);
       /* FP exceptions accrue in amefflags, independently of scalar fast-math
 	 and fenv options.  FP exponent bits must not be read as integer SAT.  */

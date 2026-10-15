@@ -133,8 +133,9 @@ after profile/type checks.
 Structural folding
 ------------------
 
-Two-packet unary operations can read a single-use concat's original halves
-when each half is a complete hardware operand in the same local window.
+Unary operations can read a single-use concat's original halves when each
+half contains complete hardware operands in the same local window.  Packet
+offsets stay within each half and preserve the original operation order.
 The concat access remains visible to ownership checking; the unary instruction
 order and destination formation are unchanged.  A single-use same-mode
 carrier view can be traversed when its original type matches exactly.
