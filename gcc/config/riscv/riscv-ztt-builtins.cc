@@ -8744,35 +8744,61 @@ local_acc_result_p ()
 static unsigned int integer_zero_width (rtx);
 static unsigned int floating_zero_width (rtx);
 
-/* A local constructor proves the zero payload and its datatype state.  */
+/* Follow at most two complete transfers to a local zero constructor.  */
 static bool
-local_zero_constructor_p (tree value, type_index type, rtx descriptor)
+local_zero_value_p (tree value, type_index type, rtx descriptor)
 {
   if (!optimize || !runtime_profile_p ()
       || !currently_expanding_gimple_stmt || type == TYPE_MAX
       || (!integer_zero_width (descriptor)
 	  && !floating_zero_width (descriptor)))
     return false;
-  gimple *producers[2];
+  gimple *producers[6];
   unsigned int count = 0;
-  if (TREE_CODE (value) != SSA_NAME
-      || !strip_structure_view (value, type, producers, count))
-    return false;
-  gimple *producer = SSA_NAME_DEF_STMT (value);
-  unsigned int code = structure_builtin_code (producer, 0);
-  if (code >= ZTT_BUILTIN_MAX)
-    return false;
-  const auto d = builtin_description_for (code);
-  expansion_index clear = types[type].accumulator
-    ? EXPAND_ACLEAR : EXPAND_MCLEAR_M;
-  expansion_index zero = types[type].accumulator
-    ? EXPAND_AZERO : EXPAND_MZERO_2D_M;
-  if (d.type != type
-      || (d.expansion != clear && d.expansion != zero))
-    return false;
-  producers[count++] = producer;
-  gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
-  return local_structure_producers_p (&gsi, producers, count);
+  for (unsigned int depth = 0; depth <= 2; ++depth)
+    {
+      if (type == TYPE_MAX
+	  || !strip_structure_view (value, type, producers, count))
+	return false;
+      gimple *producer = SSA_NAME_DEF_STMT (value);
+      if (!is_gimple_call (producer) || gimple_call_num_args (producer) > 1)
+	return false;
+      unsigned int nargs = gimple_call_num_args (producer);
+      unsigned int code = structure_builtin_code (producer, nargs);
+      if (code >= ZTT_BUILTIN_MAX)
+	return false;
+      const auto d = builtin_description_for (code);
+      expansion_index clear = types[type].accumulator
+	? EXPAND_ACLEAR : EXPAND_MCLEAR_M;
+      expansion_index zero = types[type].accumulator
+	? EXPAND_AZERO : EXPAND_MZERO_2D_M;
+      producers[count++] = producer;
+      if (!nargs && d.type == type
+	  && (d.expansion == clear || d.expansion == zero))
+	{
+	  gimple_stmt_iterator gsi
+	    = gsi_for_stmt (currently_expanding_gimple_stmt);
+	  return local_structure_producers_p (&gsi, producers, count);
+	}
+      if (depth == 2 || nargs != 1 || d.type == TYPE_MAX
+	  || !types[d.type].accumulator
+	  || types[d.type].descriptor != UINTVAL (descriptor))
+	return false;
+      bool from_m = d.expansion == EXPAND_A_FROM_M && d.type == type;
+      bool to_m = d.expansion == EXPAND_M_FROM_A && !types[type].accumulator;
+      if (!from_m && !to_m)
+	return false;
+      bool column = d.prototype == PROTO_A_M_COLUMN
+	|| d.prototype == PROTO_M_A_COLUMN;
+      unsigned int squares = types[d.type].columns;
+      type_index matrix = matrix_type_index
+	(types[d.type].descriptor, column ? squares : 1, column ? 1 : squares);
+      if (to_m && matrix != type)
+	return false;
+      type = from_m ? matrix : d.type;
+      value = gimple_call_arg (producer, 0);
+    }
+  return false;
 }
 
 static rtx
@@ -9539,7 +9565,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  type_index input = matrix_type_index
 	    (dtype, d.prototype == PROTO_A_M_COLUMN ? squares : 1,
 	     d.prototype == PROTO_A_M_COLUMN ? 1 : squares);
-	  if (local_zero_constructor_p (CALL_EXPR_ARG (exp, 0), input, descriptor))
+	  if (local_zero_value_p (CALL_EXPR_ARG (exp, 0), input, descriptor))
 	    {
 	      emit_insn (gen_ztt_acc_clear
 			 (mode, Pmode, target, force_reg (Pmode, descriptor)));
@@ -9566,7 +9592,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  return target;
 	}
 	case EXPAND_M_FROM_A:
-	  if (local_zero_constructor_p (CALL_EXPR_ARG (exp, 0), d.type, descriptor))
+	  if (local_zero_value_p (CALL_EXPR_ARG (exp, 0), d.type, descriptor))
 	    {
 	      unsigned int step = acc_m_nregs (mode);
 	      machine_mode part = matrix_mode (step);

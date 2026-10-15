@@ -572,6 +572,9 @@ proof, and arbitrary ACC values retain their transfer and mismatch checks.
 The same proof lets M-to-ACC use the existing complete ACC clear, setting
 every Ad.  The M constructor stays visible to early ownership checking;
 ordinary DCE can remove its dead payload when no other use remains.
+The proof can follow two complete, same-descriptor M/ACC transfers back to
+the constructor, within the same local window.  Intermediate calls remain
+ownership witnesses; unknown origins and longer chains retain their moves.
 It is disabled at O0.  Prepared ACC moves and matmul with both
 sources prepared use patterns without private MEM, stride or scratch
 operands.  Prepared matmul retains the tied old ACC and arithmetic effects,
