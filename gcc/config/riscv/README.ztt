@@ -89,6 +89,9 @@ attributes must not modify the shared inputs.
 Ordinary function signatures use a temporary GC-rooted vector for each
 used prototype.  Nominal Scalar signatures use a separate destination-block
 cache, allocating the TC/arity vector only for a used destination type.
+Three final slots share nominal dispatch placeholders by arity.  Operations
+with the same destination reuse these signatures during registration;
+the resolver still checks exact source and Scalar identities at each call.
 Unused prototypes and destinations allocate no type vector.  Both caches
 end at registration; later lazy declarations do not retain these caches.
 

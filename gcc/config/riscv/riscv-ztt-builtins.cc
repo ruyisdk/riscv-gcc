@@ -3078,26 +3078,29 @@ default_scalar_rm_p (unsigned int d)
   return !(d & (floating_descriptor_p (d) ? 7U << 22 : 3U << 27));
 }
 
-/* Public prototypes retain exact nominal identity, even for equal-width
-   payloads.  Internal raw signatures continue to share carrier types.  */
+/* The final TC slot holds void dispatch placeholders.  Other slots retain
+   exact nominal Scalar identity, including equal-width payloads.  */
 static tree
 nominal_registration_type (type_index dst, unsigned int c, unsigned int nargs)
 {
   gcc_assert (nargs >= 1 && nargs <= 3);
-  gcc_assert (c < numeric_scalar_dtype_count && nominal_scalar_types[c]);
+  gcc_assert (c == numeric_scalar_dtype_count
+	      || (c < numeric_scalar_dtype_count && nominal_scalar_types[c]));
   unsigned int key = c * 3 + nargs - 1;
   vec<tree, va_gc> *entries = nullptr;
   if (nominal_registration_types)
     {
       vec<tree, va_gc> *&block = nominal_registration_types->blocks[dst];
       if (!block)
-	vec_safe_grow_cleared (block, numeric_scalar_dtype_count * 3, true);
+	vec_safe_grow_cleared (block, (numeric_scalar_dtype_count + 1) * 3, true);
       entries = block;
     }
   tree ftype = entries ? (*entries)[key] : NULL_TREE;
   if (!ftype)
     {
-      tree m = ztt_m_type_nodes[dst], scalar = nominal_scalar_types[c];
+      tree m = ztt_m_type_nodes[dst];
+      tree scalar = c == numeric_scalar_dtype_count
+	? void_type_node : nominal_scalar_types[c];
       ftype = nargs == 1 ? build_function_type_list (m, scalar, NULL_TREE)
 	: nargs == 2 ? build_function_type_list (m, m, scalar, NULL_TREE)
 	: build_function_type_list (m, m, m, scalar, NULL_TREE);
@@ -5840,9 +5843,9 @@ register_functions ()
   register_storage128_types ();
   if (!in_lto_p)
     {
-      register_nominal_scalars ();
       nominal_registration_types
 	= ggc_cleared_alloc<nominal_registration_cache> ();
+      register_nominal_scalars ();
     }
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
@@ -6285,12 +6288,9 @@ nominal_builtin_decl (unsigned int code, bool initialize_p)
 		types[t].rows, types[t].columns);
       /* Resolution checks the unconverted arguments.  The placeholder
 	 prototype is never a GIMPLE or LTO signature.  */
-      tree m = ztt_m_type_nodes[t];
-      ftype = op == floating_scalar_operations
-	? build_function_type_list (m, void_type_node, NULL_TREE)
-	: integer_scalar_old_p (op)
-	? build_function_type_list (m, m, m, void_type_node, NULL_TREE)
-	: build_function_type_list (m, m, void_type_node, NULL_TREE);
+      ftype = nominal_registration_type
+	(t, numeric_scalar_dtype_count, op == floating_scalar_operations ? 1
+	 : integer_scalar_old_p (op) ? 3 : 2);
     }
   else
     {
