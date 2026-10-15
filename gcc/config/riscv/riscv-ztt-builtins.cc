@@ -12160,16 +12160,22 @@ public:
       }
   }
 
-  bool matches (rtx group, rtx descriptor) const
+  bool matches (unsigned int regno, machine_mode mode, rtx descriptor) const
   {
-    if (!REG_P (group) || !M_REG_P (REGNO (group)))
+    if (!M_REG_P (regno))
       return false;
-    const auto &f = facts[REGNO (group) - M_REG_FIRST];
-    return f.group && rtx_equal_p (f.group, group)
+    const auto &f = facts[regno - M_REG_FIRST];
+    return f.group && REGNO (f.group) == regno && GET_MODE (f.group) == mode
       && (f.identity
 	  ? full_gpr_p (descriptor)
 	    && f.identity == identities[REGNO (descriptor) - GP_REG_FIRST]
 	  : rtx_equal_p (f.descriptor, descriptor_value (descriptor)));
+  }
+
+  bool matches (rtx group, rtx descriptor) const
+  {
+    return REG_P (group)
+      && matches (REGNO (group), GET_MODE (group), descriptor);
   }
 
   bool matches_packets (rtx group, rtx descriptor, unsigned int step) const
@@ -12180,8 +12186,7 @@ public:
     if (!count || !step || count % step)
       return false;
     for (unsigned int i = 0; i < count; i += step)
-      if (!matches (gen_rtx_REG (matrix_mode (step), REGNO (group) + i),
-		    descriptor))
+      if (!matches (REGNO (group) + i, matrix_mode (step), descriptor))
 	return false;
     return true;
   }
@@ -13508,10 +13513,8 @@ reuse_local_md ()
 		    gcc_assert (step && rtx_equal_p (group, XVECEXP (src, 0, 0)));
 		    unsigned int mask = 0;
 		    for (unsigned int i = 0; i < 2; ++i)
-		      if (state.matches
-			    (gen_rtx_REG (matrix_mode (step),
-					  REGNO (group) + i * step),
-			     descriptor))
+		      if (state.matches (REGNO (group) + i * step,
+					 matrix_mode (step), descriptor))
 			mask |= 1U << i;
 		    if (mask)
 		      {
@@ -13777,9 +13780,8 @@ reuse_local_md ()
 		    gcc_assert (m_nregs (GET_MODE (dest)) == count);
 		    unsigned int mask = 0;
 		    for (unsigned int i = 0; i < count / step; ++i)
-		      if (state.matches
-			    (gen_rtx_REG (matrix_mode (step),
-					  REGNO (dest) + i * step), descriptor))
+		      if (state.matches (REGNO (dest) + i * step,
+					 matrix_mode (step), descriptor))
 			mask |= 1U << i;
 		    if (mask)
 		      {
@@ -13814,9 +13816,8 @@ reuse_local_md ()
 		      gcc_assert (count == acc_full_m_nregs (mode));
 		      unsigned int mask = 0;
 		      for (unsigned int i = 0; i < count / step; ++i)
-			if (state.matches
-			      (gen_rtx_REG (matrix_mode (step),
-					    REGNO (group) + i * step), descriptor))
+			if (state.matches (REGNO (group) + i * step,
+					   matrix_mode (step), descriptor))
 			  mask |= 1U << i;
 		      if (mask)
 			{
@@ -15513,6 +15514,33 @@ run_md_reuse_selftests ()
   ASSERT_FALSE (state.matches (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1), desc));
   const char *saved_profile = riscv_ztt_profile_string;
   riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+  for (unsigned int count : { 1U, 2U, 4U, 8U, 16U, 32U })
+    for (unsigned int offset : { 0U, M_REG_NUM - count })
+      for (bool constant : { false, true })
+	{
+	  state.clear ();
+	  unsigned int base = M_REG_FIRST + offset;
+	  rtx reg = gen_rtx_REG (matrix_mode (count), base);
+	  rtx descriptor = gen_rtx_REG (Pmode, 10);
+	  rtx value = constant ? GEN_INT (32) : descriptor;
+	  if (constant)
+	    state.record_constant (descriptor, value);
+	  state.remember (reg, descriptor);
+	  for (unsigned int other : { 1U, 2U, 4U, 8U, 16U, 32U })
+	    for (unsigned int r : { base, base + 1 })
+	      {
+		machine_mode mode = matrix_mode (other);
+		bool equal = rtx_equal_p (reg, gen_rtx_REG (mode, r));
+		ASSERT_EQ (state.matches (r, mode, value), equal);
+	      }
+	  ASSERT_FALSE (state.matches (base, VOIDmode, value));
+	  ASSERT_FALSE (state.matches (GP_REG_FIRST, GET_MODE (reg), value));
+	  ASSERT_FALSE (state.matches (const0_rtx, value));
+	  ASSERT_FALSE (state.matches (base, GET_MODE (reg),
+				       gen_rtx_REG (Pmode, 11)));
+	  state.invalidate (gen_rtx_REG (ZTTMR1mode, base + count - 1));
+	  ASSERT_FALSE (state.matches (base, GET_MODE (reg), value));
+	}
   {
     /* Compare direct ranges and partial writes with the general matcher.  */
     auto_vec<rtx, 48> writes;

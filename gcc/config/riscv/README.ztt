@@ -459,6 +459,8 @@ larger joins, backedges and exceptional edges discard facts; deeper nesting
 can evict a snapshot.  No state preparation is moved across a branch.
 Descriptor cleanup after DCE uses the same boundaries; private raw spill
 tracking remains confined to each block.
+Md queries compare the physical register number and mode directly, without
+allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
 Standard thread-fence patterns preserve register and datatype facts, but
 still invalidate private memory reuse.  The fences and user memory accesses
   remain in place.  The operand-free empty asm with only a memory clobber
