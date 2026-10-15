@@ -12479,6 +12479,10 @@ md_preserving_fp_p (int code)
 {
   switch (code)
     {
+    case CODE_FOR_riscv_frcsr:
+    case CODE_FOR_riscv_fscsr:
+    case CODE_FOR_riscv_frflags:
+    case CODE_FOR_riscv_fsflags:
     case CODE_FOR_copysignhf3:
     case CODE_FOR_copysignsf3:
     case CODE_FOR_copysigndf3:
@@ -13896,6 +13900,8 @@ run_md_reuse_selftests ()
   using namespace selftest;
   {
     const int codes[] = {
+      CODE_FOR_riscv_frcsr, CODE_FOR_riscv_fscsr,
+      CODE_FOR_riscv_frflags, CODE_FOR_riscv_fsflags,
       CODE_FOR_copysignhf3, CODE_FOR_copysignsf3, CODE_FOR_copysigndf3,
       CODE_FOR_fminhf3, CODE_FOR_fminsf3, CODE_FOR_fmindf3,
       CODE_FOR_fmaxhf3, CODE_FOR_fmaxsf3, CODE_FOR_fmaxdf3,
@@ -13945,6 +13951,32 @@ run_md_reuse_selftests ()
     ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (mem, matrix)));
     ASSERT_FALSE (spill.redundant_reload_p (PATTERN (classify)));
     ASSERT_FALSE (spill.redundant_reload_p (gen_rtx_SET (matrix, mem)));
+  }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx reg = gen_rtx_REG (SImode, 10);
+    rtx full = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (bool csr : { false, true })
+      {
+	local_md_state state;
+	state.record_constant (full, GEN_INT (32));
+	state.remember (matrix, full);
+	rtx_insn *read = emit_insn (csr ? gen_riscv_frcsr (reg)
+				 : gen_riscv_frflags (reg));
+	rtx_insn *write = emit_insn (csr ? gen_riscv_fscsr (reg)
+				  : gen_riscv_fsflags (reg));
+	if (TARGET_HARD_FLOAT)
+	  {
+	    ASSERT_TRUE (md_preserving_fp_p (recog_memoized (read)));
+	    ASSERT_TRUE (md_preserving_fp_p (recog_memoized (write)));
+	  }
+	note_stores (write, invalidate_md_store, &state);
+	ASSERT_TRUE (state.matches (matrix, full));
+	note_stores (read, invalidate_md_store, &state);
+	ASSERT_FALSE (state.matches (matrix, full));
+	ASSERT_TRUE (state.matches (matrix, GEN_INT (32)));
+      }
   }
   {
     const struct { machine_mode full, half, source; } cases[] = {
