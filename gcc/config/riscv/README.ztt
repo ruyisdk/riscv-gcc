@@ -306,6 +306,10 @@ live.  The other inner input must feed a subsequent complete local store,
 retaining its producers and loads.  The same type, copy-depth and local-window
 checks apply.  Ownership witnesses remain; floating pairs do not qualify.
 
+For an inner A & ~B, outer AND with A reuses the inner result; outer OR
+with A reuses A under the absorption conditions above.  Only the first
+inner operand matches: AND-NOT is not commutative.
+
 An integer XOR pair cancels a repeated input, returning the other inner
 input.  The inner result and intervening copies must have single uses,
 and the repeated input must feed a complete local store so that its loads

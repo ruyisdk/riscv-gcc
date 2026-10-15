@@ -8070,8 +8070,12 @@ combined_binary_value (gcall *stmt, const builtin_description &d,
       if (code >= ZTT_BUILTIN_MAX)
 	continue;
       const auto source = builtin_description_for (code);
-      bool absorb = !cancel && source.expansion == dual;
-      if (source.type != d.type || (!absorb && source.expansion != d.expansion)
+      bool and_not = source.expansion == EXPAND_MANDNOT_EW
+	&& (d.expansion == EXPAND_MAND_EW || d.expansion == EXPAND_MOR_EW);
+      bool absorb = !cancel && (source.expansion == dual
+			       || (and_not && d.expansion == EXPAND_MOR_EW));
+      if (source.type != d.type
+	  || (!absorb && !and_not && source.expansion != d.expansion)
 	  || source.prototype != PROTO_M_M_M)
 	continue;
       if (absorb || cancel)
@@ -8088,7 +8092,7 @@ combined_binary_value (gcall *stmt, const builtin_description &d,
 	    continue;
 	}
       producers[count++] = inner;
-      for (unsigned int input = 0; input < 2; ++input)
+      for (unsigned int input = 0; input < (and_not ? 1U : 2U); ++input)
 	{
 	  tree left = gimple_call_arg (stmt, 1 - side);
 	  tree right = gimple_call_arg (inner, input);
