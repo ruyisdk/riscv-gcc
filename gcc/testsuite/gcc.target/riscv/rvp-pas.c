@@ -3,7 +3,7 @@
    number arithmetic.  There is no P instruction for same-lane mixed
    add/subtract, so these must NOT be compiled into pas/psa.  */
 /* { dg-do compile } */
-/* { dg-options "-march=rv64gcp0p21 -mabi=lp64 -O2" } */
+/* { dg-options "-march=rv64gcp0p6 -mabi=lp64 -O2" } */
 /* { dg-skip-if "" { *-*-* } { "-flto" } } */
 
 typedef short int16_t;

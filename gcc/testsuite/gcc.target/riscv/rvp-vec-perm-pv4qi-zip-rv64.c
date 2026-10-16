@@ -1,5 +1,5 @@
 /* { dg-do compile } */
-/* { dg-options "-march=rv64gcp0p21 -mabi=lp64d" } */
+/* { dg-options "-march=rv64gcp0p6 -mabi=lp64d" } */
 /* { dg-skip-if "" { *-*-* } { "-flto" "-O0" } } */
 
 typedef unsigned char v4qi __attribute__ ((vector_size (4)));
