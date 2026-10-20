@@ -59,77 +59,9 @@
    (UNSPEC_PPAIRO "ppairo.w")])
 
 ; ---- 8x4 (PV4QI), 32-bit, single form ----
-(define_insn "riscv_ppaire_u8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIRE))]
-  "TARGET_RVP"
-  "ppaire.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppaire_i8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIRE))]
-  "TARGET_RVP"
-  "ppaire.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppaireo_u8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIREO))]
-  "TARGET_RVP"
-  "ppaireo.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppaireo_i8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIREO))]
-  "TARGET_RVP"
-  "ppaireo.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairoe_u8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIROE))]
-  "TARGET_RVP"
-  "ppairoe.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairoe_i8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIROE))]
-  "TARGET_RVP"
-  "ppairoe.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairo_u8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIRO))]
-  "TARGET_RVP"
-  "ppairo.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
-
-(define_insn "riscv_ppairo_i8x4"
-  [(set (match_operand:PV4QI 0 "register_operand" "=r")
-        (unspec:PV4QI [(match_operand:PV4QI 1 "register_operand" "r")
-                      (match_operand:PV4QI 2 "register_operand" "r")]
-         UNSPEC_PPAIRO))]
-  "TARGET_RVP"
-  "ppairo.b\t%0,%1,%2"
-  [(set_attr "type" "simd")])
+; The 8x4 pair intrinsics are pure header implementations (element picks
+; combine into the single ppaire.b/ppairo.b/ppaireo.b/ppairoe.b), so no
+; builtin patterns are needed here.
 
 ; ---- 16x2 (PV2HI), 32-bit ----
 ; ppaire: RV32 -> "pack" (alias), RV64 -> ppaire.h

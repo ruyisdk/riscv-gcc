@@ -1858,7 +1858,7 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaire.b\t%0, %1, %2"
+  "ppaire.b\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -1877,7 +1877,7 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaire.%d0\t%0, %1, %2"
+  "ppaire.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -1896,7 +1896,7 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaireo.b\t%0, %1, %2"
+  "ppaireo.b\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -1915,7 +1915,7 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaireo.%d0\t%0, %1, %2"
+  "ppaireo.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -1934,7 +1934,7 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairoe.b\t%0, %1, %2"
+  "ppairoe.b\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -1953,7 +1953,7 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairoe.%d0\t%0, %1, %2"
+  "ppairoe.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -1972,7 +1972,7 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairo.b\t%0, %1, %2"
+  "ppairo.b\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -1991,7 +1991,7 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairo.%d0\t%0, %1, %2"
+  "ppairo.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -2019,7 +2019,7 @@
                                        (const_int 6) (const_int 6)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppaire.%d0\t%0, %1, %2"
+  "ppaire.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -2044,7 +2044,7 @@
                                        (const_int 6) (const_int 6)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppaireo.%d0\t%0, %1, %2"
+  "ppaireo.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -2069,7 +2069,7 @@
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppairoe.%d0\t%0, %1, %2"
+  "ppairoe.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -2094,7 +2094,7 @@
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppairo.%d0\t%0, %1, %2"
+  "ppairo.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
