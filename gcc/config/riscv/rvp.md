@@ -3253,6 +3253,30 @@
   DONE;
 })
 
+(define_expand "vec_widen_<su>mult_lo_<mode>"
+  [(match_operand:<rvp_unpack_mode> 0 "register_operand")
+   (match_operand:RVP_UNPACK 1 "register_operand")
+   (match_operand:RVP_UNPACK 2 "register_operand")
+   (any_extend (const_int 0))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_widen_mult (operands[0], operands[1], operands[2],
+			     <CODE> == ZERO_EXTEND, false);
+  DONE;
+})
+
+(define_expand "vec_widen_<su>mult_hi_<mode>"
+  [(match_operand:<rvp_unpack_mode> 0 "register_operand")
+   (match_operand:RVP_UNPACK 1 "register_operand")
+   (match_operand:RVP_UNPACK 2 "register_operand")
+   (any_extend (const_int 0))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_widen_mult (operands[0], operands[1], operands[2],
+			     <CODE> == ZERO_EXTEND, true);
+  DONE;
+})
+
 (define_expand "reduc_plus_scal_pv2si"
   [(match_operand:SI 0 "register_operand")
    (match_operand:PV2SI 1 "register_operand")]

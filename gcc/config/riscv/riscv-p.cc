@@ -274,6 +274,51 @@ void emit_vec_merge_with_select (rtx target, machine_mode vmode,
                                 GEN_INT (mask))));
 }
 
+/* Multiply the low or high half of the input lanes, widening each product.
+   RV32 has a direct widening instruction.  On RV64, interleave the operands
+   so each source pair occupies one wide lane before using the cross product.
+   ZIP8HP and ZIP16HP select the high halves without separate shifts.  */
+
+void
+riscv_p_expand_widen_mult (rtx dest, rtx op1, rtx op2, bool unsigned_p,
+			   bool high_p)
+{
+  machine_mode mode = GET_MODE (op1);
+  bool bytes_p = mode == PV8QImode;
+  if (!TARGET_64BIT)
+    {
+      machine_mode half_mode = bytes_p ? PV4QImode : PV2HImode;
+      op1 = riscv_p_vector_half (op1, half_mode, high_p);
+      op2 = riscv_p_vector_half (op2, half_mode, high_p);
+      if (bytes_p)
+	emit_insn (unsigned_p ? gen_riscv_pwmulu_u16x4 (dest, op1, op2)
+			      : gen_riscv_pwmul_i16x4 (dest, op1, op2));
+      else
+	emit_insn (unsigned_p ? gen_riscv_pwmulu_u32x2 (dest, op1, op2)
+			      : gen_riscv_pwmul_i32x2 (dest, op1, op2));
+      return;
+    }
+
+  unsigned int nunits = GET_MODE_NUNITS (mode).to_constant ();
+  int indices[8];
+  for (unsigned int i = 0; i < nunits; ++i)
+    indices[i] = i / 2 + (high_p ? nunits / 2 : 0);
+
+  rtx zipped = gen_reg_rtx (mode);
+  if (bytes_p)
+    {
+      emit_vec_merge_with_select<8> (zipped, mode, op1, op2, indices, 0xaa);
+      emit_insn (unsigned_p ? gen_riscv_pmulu_b01_u16x4 (dest, zipped, zipped)
+			    : gen_riscv_pmul_b01_i16x4 (dest, zipped, zipped));
+    }
+  else
+    {
+      emit_vec_merge_with_select<4> (zipped, mode, op1, op2, indices, 0xa);
+      emit_insn (unsigned_p ? gen_riscv_pmulu_h01_u32x2 (dest, zipped, zipped)
+			    : gen_riscv_pmul_h01_i32x2 (dest, zipped, zipped));
+    }
+}
+
 /* Helper function to emit unzip pattern with vec_concat */
 template<unsigned N>
 void emit_vec_concat_with_select (rtx target, machine_mode vmode,
