@@ -52,23 +52,25 @@ int32x2_t psati_dw_imm15 (int32x2_t a)
 }
 /* { dg-final { scan-assembler {\mpsati\.dw\M.*, 15} } } */
 
-/* PV2HI: unsigned single register => pusati.h imm=8.  */
+/* PV2HI: unsigned single-register clamp uses PMINU.H.  */
 uint16x2_t pusati_h_imm8 (uint16x2_t a)
 {
   uint16x2_t hi = {255, 255};
   return VSEL (a > hi, hi, a);
 }
-/* { dg-final { scan-assembler {\mpusati\.h\M.*, 8} } } */
+/* { dg-final { scan-assembler {\mpminu\.h\M} } } */
+/* { dg-final { scan-assembler-not {\mpusati\.h\M} } } */
 
-/* PV4HI: unsigned register pair => pusati.dh imm=8.  */
+/* PV4HI: unsigned register-pair clamp uses PMINU.DH.  */
 uint16x4_t pusati_dh_imm8 (uint16x4_t a)
 {
   uint16x4_t hi = {255, 255, 255, 255};
   return VSEL (a > hi, hi, a);
 }
-/* { dg-final { scan-assembler {\mpusati\.dh\M.*, 8} } } */
+/* { dg-final { scan-assembler {\mpminu\.dh\M} } } */
+/* { dg-final { scan-assembler-not {\mpusati\.dh\M} } } */
 
-/* PV2SI: unsigned register pair => pusati.dw imm=8.  */
+/* PV2SI: unsigned register-pair clamp uses PMINU.DW.  */
 uint32x2_t pusati_dw_imm8 (uint32x2_t a)
 {
   uint32x2_t hi = {255, 255};
@@ -82,4 +84,5 @@ int32x2_t pusati_dw_signed_imm8 (int32x2_t a)
   int32x2_t t = VSEL (a > hi, hi, a);
   return VSEL (t < lo, lo, t);
 }
-/* { dg-final { scan-assembler-times {pusati\.dw\s+\S+,\s*\S+,\s*8} 2 } } */
+/* { dg-final { scan-assembler {\mpminu\.dw\M} } } */
+/* { dg-final { scan-assembler-times {pusati\.dw\s+\S+,\s*\S+,\s*8} 1 } } */

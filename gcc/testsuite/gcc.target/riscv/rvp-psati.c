@@ -41,15 +41,16 @@ int32x2_t psati_w_imm15 (int32x2_t a)
 }
 /* { dg-final { scan-assembler {\mpsati\.w\M.*, 15} } } */
 
-/* Unsigned halfword clamp [0, 255] => pusati.h imm=8.  */
+/* Unsigned halfword clamp [0, 255] must not treat the high bit as a sign.  */
 uint16x2_t pusati_h_imm8 (uint16x2_t a)
 {
   uint16x2_t hi = {255, 255};
   return VSEL (a > hi, hi, a);
 }
-/* { dg-final { scan-assembler {\mpusati\.h\M.*, 8} } } */
+/* { dg-final { scan-assembler {\mpminu\.h\M} } } */
+/* { dg-final { scan-assembler-not {\mpusati\.h\M} } } */
 
-/* Unsigned word clamp [0, 255] => pusati.w imm=8.  */
+/* Unsigned word clamp [0, 255] uses PMINU, not PUSATI.  */
 uint32x2_t pusati_w_imm8 (uint32x2_t a)
 {
   uint32x2_t hi = {255, 255};
@@ -63,4 +64,5 @@ int32x2_t pusati_w_signed_imm8 (int32x2_t a)
   int32x2_t t = VSEL (a > hi, hi, a);
   return VSEL (t < lo, lo, t);
 }
-/* { dg-final { scan-assembler-times {pusati\.w\s+\S+,\s*\S+,\s*8} 2 } } */
+/* { dg-final { scan-assembler {\mpminu\.w\M} } } */
+/* { dg-final { scan-assembler-times {pusati\.w\s+\S+,\s*\S+,\s*8} 1 } } */
