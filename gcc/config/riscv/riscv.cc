@@ -14023,6 +14023,12 @@ bool
 riscv_support_vector_misalignment (machine_mode mode, int misalignment,
 				   bool is_packed, bool is_gather_scatter)
 {
+  /* Packed vectors use scalar GPR loads and stores.  Software expansion
+     of an unaligned move does not make it a native vector access.  Let
+     the vectorizer use alignment peeling or versioning instead.  */
+  if (TARGET_RVP && riscv_pext_mode_supported_p (mode))
+    return !STRICT_ALIGNMENT;
+
   /* IS_PACKED is true if the corresponding scalar element is not naturally
      aligned.  If the misalignment is unknown and the access is packed
      we defer to the default hook which will check if movmisalign is present.
@@ -14278,6 +14284,8 @@ riscv_vectorize_preferred_vector_alignment (const_tree type)
 {
   if (riscv_vector_mode_p (TYPE_MODE (type)))
     return TYPE_ALIGN (TREE_TYPE (type));
+  if (TARGET_RVP && riscv_pext_mode_supported_p (TYPE_MODE (type)))
+    return MIN (TYPE_ALIGN (type), BITS_PER_WORD);
   return TYPE_ALIGN (type);
 }
 
@@ -14772,10 +14780,43 @@ get_vr2fr_cost ()
 
 static int
 riscv_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
-				  tree vectype, int misalign ATTRIBUTE_UNUSED)
+				  tree vectype, int misalign)
 {
   const cpu_vector_cost *costs = get_vector_costs ();
   bool fp = false;
+
+  if (TARGET_RVP && vectype
+      && riscv_pext_mode_supported_p (TYPE_MODE (vectype)))
+    {
+      unsigned int bytes = GET_MODE_SIZE (TYPE_MODE (vectype)).to_constant ();
+      unsigned int words = CEIL (bytes, UNITS_PER_WORD);
+      switch (type_of_cost)
+	{
+	case vector_load:
+	  return words * costs->scalar_load_cost;
+	case vector_store:
+	  return words * costs->scalar_store_cost;
+	case unaligned_load:
+	case unaligned_store:
+	  if (STRICT_ALIGNMENT)
+	    {
+	      /* Each partial word needs a load or store.  Combining loaded
+		 pieces takes a shift and an OR; splitting stores needs shifts.
+		 Unknown alignment can only rely on the scalar element type.  */
+	      unsigned int align = TYPE_ALIGN (TREE_TYPE (vectype)) / BITS_PER_UNIT;
+	      if (misalign > 0)
+		align = least_bit_hwi (misalign);
+	      align = MIN (align, MIN (bytes, UNITS_PER_WORD));
+	      unsigned int pieces = bytes / align;
+	      if (type_of_cost == unaligned_load)
+		return pieces * costs->scalar_load_cost + 2 * (pieces - words);
+	      return pieces * costs->scalar_store_cost + pieces - words;
+	    }
+	  break;
+	default:
+	  break;
+	}
+    }
 
   if (vectype != NULL)
     fp = FLOAT_TYPE_P (vectype);
