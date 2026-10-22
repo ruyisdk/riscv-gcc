@@ -107,6 +107,15 @@
 (define_mode_attr rvp_unpack_mode [(PV8QI "PV4HI") (PV4HI "PV2SI")])
 (define_mode_attr rvp_pack_mode [(PV4HI "PV8QI") (PV2SI "PV4HI")])
 
+;; Byte and halfword dot products accumulating into packed words.
+(define_mode_iterator RVP_DOT [PV8QI PV4HI])
+(define_mode_attr rvp_dot_signed
+  [(PV8QI "pm4adda_i8x8") (PV4HI "pm2adda_i16x4")])
+(define_mode_attr rvp_dot_unsigned
+  [(PV8QI "pm4addau_u8x8") (PV4HI "pm2addau_u16x4")])
+(define_mode_attr rvp_dot_mixed
+  [(PV8QI "pm4addasu_i8x8") (PV4HI "pm2addasu_i16x4")])
+
 ;; Mode Attributes
 
 ;; PVALL_EXT: Widened result mode for each packed mode

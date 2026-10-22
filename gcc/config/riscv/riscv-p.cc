@@ -119,6 +119,16 @@ riscv_p_expand_pack (rtx dest, rtx lo, rtx hi)
     }
 }
 
+/* Sum the two word lanes modulo 2^32.  */
+
+void
+riscv_p_expand_reduc_plus (rtx dest, rtx src)
+{
+  rtx low = riscv_p_vector_half (src, SImode, false);
+  rtx high = riscv_p_vector_half (src, SImode, true);
+  emit_insn (gen_addsi3 (dest, low, high));
+}
+
 /* Expand RVP vector comparison.
    Implements vec_cmp<mode><mode> and vec_cmpu<mode><mode> patterns.  */
 void

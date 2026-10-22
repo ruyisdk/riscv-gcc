@@ -3253,6 +3253,55 @@
   DONE;
 })
 
+(define_expand "reduc_plus_scal_pv2si"
+  [(match_operand:SI 0 "register_operand")
+   (match_operand:PV2SI 1 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_reduc_plus (operands[0], operands[1]);
+  DONE;
+})
+
+;; Each word accumulator receives four byte products or two halfword
+;; products, modulo 2^32.  RV32 uses two single-register instructions.
+(define_expand "sdot_prodpv2si<mode>"
+  [(match_operand:PV2SI 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:RVP_DOT 2 "register_operand")
+   (match_operand:PV2SI 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_insn (gen_riscv_<rvp_dot_signed> (operands[0], operands[3],
+				       operands[1], operands[2]));
+  DONE;
+})
+
+(define_expand "udot_prodpv2si<mode>"
+  [(match_operand:PV2SI 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:RVP_DOT 2 "register_operand")
+   (match_operand:PV2SI 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_insn (gen_riscv_<rvp_dot_unsigned> (operands[0], operands[3],
+					 operands[1], operands[2]));
+  DONE;
+})
+
+(define_expand "usdot_prodpv2si<mode>"
+  [(match_operand:PV2SI 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:RVP_DOT 2 "register_operand")
+   (match_operand:PV2SI 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  /* The optab takes the unsigned source first; the instruction takes
+     it last.  */
+  emit_insn (gen_riscv_<rvp_dot_mixed> (operands[0], operands[3],
+				      operands[2], operands[1]));
+  DONE;
+})
+
 ;; Intermediate rtl pattern for psext.h.b
 (define_insn "*psextqihi_1"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
