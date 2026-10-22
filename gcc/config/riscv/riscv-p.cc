@@ -39,6 +39,86 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "optabs-tree.h"
 
+/* Widen consecutive bytes or halfwords, preserving their order.  PSEXT
+   alone is not sufficient: it extends the low part of each already-wide
+   lane, whereas the input here contains tightly packed narrow lanes.  */
+
+void
+riscv_p_expand_extend (rtx dest, rtx src, bool unsigned_p)
+{
+  if (GET_MODE (dest) == PV4HImode)
+    emit_insn (unsigned_p ? gen_riscv_pwcvtu_u16x4 (dest, src)
+			 : gen_riscv_pwcvt_i16x4 (dest, src));
+  else
+    {
+      gcc_assert (GET_MODE (dest) == PV2SImode);
+      emit_insn (unsigned_p ? gen_riscv_pwcvtu_u32x2 (dest, src)
+			   : gen_riscv_pwcvt_i32x2 (dest, src));
+    }
+}
+
+/* Return the low or high 32 bits of an eight-byte packed vector as MODE.
+   A highpart subreg of a pseudo is not valid on RV64.  */
+
+static rtx
+riscv_p_vector_half (rtx src, machine_mode mode, bool high_p)
+{
+  if (!high_p)
+    return gen_lowpart (mode, src);
+  if (!TARGET_64BIT)
+    return gen_highpart (mode, src);
+
+  rtx tmp = gen_reg_rtx (DImode);
+  emit_insn (gen_lshrdi3 (tmp, gen_lowpart (DImode, src), GEN_INT (32)));
+  return gen_lowpart (mode, tmp);
+}
+
+/* Unpack half of SRC into twice-as-wide lanes in DEST.  */
+
+void
+riscv_p_expand_unpack (rtx dest, rtx src, bool unsigned_p, bool high_p)
+{
+  machine_mode half_mode = GET_MODE (src) == PV8QImode
+			   ? PV4QImode : PV2HImode;
+  riscv_p_expand_extend (dest, riscv_p_vector_half (src, half_mode, high_p),
+			 unsigned_p);
+}
+
+/* Truncate the lanes of LO and HI and concatenate the results.  */
+
+void
+riscv_p_expand_pack (rtx dest, rtx lo, rtx hi)
+{
+  machine_mode half_mode = GET_MODE (dest) == PV8QImode
+			   ? PV4QImode : PV2HImode;
+  rtx low = gen_reg_rtx (half_mode);
+  rtx high = gen_reg_rtx (half_mode);
+  if (half_mode == PV4QImode)
+    {
+      emit_insn (gen_truncpv4hipv4qi2 (low, lo));
+      emit_insn (gen_truncpv4hipv4qi2 (high, hi));
+    }
+  else
+    {
+      emit_insn (gen_truncpv2sipv2hi2 (low, lo));
+      emit_insn (gen_truncpv2sipv2hi2 (high, hi));
+    }
+
+  if (TARGET_64BIT)
+    {
+      rtx tmp = gen_reg_rtx (PV2SImode);
+      rtx concat = gen_rtx_VEC_CONCAT (PV2SImode, gen_lowpart (SImode, low),
+				      gen_lowpart (SImode, high));
+      emit_insn (gen_rtx_SET (tmp, concat));
+      emit_move_insn (dest, gen_lowpart (GET_MODE (dest), tmp));
+    }
+  else
+    {
+      emit_move_insn (gen_lowpart (half_mode, dest), low);
+      emit_move_insn (gen_highpart (half_mode, dest), high);
+    }
+}
+
 /* Expand RVP vector comparison.
    Implements vec_cmp<mode><mode> and vec_cmpu<mode><mode> patterns.  */
 void

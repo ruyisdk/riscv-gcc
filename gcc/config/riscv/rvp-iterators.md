@@ -102,6 +102,11 @@
 ;; Packed extension mode for RV32 register-pair instructions
 (define_mode_iterator RVP_DWIDTH_EXT [PV4HI PV2SI])
 
+;; Full-register inputs for unpacking consecutive elements.
+(define_mode_iterator RVP_UNPACK [PV8QI PV4HI])
+(define_mode_attr rvp_unpack_mode [(PV8QI "PV4HI") (PV4HI "PV2SI")])
+(define_mode_attr rvp_pack_mode [(PV4HI "PV8QI") (PV2SI "PV4HI")])
+
 ;; Mode Attributes
 
 ;; PVALL_EXT: Widened result mode for each packed mode

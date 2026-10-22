@@ -2603,7 +2603,12 @@
 	(truncate:<rvp_narrow_mode>
 	  (match_operand:RVP_DWIDTH_EXT 1 "register_operand" "r")))]
   "TARGET_RVP"
-  "pncvt.<rvp_extend_width>\t%0, %1"
+{
+  if (TARGET_64BIT)
+    return <MODE>mode == PV4HImode ? "unzip8p\t%0, %1, zero"
+				  : "unzip16p\t%0, %1, zero";
+  return "pncvt.<rvp_extend_width>\t%0, %1";
+}
   [(set_attr "type" "arith")
    (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
 				     (const_string "DI") (const_string "SI")))])
@@ -2616,7 +2621,9 @@
 	  (lshiftrt:PV4HI (match_operand:PV4HI 1 "register_operand" "r")
 			  (const_int 8))))]
   "TARGET_RVP"
-  "pncvth.b\t%0, %1"
+{
+  return TARGET_64BIT ? "unzip8hp\t%0, %1, zero" : "pncvth.b\t%0, %1";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3203,14 +3210,48 @@
 
 ;; Packed sign-extension
 
-;; Pattern for RV32 register-pair sign extendtions (ps/zext.dh/dw.b/h)
-(define_insn "<extension><rvp_narrow><rvp_ext_mode>2"
-  [(set (match_operand:RVP_DWIDTH_EXT 0 "register_operand" "=R")
-        (any_extend:RVP_DWIDTH_EXT (match_operand:<HALFMODE> 1 "register_operand" "r")))]
-  "TARGET_RVP && !TARGET_64BIT"
-  "<rvp_extend_insn>.<rvp_dwidth>.<rvp_extend_width>\t%0, %1"
-  [(set_attr "type" "arith")
-   (set_attr "mode" "<MODE>")])
+;; Widen all consecutive lanes, not just the low part of each wide lane.
+(define_expand "<extension><rvp_narrow><rvp_ext_mode>2"
+  [(set (match_operand:RVP_DWIDTH_EXT 0 "register_operand")
+	(any_extend:RVP_DWIDTH_EXT
+	  (match_operand:<HALFMODE> 1 "register_operand")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_extend (operands[0], operands[1], <CODE> == ZERO_EXTEND);
+  DONE;
+})
+
+(define_expand "vec_unpack<su>_lo_<mode>"
+  [(match_operand:<rvp_unpack_mode> 0 "register_operand")
+   (match_operand:RVP_UNPACK 1 "register_operand")
+   (any_extend (const_int 0))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_unpack (operands[0], operands[1], <CODE> == ZERO_EXTEND,
+			 false);
+  DONE;
+})
+
+(define_expand "vec_unpack<su>_hi_<mode>"
+  [(match_operand:<rvp_unpack_mode> 0 "register_operand")
+   (match_operand:RVP_UNPACK 1 "register_operand")
+   (any_extend (const_int 0))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_unpack (operands[0], operands[1], <CODE> == ZERO_EXTEND,
+			 true);
+  DONE;
+})
+
+(define_expand "vec_pack_trunc_<mode>"
+  [(match_operand:<rvp_pack_mode> 0 "register_operand")
+   (match_operand:RVP_DWIDTH_EXT 1 "register_operand")
+   (match_operand:RVP_DWIDTH_EXT 2 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_pack (operands[0], operands[1], operands[2]);
+  DONE;
+})
 
 ;; Intermediate rtl pattern for psext.h.b
 (define_insn "*psextqihi_1"
