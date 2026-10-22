@@ -2613,6 +2613,26 @@
    (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
 				     (const_string "DI") (const_string "SI")))])
 
+;; Combine two truncated halves and their word concatenation into a single
+;; two-source unzip.  Keep the individual truncations during expansion so
+;; the saturating clip patterns can still match before this combination.
+(define_insn "*rvp_pack_trunc_<mode>"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(vec_concat:PV2SI
+	  (subreg:SI
+	    (truncate:<rvp_narrow_mode>
+	      (match_operand:RVP_DWIDTH_EXT 1 "register_operand" "r")) 0)
+	  (subreg:SI
+	    (truncate:<rvp_narrow_mode>
+	      (match_operand:RVP_DWIDTH_EXT 2 "register_operand" "r")) 0)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
+{
+  return <MODE>mode == PV4HImode ? "unzip8p\t%0,%1,%2"
+			       : "unzip16p\t%0,%1,%2";
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; The odd-byte counterpart of PNCVT.B: pnsrli.b rd, rs1_p, 8 on RV32 and
 ;; unzip8hp rd, rs1, x0 on RV64.  Used by the PV4QI odd unzip permute.
 (define_insn "riscv_pncvth_b"
