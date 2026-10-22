@@ -781,7 +781,7 @@
   [(set (match_operand:DI          0 "register_operand" "=r,r")
 	(plus:DI (match_operand:DI 1 "register_operand" " r,r")
 		 (match_operand:DI 2 "arith_operand"    " r,I")))]
-  "TARGET_64BIT || TARGET_RVP"
+  "TARGET_64BIT"
   "add%i2\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
