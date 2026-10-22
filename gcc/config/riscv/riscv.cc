@@ -53,6 +53,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "basic-block.h"
 #include "expr.h"
 #include "optabs.h"
+#include "expmed.h"
 #include "bitmap.h"
 #include "df.h"
 #include "function-abi.h"
@@ -3874,6 +3875,32 @@ riscv_legitimize_subreg_const_poly_move (machine_mode mode, rtx dest, rtx src)
 bool
 riscv_legitimize_move (machine_mode mode, rtx dest, rtx src)
 {
+  /* Packed vectors live in GPRs and obey scalar alignment requirements.
+     In particular, a memcpy can produce a byte-aligned vector MEM.  Do
+     not leave such a MEM for lower-subreg to split into unaligned words.  */
+  if (TARGET_RVP && riscv_pext_mode_supported_p (mode)
+      && STRICT_ALIGNMENT && can_create_pseudo_p ()
+      && ((MEM_P (src)
+	   && known_lt (MEM_ALIGN (src), GET_MODE_BITSIZE (mode)))
+	  || (MEM_P (dest)
+	      && known_lt (MEM_ALIGN (dest), GET_MODE_BITSIZE (mode)))))
+    {
+      scalar_int_mode imode = int_mode_for_mode (mode).require ();
+      if (MEM_P (src))
+	{
+	  rtx value = extract_bit_field (src, GET_MODE_BITSIZE (mode), 0, 1,
+					NULL_RTX, imode, imode, false, NULL);
+	  src = gen_lowpart (mode, force_reg (imode, value));
+	}
+      if (MEM_P (dest))
+	store_bit_field (dest, GET_MODE_BITSIZE (mode), 0, 0, 0, imode,
+			 gen_lowpart (imode, force_reg (mode, src)), false,
+			 false);
+      else
+	emit_move_insn (dest, src);
+      return true;
+    }
+
   if (CONST_POLY_INT_P (src))
     {
       /*
