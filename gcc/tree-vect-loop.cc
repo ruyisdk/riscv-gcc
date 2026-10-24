@@ -11232,6 +11232,8 @@ vect_transform_loop (loop_vec_info loop_vinfo, gimple *loop_vectorized_call)
   unsigned int th;
   bool flat = maybe_flat_loop_profile (loop);
   bool uncounted_p = LOOP_VINFO_NITERS_UNCOUNTED_P (loop_vinfo);
+  bool niters_no_overflow = uncounted_p ? false /* Not known.  */
+					: loop_niters_no_overflow (loop_vinfo);
 
   DUMP_VECT_SCOPE ("vec_transform_loop");
 
@@ -11269,7 +11271,8 @@ vect_transform_loop (loop_vec_info loop_vinfo, gimple *loop_vectorized_call)
   if (LOOP_REQUIRES_VERSIONING (loop_vinfo))
     {
       class loop *sloop
-	= vect_loop_versioning (loop_vinfo, loop_vectorized_call);
+	= vect_loop_versioning (loop_vinfo, loop_vectorized_call,
+				niters_no_overflow);
       sloop->force_vectorize = false;
       check_profitability = false;
     }
@@ -11295,9 +11298,6 @@ vect_transform_loop (loop_vec_info loop_vinfo, gimple *loop_vectorized_call)
   tree nitersm1 = unshare_expr (LOOP_VINFO_NITERSM1 (loop_vinfo));
   tree advance;
   drs_init_vec orig_drs_init;
-  bool niters_no_overflow = uncounted_p ? false /* Not known.  */
-					: loop_niters_no_overflow (loop_vinfo);
-
   epilogue = vect_do_peeling (loop_vinfo, niters, nitersm1, &niters_vector,
 			      &step_vector, &niters_vector_mult_vf, th,
 			      check_profitability, niters_no_overflow,

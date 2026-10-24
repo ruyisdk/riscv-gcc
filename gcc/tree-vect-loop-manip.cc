@@ -3523,13 +3523,20 @@ vect_do_peeling (loop_vec_info loop_vinfo, tree niters, tree nitersm1,
 	}
       bool new_var_p = false;
       niters = vect_build_loop_niters (loop_vinfo, &new_var_p);
-      /* It's guaranteed that vector loop bound before vectorization is at
-	 least VF, so set range information for newly generated var.  */
+      /* The remaining iteration count is at least VF, but its representation
+	 can wrap to zero if the original count overflows and a variable-length
+	 alignment prologue executes zero iterations.  */
       if (new_var_p)
 	{
-	  int_range<1> vr (type,
+	  int_range<2> vr (type,
 			   wi::to_wide (build_int_cst (type, lowest_vf)),
 			   wi::to_wide (TYPE_MAX_VALUE (type)));
+	  if (!niters_no_overflow && prolog_peeling <= 0)
+	    {
+	      int_range<1> zero (type, wi::zero (TYPE_PRECISION (type)),
+				wi::zero (TYPE_PRECISION (type)));
+	      vr.union_ (zero);
+	    }
 	  set_range_info (niters, vr);
 	}
 
@@ -4285,12 +4292,12 @@ vect_create_cond_for_alias_checks (loop_vec_info loop_vinfo, tree * cond_expr)
    is modified to also check for profitability as indicated by the
    cost model threshold TH.
 
-   The versioning precondition(s) are placed in *COND_EXPR and
-   *COND_EXPR_STMT_LIST.  */
+   NITERS_NO_OVERFLOW says whether the iteration count is representable
+   without wrapping.  */
 
 class loop *
 vect_loop_versioning (loop_vec_info loop_vinfo,
-		      gimple *loop_vectorized_call)
+		      gimple *loop_vectorized_call, bool niters_no_overflow)
 {
   class loop *loop = LOOP_VINFO_LOOP (loop_vinfo), *nloop;
   class loop *scalar_loop = LOOP_VINFO_SCALAR_LOOP (loop_vinfo);
@@ -4317,17 +4324,41 @@ vect_loop_versioning (loop_vec_info loop_vinfo,
     = LOOP_REQUIRES_VERSIONING_FOR_SIMD_IF_COND (loop_vinfo);
   unsigned th = LOOP_VINFO_COST_MODEL_THRESHOLD (loop_vinfo);
   bool uncounted_p = LOOP_VINFO_NITERS_UNCOUNTED_P (loop_vinfo);
+  unsigned threshold_bias = 1;
+
+  /* Normally compare against NITERSM1, since NITERS can wrap to zero.
+     When the loop bound proves otherwise, avoid the subtraction in the
+     versioning guard.  Also require representable constant thresholds:
+     replacing NITERSM1 >= MAX with NITERS >= MAX + 1 would wrap the RHS.  */
+  unsigned HOST_WIDE_INT constant_threshold;
+  if (niters_no_overflow
+      && versioning_threshold.is_constant (&constant_threshold))
+    {
+      tree niters_type = TREE_TYPE (scalar_loop_iters);
+      unsigned precision
+	= TYPE_PRECISION (niters_type) - !TYPE_UNSIGNED (niters_type);
+      if (precision >= HOST_BITS_PER_WIDE_INT
+	  || MAX (constant_threshold, th) < (HOST_WIDE_INT_1U << precision))
+	{
+	  scalar_loop_iters = LOOP_VINFO_NITERS (loop_vinfo);
+	  threshold_bias = 0;
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_NOTE, vect_location,
+			     "versioning compares nonwrapping iteration count\n");
+	}
+    }
 
   if (!uncounted_p && vect_apply_runtime_profitability_check_p (loop_vinfo)
       && !ordered_p (th, versioning_threshold))
     cond_expr = fold_build2 (GE_EXPR, boolean_type_node, scalar_loop_iters,
 			     build_int_cst (TREE_TYPE (scalar_loop_iters),
-					    th - 1));
+					    th - threshold_bias));
   if (!uncounted_p && maybe_ne (versioning_threshold, 0U))
     {
       tree expr = fold_build2 (GE_EXPR, boolean_type_node, scalar_loop_iters,
 			       build_int_cst (TREE_TYPE (scalar_loop_iters),
-					      versioning_threshold - 1));
+					      versioning_threshold
+					      - threshold_bias));
       if (cond_expr)
 	cond_expr = fold_build2 (BIT_AND_EXPR, boolean_type_node,
 				 expr, cond_expr);
