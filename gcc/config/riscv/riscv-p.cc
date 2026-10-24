@@ -39,6 +39,60 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "optabs-tree.h"
 
+/* Compute one physical halfword of the modular multiply-add/subtract SRC.
+   WORD is its containing word's byte offset and HIGH_P selects its high
+   halfword.  Extend the truncated result into DEST according to UNSIGNED_P.
+   Signed scalar products have the required low bits for either signedness
+   of the packed input lanes.  */
+
+void
+riscv_p_expand_mul_acc_lane (rtx dest, rtx src, unsigned int word,
+			   bool high_p, bool unsigned_p)
+{
+  machine_mode mode = GET_MODE (src);
+  gcc_assert (TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+	      && (mode == PV2HImode || mode == PV4HImode)
+	      && (GET_CODE (src) == PLUS || GET_CODE (src) == MINUS)
+	      && word % 4 == 0
+	      && word + 4 <= GET_MODE_SIZE (mode).to_constant ());
+  bool product_first = GET_CODE (XEXP (src, 0)) == MULT;
+  rtx product = XEXP (src, product_first ? 0 : 1);
+  rtx acc = XEXP (src, product_first ? 1 : 0);
+  gcc_assert (GET_CODE (product) == MULT);
+  rtx a = simplify_gen_subreg (SImode, XEXP (product, 0), mode, word);
+  rtx b = simplify_gen_subreg (SImode, XEXP (product, 1), mode, word);
+  acc = simplify_gen_subreg (SImode, acc, mode, word);
+  if (high_p)
+    {
+      rtx temp = gen_reg_rtx (SImode);
+      emit_insn (gen_lshrsi3 (temp, acc, GEN_INT (16)));
+      acc = temp;
+    }
+
+  rtx result = gen_reg_rtx (SImode);
+  if (GET_CODE (src) == PLUS)
+    {
+      if (high_p)
+	emit_insn (gen_maddhisi4tt (result, a, b, acc));
+      else
+	emit_insn (gen_maddhisi4 (result, gen_lowpart (HImode, a),
+				gen_lowpart (HImode, b), acc));
+    }
+  else
+    {
+      if (high_p)
+	emit_insn (gen_mul_h11 (result, a, b));
+      else
+	emit_insn (gen_mulhisi3 (result, gen_lowpart (HImode, a),
+				gen_lowpart (HImode, b)));
+      emit_insn (gen_subsi3 (result, product_first ? result : acc,
+			    product_first ? acc : result));
+    }
+  rtx low = gen_lowpart (HImode, result);
+  emit_insn (unsigned_p ? gen_zero_extendhisi2 (dest, low)
+		       : gen_extendhisi2 (dest, low));
+}
+
 /* Widen consecutive bytes or halfwords, preserving their order.  PSEXT
    alone is not sufficient: it extends the low part of each already-wide
    lane, whereas the input here contains tightly packed narrow lanes.  */

@@ -181,6 +181,11 @@
 (define_code_iterator rvp_widen_op
   [plus minus])
 
+;; Modular arithmetic around a selected halfword product.
+(define_code_iterator rvp_lane_arith [plus minus])
+(define_code_attr rvp_lane_length [(plus "8") (minus "12")])
+(define_code_attr rvp_lane_high_length [(plus "12") (minus "16")])
+
 ;; Operations for averaging instructions
 (define_code_iterator avg_op [plus minus])
 

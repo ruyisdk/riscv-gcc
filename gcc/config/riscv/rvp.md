@@ -151,6 +151,127 @@
   [(set_attr "type" "multi")
    (set_attr "length" "8")])
 
+;; Extract only the observable lane of a modular multiply-add/subtract.
+;; Leave shared full-vector results available to their other consumers.
+(define_insn_and_split "*rvp_extract_<rvp_lane_arith:optab>_mul_<mode><u>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(any_extend:SI
+	  (match_operator:HI 4 "rvp_subreg_operator"
+	    [(rvp_lane_arith:RVP_EXTRACT_H
+	       (mult:RVP_EXTRACT_H
+		 (match_operand:RVP_EXTRACT_H 1 "register_operand" "r")
+		 (match_operand:RVP_EXTRACT_H 2 "register_operand" "r"))
+	       (match_operand:RVP_EXTRACT_H 3 "register_operand" "r"))])))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && SUBREG_BYTE (operands[4]).is_constant ()
+   && SUBREG_BYTE (operands[4]).to_constant () % 2 == 0
+   && SUBREG_BYTE (operands[4]).to_constant ()
+      < GET_MODE_SIZE (<MODE>mode).to_constant ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  unsigned int byte = SUBREG_BYTE (operands[4]).to_constant ();
+  bool high_p = ((byte & 2) != 0) != TARGET_BIG_ENDIAN;
+  riscv_p_expand_mul_acc_lane (operands[0], SUBREG_REG (operands[4]),
+			      byte & ~3U, high_p,
+			      <any_extend:CODE> == ZERO_EXTEND);
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+	(if_then_else
+	  (match_test "(((SUBREG_BYTE (operands[4]).to_constant () & 2) != 0)
+		       != TARGET_BIG_ENDIAN)")
+	  (const_int <rvp_lane_high_length>)
+	  (const_int <rvp_lane_length>)))])
+
+(define_insn_and_split "*rvp_extract_<rvp_lane_arith:optab>_mul_high_<mode>_<any_shiftrt:optab>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(any_shiftrt:SI
+	  (match_operator:SI 4 "rvp_subreg_operator"
+	    [(rvp_lane_arith:RVP_EXTRACT_H
+	       (mult:RVP_EXTRACT_H
+		 (match_operand:RVP_EXTRACT_H 1 "register_operand" "r")
+		 (match_operand:RVP_EXTRACT_H 2 "register_operand" "r"))
+	       (match_operand:RVP_EXTRACT_H 3 "register_operand" "r"))])
+	  (const_int 16)))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && SUBREG_BYTE (operands[4]).is_constant ()
+   && SUBREG_BYTE (operands[4]).to_constant () % 4 == 0
+   && SUBREG_BYTE (operands[4]).to_constant ()
+      < GET_MODE_SIZE (<MODE>mode).to_constant ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  unsigned int byte = SUBREG_BYTE (operands[4]).to_constant ();
+  riscv_p_expand_mul_acc_lane (operands[0], SUBREG_REG (operands[4]),
+			      byte, true, <any_shiftrt:CODE> == LSHIFTRT);
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set_attr "length" "<rvp_lane_high_length>")])
+
+;; Subtraction is not commutative: also match accumulator minus product.
+(define_insn_and_split "*rvp_extract_acc_sub_mul_<mode><u>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(any_extend:SI
+	  (match_operator:HI 4 "rvp_subreg_operator"
+	    [(minus:RVP_EXTRACT_H
+	       (match_operand:RVP_EXTRACT_H 3 "register_operand" "r")
+	       (mult:RVP_EXTRACT_H
+		 (match_operand:RVP_EXTRACT_H 1 "register_operand" "r")
+		 (match_operand:RVP_EXTRACT_H 2 "register_operand" "r")))])))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && SUBREG_BYTE (operands[4]).is_constant ()
+   && SUBREG_BYTE (operands[4]).to_constant () % 2 == 0
+   && SUBREG_BYTE (operands[4]).to_constant ()
+      < GET_MODE_SIZE (<MODE>mode).to_constant ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  unsigned int byte = SUBREG_BYTE (operands[4]).to_constant ();
+  bool high_p = ((byte & 2) != 0) != TARGET_BIG_ENDIAN;
+  riscv_p_expand_mul_acc_lane (operands[0], SUBREG_REG (operands[4]),
+			      byte & ~3U, high_p, <CODE> == ZERO_EXTEND);
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+	(if_then_else
+	  (match_test "(((SUBREG_BYTE (operands[4]).to_constant () & 2) != 0)
+		       != TARGET_BIG_ENDIAN)")
+	  (const_int 16) (const_int 12)))])
+
+(define_insn_and_split "*rvp_extract_acc_sub_mul_high_<mode>_<optab>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(any_shiftrt:SI
+	  (match_operator:SI 4 "rvp_subreg_operator"
+	    [(minus:RVP_EXTRACT_H
+	       (match_operand:RVP_EXTRACT_H 3 "register_operand" "r")
+	       (mult:RVP_EXTRACT_H
+		 (match_operand:RVP_EXTRACT_H 1 "register_operand" "r")
+		 (match_operand:RVP_EXTRACT_H 2 "register_operand" "r")))])
+	  (const_int 16)))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && SUBREG_BYTE (operands[4]).is_constant ()
+   && SUBREG_BYTE (operands[4]).to_constant () % 4 == 0
+   && SUBREG_BYTE (operands[4]).to_constant ()
+      < GET_MODE_SIZE (<MODE>mode).to_constant ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  unsigned int byte = SUBREG_BYTE (operands[4]).to_constant ();
+  riscv_p_expand_mul_acc_lane (operands[0], SUBREG_REG (operands[4]),
+			      byte, true, <CODE> == LSHIFTRT);
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set_attr "length" "16")])
+
 ;; Binary Arithmetic Operations
 
 ;; Unified pattern for all binary arithmetic operations
