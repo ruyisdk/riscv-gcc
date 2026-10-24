@@ -355,6 +355,64 @@ riscv_p_expand_widen_mult (rtx dest, rtx op1, rtx op2, bool unsigned_p,
     }
 }
 
+/* Multiply four bytes or two halfwords on RV64, widening each product.
+   ACC, when nonnull, is a pair of word accumulators.  For equal signedness,
+   interleave the inputs and use the cross product.  A mixed product instead
+   needs each input in the low half of its wide lane; OP1 is the signed input.
+   Zero widening preserves its sign bit for PMULSU/PMACCSU to interpret.  */
+
+void
+riscv_p_split_widen_mult (rtx dest, rtx op1, rtx op2, rtx acc,
+			  bool unsigned_p, bool mixed_p)
+{
+  bool bytes_p = GET_MODE (dest) == PV4HImode;
+  gcc_assert (TARGET_64BIT && (!acc || !bytes_p));
+  machine_mode mode = bytes_p ? PV8QImode : PV4HImode;
+  if (mixed_p)
+    {
+      rtx lhs = gen_reg_rtx (GET_MODE (dest));
+      rtx rhs = gen_reg_rtx (GET_MODE (dest));
+      if (bytes_p)
+	{
+	  emit_insn (gen_riscv_pwcvtu_u16x4_rv64 (lhs, op1));
+	  emit_insn (gen_riscv_pwcvtu_u16x4_rv64 (rhs, op2));
+	}
+      else
+	{
+	  emit_insn (gen_riscv_pwcvtu_u32x2_rv64 (lhs, op1));
+	  emit_insn (gen_riscv_pwcvtu_u32x2_rv64 (rhs, op2));
+	}
+      lhs = gen_lowpart (mode, lhs);
+      rhs = gen_lowpart (mode, rhs);
+      if (acc)
+	emit_insn (gen_riscv_pmaccsu_h00_i32x2 (dest, acc, lhs, rhs));
+      else if (bytes_p)
+	emit_insn (gen_riscv_pmulsu_b00_i16x4 (dest, lhs, rhs));
+      else
+	emit_insn (gen_riscv_pmulsu_h00_i32x2 (dest, lhs, rhs));
+      return;
+    }
+
+  rtx zipped = gen_reg_rtx (mode);
+  if (bytes_p)
+    {
+      emit_insn (gen_riscv_pzip_i8x8_rv64 (zipped, op1, op2));
+      emit_insn (unsigned_p ? gen_riscv_pmulu_b01_u16x4 (dest, zipped, zipped)
+			    : gen_riscv_pmul_b01_i16x4 (dest, zipped, zipped));
+    }
+  else
+    {
+      emit_insn (gen_riscv_pzip_i16x4_rv64 (zipped, op1, op2));
+      if (acc)
+	emit_insn (unsigned_p
+		   ? gen_riscv_pmaccu_h01_u32x2 (dest, acc, zipped, zipped)
+		   : gen_riscv_pmacc_h01_i32x2 (dest, acc, zipped, zipped));
+      else
+	emit_insn (unsigned_p ? gen_riscv_pmulu_h01_u32x2 (dest, zipped, zipped)
+			      : gen_riscv_pmul_h01_i32x2 (dest, zipped, zipped));
+    }
+}
+
 /* Helper function to emit unzip pattern with vec_concat */
 template<unsigned N>
 void emit_vec_concat_with_select (rtx target, machine_mode vmode,

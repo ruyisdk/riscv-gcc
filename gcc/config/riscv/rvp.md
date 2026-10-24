@@ -126,10 +126,60 @@
   [(set (match_operand:PVHW 0 "register_operand" "=r")
         (mult:PVHW (match_operand:PVHW 1 "register_operand" "r")
                    (match_operand:PVHW 2 "register_operand" "r")))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && (!TARGET_64BIT || can_create_pseudo_p ())"
   "#"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; Preserve full-width multiplication through combine on RV64 too.  If it
+;; does not fold into a widening product, compute the low bits of each lane.
+;; Signed and unsigned products have the same low half.
+(define_split
+  [(set (match_operand:PV4HI 0 "register_operand")
+	(mult:PV4HI (match_operand:PV4HI 1 "register_operand")
+		   (match_operand:PV4HI 2 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  rtx even = gen_reg_rtx (PV2SImode);
+  rtx odd = gen_reg_rtx (PV2SImode);
+  emit_insn (gen_riscv_pmul_h00_i32x2 (even, operands[1], operands[2]));
+  emit_insn (gen_riscv_pmul_h11_i32x2 (odd, operands[1], operands[2]));
+  emit_insn (gen_riscv_ppaire_i16x4_rv64 (operands[0],
+					gen_lowpart (PV4HImode, even),
+					gen_lowpart (PV4HImode, odd)));
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:PV2SI 0 "register_operand")
+	(mult:PV2SI (match_operand:PV2SI 1 "register_operand")
+		   (match_operand:PV2SI 2 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  rtx low = gen_reg_rtx (SImode);
+  rtx high = gen_reg_rtx (SImode);
+  /* Consume the low words first, allowing the shifts to overwrite their
+     inputs and use compressed instructions when optimizing for size.  */
+  emit_insn (gen_mulsi3 (low, gen_lowpart (SImode, operands[1]),
+		       gen_lowpart (SImode, operands[2])));
+  rtx lhs_high = gen_reg_rtx (DImode);
+  rtx rhs_high = gen_reg_rtx (DImode);
+  emit_insn (gen_lshrdi3 (lhs_high, gen_lowpart (DImode, operands[1]),
+			GEN_INT (32)));
+  emit_insn (gen_lshrdi3 (rhs_high, gen_lowpart (DImode, operands[2]),
+			GEN_INT (32)));
+  emit_insn (gen_mulsi3 (high, gen_lowpart (SImode, lhs_high),
+		       gen_lowpart (SImode, rhs_high)));
+  /* LOW and HIGH name physical words, but VEC_CONCAT describes logical
+     element order.  The first element occupies the high word on BE.  */
+  emit_insn (gen_rtx_SET (operands[0],
+			gen_rtx_VEC_CONCAT (PV2SImode,
+					    TARGET_BIG_ENDIAN ? high : low,
+					    TARGET_BIG_ENDIAN ? low : high)));
+  DONE;
+})
 
 ;; Split PV2SI multiplication into element-wise scalar multiplications
 ;; when the pattern cannot be combined into more efficient forms (like PWMUL).
@@ -224,12 +274,21 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
-(define_insn "*pwmulsu<rvp_narrow>3"
+(define_code_attr rvp_other_extend
+  [(sign_extend "zero_extend") (zero_extend "sign_extend")])
+
+(define_code_attr rvp_mixed_operands
+  [(sign_extend "%1, %2") (zero_extend "%2, %1")])
+
+(define_insn "*pwmul<su>mixed<rvp_narrow>3"
   [(set (match_operand:PVHW 0 "register_operand" "=r")
-        (mult:PVHW (zero_extend:PVHW (match_operand:<HALFMODE> 1 "register_operand" "r"))
-                   (sign_extend:PVHW (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
+	(mult:PVHW
+	  (any_extend:PVHW
+	    (match_operand:<HALFMODE> 1 "register_operand" "r"))
+	  (<rvp_other_extend>:PVHW
+	    (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
   "TARGET_RVP && !TARGET_64BIT"
-  "pwmulsu.<rvp_extend_width>\t%0, %2, %1"
+  "pwmulsu.<rvp_extend_width>\t%0, <rvp_mixed_operands>"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -243,15 +302,102 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
-(define_insn "*pwmaccsupv2hi3"
+(define_insn "*pwmacc<su>mixedpv2hi3"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
-        (plus:PV2SI (mult:PV2SI (zero_extend:PV2SI (match_operand:PV2HI 1 "register_operand" "r"))
-                                (sign_extend:PV2SI (match_operand:PV2HI 2 "register_operand" "r")))
-                    (match_operand:PV2SI 3 "register_operand" "0")))]
+	(plus:PV2SI
+	  (mult:PV2SI
+	    (any_extend:PV2SI (match_operand:PV2HI 1 "register_operand" "r"))
+	    (<rvp_other_extend>:PV2SI
+	      (match_operand:PV2HI 2 "register_operand" "r")))
+	  (match_operand:PV2SI 3 "register_operand" "0")))]
   "TARGET_RVP && !TARGET_64BIT"
-  "pwmaccsu.h\t%0, %2, %1"
+  "pwmaccsu.h\t%0, <rvp_mixed_operands>"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; Keep widening multiplication visible through combine, including the
+;; accumulation when available.  RV64 uses ZIP followed by a packed product;
+;; split before register allocation because these sequences need temporaries.
+(define_insn_and_split "*pwmul<su><rvp_narrow>3_rv64"
+  [(set (match_operand:PVHW 0 "register_operand" "=r")
+	(mult:PVHW
+	  (any_extend:PVHW
+	    (match_operand:<HALFMODE> 1 "register_operand" "r"))
+	  (any_extend:PVHW
+	    (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  riscv_p_split_widen_mult (operands[0], operands[1], operands[2], NULL_RTX,
+			    <CODE> == ZERO_EXTEND, false);
+  DONE;
+}
+  [(set_attr "type" "simd")
+   (set_attr "length" "8")])
+
+(define_insn_and_split "*pwmul<su>mixed<rvp_narrow>3_rv64"
+  [(set (match_operand:PVHW 0 "register_operand" "=r")
+	(mult:PVHW
+	  (any_extend:PVHW
+	    (match_operand:<HALFMODE> 1 "register_operand" "r"))
+	  (<rvp_other_extend>:PVHW
+	    (match_operand:<HALFMODE> 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  if (<CODE> == ZERO_EXTEND)
+    std::swap (operands[1], operands[2]);
+  riscv_p_split_widen_mult (operands[0], operands[1], operands[2], NULL_RTX,
+			    false, true);
+  DONE;
+}
+  [(set_attr "type" "simd")
+   (set_attr "length" "12")])
+
+(define_insn_and_split "*pwmacc<su>pv2hi3_rv64"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(plus:PV2SI
+	  (mult:PV2SI
+	    (any_extend:PV2SI (match_operand:PV2HI 1 "register_operand" "r"))
+	    (any_extend:PV2SI (match_operand:PV2HI 2 "register_operand" "r")))
+	  (match_operand:PV2SI 3 "register_operand" "r")))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  riscv_p_split_widen_mult (operands[0], operands[1], operands[2], operands[3],
+			    <CODE> == ZERO_EXTEND, false);
+  DONE;
+}
+  [(set_attr "type" "simd")
+   (set_attr "length" "12")])
+
+(define_insn_and_split "*pwmacc<su>mixedpv2hi3_rv64"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(plus:PV2SI
+	  (mult:PV2SI
+	    (any_extend:PV2SI (match_operand:PV2HI 1 "register_operand" "r"))
+	    (<rvp_other_extend>:PV2SI
+	      (match_operand:PV2HI 2 "register_operand" "r")))
+	  (match_operand:PV2SI 3 "register_operand" "r")))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  if (<CODE> == ZERO_EXTEND)
+    std::swap (operands[1], operands[2]);
+  riscv_p_split_widen_mult (operands[0], operands[1], operands[2], operands[3],
+			    false, true);
+  DONE;
+}
+  [(set_attr "type" "simd")
+   (set_attr "length" "16")])
 
 (define_insn_and_split "mulpv2hi3"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")

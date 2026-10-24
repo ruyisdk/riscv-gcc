@@ -145,6 +145,7 @@ extern void riscv_p_expand_vcond_mask (rtx *);
 extern void riscv_p_expand_extend (rtx, rtx, bool);
 extern void riscv_p_expand_unpack (rtx, rtx, bool, bool);
 extern void riscv_p_expand_widen_mult (rtx, rtx, rtx, bool, bool);
+extern void riscv_p_split_widen_mult (rtx, rtx, rtx, rtx, bool, bool);
 extern void riscv_p_expand_pack (rtx, rtx, rtx);
 extern void riscv_p_expand_reduc_plus (rtx, rtx);
 #ifdef GCC_TARGET_H
