@@ -3953,7 +3953,10 @@
   [(set (match_operand:GPR 0 "register_operand" "=r")
 	(abs:GPR (match_operand:GPR 1 "register_operand" "r")))]
   "TARGET_RVP"
-  "abs\t%0,%1"
+{
+  return TARGET_64BIT && <GPR:MODE>mode == SImode
+    ? "absw\t%0,%1" : "abs\t%0,%1";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "<GPR:MODE>")])
 
@@ -3966,17 +3969,6 @@
 (define_insn "*absw"
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(sign_extend:DI (abs:SI (match_operand:SI 1 "register_operand" "r"))))]
-  "TARGET_RVP && TARGET_64BIT"
-  "absw\t%0,%1"
-  [(set_attr "type" "arith")
-   (set_attr "mode" "SI")])
-
-;; Match sign_extend(subreg(abs(di))) pattern from GCC RTL expansion,
-;; e.g. an ABS followed by SEXT.W on RV64.
-(define_insn "*absw_di_subreg"
-  [(set (match_operand:DI 0 "register_operand" "=r")
-	(sign_extend:DI
-	  (subreg:SI (abs:DI (match_operand:DI 1 "register_operand" "r")) 0)))]
   "TARGET_RVP && TARGET_64BIT"
   "absw\t%0,%1"
   [(set_attr "type" "arith")
