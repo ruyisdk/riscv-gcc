@@ -3599,6 +3599,21 @@ vect_do_peeling (loop_vec_info loop_vinfo, tree niters, tree nitersm1,
 						bound_prolog, bound_epilog,
 						th, &bound_scalar,
 						check_profitability);
+	  /* The outer versioning guard can make this skip edge unreachable.
+	     In that case the scalar tail is bounded by the vector remainder,
+	     not by the combined prologue and remainder.  Do not use an
+	     epilogue's threshold here: it refers to the original trip count,
+	     not to the iterations remaining after the main loop.  */
+	  if (!LOOP_VINFO_EPILOGUE_P (loop_vinfo)
+	      && LOOP_REQUIRES_VERSIONING (loop_vinfo)
+	      && known_gt (LOOP_VINFO_VERSIONING_THRESHOLD (loop_vinfo),
+			   bound_prolog + bound_epilog))
+	    {
+	      bound_scalar = bound_epilog;
+	      if (dump_enabled_p ())
+		dump_printf_loc (MSG_NOTE, vect_location,
+				 "versioning bounds the scalar epilogue\n");
+	    }
 	  /* Build guard against NITERSM1 since NITERS may overflow.  */
 	  guard_cond = fold_build2 (LT_EXPR, boolean_type_node, nitersm1, t);
 	  guard_bb = anchor;
