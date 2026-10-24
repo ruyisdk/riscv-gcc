@@ -98,7 +98,7 @@
 ; reversed result (which lands in bits 63..32) back to the low half.
 (define_expand "riscv_rev_32_p"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:SI 1 "register_operand")] UNSPEC_REV))]
+	(bitreverse:SI (match_operand:SI 1 "register_operand")))]
   "TARGET_RVP"
 {
   if (TARGET_64BIT)
@@ -114,7 +114,7 @@
 
 (define_insn "riscv_rev_32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:SI 1 "register_operand" "r")] UNSPEC_REV))]
+	(bitreverse:SI (match_operand:SI 1 "register_operand" "r")))]
   "TARGET_RVP && !TARGET_64BIT"
   "rev\t%0,%1"
   [(set_attr "type" "simd")
@@ -122,7 +122,8 @@
 
 (define_insn "riscv_rev_32_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:SI 1 "register_operand" "r")] UNSPEC_REV))]
+	(sign_extend:DI
+	  (bitreverse:SI (match_operand:SI 1 "register_operand" "r"))))]
   "TARGET_RVP && TARGET_64BIT"
   "rev\t%0,%1\;srai\t%0,%0,32"
   [(set_attr "type" "simd")
@@ -131,7 +132,7 @@
 ; rev_64 / rev16_64 (RV64 only): single instruction on a 64-bit value.
 (define_insn "riscv_rev_64_p"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")] UNSPEC_REV))]
+	(bitreverse:DI (match_operand:DI 1 "register_operand" "r")))]
   "TARGET_RVP && TARGET_64BIT"
   "rev\t%0,%1"
   [(set_attr "type" "simd")
