@@ -27,10 +27,11 @@
 ;; srx_32/srx_64, wzip8p_64/wzip16p_64, zip/unzip {8,16}{,h}p_64.
 ;; -----------------------------------------------------------------
 
-; cls_32: RV32 -> cls (32-bit CLS); RV64 -> clsw (32-bit CLS on low half).
+;; CLS counts redundant sign bits, excluding the sign bit itself.
+;; On RV64, CLSW applies the same operation to the low word.
 (define_expand "riscv_cls_32_p"
   [(set (match_operand:SI 0 "register_operand")
-        (unspec:SI [(match_operand:SI 1 "register_operand")] UNSPEC_CLS))]
+	(clrsb:SI (match_operand:SI 1 "register_operand")))]
   "TARGET_RVP"
 {
   if (TARGET_64BIT)
@@ -46,18 +47,18 @@
 
 (define_insn "riscv_cls_32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
-        (unspec:SI [(match_operand:SI 1 "register_operand" "r")] UNSPEC_CLS))]
+	(clrsb:SI (match_operand:SI 1 "register_operand" "r")))]
   "TARGET_RVP && !TARGET_64BIT"
   "cls\t%0,%1"
   [(set_attr "type" "simd")
    (set_attr "mode" "SI")])
 
-; On RV64 clsw writes an XLEN (64-bit) result; truncate to the SI result the
-; prototype promises.
+;; The word count is in [0, 31], so both extensions have the same value.
+;; Use the canonical zero extension for the XLEN-wide result.
 (define_insn "riscv_clsw_32_p"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (sign_extend:DI
-          (unspec:SI [(match_operand:SI 1 "register_operand" "r")] UNSPEC_CLS)))]
+	(zero_extend:DI
+	  (clrsb:SI (match_operand:SI 1 "register_operand" "r"))))]
   "TARGET_RVP && TARGET_64BIT"
   "clsw\t%0,%1"
   [(set_attr "type" "simd")
@@ -68,11 +69,29 @@
 ; existing riscv_cls<mode>_p form and the count fits in 32 bits.
 (define_insn "riscv_cls_64_p"
   [(set (match_operand:DI 0 "register_operand" "=r")
-        (unspec:DI [(match_operand:DI 1 "register_operand" "r")] UNSPEC_CLS))]
+	(clrsb:DI (match_operand:DI 1 "register_operand" "r")))]
   "TARGET_RVP && TARGET_64BIT"
   "cls\t%0,%1"
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
+
+(define_expand "clrsbsi2"
+  [(set (match_operand:SI 0 "register_operand")
+	(clrsb:SI (match_operand:SI 1 "register_operand")))]
+  "TARGET_RVP"
+{
+  emit_insn (gen_riscv_cls_32_p (operands[0], operands[1]));
+  DONE;
+})
+
+(define_expand "clrsbdi2"
+  [(set (match_operand:DI 0 "register_operand")
+	(clrsb:DI (match_operand:DI 1 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT"
+{
+  emit_insn (gen_riscv_cls_64_p (operands[0], operands[1]));
+  DONE;
+})
 
 ; rev_32: RV32 -> rev (bit-reverse 32 bits in a 32-bit reg);
 ; RV64 -> rev (reverse all 64 bits) then srai 32 to bring the 32-bit
