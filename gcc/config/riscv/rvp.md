@@ -1126,46 +1126,49 @@
   [(set_attr "type" "imul")
    (set_attr "mode" "DI")])
 
-;; Averaging arithmetic operations with standard optab names.
-;;
-;; GCC's tree-vect-patterns.cc recognizes widening average patterns like:
-;;   (int8_t)(((int16_t)a + (int16_t)b) >> 1)
-;; and lowers them to IFN_AVG_FLOOR/IFN_AVG_SUB_FLOOR, which map to
-;; avg<mode>3_floor/avg_sub<mode>3_floor optabs.
-;;
-;; P-extension averaging instructions:
-;;   paadd/paaddu: signed/unsigned averaging add: (a + b) >> 1
-;;   pasub/pasubu: signed/unsigned averaging subtract: (a - b) >> 1
-;;
-;; These instructions perform overflow-free averaging in hardware by
-;; widening operands internally before the add/subtract.
-;;
-;; Note: The RTL pattern uses (plus:PVALL ...) which has wraparound
-;; semantics at element boundaries. However, this correctly models the
-;; hardware behavior because paadd/paaddu internally widen operands
-;; before addition, avoiding overflow.
+;; Average the full-precision sum or difference, rounding toward -Inf.
+;; Extend before arithmetic: a wrapping narrow PLUS or MINUS followed by
+;; a shift is not equivalent.  This also preserves the borrow bit in an
+;; unsigned subtraction before truncating the shifted result.
+(define_expand "<u><savg_optab><mode>3_floor"
+  [(set (match_operand:PVMOVE 0 "register_operand")
+	(truncate:PVMOVE
+	  (ashiftrt:<PVALL_EXT>
+	    (avg_op:<PVALL_EXT>
+	      (any_extend:<PVALL_EXT>
+		(match_operand:PVMOVE 1 "register_operand"))
+	      (any_extend:<PVALL_EXT>
+		(match_operand:PVMOVE 2 "register_operand")))
+	    (const_int 1))))]
+  "TARGET_RVP")
 
-;; Signed averaging: avg<mode>3_floor -> paadd, avg_sub<mode>3_floor -> pasub
-(define_insn "<savg_optab><mode>3_floor"
+(define_insn "*rvp_<avg_insn><u><mode>"
   [(set (match_operand:PVALL 0 "register_operand" "=r")
-	(ashiftrt:PVALL
-	  (avg_op:PVALL (match_operand:PVALL 1 "register_operand" "r")
-			(match_operand:PVALL 2 "register_operand" "r"))
-	  (const_int 1)))]
+	(truncate:PVALL
+	  (ashiftrt:<PVALL_EXT>
+	    (avg_op:<PVALL_EXT>
+	      (any_extend:<PVALL_EXT>
+		(match_operand:PVALL 1 "register_operand" "r"))
+	      (any_extend:<PVALL_EXT>
+		(match_operand:PVALL 2 "register_operand" "r")))
+	    (const_int 1))))]
   "TARGET_RVP"
-  "<avg_insn>.<rvp_width>\t%0,%1,%2"
+  "<avg_insn><u>.<rvp_width>\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
-;; Unsigned averaging: uavg<mode>3_floor -> paaddu, uavg_sub<mode>3_floor -> pasubu
-(define_insn "<uavg_optab><mode>3_floor"
-  [(set (match_operand:PVALL 0 "register_operand" "=r")
-	(lshiftrt:PVALL
-	  (avg_op:PVALL (match_operand:PVALL 1 "register_operand" "r")
-			(match_operand:PVALL 2 "register_operand" "r"))
-	  (const_int 1)))]
-  "TARGET_RVP"
-  "<avg_insn>u.<rvp_width>\t%0,%1,%2"
+(define_insn "*rvp_<avg_insn><u><mode>_pair"
+  [(set (match_operand:PV64 0 "register_operand" "=R")
+	(truncate:PV64
+	  (ashiftrt:<PVALL_EXT>
+	    (avg_op:<PVALL_EXT>
+	      (any_extend:<PVALL_EXT>
+		(match_operand:PV64 1 "register_operand" "r"))
+	      (any_extend:<PVALL_EXT>
+		(match_operand:PV64 2 "register_operand" "r")))
+	    (const_int 1))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "<avg_insn><u>.<rvp_dwidth>\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
