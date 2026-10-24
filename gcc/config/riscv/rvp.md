@@ -1252,8 +1252,16 @@
   [(set_attr "type" "logical")
    (set_attr "mode" "<MODE>")])
 
+;; Expose 8-byte logical operations through the standard optabs on both
+;; XLENs.  RV32 implements them with two scalar register operations.
+(define_expand "<optab><mode>3"
+  [(set (match_operand:PV64 0 "register_operand")
+	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand")
+			 (match_operand:PV64 2 "register_operand")))]
+  "TARGET_RVP")
+
 ;; Bitwise operations for 8-byte vectors on RV64 (single register instruction).
-(define_insn "<optab><mode>3"
+(define_insn "*rvp_<optab><mode>3_rv64"
   [(set (match_operand:PV64 0 "register_operand" "=r")
 	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand" "r")
 			  (match_operand:PV64 2 "register_operand" "r")))]
@@ -1263,13 +1271,13 @@
    (set_attr "mode" "<MODE>")])
 
 ;; Bitwise operations for 8-byte vectors on RV32 (register pair).
-;; Use early-clobber (=&r) to prevent the RA from assigning the destination
-;; pair to overlap with either source pair in a crossed fashion, which would
-;; cause wrong-code when the split fires after reload.
+;; Early-clobber prevents crossed overlap with a source pair.  The tied
+;; alternatives allow exact overlap with one source without extra moves;
+;; the other source still cannot overlap that destination pair.
 (define_insn_and_split "<optab><mode>3_rv32"
-  [(set (match_operand:PV64 0 "register_operand" "=&r")
-	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand" "r")
-			  (match_operand:PV64 2 "register_operand" "r")))]
+  [(set (match_operand:PV64 0 "register_operand" "=&r,&r,&r")
+	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand" "0,r,r")
+			  (match_operand:PV64 2 "register_operand" "r,0,r")))]
   "TARGET_RVP && !TARGET_64BIT"
   "#"
   "&& reload_completed"

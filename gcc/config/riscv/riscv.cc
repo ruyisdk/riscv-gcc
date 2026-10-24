@@ -65,6 +65,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm-constrs.h"
 #include "rtl-iter.h"
 #include "gimple.h"
+#include "ssa.h"
 #include "cfghooks.h"
 #include "cfgloop.h"
 #include "cfgrtl.h"
@@ -14988,6 +14989,115 @@ riscv_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
   return default_builtin_vectorization_cost (type_of_cost, vectype, misalign);
 }
 
+/* Packed logical operations on RV32 use two scalar instructions for an
+   8-byte vector.  Other packed arithmetic can use one pair instruction,
+   so this adjustment needs statement information rather than a blanket
+   cost for every operation of that vector type.  */
+class riscv_p_vector_costs : public vector_costs
+{
+public:
+  riscv_p_vector_costs (vec_info *vinfo, bool costing_for_scalar)
+    : vector_costs (vinfo, costing_for_scalar)
+  {}
+
+  unsigned int add_stmt_cost (int count, vect_cost_for_stmt kind,
+			      stmt_vec_info stmt_info, slp_tree node,
+			      tree vectype, int misalign,
+			      vect_cost_model_location where) override;
+};
+
+/* Match the scalar widening product implemented by MUL.H00/MULSU.H00.  */
+
+static bool
+riscv_p_scalar_halfword_product_p (vec_info *vinfo, gimple *stmt)
+{
+  if (!is_gimple_assign (stmt)
+      || gimple_assign_rhs_code (stmt) != MULT_EXPR)
+    return false;
+  tree lhs = gimple_assign_lhs (stmt);
+  tree type = TREE_TYPE (lhs);
+  if (!INTEGRAL_TYPE_P (type) || TYPE_PRECISION (type) != 32
+      || TYPE_OVERFLOW_TRAPS (type) || TYPE_OVERFLOW_SANITIZED (type))
+    return false;
+  for (unsigned int i = 1; i < 3; ++i)
+    {
+      tree op = gimple_op (stmt, i);
+      stmt_vec_info def_info = vinfo->lookup_def (op);
+      if (!def_info)
+	return false;
+      gassign *cast = dyn_cast <gassign *> (def_info->stmt);
+      if (!cast || !CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (cast)))
+	return false;
+      tree input_type = TREE_TYPE (gimple_assign_rhs1 (cast));
+      if (!INTEGRAL_TYPE_P (input_type) || TYPE_PRECISION (input_type) != 16)
+	return false;
+    }
+  return true;
+}
+
+/* Return true when an RV32 scalar operation is absorbed into MUL.H00 or
+   MACC.H00, including their unsigned and mixed-sign forms.  Require the
+   actual widths and single-use operations in the same block.  Do not
+   change the generic cost treatment of standalone load extensions.  */
+
+static bool
+riscv_p_scalar_fused_p (vec_info *vinfo, stmt_vec_info stmt_info)
+{
+  gassign *stmt = dyn_cast <gassign *> (stmt_info->stmt);
+  if (!stmt)
+    return false;
+  tree lhs = gimple_assign_lhs (stmt);
+  if (TREE_CODE (lhs) != SSA_NAME)
+    return false;
+  use_operand_p use;
+  gimple *user;
+  if (!single_imm_use (lhs, &use, &user)
+      || gimple_bb (user) != gimple_bb (stmt))
+    return false;
+
+  if (CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (stmt)))
+    return riscv_p_scalar_halfword_product_p (vinfo, user);
+
+  if (!riscv_p_scalar_halfword_product_p (vinfo, stmt)
+      || !is_gimple_assign (user)
+      || gimple_assign_rhs_code (user) != PLUS_EXPR)
+    return false;
+  tree result_type = TREE_TYPE (gimple_assign_lhs (user));
+  return INTEGRAL_TYPE_P (result_type) && TYPE_PRECISION (result_type) == 32
+    && !TYPE_OVERFLOW_TRAPS (result_type)
+    && !TYPE_OVERFLOW_SANITIZED (result_type);
+}
+
+unsigned int
+riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
+				   stmt_vec_info stmt_info, slp_tree node,
+				   tree vectype, int misalign,
+				   vect_cost_model_location where)
+{
+  if (kind == scalar_stmt && stmt_info
+      && riscv_p_scalar_fused_p (m_vinfo, stmt_info))
+    count = 0;
+
+  if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
+      && riscv_pext_mode_supported_p (TYPE_MODE (vectype))
+      && known_gt (GET_MODE_SIZE (TYPE_MODE (vectype)), UNITS_PER_WORD)
+      && is_gimple_assign (stmt_info->stmt))
+    switch (gimple_assign_rhs_code (stmt_info->stmt))
+      {
+      case BIT_AND_EXPR:
+      case BIT_IOR_EXPR:
+      case BIT_XOR_EXPR:
+      case BIT_NOT_EXPR:
+	count *= 2;
+	break;
+      default:
+	break;
+      }
+
+  return vector_costs::add_stmt_cost (count, kind, stmt_info, node, vectype,
+				    misalign, where);
+}
+
 /* Implement targetm.vectorize.create_costs.  */
 
 static vector_costs *
@@ -14995,6 +15105,8 @@ riscv_vectorize_create_costs (vec_info *vinfo, bool costing_for_scalar)
 {
   if (TARGET_VECTOR)
     return new riscv_vector::costs (vinfo, costing_for_scalar);
+  if (TARGET_RVP && !TARGET_64BIT)
+    return new riscv_p_vector_costs (vinfo, costing_for_scalar);
   /* Default vector costs.  */
   return new vector_costs (vinfo, costing_for_scalar);
 }
