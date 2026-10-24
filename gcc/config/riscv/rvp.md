@@ -3597,3 +3597,17 @@
   "predsumu.hs\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
+
+;; RV32 narrowing shifts pack the low half of each shifted lane without
+;; rounding or saturation.  RV64 has no corresponding immediate form.
+(define_insn "*rvp_narrow_<optab>_<mode>"
+  [(set (match_operand:<rvp_narrow_mode> 0 "register_operand" "=r")
+	(truncate:<rvp_narrow_mode>
+	  (any_shiftrt:RVP_DWIDTH_EXT
+	    (match_operand:RVP_DWIDTH_EXT 1 "register_operand" "r")
+	    (match_operand 2 "const_int_operand" "n"))))]
+  "TARGET_RVP && !TARGET_64BIT
+   && IN_RANGE (INTVAL (operands[2]), 1, <rvp_narrow_shmax>)"
+  "pn<insn>i.<rvp_extend_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
