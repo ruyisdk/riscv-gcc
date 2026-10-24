@@ -3058,6 +3058,20 @@
    (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
 				     (const_string "DI") (const_string "SI")))])
 
+;; Narrow and pack two signed vectors, with the first source in the low half.
+;; Logical vector order matches PNCLIPP register order on little-endian RV64.
+(define_insn "vec_pack_ssat_<mode>"
+  [(set (match_operand:<rvp_pack_mode> 0 "register_operand" "=r")
+	(vec_concat:<rvp_pack_mode>
+	  (ss_truncate:<rvp_narrow_mode>
+	    (match_operand:RVP_DWIDTH_EXT 1 "register_operand" "r"))
+	  (ss_truncate:<rvp_narrow_mode>
+	    (match_operand:RVP_DWIDTH_EXT 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN && !TARGET_VECTOR"
+  "pnclipp.<rvp_extend_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; Keeps the truncation visible to combine so the clip patterns below can
 ;; absorb it.  Unmatched instances stay as PNCVT, which packs the low half of
 ;; each lane and so preserves true truncation semantics, unlike the saturating

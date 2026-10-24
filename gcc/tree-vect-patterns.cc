@@ -5076,6 +5076,99 @@ vect_recog_sat_trunc_pattern (vec_info *vinfo, stmt_vec_info stmt_vinfo,
   return NULL;
 }
 
+/* Recognize a signed clamp to the exact range of a narrower result when
+   the target can combine two such vectors with a saturating pack.  Keep
+   this separate from the existing unary SAT_TRUNC recognition.  */
+
+static gimple *
+vect_recog_sat_trunc_clamp_pattern (vec_info *vinfo, stmt_vec_info stmt_info,
+				  tree *type_out)
+{
+  gassign *stmt = dyn_cast <gassign *> (stmt_info->stmt);
+  if (!stmt || !CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (stmt)))
+    return NULL;
+
+  tree lhs = gimple_assign_lhs (stmt);
+  tree otype = TREE_TYPE (lhs);
+  tree outer_result = gimple_assign_rhs1 (stmt);
+  tree itype = TREE_TYPE (outer_result);
+  if (!INTEGRAL_TYPE_P (otype) || TYPE_UNSIGNED (otype)
+      || !INTEGRAL_TYPE_P (itype) || TYPE_UNSIGNED (itype)
+      || !type_has_mode_precision_p (otype)
+      || !type_has_mode_precision_p (itype)
+      || TYPE_PRECISION (itype) != 2 * TYPE_PRECISION (otype)
+      || TREE_CODE (outer_result) != SSA_NAME
+      || !has_single_use (outer_result))
+    return NULL;
+
+  stmt_vec_info outer_info = vect_get_internal_def (vinfo, outer_result);
+  gassign *outer = outer_info ? dyn_cast <gassign *> (outer_info->stmt) : NULL;
+  if (!outer)
+    return NULL;
+  tree_code outer_code = gimple_assign_rhs_code (outer);
+  if (outer_code != MIN_EXPR && outer_code != MAX_EXPR)
+    return NULL;
+
+  tree inner_result = gimple_assign_rhs1 (outer);
+  tree outer_bound = gimple_assign_rhs2 (outer);
+  if (TREE_CODE (inner_result) == INTEGER_CST)
+    std::swap (inner_result, outer_bound);
+  if (TREE_CODE (outer_bound) != INTEGER_CST
+      || TREE_CODE (inner_result) != SSA_NAME
+      || !has_single_use (inner_result))
+    return NULL;
+
+  stmt_vec_info inner_info = vect_get_internal_def (vinfo, inner_result);
+  gassign *inner = inner_info ? dyn_cast <gassign *> (inner_info->stmt) : NULL;
+  if (!inner
+      || gimple_assign_rhs_code (inner)
+	 != (outer_code == MIN_EXPR ? MAX_EXPR : MIN_EXPR))
+    return NULL;
+
+  tree input = gimple_assign_rhs1 (inner);
+  tree inner_bound = gimple_assign_rhs2 (inner);
+  if (TREE_CODE (input) == INTEGER_CST)
+    std::swap (input, inner_bound);
+  if (TREE_CODE (input) != SSA_NAME
+      || TREE_CODE (inner_bound) != INTEGER_CST
+      || !types_compatible_p (itype, TREE_TYPE (inner_result))
+      || !types_compatible_p (itype, TREE_TYPE (input))
+      || !types_compatible_p (itype, TREE_TYPE (outer_bound))
+      || !types_compatible_p (itype, TREE_TYPE (inner_bound)))
+    return NULL;
+
+  unsigned iprec = TYPE_PRECISION (itype);
+  unsigned oprec = TYPE_PRECISION (otype);
+  wide_int lower = wide_int::from (wi::min_value (oprec, SIGNED),
+				   iprec, SIGNED);
+  wide_int upper = wide_int::from (wi::max_value (oprec, SIGNED),
+				   iprec, SIGNED);
+  tree min_bound = outer_code == MIN_EXPR ? inner_bound : outer_bound;
+  tree max_bound = outer_code == MIN_EXPR ? outer_bound : inner_bound;
+  if (wi::to_wide (min_bound) != lower || wi::to_wide (max_bound) != upper)
+    return NULL;
+
+  tree v_itype = get_vectype_for_scalar_type (vinfo, itype);
+  tree v_otype = get_vectype_for_scalar_type (vinfo, otype);
+  code_helper pack_code;
+  int multi_step = 0;
+  auto_vec<tree, 8> intermediate_types;
+  if (!v_itype || !v_otype
+      || !supportable_narrowing_operation (IFN_SAT_TRUNC, v_otype, v_itype,
+					   &pack_code, &multi_step,
+					   &intermediate_types))
+    return NULL;
+
+  gcc_assert (pack_code == VEC_PACK_SAT_EXPR && multi_step == 0);
+  gcall *call = gimple_build_call_internal (IFN_SAT_TRUNC, 1, input);
+  gimple_call_set_lhs (call, vect_recog_temp_ssa_var (otype));
+  gimple_call_set_nothrow (call, true);
+  gimple_set_location (call, gimple_location (stmt));
+  *type_out = v_otype;
+  vect_pattern_detected ("vect_recog_sat_trunc_clamp_pattern", stmt);
+  return call;
+}
+
 
 /* Function add_code_for_floorceilround_divmod
    A helper function to add compensation code for implementing FLOOR_MOD_EXPR,
@@ -7658,6 +7751,7 @@ static vect_recog_func vect_vect_recog_func_ptrs[] = {
   { vect_recog_sat_add_pattern, "sat_add" },
   { vect_recog_sat_sub_pattern, "sat_sub" },
   { vect_recog_sat_trunc_pattern, "sat_trunc" },
+  { vect_recog_sat_trunc_clamp_pattern, "sat_trunc_clamp" },
   { vect_recog_gcond_pattern, "gcond" },
   { vect_recog_bool_pattern, "bool" },
   /* This must come before mask conversion, and includes the parts
