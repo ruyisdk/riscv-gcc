@@ -15258,6 +15258,13 @@ void
 riscv_expand_usadd (rtx dest, rtx x, rtx y)
 {
   machine_mode mode = GET_MODE (dest);
+  if (TARGET_RVP && mode == SImode)
+    {
+      emit_insn (gen_rvp_usaddsi3 (dest, force_reg (SImode, x),
+				 force_reg (SImode, y)));
+      return;
+    }
+
   rtx xmode_sum = gen_reg_rtx (Xmode);
   rtx xmode_lt = gen_reg_rtx (Xmode);
   rtx xmode_x = riscv_extend_to_xmode_reg (x, mode, ZERO_EXTEND);
@@ -15337,6 +15344,13 @@ void
 riscv_expand_ssadd (rtx dest, rtx x, rtx y)
 {
   machine_mode mode = GET_MODE (dest);
+  if (TARGET_RVP && mode == SImode)
+    {
+      emit_insn (gen_rvp_ssaddsi3 (dest, force_reg (SImode, x),
+				 force_reg (SImode, y)));
+      return;
+    }
+
   unsigned bitsize = GET_MODE_BITSIZE (mode).to_constant ();
   rtx shift_bits = GEN_INT (bitsize - 1);
   rtx xmode_x = riscv_extend_to_xmode_reg (x, mode, SIGN_EXTEND);
@@ -15395,6 +15409,13 @@ void
 riscv_expand_ussub (rtx dest, rtx x, rtx y)
 {
   machine_mode mode = GET_MODE (dest);
+  if (TARGET_RVP && mode == SImode)
+    {
+      emit_insn (gen_rvp_ussubsi3 (dest, force_reg (SImode, x),
+				 force_reg (SImode, y)));
+      return;
+    }
+
   rtx xmode_x = riscv_extend_to_xmode_reg (x, mode, ZERO_EXTEND);
   rtx xmode_y = riscv_extend_to_xmode_reg (y, mode, ZERO_EXTEND);
   rtx xmode_lt = gen_reg_rtx (Xmode);
@@ -15441,6 +15462,13 @@ void
 riscv_expand_sssub (rtx dest, rtx x, rtx y)
 {
   machine_mode mode = GET_MODE (dest);
+  if (TARGET_RVP && mode == SImode)
+    {
+      emit_insn (gen_rvp_sssubsi3 (dest, force_reg (SImode, x),
+				 force_reg (SImode, y)));
+      return;
+    }
+
   unsigned bitsize = GET_MODE_BITSIZE (mode).to_constant ();
   rtx shift_bits = GEN_INT (bitsize - 1);
   rtx xmode_x = riscv_extend_to_xmode_reg (x, mode, SIGN_EXTEND);

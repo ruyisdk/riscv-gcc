@@ -274,6 +274,21 @@
 
 ;; Binary Arithmetic Operations
 
+;; The RV64 instructions operate independently on each word.  Describe only
+;; the low word; an ABI return or a wider use must extend it normally.
+(define_insn "rvp_<optab>si3"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(rvp_sat_op:SI (match_operand:SI 1 "register_operand" "r")
+		       (match_operand:SI 2 "register_operand" "r")))]
+  "TARGET_RVP"
+{
+  if (TARGET_64BIT)
+    return "p<insn>.w\t%0, %1, %2";
+  return "<insn>\t%0, %1, %2";
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
 ;; Unified pattern for all binary arithmetic operations
 ;;   - Basic: padd.b/h/w, psub.b/h/w
 ;;   - Saturating signed: psadd.b/h/w, pssub.b/h/w

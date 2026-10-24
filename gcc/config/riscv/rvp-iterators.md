@@ -181,6 +181,9 @@
 (define_code_iterator rvp_widen_op
   [plus minus])
 
+;; Scalar word saturation uses the same arithmetic codes as packed lanes.
+(define_code_iterator rvp_sat_op [ss_plus us_plus ss_minus us_minus])
+
 ;; Modular arithmetic around a selected halfword product.
 (define_code_iterator rvp_lane_arith [plus minus])
 (define_code_attr rvp_lane_length [(plus "8") (minus "12")])
