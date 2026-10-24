@@ -592,6 +592,57 @@
   "<bitmanip_insn>\t%0,%1,%z2"
   [(set_attr "type" "<bitmanip_insn>")])
 
+;; Combine comparisons against a common bound using a single min/max.
+;; Keep the ordered comparisons visible until combine, then lower before
+;; allocation because the final comparison may need a temporary.
+;; The length bound includes materializing an adjusted immediate and
+;; inverting the comparison; all instances split before allocation.
+(define_insn_and_split "*and_<bitmanip_minmax_cmp_op:code>_<X:mode><GPR:mode>"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	(and:GPR
+	  (bitmanip_minmax_cmp_op:GPR
+	    (match_operand:X 1 "register_operand" "r")
+	    (match_operand:X 3 "arith_operand" "rI"))
+	  (bitmanip_minmax_cmp_op:GPR
+	    (match_operand:X 2 "register_operand" "r")
+	    (match_dup 3))))]
+  "TARGET_ZBB && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx tmp = gen_reg_rtx (<X:MODE>mode);
+  emit_insn (gen_<bitmanip_and_cmp_minmax><X:mode>3
+	     (tmp, operands[1], operands[2]));
+  riscv_expand_int_scc (operands[0], <CODE>, tmp, operands[3]);
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "length" "20")])
+
+(define_insn_and_split "*ior_<bitmanip_minmax_cmp_op:code>_<X:mode><GPR:mode>"
+  [(set (match_operand:GPR 0 "register_operand" "=r")
+	(ior:GPR
+	  (bitmanip_minmax_cmp_op:GPR
+	    (match_operand:X 1 "register_operand" "r")
+	    (match_operand:X 3 "arith_operand" "rI"))
+	  (bitmanip_minmax_cmp_op:GPR
+	    (match_operand:X 2 "register_operand" "r")
+	    (match_dup 3))))]
+  "TARGET_ZBB && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx tmp = gen_reg_rtx (<X:MODE>mode);
+  emit_insn (gen_<bitmanip_ior_cmp_minmax><X:mode>3
+	     (tmp, operands[1], operands[2]));
+  riscv_expand_int_scc (operands[0], <CODE>, tmp, operands[3]);
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "length" "20")])
+
 ;; Provide a minmax pattern for ifcvt to match.
 (define_insn "*<bitmanip_minmax_cmp_insn>_cmp_<mode>3"
   [(set (match_operand:X 0 "register_operand" "=r")
