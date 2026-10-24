@@ -33,6 +33,13 @@
 ;; Used for instructions that have distinct DB/DH/DW (RV32) and B/H/W (RV64) forms.
 (define_mode_iterator PVHW [PV4HI PV2SI])
 
+;; Packed modes with an immediate arithmetic right shift with rounding.
+(define_mode_iterator RVP_ROUND [PV2HI PV4HI PV2SI])
+(define_mode_attr rvp_round_insn
+  [(PV2HI "riscv_psshar_s_i16x2")
+   (PV4HI "riscv_psshar_s_i16x4")
+   (PV2SI "riscv_psshar_s_i32x2")])
+
 ;; Element mode for PLI/PLUI vec_duplicate
 (define_mode_attr PVALL_ELT [
   (PV4QI "QI") (PV8QI "QI")

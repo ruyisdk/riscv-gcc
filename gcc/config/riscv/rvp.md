@@ -1172,6 +1172,37 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+;; Averaging a signed value with one is a rounded one-bit shift.  Match
+;; the widened addition so that the largest input cannot wrap.  These
+;; insns also preserve the single-instruction form after GIMPLE folding.
+(define_insn "*rvp_round_avg_one_<mode>"
+  [(set (match_operand:RVP_ROUND 0 "register_operand" "=r")
+	(truncate:RVP_ROUND
+	  (ashiftrt:<PVALL_EXT>
+	    (plus:<PVALL_EXT>
+	      (sign_extend:<PVALL_EXT>
+		(match_operand:RVP_ROUND 1 "register_operand" "r"))
+	      (match_operand:<PVALL_EXT> 2 "const_1_operand" ""))
+	    (const_int 1))))]
+  "TARGET_RVP && (TARGET_64BIT || <MODE>mode == PV2HImode)"
+  "psrari.<rvp_width>\t%0,%1,1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "<MODE>")])
+
+(define_insn "*rvp_round_avg_one_<mode>_pair"
+  [(set (match_operand:PVHW 0 "register_operand" "=R")
+	(truncate:PVHW
+	  (ashiftrt:<PVALL_EXT>
+	    (plus:<PVALL_EXT>
+	      (sign_extend:<PVALL_EXT>
+		(match_operand:PVHW 1 "register_operand" "r"))
+	      (match_operand:<PVALL_EXT> 2 "const_1_operand" ""))
+	    (const_int 1))))]
+  "TARGET_RVP && !TARGET_64BIT"
+  "psrari.<rvp_dwidth>\t%0,%1,1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "<MODE>")])
+
 ;; Vector comparison expander for signed comparisons
 (define_expand "vec_cmp<mode><mode>"
   [(set (match_operand:PCMP 0 "register_operand")
@@ -3064,39 +3095,223 @@
 ;; add/subtract, so no combine patterns are provided here; the intrinsics
 ;; (__riscv_pas_x/psa_x, p.md) are the only producers.
 
-;; Rounding arithmetic shift right immediate - scalar
-;; SRARI: rd = (rs1 + (1 << (shamt-1))) >> shamt (with rounding)
-;; Pattern matches: (a + (1 << (n-1))) >> n
-;; Shift amount must be in range [1, mode_bitsize-1] to avoid UB.
-(define_insn "*srari<X:mode>"
+;; SRARI rounds without wrapping the intermediate biased sum.  Do not
+;; match an arbitrary PLUS followed by ASHIFTRT: the RTL addition can wrap.
+;; Shifting at least once before adding one provides headroom, including
+;; at the signed endpoints, so the complete expression below is safe.
+
+;; Preserve bounded-input cases when combine can prove headroom.  Use a
+;; split to record that proof in the intrinsic's UNSPEC: register range
+;; information is not available to ordinary insn conditions after reload.
+(define_split
+  [(set (match_operand:X 0 "register_operand")
+	(ashiftrt:X
+	  (plus:X (match_operand:X 1 "register_operand")
+		  (match_operand 2 "const_int_operand"))
+	  (match_operand 3 "const_int_operand")))]
+  "TARGET_RVP && can_create_pseudo_p ()
+   && IN_RANGE (INTVAL (operands[3]), 1, GET_MODE_BITSIZE (<MODE>mode) - 1)
+   && INTVAL (operands[2]) == (HOST_WIDE_INT_1 << (INTVAL (operands[3]) - 1))
+   && num_sign_bit_copies (operands[1], <MODE>mode) > 1"
+  [(const_int 0)]
+{
+  rtx shift = GEN_INT (-INTVAL (operands[3]));
+  emit_insn (TARGET_64BIT
+	     ? gen_riscv_shar_i64_insn (operands[0], operands[1], shift)
+	     : gen_riscv_sshar_i32_insn (operands[0], operands[1], shift));
+  DONE;
+})
+
+(define_insn "*rvp_round_ashr<mode>"
   [(set (match_operand:X 0 "register_operand" "=r")
 	(ashiftrt:X
-	  (plus:X (match_operand:X 1 "register_operand" "r")
-		  (match_operand:X 2 "const_int_operand" "n"))
-	  (match_operand:X 3 "const_int_operand" "n")))]
+	  (plus:X
+	    (ashiftrt:X (match_operand:X 1 "register_operand" "r")
+		       (match_operand 2 "const_int_operand" "n"))
+	    (const_int 1))
+	  (const_int 1)))]
   "TARGET_RVP
-   && IN_RANGE (INTVAL (operands[3]), 1, GET_MODE_BITSIZE (<X:MODE>mode) - 1)
-   && INTVAL (operands[2]) == ((HOST_WIDE_INT)1 << (INTVAL (operands[3]) - 1))"
-  "srari\t%0,%1,%3"
+   && IN_RANGE (INTVAL (operands[2]), 1, GET_MODE_BITSIZE (<MODE>mode) - 2)"
+{
+  operands[2] = GEN_INT (INTVAL (operands[2]) + 1);
+  return "srari\t%0,%1,%2";
+}
   [(set_attr "type" "shift")
-   (set_attr "mode" "<X:MODE>")])
+   (set_attr "mode" "<MODE>")])
 
-;; SRARI for SI mode on RV64: matches (ashiftrt:DI (sign_extend:DI (plus:SI ...)) shamt)
-;; This is the RTL form GCC generates when combining: addiw + srai -> srari
-;; Shift amount must be in range [1, 31] for SI mode.
-(define_insn "*srari_sidi"
-  [(set (match_operand:DI 0 "register_operand" "=r")
+;; On RV64, combine can represent a rounded SI shift using the high word
+;; of a shifted DI value.  Only a proven sign-extended SI input allows the
+;; word addition to be replaced by XLEN-wide rounding without overflow.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
 	(ashiftrt:DI
-	  (sign_extend:DI
-	    (plus:SI (match_operand:SI 1 "register_operand" "r")
-		     (match_operand:SI 2 "const_int_operand" "n")))
-	  (match_operand:DI 3 "const_int_operand" "n")))]
-  "TARGET_64BIT && TARGET_RVP
-   && IN_RANGE (INTVAL (operands[3]), 1, 31)
-   && INTVAL (operands[2]) == ((HOST_WIDE_INT)1 << (INTVAL (operands[3]) - 1))"
-  "srari\t%0,%1,%3"
+	  (plus:DI
+	    (and:DI
+	      (ashift:DI (match_operand:DI 1 "register_operand")
+			 (match_operand 2 "const_int_operand"))
+	      (const_int -4294967296))
+	    (const_int 4294967296))
+	  (const_int 33)))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && IN_RANGE (INTVAL (operands[2]), 2, 31)
+   && num_sign_bit_copies (operands[1], DImode) >= 33"
+  [(const_int 0)]
+{
+  emit_insn (gen_riscv_shar_i64_insn
+	     (operands[0], operands[1], GEN_INT (INTVAL (operands[2]) - 33)));
+  DONE;
+})
+
+;; A one-bit rounded shift uses the low bit directly.  Adding it after
+;; the shift is safe even when the original value is the largest integer.
+;; RV64 word arithmetic can use an extracted word for the quotient.  It
+;; agrees with an arithmetic shift only when the DI input is sign-extended
+;; from SI.  Record that proof before register allocation loses the range.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (match_operator:SI 4 "subreg_lowpart_operator"
+	      [(and:DI (match_operand:DI 1 "register_operand") (const_int 1))])
+	    (match_operator:SI 5 "subreg_lowpart_operator"
+	      [(zero_extract:DI (match_dup 1)
+				(const_int 32) (const_int 1))]))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && num_sign_bit_copies (operands[1], DImode) >= 33"
+  [(const_int 0)]
+{
+  emit_insn (gen_riscv_shar_i64_insn (operands[0], operands[1], constm1_rtx));
+  DONE;
+})
+
+;; The commuted word form occurs in scalar loop fallbacks.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (match_operator:SI 4 "subreg_lowpart_operator"
+	      [(zero_extract:DI (match_operand:DI 1 "register_operand")
+				(const_int 32) (const_int 1))])
+	    (match_operator:SI 5 "subreg_lowpart_operator"
+	      [(and:DI (match_dup 1) (const_int 1))]))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && num_sign_bit_copies (operands[1], DImode) >= 33"
+  [(const_int 0)]
+{
+  emit_insn (gen_riscv_shar_i64_insn (operands[0], operands[1], constm1_rtx));
+  DONE;
+})
+
+;; A genuine SI arithmetic shift also permits unknown upper input bits.
+;; Sign-extend the low word before the XLEN-wide rounding operation.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (ashiftrt:SI
+	      (match_operator:SI 4 "subreg_lowpart_operator"
+		[(match_operand:DI 1 "register_operand")])
+	      (const_int 1))
+	    (match_operator:SI 5 "subreg_lowpart_operator"
+	      [(and:DI (match_dup 1) (const_int 1))]))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  rtx input = gen_reg_rtx (DImode);
+  emit_insn (gen_extendsidi2 (input, gen_lowpart (SImode, operands[1])));
+  emit_insn (gen_riscv_shar_i64_insn (operands[0], input, constm1_rtx));
+  DONE;
+})
+
+;; After shifting by at least 33, adding the extracted rounding bit still
+;; fits in SI.  A 32-bit shift is not enough: rounding INT64_MAX would
+;; produce 2^31, whose word truncation must retain its negative SI value.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (match_operator:SI 4 "subreg_lowpart_operator"
+	      [(zero_extract:DI (match_operand:DI 1 "register_operand")
+				(const_int 1)
+				(match_operand 2 "const_int_operand"))])
+	    (match_operator:SI 5 "subreg_lowpart_operator"
+	      [(ashiftrt:DI (match_dup 1)
+			    (match_operand 3 "const_int_operand"))]))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && IN_RANGE (INTVAL (operands[3]), 33, 63)
+   && INTVAL (operands[2]) == INTVAL (operands[3]) - 1"
+  [(const_int 0)]
+{
+  emit_insn (gen_riscv_shar_i64_insn
+	     (operands[0], operands[1], GEN_INT (-INTVAL (operands[3]))));
+  DONE;
+})
+
+;; Combine can put the quotient first when it schedules the two shifts
+;; in the opposite order.  Preserve the same word-range restriction.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (match_operator:SI 4 "subreg_lowpart_operator"
+	      [(ashiftrt:DI (match_operand:DI 1 "register_operand")
+			    (match_operand 3 "const_int_operand"))])
+	    (match_operator:SI 5 "subreg_lowpart_operator"
+	      [(zero_extract:DI (match_dup 1) (const_int 1)
+				(match_operand 2 "const_int_operand"))]))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && IN_RANGE (INTVAL (operands[3]), 33, 63)
+   && INTVAL (operands[2]) == INTVAL (operands[3]) - 1"
+  [(const_int 0)]
+{
+  emit_insn (gen_riscv_shar_i64_insn
+	     (operands[0], operands[1], GEN_INT (-INTVAL (operands[3]))));
+  DONE;
+})
+
+(define_insn "*rvp_round_ashr<mode>_one"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(plus:X
+	  (and:X (match_operand:X 1 "register_operand" "r") (const_int 1))
+	  (ashiftrt:X (match_dup 1) (const_int 1))))]
+  "TARGET_RVP"
+  "srari\t%0,%1,1"
   [(set_attr "type" "shift")
-   (set_attr "mode" "SI")])
+   (set_attr "mode" "<MODE>")])
+
+;; Packed forms of the same overflow-free identities.  Reuse the intrinsic
+;; expanders so that RV32 register-pair constraints remain in one place.
+(define_split
+  [(set (match_operand:RVP_ROUND 0 "register_operand")
+	(ashiftrt:RVP_ROUND
+	  (plus:RVP_ROUND
+	    (ashiftrt:RVP_ROUND
+	      (match_operand:RVP_ROUND 1 "register_operand")
+	      (match_operand 2 "const_int_operand"))
+	    (match_operand:RVP_ROUND 3 "const_1_operand"))
+	  (const_int 1)))]
+  "TARGET_RVP && can_create_pseudo_p ()
+   && IN_RANGE (INTVAL (operands[2]), 1,
+		GET_MODE_UNIT_BITSIZE (<MODE>mode) - 2)"
+  [(const_int 0)]
+{
+  emit_insn (gen_<rvp_round_insn>
+	     (operands[0], operands[1], GEN_INT (-INTVAL (operands[2]) - 1)));
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:RVP_ROUND 0 "register_operand")
+	(plus:RVP_ROUND
+	  (and:RVP_ROUND (match_operand:RVP_ROUND 1 "register_operand")
+			(match_operand:RVP_ROUND 2 "const_1_operand"))
+	  (ashiftrt:RVP_ROUND (match_dup 1) (const_int 1))))]
+  "TARGET_RVP && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  emit_insn (gen_<rvp_round_insn> (operands[0], operands[1], constm1_rtx));
+  DONE;
+})
 
 ;; PABD - Packed Absolute Difference
 ;; pabd.b/h rd, rs1, rs2: rd[i] = |rs1[i] - rs2[i]| (signed)
