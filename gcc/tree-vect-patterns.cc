@@ -3449,6 +3449,8 @@ vect_recog_mulhs_pattern (vec_info *vinfo,
 
   where NTYPE is no wider than half of TYPE.  Since only the bottom half
   of avg is used, all or part of the cast of avg' should become redundant.
+  Also recognize an explicit truncation of avg, so that the pattern need
+  not retain a vector type for TYPE when the target cannot provide one.
 
   If there is no target support available, generate code to distribute rshift
   over plus and add a carry.  */
@@ -3457,16 +3459,43 @@ static gimple *
 vect_recog_average_pattern (vec_info *vinfo,
 			    stmt_vec_info last_stmt_info, tree *type_out)
 {
-  /* Check for a shift right by one bit.  */
+  /* Also recognize the final truncation.  The shift result can be wider
+     than the selected vector size even when the average itself has a
+     supported vector type.  Attaching the pattern to the truncation
+     avoids requiring a vector type for that dead intermediate result.  */
   gassign *last_stmt = dyn_cast <gassign *> (last_stmt_info->stmt);
-  if (!last_stmt
-      || gimple_assign_rhs_code (last_stmt) != RSHIFT_EXPR
-      || !integer_onep (gimple_assign_rhs2 (last_stmt)))
+  if (!last_stmt)
+    return NULL;
+
+  tree result_type = TREE_TYPE (gimple_assign_lhs (last_stmt));
+  gassign *shift_stmt = last_stmt;
+  if (CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (last_stmt)))
+    {
+      tree rhs = gimple_assign_rhs1 (last_stmt);
+      tree rhs_type = TREE_TYPE (rhs);
+      if (!INTEGRAL_TYPE_P (result_type)
+	  || VECT_SCALAR_BOOLEAN_TYPE_P (result_type)
+	  || !INTEGRAL_TYPE_P (rhs_type)
+	  || TYPE_PRECISION (result_type) >= TYPE_PRECISION (rhs_type)
+	  || TREE_CODE (rhs) != SSA_NAME
+	  || !has_single_use (rhs))
+	return NULL;
+
+      stmt_vec_info shift_info = vect_get_internal_def (vinfo, rhs);
+      if (!shift_info)
+	return NULL;
+      shift_stmt = dyn_cast <gassign *> (shift_info->stmt);
+    }
+
+  /* Check for a shift right by one bit.  */
+  if (!shift_stmt
+      || gimple_assign_rhs_code (shift_stmt) != RSHIFT_EXPR
+      || !integer_onep (gimple_assign_rhs2 (shift_stmt)))
     return NULL;
 
   /* Check that the shift result is wider than the users of the
      result need (i.e. that narrowing would be a natural choice).  */
-  tree lhs = gimple_assign_lhs (last_stmt);
+  tree lhs = gimple_assign_lhs (shift_stmt);
   tree type = TREE_TYPE (lhs);
   unsigned int target_precision
     = vect_element_precision (last_stmt_info->min_output_precision);
@@ -3474,7 +3503,7 @@ vect_recog_average_pattern (vec_info *vinfo,
     return NULL;
 
   /* Look through any change in sign on the shift input.  */
-  tree rshift_rhs = gimple_assign_rhs1 (last_stmt);
+  tree rshift_rhs = gimple_assign_rhs1 (shift_stmt);
   vect_unpromoted_value unprom_plus;
   rshift_rhs = vect_look_through_possible_promotion (vinfo, rshift_rhs,
 						     &unprom_plus);
@@ -3533,7 +3562,7 @@ vect_recog_average_pattern (vec_info *vinfo,
 	   TYPE widened0 = (TYPE) UNPROM[0];
 	   TYPE widened1 = (TYPE) UNPROM[1];
 	   TYPE tmp1 = widened0 + widened1 {+ 1};
-	   TYPE tmp2 = tmp1 >> 1;   // LAST_STMT_INFO
+	   TYPE tmp2 = tmp1 >> 1;   // The shift result.
 
      (b) the first two statements are equivalent to:
 
@@ -3583,9 +3612,9 @@ vect_recog_average_pattern (vec_info *vinfo,
   else
     return NULL;
 
-  /* The IR requires a valid vector type for the cast result, even though
-     it's likely to be discarded.  */
-  *type_out = get_vectype_for_scalar_type (vinfo, type);
+  /* The IR requires a valid vector type for the pattern result.  When
+     recognizing the final truncation, no vector of TYPE is needed.  */
+  *type_out = get_vectype_for_scalar_type (vinfo, result_type);
   if (!*type_out)
     return NULL;
 
@@ -3632,7 +3661,8 @@ vect_recog_average_pattern (vec_info *vinfo,
       append_pattern_def_seq (vinfo, last_stmt_info, g, new_vectype);
 
       g = gimple_build_assign (new_var, PLUS_EXPR, sum_of_shifted, carry);
-      return vect_convert_output (vinfo, last_stmt_info, type, g, new_vectype);
+      return vect_convert_output (vinfo, last_stmt_info, result_type, g,
+				  new_vectype);
     }
 
   /* Generate the IFN_AVG* call.  */
@@ -3645,8 +3675,8 @@ vect_recog_average_pattern (vec_info *vinfo,
     dump_printf_loc (MSG_NOTE, vect_location,
 		     "created pattern stmt: %G", (gimple *) average_stmt);
 
-  return vect_convert_output (vinfo, last_stmt_info,
-			      type, average_stmt, new_vectype);
+  return vect_convert_output (vinfo, last_stmt_info, result_type,
+			      average_stmt, new_vectype);
 }
 
 /* Recognize cases in which the input to a cast is wider than its
