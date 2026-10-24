@@ -6294,11 +6294,13 @@ DEFINE_INT_AND_FLOAT_ROUND_FN (RINT)
    (minus (max @0 @1) (min @0 @1)))))
 
 /* Recognize abs(a - b) pattern and convert to smax(a, b) - smin(a, b).
+   This requires undefined overflow: the magnitude of a wrapped difference
+   need not equal the difference between the maximum and minimum operands.
    This enables better code generation using sabd instructions
    on targets that support them (e.g., RISC-V P-extension pabd).  */
 (simplify
  (abs (minus @0 @1))
- (if (VECTOR_INTEGER_TYPE_P (type))
+ (if (VECTOR_INTEGER_TYPE_P (type) && TYPE_OVERFLOW_UNDEFINED (type))
   (minus (max @0 @1) (min @0 @1))))
 
 /* Sink unary operations to branches, but only if we do fold both.  */
