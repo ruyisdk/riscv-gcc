@@ -2722,6 +2722,29 @@
    (set (attr "mode") (if_then_else (match_test "TARGET_64BIT")
 				     (const_string "DI") (const_string "SI")))])
 
+;; Pack two exact unsigned clamps directly.  The one-source clamp patterns
+;; above retain TRUNCATE (UMIN) until splitting, so match that representation
+;; as well as keeping the source lane order used by VEC_CONCAT.
+(define_insn "*rvp_pack_ustrunc_<mode>"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(vec_concat:PV2SI
+	  (subreg:SI
+	    (truncate:<rvp_narrow_mode>
+	      (umin:RVP_DWIDTH_EXT
+		(match_operand:RVP_DWIDTH_EXT 1 "register_operand" "r")
+		(match_operand:RVP_DWIDTH_EXT 3 "immediate_operand"))) 0)
+	  (subreg:SI
+	    (truncate:<rvp_narrow_mode>
+	      (umin:RVP_DWIDTH_EXT
+		(match_operand:RVP_DWIDTH_EXT 2 "register_operand" "r")
+		(match_operand:RVP_DWIDTH_EXT 4 "immediate_operand"))) 0)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && riscv_const_vector_broadcast_val_p (operands[3], <rvp_narrow_umax>)
+   && riscv_const_vector_broadcast_val_p (operands[4], <rvp_narrow_umax>)"
+  "pnclipup.<rvp_extend_width>\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; The RV32 clips hold the shift amount themselves.
 (define_insn "*pnclipi_<rvp_extend_width>_rv32"
   [(set (match_operand:<rvp_narrow_mode> 0 "register_operand" "=r")

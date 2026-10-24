@@ -4353,6 +4353,63 @@ riscv_is_macc_shift_extend_pattern_p (rtx op0, rtx op1, int shamt)
 	  || (op0_is_shift && op1_is_shift));
 }
 
+/* Return the cost of an unsigned packed clip, or a pair packed on RV64,
+   or zero if X does not match a narrowing pattern in rvp.md.
+   The constant bound is encoded by the clip itself, not loaded separately.  */
+
+static int
+riscv_p_unsigned_clip_cost (rtx x, machine_mode mode)
+{
+  if (GET_CODE (x) == VEC_CONCAT && mode == PV2SImode
+      && TARGET_64BIT && !TARGET_BIG_ENDIAN)
+    {
+      rtx lo = XEXP (x, 0);
+      rtx hi = XEXP (x, 1);
+      if (!SUBREG_P (lo) || !SUBREG_P (hi)
+	  || GET_MODE (lo) != SImode || GET_MODE (hi) != SImode
+	  || !known_eq (SUBREG_BYTE (lo), 0)
+	  || !known_eq (SUBREG_BYTE (hi), 0))
+	return 0;
+
+      lo = SUBREG_REG (lo);
+      hi = SUBREG_REG (hi);
+      machine_mode narrow_mode = GET_MODE (lo);
+      if (narrow_mode == GET_MODE (hi)
+	  && (narrow_mode == PV4QImode || narrow_mode == PV2HImode)
+	  && riscv_p_unsigned_clip_cost (lo, narrow_mode) == COSTS_N_INSNS (1)
+	  && riscv_p_unsigned_clip_cost (hi, narrow_mode) == COSTS_N_INSNS (1))
+	return COSTS_N_INSNS (1);
+      return 0;
+    }
+
+  if (GET_CODE (x) != TRUNCATE
+      || (mode != PV4QImode && mode != PV2HImode))
+    return 0;
+
+  machine_mode wide_mode = mode == PV4QImode ? PV4HImode : PV2SImode;
+  unsigned int bits = mode == PV4QImode ? 8 : 16;
+  rtx min = XEXP (x, 0);
+  if (GET_CODE (min) != UMIN || GET_MODE (min) != wide_mode
+      || !riscv_const_vector_broadcast_val_p (XEXP (min, 1),
+					     (1 << bits) - 1))
+    return 0;
+
+  rtx value = XEXP (min, 0);
+  if (register_operand (value, wide_mode))
+    return COSTS_N_INSNS (1);
+
+  /* RV32 folds the logical shift into PNCLIPIU.  RV64 needs a separate
+     packed shift followed by PNCLIPUP.  Arithmetic shifts are not unsigned
+     clips, and shifts outside the element width must not match.  */
+  if (GET_CODE (value) == LSHIFTRT
+      && register_operand (XEXP (value, 0), wide_mode)
+      && CONST_INT_P (XEXP (value, 1))
+      && IN_RANGE (INTVAL (XEXP (value, 1)), 1, 2 * bits - 1))
+    return COSTS_N_INSNS (TARGET_64BIT ? 2 : 1);
+
+  return 0;
+}
+
 /* Implement TARGET_RTX_COSTS.  */
 
 #define SINGLE_SHIFT_COST 1
@@ -5078,6 +5135,18 @@ static int
 riscv_insn_cost (rtx_insn *insn, bool speed)
 {
   rtx x = PATTERN (insn);
+  if (TARGET_RVP && GET_CODE (x) == SET
+      && register_operand (SET_DEST (x), GET_MODE (SET_DEST (x))))
+    {
+      /* Generic RTX costing skips TRUNCATE when its modes are tieable.
+	 Account for a packed narrowing clip before recursing into its clamp
+	 and charging for constants that the instruction does not materialize.  */
+      int clip_cost = riscv_p_unsigned_clip_cost (SET_SRC (x),
+						GET_MODE (SET_DEST (x)));
+      if (clip_cost)
+	return clip_cost;
+
+    }
   int cost = pattern_cost (x, speed);
 
   if (JUMP_P (insn))
