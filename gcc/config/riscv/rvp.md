@@ -1696,9 +1696,11 @@
       (match_operand:PV2HI 2 "register_operand" "r, r")
       (match_operand:SI 3 "immediate_operand" "k01, k02")))]
   "TARGET_RVP"
-  "@
-   ppaireo.h\t%0, %1, %2
-   ppaire.h\t%0, %2, %1"
+{
+  if ((which_alternative == 0) != TARGET_BIG_ENDIAN)
+    return "ppaireo.h\t%0, %1, %2";
+  return "ppaire.h\t%0, %2, %1";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -1725,9 +1727,11 @@
       (match_operand:PV2SI 2 "register_operand" "r, r")
       (match_operand:SI 3 "immediate_operand" "k01, k02")))]
   "TARGET_RVP && TARGET_64BIT"
-  "@
-   ppaireo.w\t%0, %1, %2
-   pack\t%0, %2, %1"
+{
+  if ((which_alternative == 0) != TARGET_BIG_ENDIAN)
+    return "ppaireo.w\t%0, %1, %2";
+  return "pack\t%0, %2, %1";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -1735,14 +1739,18 @@
 ;; halfword of each operand into a 32-bit word, which is what is needed for
 ;; both RV32 and RV64; on RV64 a plain PACK would instead concatenate the
 ;; full 32-bit halves and produce a wrong result.  On RV32 PPAIRE.H is an
-;; alias of PACK, so this is also correct there.
+;; alias of PACK, so this is also correct there.  VEC_CONCAT names logical
+;; elements, whereas the instruction puts its first source in the low bits.
 (define_insn "ppaire_concatpv2hi"
   [(set (match_operand:PV2HI 0 "register_operand" "=r")
         (vec_concat:PV2HI
           (match_operand:HI 1 "register_operand" "r") 
           (match_operand:HI 2 "register_operand" "r")))]
   "TARGET_RVP"
-  "ppaire.h\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaire.h\t%0, %2, %1"
+			   : "ppaire.h\t%0, %1, %2";
+}
   [(set_attr "type"  "arith")
    (set_attr "mode"  "SI")])
 
@@ -1752,7 +1760,10 @@
           (match_operand:SI 1 "register_operand" "r") 
           (match_operand:SI 2 "register_operand" "r")))]
   "TARGET_RVP && TARGET_64BIT"
-  "pack\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "pack\t%0, %2, %1"
+			   : "pack\t%0, %1, %2";
+}
   [(set_attr "type"  "arith")
    (set_attr "mode"  "DI")])
 

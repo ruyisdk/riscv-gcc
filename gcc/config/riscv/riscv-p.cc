@@ -491,10 +491,13 @@ riscv_concat_pv4qi (rtx op0, rtx op1)
   if (TARGET_64BIT)
     {
       rtx packed = gen_reg_rtx (PV2SImode);
+      rtx low = gen_lowpart (SImode, op0);
+      rtx high = gen_lowpart (SImode, op1);
+      /* Preserve physical halves when constructing logical elements.  */
       emit_insn (gen_rtx_SET (packed,
 			      gen_rtx_VEC_CONCAT (PV2SImode,
-						  gen_lowpart (SImode, op0),
-						  gen_lowpart (SImode, op1))));
+					TARGET_BIG_ENDIAN ? high : low,
+					TARGET_BIG_ENDIAN ? low : high)));
       return gen_lowpart (PV8QImode, packed);
     }
 
