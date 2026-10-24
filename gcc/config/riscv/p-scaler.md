@@ -127,6 +127,7 @@
   "TARGET_RVP && TARGET_64BIT"
   "rev\t%0,%1\;srai\t%0,%0,32"
   [(set_attr "type" "simd")
+   (set_attr "length" "8")
    (set_attr "mode" "DI")])
 
 ; rev_64 / rev16_64 (RV64 only): single instruction on a 64-bit value.
