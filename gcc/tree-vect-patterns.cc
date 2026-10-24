@@ -3679,6 +3679,167 @@ vect_recog_average_pattern (vec_info *vinfo,
 			      average_stmt, new_vectype);
 }
 
+/* Look through sign changes in OP, preserving PRECISION bits.  Unlike
+   promotion peeling, these casts preserve every bit used by a bitwise
+   average.  Leave widening and narrowing conversions as opaque inputs.  */
+
+static tree
+vect_bitwise_average_input (vec_info *vinfo, tree op,
+			    unsigned int precision)
+{
+  if (!INTEGRAL_TYPE_P (TREE_TYPE (op))
+      || VECT_SCALAR_BOOLEAN_TYPE_P (TREE_TYPE (op))
+      || TYPE_PRECISION (TREE_TYPE (op)) != precision)
+    return NULL_TREE;
+
+  while (stmt_vec_info def_info = vect_get_internal_def (vinfo, op))
+    {
+      gassign *def = dyn_cast <gassign *> (def_info->stmt);
+      if (!def || !CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (def)))
+	break;
+      tree input = gimple_assign_rhs1 (def);
+      if (!INTEGRAL_TYPE_P (TREE_TYPE (input))
+	  || VECT_SCALAR_BOOLEAN_TYPE_P (TREE_TYPE (input))
+	  || TYPE_PRECISION (TREE_TYPE (input)) != precision)
+	break;
+      op = input;
+    }
+  return op;
+}
+
+/* Recognize overflow-free averages before vector cost analysis:
+
+     (a & b) + ((a ^ b) >> 1) = AVG_FLOOR (a, b)
+     (a >> 1) + (a & 1)       = AVG_CEIL (a, 0)
+			     = AVG_FLOOR (a, 1).
+
+   Select signedness from the shifted value, not the addition.  Only
+   look through precision-preserving conversions and require single-use
+   terms, so replacing them does not duplicate independently live work.  */
+
+static gimple *
+vect_recog_bitwise_average_pattern (vec_info *vinfo,
+				   stmt_vec_info last_stmt_info,
+				   tree *type_out)
+{
+  gassign *last_stmt = dyn_cast <gassign *> (last_stmt_info->stmt);
+  if (!last_stmt || gimple_assign_rhs_code (last_stmt) != PLUS_EXPR)
+    return NULL;
+
+  tree type = TREE_TYPE (gimple_assign_lhs (last_stmt));
+  if (!INTEGRAL_TYPE_P (type) || VECT_SCALAR_BOOLEAN_TYPE_P (type))
+    return NULL;
+  unsigned int precision = TYPE_PRECISION (type);
+
+  gassign *terms[2];
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      vect_unpromoted_value unprom;
+      bool single_use_p = true;
+      tree op = vect_look_through_possible_promotion
+	(vinfo, gimple_op (last_stmt, i + 1), &unprom, &single_use_p);
+      if (!op || !single_use_p
+	  || TYPE_PRECISION (TREE_TYPE (op)) != precision)
+	return NULL;
+      stmt_vec_info def_info = vect_get_internal_def (vinfo, op);
+      if (!def_info)
+	return NULL;
+      terms[i] = dyn_cast <gassign *> (def_info->stmt);
+      if (!terms[i])
+	return NULL;
+    }
+  if (gimple_assign_rhs_code (terms[0]) == BIT_AND_EXPR)
+    std::swap (terms[0], terms[1]);
+  if (gimple_assign_rhs_code (terms[0]) != RSHIFT_EXPR
+      || !integer_onep (gimple_assign_rhs2 (terms[0]))
+      || gimple_assign_rhs_code (terms[1]) != BIT_AND_EXPR)
+    return NULL;
+
+  tree shifted = gimple_assign_rhs1 (terms[0]);
+  tree avg_type = TREE_TYPE (shifted);
+  if (!INTEGRAL_TYPE_P (avg_type)
+      || TYPE_PRECISION (avg_type) != precision
+      || (!types_compatible_p (type, avg_type)
+	  && (TYPE_OVERFLOW_SANITIZED (type) || TYPE_OVERFLOW_TRAPS (type))))
+    return NULL;
+
+  tree inputs[2];
+  bool half_p = integer_onep (gimple_assign_rhs2 (terms[1]));
+  if (half_p)
+    {
+      tree a = vect_bitwise_average_input (vinfo, shifted, precision);
+      tree b = vect_bitwise_average_input
+	(vinfo, gimple_assign_rhs1 (terms[1]), precision);
+      half_p = a && b && operand_equal_p (a, b, 0);
+      if (half_p)
+	inputs[0] = shifted;
+    }
+  if (!half_p)
+    {
+      stmt_vec_info xor_info = vect_get_internal_def (vinfo, shifted);
+      if (!xor_info
+	  || (!STMT_VINFO_RELATED_STMT (xor_info)
+	      && !has_single_use (shifted)))
+	return NULL;
+      gassign *xor_stmt = dyn_cast <gassign *> (xor_info->stmt);
+      if (!xor_stmt || gimple_assign_rhs_code (xor_stmt) != BIT_XOR_EXPR)
+	return NULL;
+      tree masked[2];
+      for (unsigned int i = 0; i < 2; ++i)
+	{
+	  inputs[i] = vect_bitwise_average_input
+	    (vinfo, gimple_op (xor_stmt, i + 1), precision);
+	  masked[i] = vect_bitwise_average_input
+	    (vinfo, gimple_op (terms[1], i + 1), precision);
+	  if (!inputs[i] || !masked[i])
+	    return NULL;
+	}
+      if (!((operand_equal_p (inputs[0], masked[0], 0)
+	     && operand_equal_p (inputs[1], masked[1], 0))
+	    || (operand_equal_p (inputs[0], masked[1], 0)
+		&& operand_equal_p (inputs[1], masked[0], 0))))
+	return NULL;
+    }
+
+  tree vectype = get_vectype_for_scalar_type (vinfo, avg_type);
+  if (!vectype)
+    return NULL;
+  internal_fn ifn = IFN_AVG_FLOOR;
+  if (half_p
+      && direct_internal_fn_supported_p (IFN_AVG_CEIL, vectype,
+					 OPTIMIZE_FOR_SPEED))
+    ifn = IFN_AVG_CEIL;
+  else if (!direct_internal_fn_supported_p (ifn, vectype,
+					  OPTIMIZE_FOR_SPEED))
+    return NULL;
+  if (half_p)
+    inputs[1] = (ifn == IFN_AVG_CEIL
+		 ? build_zero_cst (avg_type) : build_one_cst (avg_type));
+
+  *type_out = get_vectype_for_scalar_type (vinfo, type);
+  if (!*type_out)
+    return NULL;
+  vect_unpromoted_value unprom[2];
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      vect_def_type dt;
+      if (!vect_is_simple_use (inputs[i], vinfo, &dt))
+	return NULL;
+      unprom[i].set_op (inputs[i], dt);
+    }
+  tree new_ops[2];
+  vect_convert_inputs (vinfo, last_stmt_info, 2, new_ops, avg_type,
+		       unprom, vectype);
+  tree new_var = vect_recog_temp_ssa_var (avg_type, NULL);
+  gcall *average_stmt = gimple_build_call_internal (ifn, 2, new_ops[0],
+						    new_ops[1]);
+  gimple_call_set_lhs (average_stmt, new_var);
+  gimple_set_location (average_stmt, gimple_location (last_stmt));
+  vect_pattern_detected ("vect_recog_bitwise_average_pattern", last_stmt);
+  return vect_convert_output (vinfo, last_stmt_info, type, average_stmt,
+			      vectype);
+}
+
 /* Recognize cases in which the input to a cast is wider than its
    output, and the input is fed by a widening operation.  Fold this
    by removing the unnecessary intermediate widening.  E.g.:
@@ -7474,6 +7635,7 @@ static vect_recog_func vect_vect_recog_func_ptrs[] = {
   /* Must come after over_widening, which narrows the shift as much as
      possible beforehand.  */
   { vect_recog_average_pattern, "average" },
+  { vect_recog_bitwise_average_pattern, "bitwise_average" },
   { vect_recog_cond_expr_convert_pattern, "cond_expr_convert" },
   { vect_recog_mulhs_pattern, "mult_high" },
   { vect_recog_cast_forwprop_pattern, "cast_forwprop" },

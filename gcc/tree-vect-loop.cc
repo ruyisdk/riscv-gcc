@@ -1362,6 +1362,41 @@ vect_compute_single_scalar_iteration_cost (loop_vec_info loop_vinfo)
 
   DUMP_VECT_SCOPE ("vect_compute_single_scalar_iteration_cost");
 
+  /* Pattern recognition can make the statements feeding a pattern
+     irrelevant to the vector loop.  Their original scalar operations
+     still execute in the scalar loop, however.  Walk the original
+     dependencies of relevant patterns, stopping at data references so
+     that address arithmetic keeps its existing cost treatment.  */
+  hash_set<gimple *> scalar_pattern_stmts;
+  auto_vec<stmt_vec_info> worklist;
+  for (i = 0; i < nbbs; ++i)
+    for (gimple_stmt_iterator si = gsi_start_bb (bbs[i]);
+	 !gsi_end_p (si); gsi_next (&si))
+      {
+	stmt_vec_info stmt_info = loop_vinfo->lookup_stmt (gsi_stmt (si));
+	if (!stmt_info || !STMT_VINFO_IN_PATTERN_P (stmt_info))
+	  continue;
+	stmt_vec_info pattern_info = vect_stmt_to_vectorize (stmt_info);
+	if (STMT_VINFO_RELEVANT_P (pattern_info)
+	    || (STMT_VINFO_LIVE_P (pattern_info)
+		&& VECTORIZABLE_CYCLE_DEF (STMT_VINFO_DEF_TYPE (pattern_info))))
+	  worklist.safe_push (stmt_info);
+      }
+  while (!worklist.is_empty ())
+    {
+      stmt_vec_info stmt_info = worklist.pop ();
+      gimple *stmt = stmt_info->stmt;
+      if ((!is_gimple_assign (stmt) && !is_gimple_call (stmt))
+	  || scalar_pattern_stmts.add (stmt)
+	  || STMT_VINFO_DATA_REF (stmt_info))
+	continue;
+      ssa_op_iter iter;
+      tree op;
+      FOR_EACH_SSA_TREE_OPERAND (op, stmt, iter, SSA_OP_USE)
+	if (stmt_vec_info def_info = loop_vinfo->lookup_def (op))
+	  worklist.safe_push (def_info);
+    }
+
   /* Gather costs for statements in the scalar loop.  */
 
   /* FORNOW.  */
@@ -1394,7 +1429,8 @@ vect_compute_single_scalar_iteration_cost (loop_vec_info loop_vinfo)
           if (!STMT_VINFO_RELEVANT_P (vstmt_info)
               && (!STMT_VINFO_LIVE_P (vstmt_info)
                   || !VECTORIZABLE_CYCLE_DEF
-			(STMT_VINFO_DEF_TYPE (vstmt_info))))
+			(STMT_VINFO_DEF_TYPE (vstmt_info)))
+	      && !scalar_pattern_stmts.contains (stmt))
             continue;
 
 	  vect_cost_for_stmt kind;
