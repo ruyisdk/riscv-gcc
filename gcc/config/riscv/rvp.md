@@ -3020,18 +3020,85 @@
 ;; MVM/MVMN: Move under Mask / Move under Mask Negated
 ;; MVM:  rd = (~rs2 & rd) | (rs2 & rs1) - select rs1 where mask=1
 ;; MVMN: rd = (~rs2 & rs1) | (rs2 & rd) - select rs1 where mask=0
-(define_insn "*mvm<X:mode>"
-  [(set (match_operand:X 0 "register_operand" "=r,r")
-	(ior:X (and:X (not:X (match_operand:X 2 "register_operand" "r,r"))
-		      (match_operand:X 1 "register_operand" "0,r"))
-	       (and:X (match_dup 2)
-		      (match_operand:X 3 "register_operand" "r,0"))))]
+(define_insn_and_split "*mvm<mode>"
+  [(set (match_operand:PVMVM 0 "register_operand" "=r,r")
+	(ior:PVMVM
+	  (and:PVMVM (not:PVMVM
+		       (match_operand:PVMVM 2 "register_operand" "r,r"))
+		     (match_operand:PVMVM 1 "register_operand" "0,r"))
+	  (and:PVMVM (match_dup 2)
+		     (match_operand:PVMVM 3 "register_operand" "r,0"))))]
   "TARGET_RVP"
-  "@
-   mvm\t%0,%3,%2
-   mvmn\t%0,%1,%2"
+{
+  if (!TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8))
+    return "#";
+  return which_alternative == 0 ? "mvm\t%0,%3,%2" : "mvmn\t%0,%1,%2";
+}
+  "&& !TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8)
+   && reload_completed"
+  [(set (match_dup 4)
+	(ior:SI (and:SI (not:SI (match_dup 6)) (match_dup 5))
+		(and:SI (match_dup 6) (match_dup 7))))
+   (set (match_dup 8)
+	(ior:SI (and:SI (not:SI (match_dup 10)) (match_dup 9))
+		(and:SI (match_dup 10) (match_dup 11))))]
+{
+  /* Packed pairs start at even registers, so complete pairs can overlap
+     but their low and high halves cannot cross.  */
+  for (unsigned int i = 0; i < 4; ++i)
+    {
+      operands[i + 4] = gen_lowpart (SImode, operands[i]);
+      operands[i + 8] = gen_highpart (SImode, operands[i]);
+    }
+}
   [(set_attr "type" "arith")
-   (set_attr "mode" "<X:MODE>")])
+   (set_attr "mode" "<MODE>")
+   (set (attr "length")
+	(if_then_else (match_test "!TARGET_64BIT
+				  && known_eq (GET_MODE_SIZE (<MODE>mode), 8)")
+		      (const_int 8) (const_int 4)))])
+
+;; Normalize commuted OR-of-ANDs forms to the MVM pattern above.  Combine
+;; can use these single-insn splits when a three-insn combination does not
+;; match directly.  Keep the destination ties and register-pair splitting
+;; in that one pattern.  The first split must not reproduce its own input
+;; when the positive-mask value is also the mask.
+(define_split
+  [(set (match_operand:PVMVM 0 "register_operand")
+	(ior:PVMVM
+	  (and:PVMVM (not:PVMVM (match_operand:PVMVM 2 "register_operand"))
+		     (match_operand:PVMVM 1 "register_operand"))
+	  (and:PVMVM (match_operand:PVMVM 3 "register_operand")
+		     (match_dup 2))))]
+  "TARGET_RVP && can_create_pseudo_p ()
+   && !rtx_equal_p (operands[2], operands[3])"
+  [(set (match_dup 0)
+	(ior:PVMVM (and:PVMVM (not:PVMVM (match_dup 2)) (match_dup 1))
+		   (and:PVMVM (match_dup 2) (match_dup 3))))])
+
+(define_split
+  [(set (match_operand:PVMVM 0 "register_operand")
+	(ior:PVMVM
+	  (and:PVMVM (match_operand:PVMVM 2 "register_operand")
+		     (match_operand:PVMVM 3 "register_operand"))
+	  (and:PVMVM (not:PVMVM (match_dup 2))
+		     (match_operand:PVMVM 1 "register_operand"))))]
+  "TARGET_RVP && can_create_pseudo_p ()"
+  [(set (match_dup 0)
+	(ior:PVMVM (and:PVMVM (not:PVMVM (match_dup 2)) (match_dup 1))
+		   (and:PVMVM (match_dup 2) (match_dup 3))))])
+
+(define_split
+  [(set (match_operand:PVMVM 0 "register_operand")
+	(ior:PVMVM
+	  (and:PVMVM (match_operand:PVMVM 3 "register_operand")
+		     (match_operand:PVMVM 2 "register_operand"))
+	  (and:PVMVM (not:PVMVM (match_dup 2))
+		     (match_operand:PVMVM 1 "register_operand"))))]
+  "TARGET_RVP && can_create_pseudo_p ()"
+  [(set (match_dup 0)
+	(ior:PVMVM (and:PVMVM (not:PVMVM (match_dup 2)) (match_dup 1))
+		   (and:PVMVM (match_dup 2) (match_dup 3))))])
 
 ;; MVM/MVMN XOR forms: ((a ^ b) & mask) ^ c
 ;; This pattern is similar to AArch64's BSL (Bitwise Select) pattern.
@@ -3041,34 +3108,80 @@
 ;;
 ;; The pattern ((a ^ b) & mask) ^ a is equivalent to (~mask & a) | (mask & b)
 ;; The pattern ((a ^ b) & mask) ^ b is equivalent to (~mask & b) | (mask & a)
-(define_insn "*mvm<X:mode>_xor"
-  [(set (match_operand:X 0 "register_operand" "=r,r")
-	(xor:X (and:X (xor:X (match_operand:X 1 "register_operand" "0,r")
-			     (match_operand:X 3 "register_operand" "r,0"))
-		      (match_operand:X 2 "register_operand" "r,r"))
-	       (match_dup 1)))]
+(define_insn_and_split "*mvm<mode>_xor"
+  [(set (match_operand:PVMVM 0 "register_operand" "=r,r")
+	(xor:PVMVM
+	  (and:PVMVM
+	    (xor:PVMVM (match_operand:PVMVM 1 "register_operand" "0,r")
+		       (match_operand:PVMVM 3 "register_operand" "r,0"))
+	    (match_operand:PVMVM 2 "register_operand" "r,r"))
+	  (match_dup 1)))]
   "TARGET_RVP"
-  "@
-   mvm\t%0,%3,%2
-   mvmn\t%0,%1,%2"
+{
+  if (!TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8))
+    return "#";
+  return which_alternative == 0 ? "mvm\t%0,%3,%2" : "mvmn\t%0,%1,%2";
+}
+  "&& !TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8)
+   && reload_completed"
+  [(set (match_dup 4)
+	(xor:SI (and:SI (xor:SI (match_dup 5) (match_dup 7)) (match_dup 6))
+		(match_dup 5)))
+   (set (match_dup 8)
+	(xor:SI (and:SI (xor:SI (match_dup 9) (match_dup 11)) (match_dup 10))
+		(match_dup 9)))]
+{
+  for (unsigned int i = 0; i < 4; ++i)
+    {
+      operands[i + 4] = gen_lowpart (SImode, operands[i]);
+      operands[i + 8] = gen_highpart (SImode, operands[i]);
+    }
+}
   [(set_attr "type" "arith")
-   (set_attr "mode" "<X:MODE>")])
+   (set_attr "mode" "<MODE>")
+   (set (attr "length")
+	(if_then_else (match_test "!TARGET_64BIT
+				  && known_eq (GET_MODE_SIZE (<MODE>mode), 8)")
+		      (const_int 8) (const_int 4)))])
 
 ;; Alternative form where the outer XOR operand is operands[3] instead
 ;; of operands[1].  This is needed because combine may produce either form
 ;; depending on which operand of the inner XOR it chooses to commute.
-(define_insn "*mvm<X:mode>_xor_alt"
-  [(set (match_operand:X 0 "register_operand" "=r,r")
-	(xor:X (and:X (xor:X (match_operand:X 1 "register_operand" "r,0")
-			     (match_operand:X 3 "register_operand" "0,r"))
-		      (match_operand:X 2 "register_operand" "r,r"))
-	       (match_dup 3)))]
+(define_insn_and_split "*mvm<mode>_xor_alt"
+  [(set (match_operand:PVMVM 0 "register_operand" "=r,r")
+	(xor:PVMVM
+	  (and:PVMVM
+	    (xor:PVMVM (match_operand:PVMVM 1 "register_operand" "r,0")
+		       (match_operand:PVMVM 3 "register_operand" "0,r"))
+	    (match_operand:PVMVM 2 "register_operand" "r,r"))
+	  (match_dup 3)))]
   "TARGET_RVP"
-  "@
-   mvm\t%0,%1,%2
-   mvmn\t%0,%3,%2"
+{
+  if (!TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8))
+    return "#";
+  return which_alternative == 0 ? "mvm\t%0,%1,%2" : "mvmn\t%0,%3,%2";
+}
+  "&& !TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8)
+   && reload_completed"
+  [(set (match_dup 4)
+	(xor:SI (and:SI (xor:SI (match_dup 5) (match_dup 7)) (match_dup 6))
+		(match_dup 7)))
+   (set (match_dup 8)
+	(xor:SI (and:SI (xor:SI (match_dup 9) (match_dup 11)) (match_dup 10))
+		(match_dup 11)))]
+{
+  for (unsigned int i = 0; i < 4; ++i)
+    {
+      operands[i + 4] = gen_lowpart (SImode, operands[i]);
+      operands[i + 8] = gen_highpart (SImode, operands[i]);
+    }
+}
   [(set_attr "type" "arith")
-   (set_attr "mode" "<X:MODE>")])
+   (set_attr "mode" "<MODE>")
+   (set (attr "length")
+	(if_then_else (match_test "!TARGET_64BIT
+				  && known_eq (GET_MODE_SIZE (<MODE>mode), 8)")
+		      (const_int 8) (const_int 4)))])
 
 ;; PSABS: Saturating absolute value for scalar and packed QI/HI modes
 (define_insn "ssabs<mode>2"

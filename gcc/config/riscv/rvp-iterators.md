@@ -88,6 +88,11 @@
 ;; Includes PV2SI which is now supported on both RV32 and RV64
 (define_mode_iterator PVMOVE [PV4QI PV2HI PV8QI PV4HI PV2SI])
 
+;; Scalar words and packed vectors for bitwise masked moves.  Eight-byte
+;; vectors on RV32 are split into one masked move per register.
+(define_mode_iterator PVMVM [(SI "!TARGET_64BIT") (DI "TARGET_64BIT")
+			    PV4QI PV2HI PV8QI PV4HI PV2SI])
+
 ;; QIHI: Scalar and packed modes for byte and halfword elements
 ;; Used for instructions like PSABS that work on both scalar and packed modes
 (define_mode_iterator QIHI [QI HI PV4QI PV2HI
