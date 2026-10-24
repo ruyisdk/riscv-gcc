@@ -2575,7 +2575,9 @@ get_misalign_in_elems (gimple **seq, loop_vec_info loop_vinfo)
    Else, compute address misalignment in bytes:
      addr_mis = addr & (target_align - 1)
 
-   prolog_niters = ((VF - addr_mis/elem_size)&(VF-1))/step
+   align_in_elems = target_align / elem_size
+   prolog_niters = (align_in_elems - addr_mis / elem_size)
+		  & (align_in_elems - 1)
 
    (elem_size = element type size; an element is the scalar element whose type
    is the inner type of the vectype)
@@ -2583,15 +2585,13 @@ get_misalign_in_elems (gimple **seq, loop_vec_info loop_vinfo)
    The computations will be emitted at the end of BB.  We also compute and
    store upper bound (included) of the result in BOUND.
 
-   When the step of the data-ref in the loop is not 1 (as in interleaved data
-   and SLP), the number of iterations of the prolog must be divided by the step
-   (which is equal to the size of interleaved group).
+   For a negative step, reverse the subtraction before applying the mask.
+   Unknown-alignment peeling does not support grouped accesses.  For known
+   alignment, use the precomputed peel count, which accounts for the size
+   of an interleaved group.
 
-   The above formulas assume that VF == number of elements in the vector. This
-   may not hold when there are multiple-types in the loop.
-   In this case, for some data-references in the loop the VF does not represent
-   the number of elements that fit in the vector.  Therefore, instead of VF we
-   use TYPE_VECTOR_SUBPARTS.  */
+   The alignment period need not equal the vectorization factor or the
+   number of elements in VECTYPE.  */
 
 static tree
 vect_gen_prolog_loop_niters (loop_vec_info loop_vinfo,
@@ -2646,7 +2646,7 @@ vect_gen_prolog_loop_niters (loop_vec_info loop_vinfo,
 			     misalign_in_elems);
       iters = fold_build2 (BIT_AND_EXPR, type, iters, align_in_elems_minus_1);
       iters = fold_convert (niters_type, iters);
-      *bound = align_in_elems;
+      *bound = align_in_elems - 1;
     }
 
   if (dump_enabled_p ())

@@ -2586,7 +2586,12 @@ start_over:
 	    {
 	      dr_vec_info *dr_info = LOOP_VINFO_UNALIGNED_DR (loop_vinfo);
 	      tree vectype = STMT_VINFO_VECTYPE (dr_info->stmt);
-	      niters_th += TYPE_VECTOR_SUBPARTS (vectype) - 1;
+	      unsigned HOST_WIDE_INT elem_size
+		= tree_to_uhwi (TYPE_SIZE_UNIT (TREE_TYPE (vectype)));
+	      /* The runtime peel count is masked by alignment_in_elems - 1,
+		 which need not equal the vector element count minus one.  */
+	      niters_th
+		+= exact_div (DR_TARGET_ALIGNMENT (dr_info), elem_size) - 1;
 	    }
 	  else
 	    niters_th += LOOP_VINFO_PEELING_FOR_ALIGNMENT (loop_vinfo);
@@ -4094,8 +4099,8 @@ vect_estimate_min_profitable_iters (loop_vec_info loop_vinfo,
   /* Add additional cost for the peeled instructions in prologue and epilogue
      loop.  (For fully-masked loops there will be no peeling.)
 
-     FORNOW: If we don't know the value of peel_iters for prologue or epilogue
-     at compile-time - we assume it's vf/2 (the worst would be vf-1).
+     If the peeling counts are unknown, estimate half the alignment period
+     for the prologue and half the vectorization factor for the epilogue.
 
      TODO: Build an expression that represents peel_iters for prologue and
      epilogue to be used in a run-time test.  */
@@ -4108,10 +4113,13 @@ vect_estimate_min_profitable_iters (loop_vec_info loop_vinfo,
     peel_iters_prologue = 0;
   else if (npeel < 0)
     {
-      peel_iters_prologue = assumed_vf / 2;
+      peel_iters_prologue
+	= vect_estimate_alignment_peeling
+	    (loop_vinfo, LOOP_VINFO_UNALIGNED_DR (loop_vinfo));
       if (dump_enabled_p ())
 	dump_printf (MSG_NOTE, "cost model: "
-		     "prologue peel iters set to vf/2.\n");
+		     "prologue peel iters estimated to %d using alignment.\n",
+		     peel_iters_prologue);
 
       /* If peeled iterations are unknown, count a taken branch and a not taken
 	 branch per peeled loop.  Even if scalar loop iterations are known,
