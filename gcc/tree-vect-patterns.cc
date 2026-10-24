@@ -4776,6 +4776,8 @@ vect_recog_mult_pattern (vec_info *vinfo,
 
 extern bool gimple_unsigned_integer_sat_add (tree, tree*, tree (*)(tree));
 extern bool gimple_unsigned_integer_sat_sub (tree, tree*, tree (*)(tree));
+extern bool gimple_unsigned_integer_sat_sub_trunc (tree, tree *,
+						 tree (*) (tree));
 extern bool gimple_unsigned_integer_sat_trunc (tree, tree*, tree (*)(tree));
 
 extern bool gimple_unsigned_integer_narrow_clip (tree, tree*, tree (*)(tree));
@@ -4973,6 +4975,7 @@ vect_recog_sat_sub_pattern (vec_info *vinfo, stmt_vec_info stmt_vinfo,
   tree lhs = gimple_assign_lhs (last_stmt);
 
   if (gimple_unsigned_integer_sat_sub (lhs, ops, NULL)
+      || gimple_unsigned_integer_sat_sub_trunc (lhs, ops, NULL)
       || gimple_signed_integer_sat_sub (lhs, ops, NULL))
     {
       vect_recog_sat_sub_pattern_transform (vinfo, stmt_vinfo, lhs, ops);

@@ -4138,9 +4138,21 @@ build_saturation_binary_arith_call_and_replace (gimple_stmt_iterator *gsi,
 {
   if (direct_internal_fn_supported_p (fn, TREE_TYPE (op_0), OPTIMIZE_FOR_BOTH))
     {
+      /* Keep the saturation domain independent of a conversion on LHS.  */
+      tree result = lhs;
+      if (!useless_type_conversion_p (TREE_TYPE (lhs), TREE_TYPE (op_0)))
+	result = make_ssa_name (TREE_TYPE (op_0));
+
       gcall *call = gimple_build_call_internal (fn, 2, op_0, op_1);
-      gimple_call_set_lhs (call, lhs);
-      gsi_replace (gsi, call, /* update_eh_info */ true);
+      gimple_call_set_lhs (call, result);
+      if (result != lhs)
+	{
+	  gsi_insert_before (gsi, call, GSI_SAME_STMT);
+	  gassign *convert = gimple_build_assign (lhs, NOP_EXPR, result);
+	  gsi_replace (gsi, convert, /* update_eh_info */ true);
+	}
+      else
+	gsi_replace (gsi, call, /* update_eh_info */ true);
     }
 }
 
@@ -4152,9 +4164,18 @@ build_saturation_binary_arith_call_and_insert (gimple_stmt_iterator *gsi,
   if (!direct_internal_fn_supported_p (fn, TREE_TYPE (op_0), OPTIMIZE_FOR_BOTH))
     return false;
 
+  tree result = lhs;
+  if (!useless_type_conversion_p (TREE_TYPE (lhs), TREE_TYPE (op_0)))
+    result = make_ssa_name (TREE_TYPE (op_0));
+
   gcall *call = gimple_build_call_internal (fn, 2, op_0, op_1);
-  gimple_call_set_lhs (call, lhs);
+  gimple_call_set_lhs (call, result);
   gsi_insert_before (gsi, call, GSI_SAME_STMT);
+  if (result != lhs)
+    {
+      gassign *convert = gimple_build_assign (lhs, NOP_EXPR, result);
+      gsi_insert_before (gsi, convert, GSI_SAME_STMT);
+    }
 
   return true;
 }
