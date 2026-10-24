@@ -12226,6 +12226,51 @@ and,
     (view_convert (vec_perm @0 @1 @2)))))
 
 #if GIMPLE
+/* Add the rounding bit without overflowing a biased full-width sum.
+   For K >= 2, shifting by K - 1 leaves room to add one.  The low bit of
+   that shifted value is independent of the rounding-bit shift's sign.
+   Look through only conversions that preserve precision and lane shape.
+   Avoid introducing multiword scalar additions and shifts.  Require the
+   quotient and rounding bit to have single uses, including conversions,
+   so that sharing cannot make the replacement more expensive.  */
+(simplify
+ (plus:c (nop_convert1?@3 (rshift@4 @0 INTEGER_CST@1))
+         (nop_convert2?@5 (bit_and@6
+           (rshift (nop_convert3? @0) INTEGER_CST@2) integer_onep)))
+ (with { tree shift_type = TREE_TYPE (@0); }
+  (if (ANY_INTEGRAL_TYPE_P (shift_type)
+       && (VECTOR_TYPE_P (shift_type)
+	   || TYPE_PRECISION (shift_type) <= BITS_PER_WORD)
+       && single_use (@3) && single_use (@4)
+       && single_use (@5) && single_use (@6)
+       && tree_fits_uhwi_p (@1) && tree_fits_uhwi_p (@2)
+       && IN_RANGE (tree_to_uhwi (@1), 2, element_precision (shift_type) - 1)
+       && tree_to_uhwi (@2) == tree_to_uhwi (@1) - 1)
+   (view_convert
+    (rshift:shift_type
+     (plus:shift_type (rshift:shift_type @0 @2)
+                      { build_one_cst (shift_type); })
+     { build_int_cst (TREE_TYPE (@1), 1); })))))
+
+/* One-bit rounding is a full-precision average with zero (ceil) or one
+   (floor).  Prefer ceil where supported, avoiding a nonzero constant.
+   Keep shared intermediates and trapping reverse conversions intact.  */
+(simplify
+ (plus:c (nop_convert1?@1 (rshift@2 @0 integer_onep))
+	 (nop_convert2?@3 (bit_and@4 (nop_convert3? @0) integer_onep)))
+ (with { tree avg_type = TREE_TYPE (@0); }
+  (if (VECTOR_TYPE_P (avg_type)
+       && single_use (@1) && single_use (@2)
+       && single_use (@3) && single_use (@4)
+       && (types_match (type, avg_type)
+	   || (!TYPE_OVERFLOW_SANITIZED (type) && !TYPE_OVERFLOW_TRAPS (type))))
+   (if (direct_internal_fn_supported_p (IFN_AVG_CEIL, avg_type,
+				       OPTIMIZE_FOR_BOTH))
+    (view_convert (IFN_AVG_CEIL:avg_type @0 { build_zero_cst (avg_type); }))
+    (if (direct_internal_fn_supported_p (IFN_AVG_FLOOR, avg_type,
+					OPTIMIZE_FOR_BOTH))
+     (view_convert (IFN_AVG_FLOOR:avg_type @0 { build_one_cst (avg_type); })))))))
+
 /* Preserve folding when an average's inputs become equal or constant
    after inlining.  Use overflow-free identities for constant lanes.  */
 (for avg (IFN_AVG_FLOOR IFN_AVG_CEIL)
