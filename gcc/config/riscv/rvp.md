@@ -206,11 +206,11 @@
   DONE;
 })
 
-;; Split PV4HI multiplication into element-wise multiplications using mul.h00/mul.h11
-;; when the pattern cannot be combined into more efficient forms (like PWMUL).
-;; On RV32, PV4HI uses register pairs where each 32-bit word contains TWO packed
-;; 16-bit elements. We use mul.h00 and mul.h11 to multiply individual elements,
-;; then pack the results using shift and OR.
+;; Lower an unfused RV32 PV4HI product with MUL.H00/MUL.H11 and PACK
+;; (PPAIRE.H) to retain the low half of each product.  Use scalar bitwise
+;; RTL for PACK so its meaning is independent of vector element order.
+;; Read both source words before writing either result word, allowing
+;; complete source-pair reuse.
 (define_split
   [(set (match_operand:PV4HI 0 "register_operand")
         (mult:PV4HI (match_operand:PV4HI 1 "register_operand")
@@ -218,49 +218,25 @@
   "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()"
   [(const_int 0)]
 {
-  rtx dest_lo = riscv_subword (operands[0], false);
-  rtx dest_hi = riscv_subword (operands[0], true);
-  rtx src1_lo = riscv_subword (operands[1], false);
-  rtx src1_hi = riscv_subword (operands[1], true);
-  rtx src2_lo = riscv_subword (operands[2], false);
-  rtx src2_hi = riscv_subword (operands[2], true);
+  rtx products[4];
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      rtx op1 = riscv_subword (operands[1], i != 0);
+      rtx op2 = riscv_subword (operands[2], i != 0);
+      products[2 * i] = gen_reg_rtx (SImode);
+      products[2 * i + 1] = gen_reg_rtx (SImode);
+      emit_insn (gen_mulhisi3 (products[2 * i], gen_lowpart (HImode, op1),
+			     gen_lowpart (HImode, op2)));
+      emit_insn (gen_mul_h11 (products[2 * i + 1], op1, op2));
+    }
 
-  /* Each 32-bit word contains two 16-bit elements [e0, e1] or [e2, e3].
-     mul.h00 multiplies lower 16-bit elements: result in lower 16 bits
-     mul.h11 multiplies upper 16-bit elements: result in lower 16 bits
-     We pack them: (mul.h11 << 16) | (mul.h00 & 0xFFFF) */
-
-  /* Process lower word: elements [0] and [1] */
-  rtx temp_e0 = gen_reg_rtx (SImode);  /* element 0 result */
-  rtx temp_e1 = gen_reg_rtx (SImode);  /* element 1 result */
-  rtx temp_e1_shifted = gen_reg_rtx (SImode);
-  rtx temp_e0_masked = gen_reg_rtx (SImode);
-
-  /* mul_h00 expects HImode operands: extract lower 16 bits as HImode */
-  rtx src1_lo_hi = gen_lowpart (HImode, src1_lo);
-  rtx src2_lo_hi = gen_lowpart (HImode, src2_lo);
-
-  emit_insn (gen_mulhisi3 (temp_e0, src1_lo_hi, src2_lo_hi));
-  emit_insn (gen_mul_h11 (temp_e1, src1_lo, src2_lo));
-  emit_insn (gen_ashlsi3 (temp_e1_shifted, temp_e1, GEN_INT (16)));
-  emit_insn (gen_andsi3 (temp_e0_masked, temp_e0, GEN_INT (0xFFFF)));
-  emit_insn (gen_iorsi3 (dest_lo, temp_e1_shifted, temp_e0_masked));
-
-  /* Process upper word: elements [2] and [3] */
-  rtx temp_e2 = gen_reg_rtx (SImode);  /* element 2 result */
-  rtx temp_e3 = gen_reg_rtx (SImode);  /* element 3 result */
-  rtx temp_e3_shifted = gen_reg_rtx (SImode);
-  rtx temp_e2_masked = gen_reg_rtx (SImode);
-
-  /* mul_h00 expects HImode operands: extract lower 16 bits as HImode */
-  rtx src1_hi_hi = gen_lowpart (HImode, src1_hi);
-  rtx src2_hi_hi = gen_lowpart (HImode, src2_hi);
-
-  emit_insn (gen_mulhisi3 (temp_e2, src1_hi_hi, src2_hi_hi));
-  emit_insn (gen_mul_h11 (temp_e3, src1_hi, src2_hi));
-  emit_insn (gen_ashlsi3 (temp_e3_shifted, temp_e3, GEN_INT (16)));
-  emit_insn (gen_andsi3 (temp_e2_masked, temp_e2, GEN_INT (0xFFFF)));
-  emit_insn (gen_iorsi3 (dest_hi, temp_e3_shifted, temp_e2_masked));
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      rtx dest = riscv_subword (operands[0], i != 0);
+      emit_insn (gen_riscv_xpack_si_hi_2
+		 (dest, products[2 * i + 1], GEN_INT (16),
+		  gen_lowpart (HImode, products[2 * i])));
+    }
 
   DONE;
 })
@@ -429,8 +405,15 @@
 
   rtx result_lo = gen_lowpart (HImode, temp_e0);
   rtx result_hi = gen_lowpart (HImode, temp_e1);
-
-  emit_insn (gen_ppaire_concatpv2hi (operands[0], result_lo, result_hi)); 
+  /* The low product occupies the low bits on either endian target.
+     VEC_CONCAT describes element order, so use bitwise RTL instead when
+     that order differs.  Retain little-endian lane folding otherwise.  */
+  if (TARGET_BIG_ENDIAN)
+    emit_insn (gen_riscv_xpack_si_hi_2
+	       (gen_lowpart (SImode, operands[0]), temp_e1, GEN_INT (16),
+		result_lo));
+  else
+    emit_insn (gen_ppaire_concatpv2hi (operands[0], result_lo, result_hi));
 
   DONE;
 }
