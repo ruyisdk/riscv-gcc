@@ -31,6 +31,18 @@
     DONE;
 })
 
+;; Reuse the scalar-aligned expansion for packed memory references.  This
+;; also avoids stack temporaries when a view conversion requires a move
+;; whose alignment is smaller than the packed mode's alignment.
+(define_expand "movmisalign<mode>"
+  [(set (match_operand:PVMOVE 0 "nonimmediate_operand")
+	(match_operand:PVMOVE 1 "general_operand"))]
+  "TARGET_RVP"
+{
+  emit_move_insn (operands[0], operands[1]);
+  DONE;
+})
+
 ;; Single-register move for packed vectors
 ;; - 4-byte vectors (PV4QI, PV2HI): always use single register on both RV32 and RV64
 ;; - 8-byte vectors (PV8QI, PV4HI, PV2SI): use single register on RV64 only
