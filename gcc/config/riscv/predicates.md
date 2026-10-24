@@ -405,6 +405,9 @@
        (and (match_code "subreg")
             (match_test "subreg_lowpart_p (op)"))))
 
+(define_predicate "rvp_subreg_operator"
+  (match_code "subreg"))
+
 (define_predicate "fp_native_comparison"
   (match_code "eq,lt,le,gt,ge"))
 

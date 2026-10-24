@@ -28,6 +28,9 @@
 ;; Used for instructions whose 4-byte halfword form exists on both RV32 and RV64.
 (define_mode_iterator PVHIW [PV2HI])
 
+;; Halfword vectors with selected modular products on RV32.
+(define_mode_iterator RVP_EXTRACT_H [PV2HI PV4HI])
+
 ;; PVHW: 8-byte packed halfword and word modes (PV4HI + PV2SI).
 ;; Single register on RV64; register pair on RV32.
 ;; Used for instructions that have distinct DB/DH/DW (RV32) and B/H/W (RV64) forms.

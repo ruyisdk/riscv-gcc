@@ -80,6 +80,77 @@
    (set_attr "type" "move,move,move,load,store,mtc,fpload,mfc,fmove,fpstore")
    (set_attr "mode" "<MODE>")])
 
+;; A selected modular halfword product does not need the other products
+;; or a packed result.  Signed and unsigned multiplication have identical
+;; low 16 bits.  Match the existing subreg extraction so that ordinary
+;; extracts remain available to other multiply and reduction patterns.
+(define_insn_and_split "*rvp_extract_mul_<mode><u>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(any_extend:SI
+	  (match_operator:HI 3 "rvp_subreg_operator"
+	    [(mult:RVP_EXTRACT_H
+	       (match_operand:RVP_EXTRACT_H 1 "register_operand" "r")
+	       (match_operand:RVP_EXTRACT_H 2 "register_operand" "r"))])))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && SUBREG_BYTE (operands[3]).is_constant ()
+   && SUBREG_BYTE (operands[3]).to_constant () % 2 == 0
+   && SUBREG_BYTE (operands[3]).to_constant ()
+      < GET_MODE_SIZE (<MODE>mode).to_constant ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  unsigned int byte = SUBREG_BYTE (operands[3]).to_constant ();
+  rtx a = simplify_gen_subreg (SImode, operands[1], <MODE>mode,
+			      byte & ~3U);
+  rtx b = simplify_gen_subreg (SImode, operands[2], <MODE>mode,
+			      byte & ~3U);
+  rtx product = gen_reg_rtx (SImode);
+  if (((byte & 2) != 0) != TARGET_BIG_ENDIAN)
+    emit_insn (gen_mul_h11 (product, a, b));
+  else
+    emit_insn (gen_mulhisi3 (product, gen_lowpart (HImode, a),
+			   gen_lowpart (HImode, b)));
+  emit_insn (gen_<optab>hisi2 (operands[0], gen_lowpart (HImode, product)));
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set_attr "length" "8")])
+
+;; A right shift by 16 selects the high physical half of a word in either
+;; byte order.  Preserve the extension of the truncated halfword product.
+(define_insn_and_split "*rvp_extract_mul_high_<mode>_<optab>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(any_shiftrt:SI
+	  (match_operator:SI 3 "rvp_subreg_operator"
+	    [(mult:RVP_EXTRACT_H
+	       (match_operand:RVP_EXTRACT_H 1 "register_operand" "r")
+	       (match_operand:RVP_EXTRACT_H 2 "register_operand" "r"))])
+	  (const_int 16)))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && SUBREG_BYTE (operands[3]).is_constant ()
+   && SUBREG_BYTE (operands[3]).to_constant () % 4 == 0
+   && SUBREG_BYTE (operands[3]).to_constant ()
+      < GET_MODE_SIZE (<MODE>mode).to_constant ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  unsigned int byte = SUBREG_BYTE (operands[3]).to_constant ();
+  rtx a = simplify_gen_subreg (SImode, operands[1], <MODE>mode, byte);
+  rtx b = simplify_gen_subreg (SImode, operands[2], <MODE>mode, byte);
+  rtx product = gen_reg_rtx (SImode);
+  emit_insn (gen_mul_h11 (product, a, b));
+  if (<CODE> == ASHIFTRT)
+    emit_insn (gen_extendhisi2 (operands[0], gen_lowpart (HImode, product)));
+  else
+    emit_insn (gen_zero_extendhisi2 (operands[0],
+				   gen_lowpart (HImode, product)));
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set_attr "length" "8")])
+
 ;; Binary Arithmetic Operations
 
 ;; Unified pattern for all binary arithmetic operations
