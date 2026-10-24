@@ -5006,6 +5006,31 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
 	  rtx op1 = XEXP (x, 1);
 	  int shamt = riscv_macc_shift_amount (mode);
 
+	  /* Packed widening products consume the narrow registers directly.
+	     Do not charge for standalone extensions that the matching pattern
+	     does not emit.  RV64 needs one ZIP for equal signedness, or two
+	     zero-widening ZIPs for mixed signedness; RV32 needs neither.  */
+	  if ((mode == PV4HImode || mode == PV2SImode)
+	      && (GET_CODE (op0) == SIGN_EXTEND
+		  || GET_CODE (op0) == ZERO_EXTEND)
+	      && (GET_CODE (op1) == SIGN_EXTEND
+		  || GET_CODE (op1) == ZERO_EXTEND))
+	    {
+	      machine_mode narrow_mode
+		= mode == PV4HImode ? PV4QImode : PV2HImode;
+	      if (register_operand (XEXP (op0, 0), narrow_mode)
+		  && register_operand (XEXP (op1, 0), narrow_mode))
+		{
+		  unsigned int zips
+		    = TARGET_64BIT ? (GET_CODE (op0) == GET_CODE (op1) ? 1 : 2)
+				   : 0;
+		  *total = COSTS_N_INSNS (zips)
+			   + (speed ? tune_param->int_mul[0]
+				    : COSTS_N_INSNS (1));
+		  return true;
+		}
+	    }
+
 	  /* Example MACC patterns:
 	     - MACC.H01: (mult (sign_extend a[0]) (ashiftrt b 16)) + acc
 	     - MACC.H01: (mult (ashiftrt a 16) (sign_extend b[0])) + acc
