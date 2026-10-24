@@ -12226,6 +12226,92 @@ and,
     (view_convert (vec_perm @0 @1 @2)))))
 
 #if GIMPLE
+/* Preserve folding when an average's inputs become equal or constant
+   after inlining.  Use overflow-free identities for constant lanes.  */
+(for avg (IFN_AVG_FLOOR IFN_AVG_CEIL)
+ (simplify
+  (avg @0 @0)
+  @0))
+
+(simplify
+ (IFN_AVG_FLOOR VECTOR_CST@0 VECTOR_CST@1)
+ (with {
+   tree both = const_binop (BIT_AND_EXPR, type, @0, @1);
+   tree different = const_binop (BIT_XOR_EXPR, type, @0, @1);
+   tree shifted = different
+     ? const_binop (RSHIFT_EXPR, type, different, integer_one_node) : NULL_TREE;
+   tree average = both && shifted
+     ? const_binop (PLUS_EXPR, type, both, shifted) : NULL_TREE;
+  }
+  (if (average)
+   { average; })))
+
+(simplify
+ (IFN_AVG_CEIL VECTOR_CST@0 VECTOR_CST@1)
+ (with {
+   tree either = const_binop (BIT_IOR_EXPR, type, @0, @1);
+   tree different = const_binop (BIT_XOR_EXPR, type, @0, @1);
+   tree shifted = different
+     ? const_binop (RSHIFT_EXPR, type, different, integer_one_node) : NULL_TREE;
+   tree average = either && shifted
+     ? const_binop (MINUS_EXPR, type, either, shifted) : NULL_TREE;
+  }
+  (if (average)
+   { average; })))
+
+/* These identities compute floor ((a + b) / 2) without overflowing an
+   element.  The signed forms use arithmetic right shifts, so negative
+   odd sums round toward negative infinity too.  Look through lane-preserving
+   conversions introduced when narrowing promoted scalar arithmetic.  Select
+   the average's signedness from the shift inputs, not the addition type.  */
+(simplify
+ (plus:c (nop_convert1? (bit_and @0 @1))
+         (nop_convert2? (rshift (bit_xor:c @0 @1) integer_onep)))
+ (with { tree avg_type = TREE_TYPE (@0); }
+  (if (VECTOR_TYPE_P (avg_type)
+       && (types_match (type, avg_type)
+	   || (!TYPE_OVERFLOW_SANITIZED (type) && !TYPE_OVERFLOW_TRAPS (type)))
+       && direct_internal_fn_supported_p (IFN_AVG_FLOOR, avg_type,
+					  OPTIMIZE_FOR_BOTH))
+   (view_convert (IFN_AVG_FLOOR:avg_type @0 @1)))))
+
+/* Reassociation can move the mask onto either input, and can group the
+   carry with either shifted input.  Match both associations.  */
+(match (avg_floor_carry @0 @1)
+ (bit_and (bit_and @0 @1) integer_onep))
+(match (avg_floor_carry @0 @1)
+ (bit_and:c (bit_and @0 integer_onep) @1))
+
+(simplify
+ (plus:c (plus:c (nop_convert1? (rshift @0 integer_onep@1))
+		 (nop_convert2? (rshift @2 @1)))
+         (nop_convert3? (avg_floor_carry @3 @4)))
+ (with { tree avg_type = TREE_TYPE (@0); }
+  (if (VECTOR_TYPE_P (avg_type)
+       && types_match (@0, @2)
+       && (types_match (type, avg_type)
+	   || (!TYPE_OVERFLOW_SANITIZED (type) && !TYPE_OVERFLOW_TRAPS (type)))
+       && direct_internal_fn_supported_p (IFN_AVG_FLOOR, avg_type,
+					  OPTIMIZE_FOR_BOTH)
+       && ((operand_equal_p (@0, @3, 0) && operand_equal_p (@2, @4, 0))
+           || (operand_equal_p (@0, @4, 0) && operand_equal_p (@2, @3, 0))))
+   (view_convert (IFN_AVG_FLOOR:avg_type @0 @2)))))
+
+(simplify
+ (plus:c (plus:c (nop_convert1? (rshift @0 integer_onep@1))
+		 (nop_convert2? (avg_floor_carry @3 @4)))
+         (nop_convert3? (rshift @2 @1)))
+ (with { tree avg_type = TREE_TYPE (@0); }
+  (if (VECTOR_TYPE_P (avg_type)
+       && types_match (@0, @2)
+       && (types_match (type, avg_type)
+	   || (!TYPE_OVERFLOW_SANITIZED (type) && !TYPE_OVERFLOW_TRAPS (type)))
+       && direct_internal_fn_supported_p (IFN_AVG_FLOOR, avg_type,
+					  OPTIMIZE_FOR_BOTH)
+       && ((operand_equal_p (@0, @3, 0) && operand_equal_p (@2, @4, 0))
+           || (operand_equal_p (@0, @4, 0) && operand_equal_p (@2, @3, 0))))
+   (view_convert (IFN_AVG_FLOOR:avg_type @0 @2)))))
+
 /* Simplify (a >> 1) + (b >> 1) + ((a | b) & 1) to .AVG_CEIL (a, b).
    Similar for (a | b) - ((a ^ b) >> 1).  */
 
