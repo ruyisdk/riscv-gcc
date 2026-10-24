@@ -762,10 +762,11 @@
   [(set (match_operand:DI          0 "register_operand")
 	(plus:DI (match_operand:DI 1 "register_operand")
 		 (match_operand:DI 2 "reg_or_const_int_operand")))]
-  "TARGET_64BIT || TARGET_RVP"
+  "TARGET_64BIT || (TARGET_RVP && !TARGET_BIG_ENDIAN)"
 {
-  /* On RV32 with RVP, keep the DI add as a single RTX operation so that the
-     widening add patterns can match it in the combine pass.  */
+  /* On little-endian RV32 with RVP, keep the DI add as a single RTX
+     operation so widening add patterns can match it in combine.  P register
+     pairs put the low word first, unlike big-endian scalar DI values.  */
   if (!TARGET_64BIT && TARGET_RVP)
     {
       if (!REG_P (operands[2]))
@@ -936,7 +937,7 @@
   [(set (match_operand:DI 0           "register_operand")
         (minus:DI (match_operand:DI 1 "reg_or_0_operand")
                   (match_operand:DI 2 "register_operand")))]
-  "TARGET_64BIT || TARGET_RVP"
+  "TARGET_64BIT || (TARGET_RVP && !TARGET_BIG_ENDIAN)"
   ""
 )
 
@@ -1357,7 +1358,7 @@
 		   (match_operand:SI 2 "register_operand" " r"))))]
   "((TARGET_ZMMUL || TARGET_MUL) && !TARGET_64BIT) || TARGET_RVP"
 {
-  if (!TARGET_RVP)
+  if (!TARGET_RVP || (!TARGET_64BIT && TARGET_BIG_ENDIAN))
     {
       rtx temp = gen_reg_rtx (SImode);
       riscv_emit_binary (MULT, temp, operands[1], operands[2]);
@@ -1391,7 +1392,7 @@
 		   (match_operand:SI 2 "register_operand" " r"))))]
   "(TARGET_ZMMUL || TARGET_MUL || TARGET_RVP) && !TARGET_64BIT"
 {
-  if (!TARGET_RVP)
+  if (!TARGET_RVP || TARGET_BIG_ENDIAN)
     {
       rtx temp = gen_reg_rtx (SImode);
       riscv_emit_binary (MULT, temp, operands[1], operands[2]);
@@ -1873,7 +1874,7 @@
 (define_expand "zero_extendsidi2"
   [(set (match_operand:DI 0 "register_operand")
 	(zero_extend:DI (match_operand:SI 1 "nonimmediate_operand")))]
-  "TARGET_64BIT || TARGET_RVP"
+  "TARGET_64BIT || (TARGET_RVP && !TARGET_BIG_ENDIAN)"
 {
   if (TARGET_64BIT)
     {
@@ -1975,7 +1976,7 @@
   [(set (match_operand:DI     0 "register_operand"     "=r,r")
 	(sign_extend:DI
 	    (match_operand:SI 1 "nonimmediate_operand" " r,m")))]
-  "TARGET_64BIT || TARGET_RVP"
+  "TARGET_64BIT || (TARGET_RVP && !TARGET_BIG_ENDIAN)"
 {
   if (TARGET_64BIT)
     {

@@ -670,7 +670,7 @@
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(mult:DI (sign_extend:DI (match_operand:HI 1 "register_operand" "r"))
 		 (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "#"
   "&& can_create_pseudo_p ()"
   [(const_int 0)]
@@ -704,7 +704,7 @@
 	      (mult:DI (sign_extend:DI (match_dup 1))
 		       (sign_extend:DI (match_dup 2))) 4)
 	    (const_int 16))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "mulh.h0\t%0,%2,%1"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
@@ -726,7 +726,7 @@
 	      (mult:DI (sign_extend:DI (match_dup 1))
 		       (sign_extend:DI (match_dup 2))) 4)
 	    (const_int 16))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "#"
   "&& can_create_pseudo_p ()"
   [(const_int 0)]
@@ -760,7 +760,7 @@
                        (sign_extend:DI
                          (match_dup 2))) 4)
             (const_int 16))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "mulh.h1\t%0,%2,%1"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])       
@@ -780,7 +780,7 @@
                    (ashiftrt:SI
 		     (match_operand:SI 2 "register_operand" "r")
 		     (const_int 16)))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "#"
   "&& reload_completed"
   [(set (match_dup 3)
@@ -802,7 +802,7 @@
 		   (match_operand:HI 1 "register_operand" "r"))
 		 (sign_extend:DI
 		   (match_operand:HI 2 "register_operand" "r"))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "#"
   "&& reload_completed"
   [(set (match_dup 3)
@@ -831,7 +831,7 @@
                                                        (const_int 16)))
                           (sign_extend:DI (ashiftrt:SI (subreg:SI (match_operand:PV2HI 4 "register_operand" "r") 0)
                                                        (const_int 16))))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "#"
   "&& reload_completed"
   [(set (match_dup 0)
@@ -852,7 +852,7 @@
                                                        (const_int 16)))
                           (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
                                                        (const_int 16))))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "pm2wadd.h\t%0, %1, %2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
@@ -875,7 +875,7 @@
                           (sign_extend:DI (match_operand:SI 4 "register_operand" "r")))))
    (clobber (match_scratch:SI 5 "=&r"))
    (clobber (match_scratch:SI 6 "=&r"))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "#"
   "&& reload_completed"
   [(set (match_dup 5) (ashiftrt:SI (subreg:SI (match_dup 2) 0) (const_int 16)))
@@ -898,7 +898,7 @@
                  (mult:DI (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 1) 0)
                                                        (const_int 16)))
                           (sign_extend:DI (subreg:HI (match_dup 2) 0)))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "pm2wadd.hx\t%0, %1, %2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
@@ -937,7 +937,7 @@
                                                         (const_int 16)))
                            (sign_extend:DI (ashiftrt:SI (subreg:SI (match_dup 2) 0)
                                                         (const_int 16))))))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "pm2wsub.h\t%0, %1, %2"
   [(set_attr "type" "imul")
    (set_attr "mode" "SI")])
@@ -2467,7 +2467,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (plus:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wadd\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2478,7 +2478,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (minus:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
                   (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wsub\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2489,7 +2489,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (plus:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "waddu\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2500,7 +2500,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (minus:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
                   (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wsubu\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2515,7 +2515,7 @@
         (plus:DI (plus:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
                           (any_extend:DI (match_operand:SI 2 "reg_or_0_operand" "rJ")))
                        (match_operand:DI 3 "register_operand" "0")))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wadda<u>\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2525,7 +2525,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (plus:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (match_operand:DI 2 "register_operand" "0")))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wadda<u>\t%0, %1, zero"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2541,7 +2541,7 @@
         (plus:DI (minus:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
                           (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
                        (match_operand:DI 3 "register_operand" "0")))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wsuba<u>\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2552,7 +2552,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (plus:DI (match_operand:DI 1 "register_operand" "R")
                  (match_operand:DI 2 "register_operand" "R")))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "addd\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2566,7 +2566,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (minus:DI (match_operand:DI 1 "reg_or_0_operand" "jR")
                   (match_operand:DI 2 "register_operand" "R")))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "subd\t%0, %z1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2574,7 +2574,7 @@
 (define_insn "*negdi2_rvp32_neg"
   [(set (match_operand:DI 0 "register_operand" "=R")
         (neg:DI (match_operand:DI 1 "register_operand" "R")))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "negd\t%0, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2624,7 +2624,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (mult:DI (sign_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wmul\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2633,7 +2633,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wmulu\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -2642,7 +2642,7 @@
   [(set (match_operand:DI 0 "register_operand" "=R")
         (mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
-  "!TARGET_64BIT && TARGET_RVP"
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN"
   "wmulsu\t%0, %2, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -3555,7 +3555,7 @@
           (mult:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
                    (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
           (match_operand:DI 3 "register_operand" "0")))]
-  "TARGET_RVP"
+  "TARGET_RVP && (TARGET_64BIT || !TARGET_BIG_ENDIAN)"
 )
 
 (define_insn "*rvp_widen_<u>maddsidi4"
@@ -3564,7 +3564,7 @@
           (mult:DI (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
                    (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
           (match_operand:DI 3 "register_operand" "0")))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "wmacc<u>\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
@@ -3575,7 +3575,7 @@
           (mult:DI (zero_extend:DI (match_operand:SI 2 "register_operand" "r"))
                    (sign_extend:DI (match_operand:SI 1 "register_operand" "r")))
           (match_operand:DI 3 "register_operand" "0")))]
-  "TARGET_RVP && !TARGET_64BIT"
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
   "wmaccsu\t%0, %1, %2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
