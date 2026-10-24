@@ -1294,6 +1294,70 @@
   [(set_attr "type" "logical")
    (set_attr "mode" "<MODE>")])
 
+;; Packed forms of the Zbb inverted logical operations.  Keep the complete
+;; expression until after reload so combine can also build masked moves.
+;; On RV32, packed pairs start at even registers: complete source pairs can
+;; overlap the destination, but their low and high halves cannot cross.
+(define_insn_and_split "*rvp_<optab>_not<mode>"
+  [(set (match_operand:PVMOVE 0 "register_operand" "=r")
+	(bitmanip_bitwise:PVMOVE
+	  (not:PVMOVE (match_operand:PVMOVE 1 "register_operand" "r"))
+	  (match_operand:PVMOVE 2 "register_operand" "r")))]
+  "TARGET_RVP && (TARGET_ZBB || TARGET_ZBKB)"
+{
+  if (!TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8))
+    return "#";
+  return "<insn>n\t%0,%2,%1";
+}
+  "&& !TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8)
+   && reload_completed"
+  [(set (match_dup 3)
+	(bitmanip_bitwise:SI (not:SI (match_dup 4)) (match_dup 5)))
+   (set (match_dup 6)
+	(bitmanip_bitwise:SI (not:SI (match_dup 7)) (match_dup 8)))]
+{
+  for (unsigned int i = 0; i < 3; ++i)
+    {
+      operands[i + 3] = gen_lowpart (SImode, operands[i]);
+      operands[i + 6] = gen_highpart (SImode, operands[i]);
+    }
+}
+  [(set_attr "type" "bitmanip")
+   (set_attr "mode" "<MODE>")
+   (set (attr "length")
+	(if_then_else (match_test "!TARGET_64BIT
+				  && known_eq (GET_MODE_SIZE (<MODE>mode), 8)")
+		      (const_int 8) (const_int 4)))])
+
+(define_insn_and_split "*rvp_xor_not<mode>"
+  [(set (match_operand:PVMOVE 0 "register_operand" "=r")
+	(not:PVMOVE
+	  (xor:PVMOVE (match_operand:PVMOVE 1 "register_operand" "r")
+		      (match_operand:PVMOVE 2 "register_operand" "r"))))]
+  "TARGET_RVP && (TARGET_ZBB || TARGET_ZBKB)"
+{
+  if (!TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8))
+    return "#";
+  return "xnor\t%0,%1,%2";
+}
+  "&& !TARGET_64BIT && known_eq (GET_MODE_SIZE (<MODE>mode), 8)
+   && reload_completed"
+  [(set (match_dup 3) (not:SI (xor:SI (match_dup 4) (match_dup 5))))
+   (set (match_dup 6) (not:SI (xor:SI (match_dup 7) (match_dup 8))))]
+{
+  for (unsigned int i = 0; i < 3; ++i)
+    {
+      operands[i + 3] = gen_lowpart (SImode, operands[i]);
+      operands[i + 6] = gen_highpart (SImode, operands[i]);
+    }
+}
+  [(set_attr "type" "bitmanip")
+   (set_attr "mode" "<MODE>")
+   (set (attr "length")
+	(if_then_else (match_test "!TARGET_64BIT
+				  && known_eq (GET_MODE_SIZE (<MODE>mode), 8)")
+		      (const_int 8) (const_int 4)))])
+
 ;; Bitwise NOT for 4-byte vector modes (always single register)
 (define_insn "one_cmpl<mode>2"
   [(set (match_operand:PV32 0 "register_operand" "=r")
