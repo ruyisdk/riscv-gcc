@@ -4353,6 +4353,36 @@ riscv_is_macc_shift_extend_pattern_p (rtx op0, rtx op1, int shamt)
 	  || (op0_is_shift && op1_is_shift));
 }
 
+/* Return the cost of a widened halfword reduction, or zero if X does not
+   match *rvp_reduc_widen_pv2hi in rvp.md.  The two lane extractions share
+   one conversion, and PREDSUM folds the entire expression.  */
+
+static int
+riscv_p_reduc_widen_cost (rtx x)
+{
+  if (TARGET_64BIT || TARGET_BIG_ENDIAN
+      || GET_CODE (x) != PLUS || GET_MODE (x) != SImode)
+    return 0;
+
+  rtx lo = XEXP (x, 0);
+  rtx hi = XEXP (x, 1);
+  if (!SUBREG_P (lo) || !SUBREG_P (hi)
+      || GET_MODE (lo) != SImode || GET_MODE (hi) != SImode
+      || !known_eq (SUBREG_BYTE (lo), 0)
+      || !known_eq (SUBREG_BYTE (hi), 4))
+    return 0;
+
+  lo = SUBREG_REG (lo);
+  hi = SUBREG_REG (hi);
+  if ((GET_CODE (lo) == SIGN_EXTEND || GET_CODE (lo) == ZERO_EXTEND)
+      && GET_MODE (lo) == PV2SImode
+      && register_operand (XEXP (lo, 0), PV2HImode)
+      && rtx_equal_p (lo, hi))
+    return COSTS_N_INSNS (1);
+
+  return 0;
+}
+
 /* Return the cost of an unsigned packed clip, or a pair packed on RV64,
    or zero if X does not match a narrowing pattern in rvp.md.
    The constant bound is encoded by the clip itself, not loaded separately.  */
@@ -5146,6 +5176,9 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
       if (clip_cost)
 	return clip_cost;
 
+      int reduction_cost = riscv_p_reduc_widen_cost (SET_SRC (x));
+      if (reduction_cost)
+	return reduction_cost;
     }
   int cost = pattern_cost (x, speed);
 

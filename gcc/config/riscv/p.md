@@ -1473,10 +1473,10 @@
 (define_insn "riscv_predsum_i8x4_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (unspec:SI [(match_operand:PV4QI 1 "register_operand" "r")
-                            (match_operand:SI 2 "nonmemory_operand" "r")]
+                            (match_operand:SI 2 "nonmemory_operand" "rJ")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
-  "predsum.bs\t%0,%1,%2"
+  "predsum.bs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsumu_u8x4_u32"
@@ -1535,10 +1535,10 @@
 (define_insn "riscv_predsum_i16x2_i32_rv32"
   [(set (match_operand:SI 0 "register_operand" "=r")
         (unspec:SI [(match_operand:PV2HI 1 "register_operand" "r")
-                            (match_operand:SI 2 "nonmemory_operand" "r")]
+                            (match_operand:SI 2 "nonmemory_operand" "rJ")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && !TARGET_64BIT"
-  "predsum.hs\t%0,%1,%2"
+  "predsum.hs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsumu_u16x2_u32"
@@ -1738,10 +1738,10 @@
 (define_insn "riscv_predsum_i8x8_i64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (unspec:DI [(match_operand:PV8QI 1 "register_operand" "r")
-                            (match_operand:DI 2 "nonmemory_operand" "r")]
+                            (match_operand:DI 2 "nonmemory_operand" "rJ")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
-  "predsum.bs\t%0,%1,%2"
+  "predsum.bs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsumu_u8x8_u64"
@@ -1804,10 +1804,10 @@
 (define_insn "riscv_predsum_i16x4_i64_rv64"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (unspec:DI [(match_operand:PV4HI 1 "register_operand" "r")
-                            (match_operand:DI 2 "nonmemory_operand" "r")]
+                            (match_operand:DI 2 "nonmemory_operand" "rJ")]
          UNSPEC_PREDSUM))]
   "TARGET_RVP && TARGET_64BIT"
-  "predsum.hs\t%0,%1,%2"
+  "predsum.hs\t%0,%1,%z2"
   [(set_attr "type" "simd")])
 
 (define_expand "riscv_predsumu_u16x4_u64"

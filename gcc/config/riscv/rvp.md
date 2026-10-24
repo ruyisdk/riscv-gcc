@@ -3275,12 +3275,38 @@
   DONE;
 })
 
-(define_expand "reduc_plus_scal_pv2si"
-  [(match_operand:SI 0 "register_operand")
-   (match_operand:PV2SI 1 "register_operand")]
+(define_expand "reduc_plus_scal_<mode>"
+  [(match_operand:<PVALL_ELT> 0 "register_operand")
+   (match_operand:PVMOVE 1 "register_operand")]
   "TARGET_RVP && !TARGET_BIG_ENDIAN"
 {
   riscv_p_expand_reduc_plus (operands[0], operands[1]);
+  DONE;
+})
+
+;; A dot product with ones sums each group of four bytes or two halfwords
+;; into a word accumulator.  Keep the modulo-2^32 accumulator semantics.
+(define_expand "widen_ssumpv2si<mode>3"
+  [(match_operand:PV2SI 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:PV2SI 2 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  rtx ones = force_reg (<MODE>mode, CONST1_RTX (<MODE>mode));
+  emit_insn (gen_sdot_prodpv2si<mode> (operands[0], operands[1], ones,
+				    operands[2]));
+  DONE;
+})
+
+(define_expand "widen_usumpv2si<mode>3"
+  [(match_operand:PV2SI 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:PV2SI 2 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  rtx ones = force_reg (<MODE>mode, CONST1_RTX (<MODE>mode));
+  emit_insn (gen_udot_prodpv2si<mode> (operands[0], operands[1], ones,
+				    operands[2]));
   DONE;
 })
 
@@ -3536,6 +3562,21 @@
   "psh1add.%d0\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
+
+;; Combine a widening conversion followed by a horizontal sum.  SLP can
+;; introduce this form instead of the scalar lane extractions below.
+(define_insn "*rvp_reduc_widen_pv2hi<u>"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (subreg:SI
+	    (any_extend:PV2SI
+	      (match_operand:PV2HI 1 "register_operand" "r")) 0)
+	  (subreg:SI
+	    (any_extend:PV2SI (match_dup 1)) 4)))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "predsum<u>.hs\t%0,%1,zero"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
 
 ;; Reduction sum
 (define_insn_and_split "*reduc_sum_inter_rtl"

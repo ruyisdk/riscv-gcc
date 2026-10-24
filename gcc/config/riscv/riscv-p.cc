@@ -119,14 +119,50 @@ riscv_p_expand_pack (rtx dest, rtx lo, rtx hi)
     }
 }
 
-/* Sum the two word lanes modulo 2^32.  */
+/* Sum lanes modulo the element width.  Signed and unsigned lane sums have
+   the same low bits.  PREDSUM computes a wider signed result, which we
+   truncate only after reducing all lanes.  */
 
 void
 riscv_p_expand_reduc_plus (rtx dest, rtx src)
 {
-  rtx low = riscv_p_vector_half (src, SImode, false);
-  rtx high = riscv_p_vector_half (src, SImode, true);
-  emit_insn (gen_addsi3 (dest, low, high));
+  machine_mode mode = GET_MODE (src);
+  if (mode == PV2SImode)
+    {
+      rtx low = riscv_p_vector_half (src, SImode, false);
+      rtx high = riscv_p_vector_half (src, SImode, true);
+      emit_insn (gen_addsi3 (dest, low, high));
+      return;
+    }
+
+  rtx sum = gen_reg_rtx (Xmode);
+  bool bytes_p = mode == PV4QImode || mode == PV8QImode;
+  if (TARGET_64BIT)
+    {
+      /* A four-byte vector does not define the upper half of its GPR.
+	 Clear those bits before reducing all XLEN bits.  */
+      if (known_eq (GET_MODE_SIZE (mode), 4))
+	{
+	  rtx wide = gen_reg_rtx (DImode);
+	  emit_insn (gen_zero_extendsidi2 (wide, gen_lowpart (SImode, src)));
+	  src = gen_lowpart (bytes_p ? PV8QImode : PV4HImode, wide);
+	}
+      emit_insn (bytes_p
+		 ? gen_riscv_predsum_i8x8_i64_rv64 (sum, src, const0_rtx)
+		 : gen_riscv_predsum_i16x4_i64_rv64 (sum, src, const0_rtx));
+    }
+  else if (mode == PV4QImode)
+    emit_insn (gen_riscv_predsum_i8x4_i32_rv32 (sum, src, const0_rtx));
+  else if (mode == PV2HImode)
+    emit_insn (gen_riscv_predsum_i16x2_i32_rv32 (sum, src, const0_rtx));
+  else
+    {
+      gcc_assert (mode == PV8QImode || mode == PV4HImode);
+      emit_insn (bytes_p
+		 ? gen_riscv_predsum_i8x8_i32_rv32 (sum, src, const0_rtx)
+		 : gen_riscv_predsum_i16x4_i32_rv32 (sum, src, const0_rtx));
+    }
+  emit_move_insn (dest, gen_lowpart (GET_MODE (dest), sum));
 }
 
 /* Expand RVP vector comparison.
