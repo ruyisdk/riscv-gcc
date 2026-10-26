@@ -5512,12 +5512,28 @@ riscv_subword (rtx op, bool high_p)
   return simplify_gen_subreg (word_mode, op, mode, byte);
 }
 
+/* Return true if an integer zero can clear a complete RV32 GPR pair.
+   Do not select ADDD for pseudos or odd hard-register ABI destinations.  */
+
+static bool
+riscv_p_zero_64bit_move_p (rtx dest, rtx src)
+{
+  return !TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN
+    && GET_MODE (dest) == DImode && src == const0_rtx
+    && REG_P (dest) && GP_REG_P (REGNO (dest))
+    && REGNO (dest) < FIRST_PSEUDO_REGISTER && REGNO (dest) != 0
+    && (REGNO (dest) % 2) == 0;
+}
+
 /* Return true if a 64-bit move from SRC to DEST should be split into two.  */
 
 bool
 riscv_split_64bit_move_p (rtx dest, rtx src)
 {
   if (TARGET_64BIT)
+    return false;
+
+  if (riscv_p_zero_64bit_move_p (dest, src))
     return false;
 
   /* Zilsd provides load/store with even-odd register pair. */
@@ -5696,6 +5712,9 @@ riscv_output_move (rtx dest, rtx src)
 
   if (dbl_p && riscv_split_64bit_move_p (dest, src))
     return "#";
+
+  if (riscv_p_zero_64bit_move_p (dest, src))
+    return "addd\t%0,x0,x0";
 
   if (dest_code == REG && GP_REG_P (REGNO (dest)))
     {

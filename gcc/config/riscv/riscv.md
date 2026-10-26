@@ -657,6 +657,16 @@
 							     operands[1])")))
 	  (const_int 4)
 
+	  ;; An integer zero can clear a complete RV32 P register pair.
+	  (and (eq_attr "move_type" "const")
+	       (and (eq_attr "mode" "DI")
+		    (match_test "!TARGET_64BIT && TARGET_RVP
+				 && !TARGET_BIG_ENDIAN
+				 && operands[1] == const0_rtx
+				 && !riscv_split_64bit_move_p (operands[0],
+							     operands[1])")))
+	  (const_int 4)
+
 	  ;; Check for doubleword moves that are decomposed into two
 	  ;; instructions.
 	  (and (eq_attr "move_type" "mtc,mfc,move")
@@ -2604,6 +2614,28 @@
    (set_attr "mode" "DI")
    (set_attr "type" "move,move,load,store,mtc,fpload,mfc,fmove,fpstore,move")
    (set_attr "ext" "base,base,base,base,d,d,d,d,d,vector")])
+
+;; A partial overwrite makes half of a preceding pair clear redundant.
+;; Keep a word clear so that it can still use the compressed encoding.
+(define_peephole2
+  [(set (match_operand:DI 0 "register_operand")
+	(const_int 0))
+   (set (match_operand:SI 1 "register_operand")
+	(match_operand:SI 2 "nonmemory_operand"))]
+  "!TARGET_64BIT && TARGET_RVP && !TARGET_BIG_ENDIAN
+   && GP_REG_P (REGNO (operands[0])) && REGNO (operands[0]) != 0
+   && (REGNO (operands[0]) % 2) == 0
+   && (REGNO (operands[1]) == REGNO (operands[0])
+       || REGNO (operands[1]) == REGNO (operands[0]) + 1)
+   && !reg_overlap_mentioned_p (operands[0], operands[2])"
+  [(set (match_dup 3) (const_int 0))
+   (set (match_dup 1) (match_dup 2))]
+{
+  unsigned int regno = REGNO (operands[0]);
+  if (REGNO (operands[1]) == regno)
+    ++regno;
+  operands[3] = gen_rtx_REG (SImode, regno);
+})
 
 ;; 32-bit Integer moves
 
