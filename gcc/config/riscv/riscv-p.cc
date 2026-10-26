@@ -984,6 +984,45 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, machine_mode op_mode,
   if (op_mode != vmode)
     return false;
 
+  /* Swap adjacent bytes within each halfword.  Keep this separate from
+     the table shared by byte and halfword modes.  */
+  if (vmode == PV4QImode || vmode == PV8QImode)
+    {
+      const int indices[] = { 1, 0, 3, 2, 5, 4, 7, 6 };
+      unsigned int len = GET_MODE_NUNITS (vmode).to_constant ();
+      vec_perm_match_type match
+	= match_vec_perm_pattern (indices, len, sel);
+      if (match != ERROR_MATCH)
+	{
+	  if (!testing_p)
+	    {
+	      rtx src = match == SWAPPED_MATCH ? op1 : op0;
+	      src = force_reg (vmode, src);
+	      emit_insn (vmode == PV4QImode
+			 ? gen_riscv_bswap16_pv4qi (target, src)
+			 : gen_riscv_bswap16_pv8qi (target, src));
+	    }
+	  return true;
+	}
+    }
+
+  /* Reverse bytes within each word, without reversing word order.  */
+  if (vmode == PV8QImode)
+    {
+      const int indices[] = { 3, 2, 1, 0, 7, 6, 5, 4 };
+      vec_perm_match_type match = match_vec_perm_pattern (indices, 8, sel);
+      if (match != ERROR_MATCH)
+	{
+	  if (!testing_p)
+	    {
+	      rtx src = match == SWAPPED_MATCH ? op1 : op0;
+	      emit_insn (gen_riscv_bswap32_pv8qi (target,
+					       force_reg (vmode, src)));
+	    }
+	  return true;
+	}
+    }
+
   if (vmode == PV4QImode || vmode == PV4HImode)
     {
       for (const auto &pattern : vec_perm_patterns_4elem)

@@ -15014,10 +15014,9 @@ riscv_builtin_vectorization_cost (enum vect_cost_for_stmt type_of_cost,
   return default_builtin_vectorization_cost (type_of_cost, vectype, misalign);
 }
 
-/* Packed logical operations on RV32 use two scalar instructions for an
-   8-byte vector.  Other packed arithmetic can use one pair instruction,
-   so this adjustment needs statement information rather than a blanket
-   cost for every operation of that vector type.  */
+/* Account for packed operations that need more than one instruction.
+   These adjustments need statement information rather than a blanket
+   cost for every operation of the same vector type.  */
 class riscv_p_vector_costs : public vector_costs
 {
 public:
@@ -15099,9 +15098,17 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
 				   tree vectype, int misalign,
 				   vect_cost_model_location where)
 {
-  if (kind == scalar_stmt && stmt_info
+  if (!TARGET_64BIT && kind == scalar_stmt && stmt_info
       && riscv_p_scalar_fused_p (m_vinfo, stmt_info))
     count = 0;
+
+  /* Byte reversal within two packed words needs a byte-pair swap and
+     a halfword-pair swap, on both XLENs.  Other permutations retain
+     their existing costs.  */
+  if (!m_costing_for_scalar && kind == vec_perm && stmt_info && vectype
+      && TYPE_MODE (vectype) == PV2SImode
+      && gimple_call_builtin_p (stmt_info->stmt, BUILT_IN_BSWAP32))
+    count *= 2;
 
   if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
       && riscv_pext_mode_supported_p (TYPE_MODE (vectype))
@@ -15130,7 +15137,7 @@ riscv_vectorize_create_costs (vec_info *vinfo, bool costing_for_scalar)
 {
   if (TARGET_VECTOR)
     return new riscv_vector::costs (vinfo, costing_for_scalar);
-  if (TARGET_RVP && !TARGET_64BIT)
+  if (TARGET_RVP)
     return new riscv_p_vector_costs (vinfo, costing_for_scalar);
   /* Default vector costs.  */
   return new vector_costs (vinfo, costing_for_scalar);

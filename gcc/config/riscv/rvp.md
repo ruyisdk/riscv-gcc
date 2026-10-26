@@ -1876,6 +1876,107 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+;; A full-width extension of a halfword swap can retain the compact
+;; rev8/shift sequence without restricting native narrow consumers.
+(define_insn_and_split "*bswaphi_<su>_<mode>_rvp"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(any_extend:X
+	  (bswap:HI (match_operand:HI 1 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_ZBB"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 0) (bswap:X (match_dup 2)))
+   (set (match_dup 0) (match_dup 3))]
+{
+  operands[2] = gen_lowpart (<MODE>mode, operands[1]);
+  operands[3] = gen_rtx_fmt_ee (<CODE> == ZERO_EXTEND ? LSHIFTRT : ASHIFTRT,
+			       <MODE>mode, operands[0],
+			       GEN_INT (GET_MODE_BITSIZE (<MODE>mode) - 16));
+}
+  [(set_attr "type" "bitmanip")
+   (set_attr "mode" "<MODE>")
+   (set_attr "length" "8")])
+
+;; Only the low halfword is defined for a scalar HImode byte swap.  Do not
+;; imply that the other bits are zero; callers may require an extension.
+(define_insn "riscv_bswaphi2"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+	(bswap:HI (match_operand:HI 1 "register_operand" "r")))]
+  "TARGET_RVP"
+  "ppairoe.b\t%0,%1,%1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "HI")])
+
+;; Byte reversal within each halfword, without reversing halfword order.
+(define_insn "riscv_bswap16_pv4qi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(vec_select:PV4QI
+	  (match_operand:PV4QI 1 "register_operand" "r")
+	  (parallel [(const_int 1) (const_int 0)
+		     (const_int 3) (const_int 2)])))]
+  "TARGET_RVP"
+  "ppairoe.b\t%0,%1,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "PV4QI")])
+
+(define_insn "riscv_bswap16_pv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_select:PV8QI
+	  (match_operand:PV8QI 1 "register_operand" "r")
+	  (parallel [(const_int 1) (const_int 0)
+		     (const_int 3) (const_int 2)
+		     (const_int 5) (const_int 4)
+		     (const_int 7) (const_int 6)])))]
+  "TARGET_RVP"
+  "ppairoe.%d0\t%0,%1,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "PV8QI")])
+
+;; Reverse bytes within each word.  After allocation, reuse the result
+;; for the intermediate byte swap.  PV8QI pairs cannot partially overlap.
+(define_insn_and_split "riscv_bswap32_pv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_select:PV8QI
+	  (match_operand:PV8QI 1 "register_operand" "r")
+	  (parallel [(const_int 3) (const_int 2)
+		     (const_int 1) (const_int 0)
+		     (const_int 7) (const_int 6)
+		     (const_int 5) (const_int 4)])))]
+  "TARGET_RVP"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 0)
+	(vec_select:PV8QI (match_dup 1)
+	  (parallel [(const_int 1) (const_int 0)
+		     (const_int 3) (const_int 2)
+		     (const_int 5) (const_int 4)
+		     (const_int 7) (const_int 6)])))
+   (set (match_dup 0)
+	(vec_select:PV8QI (match_dup 0)
+	  (parallel [(const_int 2) (const_int 3)
+		     (const_int 0) (const_int 1)
+		     (const_int 6) (const_int 7)
+		     (const_int 4) (const_int 5)])))]
+  ""
+  [(set_attr "type" "simd")
+   (set_attr "mode" "PV8QI")
+   (set_attr "length" "8")])
+
+(define_insn "*riscv_swap_halfwords_pv8qi"
+  [(set (match_operand:PV8QI 0 "register_operand" "=r")
+	(vec_select:PV8QI
+	  (match_operand:PV8QI 1 "register_operand" "r")
+	  (parallel [(const_int 2) (const_int 3)
+		     (const_int 0) (const_int 1)
+		     (const_int 6) (const_int 7)
+		     (const_int 4) (const_int 5)])))]
+  "TARGET_RVP"
+{
+  return TARGET_64BIT ? "ppairoe.h\t%0,%1,%1" : "ppairoe.dh\t%0,%1,%1";
+}
+  [(set_attr "type" "simd")
+   (set_attr "mode" "PV8QI")])
+
 ;; Pack operations for scalar mode
 ;; Element reversal of PV2HI: ppairoe.h with rs1 == rs2 interleaves the odd
 ;; and even halfwords of the source, which for one 32-bit register is the

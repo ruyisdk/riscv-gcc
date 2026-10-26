@@ -537,15 +537,21 @@
    (set_attr "mode" "DI")
    (set_attr "length" "8")])
 
-;; HI bswap can be emulated using SI/DI bswap followed
+;; HI bswap can use P's adjacent-byte permutation, or SI/DI bswap followed
 ;; by a logical shift right
 ;; SI bswap for TARGET_64BIT is already similarly in
 ;; the common code.
 (define_expand "bswaphi2"
   [(set (match_operand:HI 0 "register_operand" "=r")
         (bswap:HI (match_operand:HI 1 "register_operand" "r")))]
-  "TARGET_ZBB"
+  "TARGET_ZBB || TARGET_RVP"
 {
+  if (TARGET_RVP)
+    {
+      emit_insn (gen_riscv_bswaphi2 (operands[0], operands[1]));
+      DONE;
+    }
+
   rtx tmp = gen_reg_rtx (word_mode);
   rtx newop1 = gen_lowpart (word_mode, operands[1]);
   if (TARGET_64BIT)
