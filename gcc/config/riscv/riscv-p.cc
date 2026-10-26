@@ -40,6 +40,42 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "optabs-tree.h"
 
+/* Return true if LO and HI can be read as one aligned PV4HI value.
+   Preserve the little-endian lane order and the exact accessed range.  */
+
+bool
+riscv_p_small_pack_mems_p (rtx lo, rtx hi)
+{
+  if (!MEM_P (lo) || !MEM_P (hi)
+      || GET_MODE (lo) != PV2HImode || GET_MODE (hi) != PV2HImode
+      || MEM_VOLATILE_P (lo) || MEM_VOLATILE_P (hi)
+      || MEM_ADDR_SPACE (lo) != MEM_ADDR_SPACE (hi)
+      || MEM_ALIAS_SET (lo) != MEM_ALIAS_SET (hi)
+      || MEM_ALIGN (lo) < 64
+      || side_effects_p (XEXP (lo, 0)) || side_effects_p (XEXP (hi, 0)))
+    return false;
+
+  rtx next = plus_constant (Pmode, XEXP (lo, 0), 4);
+  return rtx_equal_p (next, XEXP (hi, 0))
+    && memory_address_addr_space_p (PV4HImode, XEXP (lo, 0),
+				    MEM_ADDR_SPACE (lo));
+}
+
+/* Construct the full load after riscv_p_small_pack_mems_p succeeds.
+   Neither half's expression or trapping promise describes the full range.  */
+
+rtx
+riscv_p_small_pack_mem (rtx lo, rtx hi)
+{
+  gcc_assert (riscv_p_small_pack_mems_p (lo, hi));
+  rtx mem = adjust_address (lo, PV4HImode, 0);
+  set_mem_expr (mem, NULL_TREE);
+  clear_mem_offset (mem);
+  MEM_NOTRAP_P (mem) = MEM_NOTRAP_P (lo) && MEM_NOTRAP_P (hi);
+  MEM_READONLY_P (mem) = MEM_READONLY_P (lo) && MEM_READONLY_P (hi);
+  return mem;
+}
+
 /* Pack COUNT bytes from VALS, starting at FIRST, using pair operations.
    Each stage consumes only the defined low bits of the preceding stage.  */
 

@@ -148,6 +148,8 @@ extern void riscv_p_expand_unpack (rtx, rtx, bool, bool);
 extern void riscv_p_expand_widen_mult (rtx, rtx, rtx, bool, bool);
 extern void riscv_p_split_widen_mult (rtx, rtx, rtx, rtx, bool, bool);
 extern void riscv_p_expand_pack (rtx, rtx, rtx);
+extern bool riscv_p_small_pack_mems_p (rtx, rtx);
+extern rtx riscv_p_small_pack_mem (rtx, rtx);
 extern void riscv_p_expand_reduc_plus (rtx, rtx);
 extern void riscv_p_expand_mul_acc_lane (rtx, rtx, unsigned int, bool, bool);
 #ifdef GCC_TARGET_H

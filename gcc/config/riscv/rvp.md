@@ -3650,6 +3650,30 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
+;; Adjacent small loads can form the source pair without register copies.
+(define_insn_and_split "*riscv_p_pack_trunc_load_pv2hi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (vec_concat:PV4HI
+	    (match_operand:PV2HI 1 "memory_operand" "m")
+	    (match_operand:PV2HI 2 "memory_operand" "m"))))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR
+   && can_create_pseudo_p ()
+   && riscv_p_small_pack_mems_p (operands[1], operands[2])"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx mem = riscv_p_small_pack_mem (operands[1], operands[2]);
+  rtx combined = force_reg (PV4HImode, mem);
+  emit_insn (gen_truncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+}
+  [(set_attr "type" "load")
+   (set_attr "mode" "DI")
+   (set (attr "length") (if_then_else (match_test "TARGET_64BIT")
+				       (const_int 8) (const_int 12)))])
+
 ;; Keep the small pack as one operation, allowing combine to absorb both
 ;; source clamps and their shared bound before splitting the fallback.
 (define_insn_and_split "riscv_p_pack_trunc_pv2hi"
@@ -3791,6 +3815,33 @@
   "pnclipup.<rvp_extend_width>\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+(define_insn_and_split "*rvp_pack_ustrunc_small_load"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (vec_concat:PV4HI
+	    (umin:PV2HI (match_operand:PV2HI 1 "memory_operand" "m")
+		       (match_operand:PV2HI 3 "immediate_operand"))
+	    (umin:PV2HI (match_operand:PV2HI 2 "memory_operand" "m")
+		       (match_operand:PV2HI 4 "immediate_operand")))))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR
+   && can_create_pseudo_p ()
+   && riscv_p_small_pack_mems_p (operands[1], operands[2])
+   && riscv_const_vector_broadcast_val_p (operands[3], 255)
+   && riscv_const_vector_broadcast_val_p (operands[4], 255)"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx mem = riscv_p_small_pack_mem (operands[1], operands[2]);
+  rtx combined = force_reg (PV4HImode, mem);
+  emit_insn (gen_ustruncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+}
+  [(set_attr "type" "load")
+   (set_attr "mode" "DI")
+   (set (attr "length") (if_then_else (match_test "TARGET_64BIT")
+				       (const_int 8) (const_int 12)))])
 
 ;; The small-vector pack has two halfword pairs as inputs.  Form the full
 ;; source before clipping, so either source can overlap the final result.

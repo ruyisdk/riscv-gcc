@@ -5300,6 +5300,35 @@ riscv_address_cost (rtx addr, machine_mode mode,
   return riscv_address_insns (addr, mode, false);
 }
 
+/* Return the cost of an adjacent-load pack, or zero if X does not match.
+   The full-width load replaces both source loads and pair construction.  */
+
+static int
+riscv_p_small_load_pack_cost (rtx x, bool speed)
+{
+  if (TARGET_BIG_ENDIAN || TARGET_VECTOR
+      || GET_CODE (x) != TRUNCATE || GET_MODE (x) != PV4QImode
+      || GET_CODE (XEXP (x, 0)) != VEC_CONCAT
+      || GET_MODE (XEXP (x, 0)) != PV4HImode)
+    return 0;
+
+  rtx lo = XEXP (XEXP (x, 0), 0);
+  rtx hi = XEXP (XEXP (x, 0), 1);
+  if (GET_CODE (lo) == UMIN && GET_CODE (hi) == UMIN
+      && GET_MODE (lo) == PV2HImode && GET_MODE (hi) == PV2HImode
+      && riscv_const_vector_broadcast_val_p (XEXP (lo, 1), 255)
+      && riscv_const_vector_broadcast_val_p (XEXP (hi, 1), 255))
+    {
+      lo = XEXP (lo, 0);
+      hi = XEXP (hi, 0);
+    }
+  if (!riscv_p_small_pack_mems_p (lo, hi))
+    return 0;
+
+  rtx mem = adjust_address_nv (lo, PV4HImode, 0);
+  return rtx_cost (mem, PV4HImode, SET, 1, speed) + COSTS_N_INSNS (1);
+}
+
 /* Implement TARGET_INSN_COST.  We factor in the branch cost in the cost
    calculation for conditional branches: one unit is considered the cost
    of microarchitecture-dependent actual branch execution and therefore
@@ -5315,6 +5344,10 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
   if (TARGET_RVP && GET_CODE (x) == SET
       && register_operand (SET_DEST (x), GET_MODE (SET_DEST (x))))
     {
+      int load_pack_cost = riscv_p_small_load_pack_cost (SET_SRC (x), speed);
+      if (load_pack_cost)
+	return load_pack_cost;
+
       /* Generic RTX costing skips TRUNCATE when its modes are tieable.
 	 Account for a packed narrowing clip before recursing into its clamp
 	 and charging for constants that the instruction does not materialize.  */
