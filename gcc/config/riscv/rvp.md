@@ -2196,6 +2196,368 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "HI")])
 
+;; Only the low word is defined; PPAIRE.H does not sign-extend bit 31.
+(define_insn "riscv_p_pack_halfwordssi"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(ior:SI
+	  (ashift:SI (match_operand:SI 1 "register_operand" "r")
+		     (const_int 16))
+	  (zero_extend:SI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; Keep the promoted scalar form and expose the low-word result before
+;; allocation.  Unlike PACKW, this operation needs an explicit sign
+;; extension after PPAIRE.H.
+(define_insn_and_split "*riscv_p_pack_halfwordsdi_sext_hi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (ashift:DI
+	    (sign_extend:DI (match_operand:HI 1 "register_operand" "r"))
+	    (const_int 16))
+	  (zero_extend:DI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_ZBKB"
+  "#"
+  "&& 1"
+  [(set (match_dup 3)
+	(ior:SI (ashift:SI (match_dup 4) (const_int 16))
+		(zero_extend:SI (match_dup 2))))
+   (set (match_dup 0) (sign_extend:DI (match_dup 3)))]
+{
+  operands[3] = gen_lowpart (SImode, operands[0]);
+  operands[4] = gen_lowpart (SImode, operands[1]);
+}
+  [(set_attr "type" "arith")
+   (set_attr "length" "8")
+   (set_attr "mode" "DI")])
+
+(define_insn_and_split "*riscv_p_pack_halfwordsdi_sext_si"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (sign_extend:DI
+	    (ashift:SI (match_operand:SI 1 "register_operand" "r")
+		       (const_int 16)))
+	  (zero_extend:DI (match_operand:HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_ZBKB"
+  "#"
+  "&& 1"
+  [(set (match_dup 3)
+	(ior:SI (ashift:SI (match_dup 1) (const_int 16))
+		(zero_extend:SI (match_dup 2))))
+   (set (match_dup 0) (sign_extend:DI (match_dup 3)))]
+  "operands[3] = gen_lowpart (SImode, operands[0]);"
+  [(set_attr "type" "arith")
+   (set_attr "length" "8")
+   (set_attr "mode" "DI")])
+
+;; Narrow a masked insertion before extending its result.  The low field
+;; fits in a halfword within its low word, but may not yet have been
+;; substituted by combine.  Keeping its HI view lets a later combination
+;; absorb the field producer without assuming anything about the high
+;; input's upper word.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(any_extend:DI
+	  (match_operator:SI 3 "subreg_lowpart_operator"
+	    [(ior:DI
+	       (and:DI (match_operand:DI 1 "register_operand")
+		       (const_int -65536))
+	       (match_operand:DI 2 "register_operand"))])))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && (nonzero_bits (operands[2], DImode)
+       & HOST_WIDE_INT_UC (0xffff0000)) == 0"
+  [(set (match_dup 4)
+	(ior:SI (and:SI (match_dup 5) (const_int -65536))
+		(zero_extend:SI (match_dup 6))))
+   (set (match_dup 0) (any_extend:DI (match_dup 4)))]
+{
+  operands[4] = gen_reg_rtx (SImode);
+  operands[5] = gen_lowpart (SImode, operands[1]);
+  operands[6] = gen_lowpart (HImode, operands[2]);
+})
+
+;; Zero extension can instead be folded into the high field's mask.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand")
+		  (const_int 4294901760))
+	  (match_operand:DI 2 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && (nonzero_bits (operands[2], DImode) & ~HOST_WIDE_INT_UC (65535)) == 0"
+  [(set (match_dup 3)
+	(ior:SI (and:SI (match_dup 4) (const_int -65536))
+		(zero_extend:SI (match_dup 5))))
+   (set (match_dup 0) (zero_extend:DI (match_dup 3)))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+  operands[4] = gen_lowpart (SImode, operands[1]);
+  operands[5] = gen_lowpart (HImode, operands[2]);
+})
+
+;; An explicitly extended SI field has the same low-halfword bound.  Its
+;; upper bits are defined by the extension, unlike a paradoxical subreg.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand")
+		  (const_int 4294901760))
+	  (zero_extend:DI (match_operand:SI 2 "register_operand"))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && (nonzero_bits (operands[2], SImode) & ~HOST_WIDE_INT_UC (65535)) == 0"
+  [(set (match_dup 3)
+	(ior:SI (and:SI (match_dup 4) (const_int -65536))
+		(zero_extend:SI (match_dup 5))))
+   (set (match_dup 0) (zero_extend:DI (match_dup 3)))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+  operands[4] = gen_lowpart (SImode, operands[1]);
+  operands[5] = gen_lowpart (HImode, operands[2]);
+})
+
+;; Substituting a halfword extraction into the narrowed insertion can
+;; leave a redundant AND.  Its low half is all ones, while its high half
+;; repeats the high field already selected by the inner AND.  Recognize
+;; this as an instruction too, since a two-insn combine does not try
+;; machine-description splits.
+(define_insn_and_split "*riscv_p_pair_odd_halfwordssi_mask"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(and:SI
+	  (ior:SI
+	    (and:SI (match_operand:SI 1 "register_operand" "r")
+		    (const_int -65536))
+	    (lshiftrt:SI (match_operand:SI 2 "register_operand" "r")
+			 (const_int 16)))
+	  (ior:SI (match_dup 1) (const_int 65535))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "#"
+  "&& 1"
+  [(set (match_dup 0)
+	(ior:SI (and:SI (match_dup 1) (const_int -65536))
+		(lshiftrt:SI (match_dup 2) (const_int 16))))]
+  ""
+  [(set_attr "type" "arith")
+   (set_attr "mode" "SI")])
+
+;; A promoted word insertion can lose its explicit sign extension during
+;; combine.  Only use the low-word pair when the preserved high part is
+;; already sign-extended.  Record that proof before allocation, since the
+;; pair instruction itself does not define a sign-extended DI result.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand")
+		  (const_int -65536))
+	  (zero_extend:DI (match_operand:HI 2 "register_operand"))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && num_sign_bit_copies (operands[1], DImode) >= 33"
+  [(set (match_dup 3)
+	(ior:SI (and:SI (match_dup 4) (const_int -65536))
+		(zero_extend:SI (match_dup 2))))
+   (set (match_dup 0) (sign_extend:DI (match_dup 3)))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+  operands[4] = gen_lowpart (SImode, operands[1]);
+})
+
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand")
+		  (const_int -65536))
+	  (zero_extract:DI (match_operand:DI 2 "register_operand")
+			   (const_int 16) (const_int 16))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()
+   && num_sign_bit_copies (operands[1], DImode) >= 33"
+  [(set (match_dup 3)
+	(ior:SI (and:SI (match_dup 4) (const_int -65536))
+		(lshiftrt:SI (match_dup 5) (const_int 16))))
+   (set (match_dup 0) (sign_extend:DI (match_dup 3)))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+  operands[4] = gen_lowpart (SImode, operands[1]);
+  operands[5] = gen_lowpart (SImode, operands[2]);
+})
+
+;; Here the shifted signed halfword makes the extension explicit, while
+;; the extracted low field cannot affect the result sign bit.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(ior:DI
+	  (ashift:DI
+	    (sign_extend:DI (match_operand:HI 1 "register_operand"))
+	    (const_int 16))
+	  (zero_extract:DI (match_operand:DI 2 "register_operand")
+			   (const_int 16) (const_int 16))))]
+  "TARGET_RVP && TARGET_64BIT && can_create_pseudo_p ()"
+  [(set (match_dup 3)
+	(ior:SI (ashift:SI (match_dup 4) (const_int 16))
+		(lshiftrt:SI (match_dup 5) (const_int 16))))
+   (set (match_dup 0) (sign_extend:DI (match_dup 3)))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+  operands[4] = gen_lowpart (SImode, operands[1]);
+  operands[5] = gen_lowpart (SImode, operands[2]);
+})
+
+;; Scalar views of the two halfword pairs in a 64-bit register.  Keep the
+;; masks recognizable on their own so that combine can first absorb their
+;; constant loads, then combine the two fields.  The masks are
+;; 0x0000ffff0000ffff and 0xffff0000ffff0000, respectively.
+(define_insn "*riscv_p_mask_even_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(and:DI (match_operand:DI 1 "register_operand" "r")
+		(const_int 281470681808895)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.h\t%0, %1, zero"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_mask_odd_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(and:DI (match_operand:DI 1 "register_operand" "r")
+		(const_int -281470681808896)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.h\t%0, zero, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_shift_even_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(and:DI
+	  (ashift:DI (match_operand:DI 1 "register_operand" "r")
+		     (const_int 16))
+	  (const_int -281470681808896)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.h\t%0, zero, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_shift_odd_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(and:DI
+	  (lshiftrt:DI (match_operand:DI 1 "register_operand" "r")
+		      (const_int 16))
+	  (const_int 281470681808895)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.h\t%0, %1, zero"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_even_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI
+	    (ashift:DI (match_operand:DI 1 "register_operand" "r")
+		       (const_int 16))
+	    (const_int -281470681808896))
+	  (and:DI (match_operand:DI 2 "register_operand" "r")
+		  (const_int 281470681808895))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_even_halfwordsdi_commuted"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand" "r")
+		  (const_int 281470681808895))
+	  (and:DI
+	    (ashift:DI (match_operand:DI 2 "register_operand" "r")
+		       (const_int 16))
+	    (const_int -281470681808896))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaire.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_even_odd_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand" "r")
+		  (const_int 281470681808895))
+	  (and:DI (match_operand:DI 2 "register_operand" "r")
+		  (const_int -281470681808896))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_even_odd_halfwordsdi_commuted"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand" "r")
+		  (const_int -281470681808896))
+	  (and:DI (match_operand:DI 2 "register_operand" "r")
+		  (const_int 281470681808895))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppaireo.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_odd_even_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI
+	    (ashift:DI (match_operand:DI 1 "register_operand" "r")
+		       (const_int 16))
+	    (const_int -281470681808896))
+	  (and:DI
+	    (lshiftrt:DI (match_operand:DI 2 "register_operand" "r")
+			(const_int 16))
+	    (const_int 281470681808895))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_odd_even_halfwordsdi_commuted"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI
+	    (lshiftrt:DI (match_operand:DI 1 "register_operand" "r")
+			(const_int 16))
+	    (const_int 281470681808895))
+	  (and:DI
+	    (ashift:DI (match_operand:DI 2 "register_operand" "r")
+		       (const_int 16))
+	    (const_int -281470681808896))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairoe.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_odd_halfwordsdi"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI
+	    (lshiftrt:DI (match_operand:DI 1 "register_operand" "r")
+			(const_int 16))
+	    (const_int 281470681808895))
+	  (and:DI (match_operand:DI 2 "register_operand" "r")
+		  (const_int -281470681808896))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.h\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
+(define_insn "*riscv_p_pair_odd_halfwordsdi_commuted"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(ior:DI
+	  (and:DI (match_operand:DI 1 "register_operand" "r")
+		  (const_int -281470681808896))
+	  (and:DI
+	    (lshiftrt:DI (match_operand:DI 2 "register_operand" "r")
+			(const_int 16))
+	    (const_int 281470681808895))))]
+  "TARGET_RVP && TARGET_64BIT"
+  "ppairo.h\t%0, %2, %1"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")])
+
 ;; Concatenate two halfwords into a PV2HI vector.  PPAIRE.H packs the low
 ;; halfword of each operand into a 32-bit word, which is what is needed for
 ;; both RV32 and RV64; on RV64 a plain PACK would instead concatenate the

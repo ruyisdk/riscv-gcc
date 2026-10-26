@@ -4441,6 +4441,86 @@ riscv_p_unsigned_clip_cost (rtx x, machine_mode mode)
   return 0;
 }
 
+/* Return true if X selects the high or low halfword in each 32-bit word
+   using one of the scalar PPAIRE.H-family patterns.  */
+
+static bool
+riscv_p_halfword_field_p (rtx x, bool high_p)
+{
+  if (GET_CODE (x) != AND || GET_MODE (x) != DImode
+      || !CONST_INT_P (XEXP (x, 1)))
+    return false;
+
+  unsigned HOST_WIDE_INT mask = high_p ? HOST_WIDE_INT_UC (0xffff0000ffff0000)
+				     : HOST_WIDE_INT_UC (0x0000ffff0000ffff);
+  if (UINTVAL (XEXP (x, 1)) != mask)
+    return false;
+
+  rtx value = XEXP (x, 0);
+  if (register_operand (value, DImode))
+    return true;
+
+  return GET_CODE (value) == (high_p ? ASHIFT : LSHIFTRT)
+	 && GET_MODE (value) == DImode
+	 && register_operand (XEXP (value, 0), DImode)
+	 && CONST_INT_P (XEXP (value, 1))
+	 && INTVAL (XEXP (value, 1)) == 16;
+}
+
+/* Return true for the scalar SI forms implemented by PACK/PPAIRE.H,
+   PPAIREO.H, PPAIROE.H and PPAIRO.H.  Match only the operand orders
+   described by the instruction patterns.  */
+
+static bool
+riscv_p_halfword_pair_si_p (rtx x)
+{
+  if ((GET_CODE (x) != IOR && GET_CODE (x) != AND)
+      || GET_MODE (x) != SImode)
+    return false;
+
+  auto mask_p = [] (rtx op, HOST_WIDE_INT mask)
+    {
+      return GET_CODE (op) == AND && GET_MODE (op) == SImode
+	     && register_operand (XEXP (op, 0), SImode)
+	     && CONST_INT_P (XEXP (op, 1))
+	     && INTVAL (XEXP (op, 1)) == mask;
+    };
+  auto shift_p = [] (rtx op, rtx_code code)
+    {
+      return GET_CODE (op) == code && GET_MODE (op) == SImode
+	     && register_operand (XEXP (op, 0), SImode)
+	     && CONST_INT_P (XEXP (op, 1))
+	     && INTVAL (XEXP (op, 1)) == 16;
+    };
+  auto extend_p = [] (rtx op)
+    {
+      return GET_CODE (op) == ZERO_EXTEND && GET_MODE (op) == SImode
+	     && register_operand (XEXP (op, 0), HImode);
+    };
+
+  rtx left = XEXP (x, 0);
+  rtx right = XEXP (x, 1);
+  /* The narrowed odd pair can retain a redundant mask until split1.
+     Its upper factor duplicates the selected high field, and its lower
+     factor is all ones.  This is still a single PPAIRO.H operation.  */
+  if (GET_CODE (x) == AND)
+    return GET_CODE (left) == IOR && GET_MODE (left) == SImode
+	   && mask_p (XEXP (left, 0), -65536)
+	   && shift_p (XEXP (left, 1), LSHIFTRT)
+	   && GET_CODE (right) == IOR && GET_MODE (right) == SImode
+	   && rtx_equal_p (XEXP (XEXP (left, 0), 0), XEXP (right, 0))
+	   && CONST_INT_P (XEXP (right, 1))
+	   && INTVAL (XEXP (right, 1)) == 65535;
+
+  return (mask_p (left, -65536)
+	  && (extend_p (right) || mask_p (right, 65535)
+	      || shift_p (right, LSHIFTRT)))
+	 || (extend_p (left) && mask_p (right, -65536))
+	 || (shift_p (left, ASHIFT)
+	     && (extend_p (right) || shift_p (right, LSHIFTRT)))
+	 || (shift_p (left, LSHIFTRT) && shift_p (right, ASHIFT));
+}
+
 /* Implement TARGET_RTX_COSTS.  */
 
 #define SINGLE_SHIFT_COST 1
@@ -4449,6 +4529,29 @@ static bool
 riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UNUSED,
 		 int *total, bool speed)
 {
+  if (TARGET_RVP && TARGET_64BIT && mode == SImode
+      && riscv_p_halfword_pair_si_p (x))
+    {
+      *total = COSTS_N_INSNS (1);
+      return true;
+    }
+
+  /* The scalar halfword pair patterns do not materialize their masks or
+     shifts.  Only charge one operation for the exact supported forms.  */
+  if (TARGET_RVP && TARGET_64BIT && mode == DImode
+      && ((GET_CODE (x) == AND
+	   && (riscv_p_halfword_field_p (x, false)
+	       || riscv_p_halfword_field_p (x, true)))
+	  || (GET_CODE (x) == IOR
+	      && ((riscv_p_halfword_field_p (XEXP (x, 0), false)
+		   && riscv_p_halfword_field_p (XEXP (x, 1), true))
+		  || (riscv_p_halfword_field_p (XEXP (x, 0), true)
+		      && riscv_p_halfword_field_p (XEXP (x, 1), false))))))
+    {
+      *total = COSTS_N_INSNS (1);
+      return true;
+    }
+
   /* TODO: We set RVV instruction cost as 1 by default.
      Cost Model need to be well analyzed and supported in the future. */
   if (riscv_vector_mode_p (mode))
