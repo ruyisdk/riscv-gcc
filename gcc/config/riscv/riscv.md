@@ -649,6 +649,14 @@
 	  (eq_attr "move_type" "shift_shift")
 		(const_int 8)
 
+	  ;; Native RV32 P register-pair copies use one ADDD instruction.
+	  (and (eq_attr "move_type" "move")
+	       (and (eq_attr "dword_mode" "yes")
+		    (match_test "!TARGET_64BIT && TARGET_RVP
+				 && !riscv_split_64bit_move_p (operands[0],
+							     operands[1])")))
+	  (const_int 4)
+
 	  ;; Check for doubleword moves that are decomposed into two
 	  ;; instructions.
 	  (and (eq_attr "move_type" "mtc,mfc,move")
