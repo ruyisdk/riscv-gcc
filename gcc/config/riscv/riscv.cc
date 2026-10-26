@@ -15213,6 +15213,15 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
       && gimple_call_builtin_p (stmt_info->stmt, BUILT_IN_BSWAP32))
     count *= 2;
 
+  /* An eight-byte signed saturating pack needs two clips on RV32.
+     The four-byte byte pack uses one clip of a source register pair.  */
+  if (!m_costing_for_scalar && !TARGET_64BIT
+      && kind == vec_promote_demote && stmt_info && vectype
+      && (TYPE_MODE (vectype) == PV8QImode
+	  || TYPE_MODE (vectype) == PV4HImode)
+      && gimple_call_internal_p (stmt_info->stmt, IFN_SAT_TRUNC))
+    count *= 2;
+
   if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
       && riscv_pext_mode_supported_p (TYPE_MODE (vectype))
       && known_gt (GET_MODE_SIZE (TYPE_MODE (vectype)), UNITS_PER_WORD)

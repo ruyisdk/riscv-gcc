@@ -3546,8 +3546,45 @@
 				     (const_string "DI") (const_string "SI")))])
 
 ;; Narrow and pack two signed vectors, with the first source in the low half.
+;; RV32 needs two clips, each reading an even-odd register pair.  Complete
+;; both clips before assembling the result, so overlapping inputs survive.
+(define_expand "vec_pack_ssat_<mode>"
+  [(match_operand:<rvp_pack_mode> 0 "register_operand")
+   (match_operand:RVP_DWIDTH_EXT 1 "register_operand")
+   (match_operand:RVP_DWIDTH_EXT 2 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR"
+{
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_p_vec_pack_ssat_<mode> (operands[0], operands[1],
+					      operands[2]));
+  else
+    {
+      rtx lo = gen_reg_rtx (<rvp_narrow_mode>mode);
+      rtx hi = gen_reg_rtx (<rvp_narrow_mode>mode);
+      emit_insn (gen_sstrunc<mode><rvp_narrow>2 (lo, operands[1]));
+      emit_insn (gen_sstrunc<mode><rvp_narrow>2 (hi, operands[2]));
+      emit_move_insn (gen_lowpart (<rvp_narrow_mode>mode, operands[0]), lo);
+      emit_move_insn (gen_highpart (<rvp_narrow_mode>mode, operands[0]), hi);
+    }
+  DONE;
+})
+
+;; Two word-sized inputs form the source pair for a single byte clip.
+(define_expand "vec_pack_ssat_pv2hi"
+  [(match_operand:PV4QI 0 "register_operand")
+   (match_operand:PV2HI 1 "register_operand")
+   (match_operand:PV2HI 2 "register_operand")]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN && !TARGET_VECTOR"
+{
+  rtx combined = gen_reg_rtx (PV4HImode);
+  emit_move_insn (gen_lowpart (PV2HImode, combined), operands[1]);
+  emit_move_insn (gen_highpart (PV2HImode, combined), operands[2]);
+  emit_insn (gen_sstruncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+})
+
 ;; Logical vector order matches PNCLIPP register order on little-endian RV64.
-(define_insn "vec_pack_ssat_<mode>"
+(define_insn "riscv_p_vec_pack_ssat_<mode>"
   [(set (match_operand:<rvp_pack_mode> 0 "register_operand" "=r")
 	(vec_concat:<rvp_pack_mode>
 	  (ss_truncate:<rvp_narrow_mode>

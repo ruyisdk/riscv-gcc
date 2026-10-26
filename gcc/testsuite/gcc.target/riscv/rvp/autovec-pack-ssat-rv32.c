@@ -4,6 +4,8 @@
 
 #include "../../../gcc.dg/vect/vect-pack-ssat.h"
 
-/* { dg-final { scan-tree-dump-not "vect_recog_sat_trunc_clamp_pattern" "vect" } } */
-/* { dg-final { scan-tree-dump-not "vect_recog_sat_trunc_clamp_pattern" "slp1" } } */
+/* { dg-final { scan-tree-dump "vect_recog_sat_trunc_clamp_pattern" "vect" } } */
+/* { dg-final { scan-tree-dump-times "LOOP VECTORIZED" 4 "vect" } } */
+/* { dg-final { scan-assembler {\mpnclipi\.b\M} } } */
+/* { dg-final { scan-assembler {\mpnclipi\.h\M} } } */
 /* { dg-final { scan-assembler-not {\mpnclipp\.[bh]\M} } } */
