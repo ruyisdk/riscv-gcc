@@ -64,6 +64,19 @@
   [(set_attr "type" "simd")
    (set_attr "mode" "SI")])
 
+;; Combine can express the extension as a masked paradoxical subreg.
+;; CLRSB:SI is in [0, 31], so the mask discards only undefined upper bits.
+(define_insn "*riscv_clsw_32_masked"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(and:DI
+	  (subreg:DI
+	    (clrsb:SI (match_operand:SI 1 "register_operand" "r")) 0)
+	  (const_int 31)))]
+  "TARGET_RVP && TARGET_64BIT"
+  "clsw\t%0,%1"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "SI")])
+
 ; cls_64 (RV64 only): full 64-bit CLS, result is a small unsigned count;
 ; the prototype returns `unsigned`, but exposing it as DI matches the
 ; existing riscv_cls<mode>_p form and the count fits in 32 bits.
