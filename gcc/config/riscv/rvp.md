@@ -3482,6 +3482,151 @@
    (set_attr "mode" "DI")])
 
 ;; -------------------------------------------------------------------------
+;; Rounded word products take bits 63:32 after adding exactly 2^31.
+;; This is not the scaled MULHRS optab or saturating Q-format multiplication.
+
+(define_insn "*rvp_round_mulh<u>_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(subreg:SI
+	  (plus:DI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 2147483648)) 4))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "mulhr<u>\t%0, %1, %2"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_round_mulh<su>mixed_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(subreg:SI
+	  (plus:DI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (<rvp_other_extend>:DI
+		(match_operand:SI 2 "register_operand" "r")))
+	    (const_int 2147483648)) 4))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "mulhrsu\t%0, <rvp_mixed_operands>"
+  [(set_attr "type" "imul")
+   (set_attr "mode" "SI")])
+
+;; Combine can remove the explicit extensions of known word-valued DI
+;; registers.  Prove their range when splitting and freeze that choice in
+;; the packed operation.  Do not carry range-dependent recognition to IRA.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(any_shiftrt:DI
+	  (plus:DI (mult:DI (match_operand:DI 1 "register_operand")
+			   (match_operand:DI 2 "register_operand"))
+		   (const_int 2147483648))
+	  (const_int 32)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_round_mulhi_p (operands[1], operands[2])"
+  [(const_int 0)]
+{
+  riscv_p_expand_round_mulhi (operands[0], operands[1], operands[2],
+			    <CODE> == LSHIFTRT);
+  DONE;
+})
+
+;; Loop results commonly go directly to memory.  Keep the arithmetic and
+;; the store as separate instructions instead of requiring a register
+;; destination before combine can recognize the rounded product.
+(define_insn_and_split "*rvp_round_mulh<u>_store"
+  [(set (match_operand:SI 0 "memory_operand" "=m")
+	(subreg:SI
+	  (plus:DI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (any_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	    (const_int 2147483648)) 4))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(set (match_dup 3)
+	(subreg:SI
+	  (plus:DI
+	    (mult:DI (any_extend:DI (match_dup 1))
+		     (any_extend:DI (match_dup 2)))
+	    (const_int 2147483648)) 4))
+   (set (match_dup 0) (match_dup 3))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+}
+  [(set_attr "type" "store")
+   (set_attr "mode" "SI")
+   (set_attr "length" "8")])
+
+(define_insn_and_split "*rvp_round_mulh<su>mixed_store"
+  [(set (match_operand:SI 0 "memory_operand" "=m")
+	(subreg:SI
+	  (plus:DI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (<rvp_other_extend>:DI
+		(match_operand:SI 2 "register_operand" "r")))
+	    (const_int 2147483648)) 4))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(set (match_dup 3)
+	(subreg:SI
+	  (plus:DI
+	    (mult:DI (any_extend:DI (match_dup 1))
+		     (<rvp_other_extend>:DI (match_dup 2)))
+	    (const_int 2147483648)) 4))
+   (set (match_dup 0) (match_dup 3))]
+{
+  operands[3] = gen_reg_rtx (SImode);
+}
+  [(set_attr "type" "store")
+   (set_attr "mode" "SI")
+   (set_attr "length" "8")])
+
+;; Unsigned ABI inputs can retain their explicit word extensions instead
+;; of becoming known word-valued DI registers.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(any_shiftrt:DI
+	  (plus:DI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand"))
+	      (any_extend:DI (match_operand:SI 2 "register_operand")))
+	    (const_int 2147483648))
+	  (const_int 32)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  riscv_p_expand_round_mulhi (operands[0], operands[1], operands[2],
+			    <any_shiftrt:CODE> == LSHIFTRT,
+			    <any_extend:CODE> == ZERO_EXTEND ? 1 : 0);
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:SI 0 "memory_operand")
+	(match_operator:SI 3 "subreg_lowpart_operator"
+	  [(any_shiftrt:DI
+	    (plus:DI (mult:DI (match_operand:DI 1 "register_operand")
+			     (match_operand:DI 2 "register_operand"))
+		     (const_int 2147483648))
+	    (const_int 32))]))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_round_mulhi_p (operands[1], operands[2])"
+  [(const_int 0)]
+{
+  riscv_p_expand_round_mulhi (operands[0], operands[1], operands[2], true);
+  DONE;
+})
+
+;; -------------------------------------------------------------------------
 ;; USATI - Unsigned Saturation Immediate
 ;; -------------------------------------------------------------------------
 ;; Saturates a signed value to an unsigned n-bit range [0, 2^n - 1].

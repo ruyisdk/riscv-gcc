@@ -76,6 +76,65 @@ riscv_p_small_pack_mem (rtx lo, rtx hi)
   return mem;
 }
 
+/* Classify a full-register product whose operands are extended words.
+   Return 0 for signed inputs, 1 for unsigned inputs, 2 for signed/unsigned
+   inputs, 3 for unsigned/signed inputs, or -1 if neither range is known.
+   The bit information is used only while splitting, not as a persistent
+   condition on an instruction that would need the same facts after IRA.  */
+
+static int
+riscv_p_round_mulhi_kind (rtx lhs, rtx rhs)
+{
+  bool ls = num_sign_bit_copies (lhs, DImode) >= 33;
+  bool rs = num_sign_bit_copies (rhs, DImode) >= 33;
+  bool lu = (nonzero_bits (lhs, DImode) & ~GET_MODE_MASK (SImode)) == 0;
+  bool ru = (nonzero_bits (rhs, DImode) & ~GET_MODE_MASK (SImode)) == 0;
+  if (ls && rs)
+    return 0;
+  if (lu && ru)
+    return 1;
+  if (ls && ru)
+    return 2;
+  if (lu && rs)
+    return 3;
+  return -1;
+}
+
+/* Return whether LHS and RHS can use a rounded packed word product.  */
+
+bool
+riscv_p_round_mulhi_p (rtx lhs, rtx rhs)
+{
+  return riscv_p_round_mulhi_kind (lhs, rhs) >= 0;
+}
+
+/* Extract a rounded product's high word, with logical extension if
+   UNSIGNED_P.  KIND is the input classification, or -1 to infer it from
+   full-register values.  Account for both packed result lanes before
+   extracting the low word; a packed word result is not an ABI-sign-extended
+   scalar.  */
+
+void
+riscv_p_expand_round_mulhi (rtx target, rtx lhs, rtx rhs, bool unsigned_p,
+			  int kind)
+{
+  if (kind < 0)
+    kind = riscv_p_round_mulhi_kind (lhs, rhs);
+  gcc_assert (IN_RANGE (kind, 0, 3) && TARGET_64BIT);
+  rtx result = gen_reg_rtx (PV2SImode);
+  lhs = gen_lowpart (PV2SImode, lhs);
+  rhs = gen_lowpart (PV2SImode, rhs);
+  if (kind == 0)
+    emit_insn (gen_riscv_pmulhr_i32x2 (result, lhs, rhs));
+  else if (kind == 1)
+    emit_insn (gen_riscv_pmulhru_u32x2 (result, lhs, rhs));
+  else if (kind == 2)
+    emit_insn (gen_riscv_pmulhrsu_i32x2 (result, lhs, rhs));
+  else
+    emit_insn (gen_riscv_pmulhrsu_i32x2 (result, rhs, lhs));
+  convert_move (target, gen_lowpart (SImode, result), unsigned_p);
+}
+
 /* Pack COUNT bytes from VALS, starting at FIRST, using pair operations.
    Each stage consumes only the defined low bits of the preceding stage.  */
 
