@@ -3404,6 +3404,23 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
 	}
     }
 
+  /* Substituting one input can make another input unused before its
+     side effects have been substituted.  Do not delete such an input
+     unless its set is retained.  */
+  if ((!i2_is_used && !added_sets_2 && side_effects_p (i2src))
+      || (i1 && !i1_is_used && !added_sets_1
+	  && !(added_sets_2 && i1_feeds_i2_n)
+	  && side_effects_p (i1src))
+      || (i0 && !n_occurrences && !added_sets_0
+	  && !(added_sets_1 && i0_feeds_i1_n)
+	  && !(added_sets_2
+	       && (i0_feeds_i2_n || (i0_feeds_i1_n && i1_feeds_i2_n)))
+	  && side_effects_p (i0src)))
+    {
+      undo_all ();
+      return 0;
+    }
+
   /* Fail if an autoincrement side-effect has been duplicated.  Be careful
      to count all the ways that I2SRC and I1SRC can be used.  */
   if ((FIND_REG_INC_NOTE (i2, NULL_RTX) != 0
