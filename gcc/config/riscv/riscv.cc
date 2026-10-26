@@ -14560,6 +14560,10 @@ rvp_vectorize_preferred_simd_mode (scalar_mode mode)
     case E_SImode:
       if (TARGET_64BIT)
         return PV2SImode;
+      return word_mode;
+    case E_DImode:
+      if (!TARGET_BIG_ENDIAN)
+	return PV1DImode;
       /* Fall through.  */
     default:
       return word_mode;
@@ -15275,6 +15279,18 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
       && riscv_p_scalar_fused_p (m_vinfo, stmt_info))
     count = 0;
 
+  /* A one-element sum needs neither a horizontal reduction nor an
+     extraction instruction.  Both are views of the scalar doubleword
+     accumulator.  Keep the costs of initialization and loop arithmetic.  */
+  if (!m_costing_for_scalar && !TARGET_BIG_ENDIAN && node && vectype
+      && TYPE_MODE (vectype) == PV1DImode && where == vect_epilogue
+      && (kind == vector_stmt || kind == vec_to_scalar))
+    if (loop_vec_info loop_vinfo = dyn_cast <loop_vec_info> (m_vinfo))
+      if (vect_reduc_info reduc_info = info_for_reduction (loop_vinfo, node))
+	if (VECT_REDUC_INFO_TYPE (reduc_info) == TREE_CODE_REDUCTION
+	    && VECT_REDUC_INFO_FN (reduc_info) == IFN_REDUC_PLUS)
+	  count = 0;
+
   /* Byte reversal within two packed words needs a byte-pair swap and
      a halfword-pair swap, on both XLENs.  Other permutations retain
      their existing costs.  */
@@ -15303,6 +15319,11 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
       case BIT_XOR_EXPR:
       case BIT_NOT_EXPR:
 	count *= 2;
+	break;
+      case DOT_PROD_EXPR:
+	/* Four halfword products need two wide accumulations on RV32.  */
+	if (TYPE_MODE (vectype) == PV1DImode)
+	  count *= 2;
 	break;
       default:
 	break;
@@ -17562,6 +17583,10 @@ bool riscv_pext_mode_supported_p (machine_mode mode)
     case PV4HImode:
     case PV2SImode:
       return true;
+
+    /* A single doubleword accumulator for a packed dot product.  */
+    case PV1DImode:
+      return !TARGET_BIG_ENDIAN;
 
     default:
       return false;

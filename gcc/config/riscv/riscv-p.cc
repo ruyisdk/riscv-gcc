@@ -516,6 +516,48 @@ riscv_p_expand_reduc_plus (rtx dest, rtx src)
   emit_move_insn (dest, gen_lowpart (GET_MODE (dest), sum));
 }
 
+/* Accumulate four halfword products into a doubleword, without truncating
+   the products or their sum to a word.  The mixed-sign optab supplies the
+   unsigned operand first, unlike the P instructions.  */
+
+void
+riscv_p_expand_dot_product_64 (rtx dest, rtx a, rtx b, rtx acc,
+			       bool unsigned_p, bool mixed_p)
+{
+  if (mixed_p)
+    std::swap (a, b);
+
+  /* Keep the accumulator in the destination pseudo so that its incoming
+     value can coalesce with the loop PHI.  A separate DI pseudo would
+     leave copies across the scalar/vector mode boundary.  Preserve a
+     distinct temporary if the output overlaps either multiplicand;
+     RV32 still needs the upper halves after its first accumulation.  */
+  bool direct_p = (REG_P (dest) && REGNO (dest) >= FIRST_PSEUDO_REGISTER
+		   && !reg_overlap_mentioned_p (dest, a)
+		   && !reg_overlap_mentioned_p (dest, b));
+  rtx sum = direct_p ? gen_lowpart (DImode, dest) : gen_reg_rtx (DImode);
+  emit_move_insn (sum, gen_lowpart (DImode, acc));
+  if (TARGET_64BIT)
+    emit_insn (mixed_p
+	       ? gen_riscv_pm4addasu_i16x4_rv64 (sum, a, b)
+	       : unsigned_p
+	       ? gen_riscv_pm4addau_u16x4_rv64 (sum, a, b)
+	       : gen_riscv_pm4adda_i16x4_rv64 (sum, a, b));
+  else
+    for (unsigned int byte = 0; byte < 8; byte += 4)
+      {
+	rtx lhs = simplify_gen_subreg (PV2HImode, a, PV4HImode, byte);
+	rtx rhs = simplify_gen_subreg (PV2HImode, b, PV4HImode, byte);
+	emit_insn (mixed_p
+		   ? gen_riscv_pm2waddasu_i64_rmw (sum, lhs, rhs)
+		   : unsigned_p
+		   ? gen_riscv_pm2waddau_u64_rmw (sum, lhs, rhs)
+		   : gen_riscv_pm2wadda_i64_rmw (sum, lhs, rhs));
+      }
+  if (!direct_p)
+    emit_move_insn (gen_lowpart (DImode, dest), sum);
+}
+
 /* Expand RVP vector comparison.
    Implements vec_cmp<mode><mode> and vec_cmpu<mode><mode> patterns.  */
 void

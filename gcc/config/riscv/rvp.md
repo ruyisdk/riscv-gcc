@@ -19,6 +19,80 @@
 
 (include "rvp-iterators.md")
 
+;; A one-element vector is a scalar doubleword in a GPR (or a GPR pair).
+;; Keep it separate from the packed-lane arithmetic iterators.
+(define_expand "movpv1di"
+  [(set (match_operand:PV1DI 0 "")
+	(match_operand:PV1DI 1 ""))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  if (riscv_legitimize_move (PV1DImode, operands[0], operands[1]))
+    DONE;
+  /* Do not let emit_move_insn canonicalize these equal-sized subregs
+     back into a PV1DI move.  */
+  emit_insn (gen_movdi (gen_lowpart (DImode, operands[0]),
+			gen_lowpart (DImode, operands[1])));
+  DONE;
+})
+
+(define_expand "movmisalignpv1di"
+  [(set (match_operand:PV1DI 0 "nonimmediate_operand")
+	(match_operand:PV1DI 1 "general_operand"))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_move_insn (operands[0], operands[1]);
+  DONE;
+})
+
+(define_expand "vec_initpv1didi"
+  [(match_operand:PV1DI 0 "register_operand")
+   (match_operand 1 "")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_move_insn (gen_lowpart (DImode, operands[0]), XVECEXP (operands[1], 0, 0));
+  DONE;
+})
+
+(define_expand "vec_duplicatepv1di"
+  [(set (match_operand:PV1DI 0 "register_operand")
+	(vec_duplicate:PV1DI (match_operand:DI 1 "register_operand")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_move_insn (gen_lowpart (DImode, operands[0]), operands[1]);
+  DONE;
+})
+
+(define_expand "vec_extractpv1didi"
+  [(match_operand:DI 0 "register_operand")
+   (match_operand:PV1DI 1 "register_operand")
+   (match_operand 2 "const_0_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_move_insn (operands[0], gen_lowpart (DImode, operands[1]));
+  DONE;
+})
+
+(define_expand "reduc_plus_scal_pv1di"
+  [(match_operand:DI 0 "register_operand")
+   (match_operand:PV1DI 1 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_move_insn (operands[0], gen_lowpart (DImode, operands[1]));
+  DONE;
+})
+
+(define_expand "addpv1di3"
+  [(set (match_operand:PV1DI 0 "register_operand")
+	(plus:PV1DI (match_operand:PV1DI 1 "register_operand")
+		   (match_operand:PV1DI 2 "register_operand")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  emit_insn (gen_adddi3 (gen_lowpart (DImode, operands[0]),
+			gen_lowpart (DImode, operands[1]),
+			gen_lowpart (DImode, operands[2])));
+  DONE;
+})
+
 ;; Move patterns for all packed vector modes
 ;; 4-byte vectors (PV4QI/PV2HI): supported on both RV32 and RV64
 ;; 8-byte vectors (PV8QI/PV4HI/PV2SI): RV64 uses single register, RV32 uses register pairs
@@ -4924,6 +4998,43 @@
      it last.  */
   emit_insn (gen_riscv_<rvp_dot_mixed> (operands[0], operands[3],
 				      operands[2], operands[1]));
+  DONE;
+})
+
+;; Four full halfword products contribute to a doubleword accumulator.
+(define_expand "sdot_prodpv1dipv4hi"
+  [(match_operand:PV1DI 0 "register_operand")
+   (match_operand:PV4HI 1 "register_operand")
+   (match_operand:PV4HI 2 "register_operand")
+   (match_operand:PV1DI 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_dot_product_64 (operands[0], operands[1], operands[2],
+				operands[3], false, false);
+  DONE;
+})
+
+(define_expand "udot_prodpv1dipv4hi"
+  [(match_operand:PV1DI 0 "register_operand")
+   (match_operand:PV4HI 1 "register_operand")
+   (match_operand:PV4HI 2 "register_operand")
+   (match_operand:PV1DI 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_dot_product_64 (operands[0], operands[1], operands[2],
+				operands[3], true, false);
+  DONE;
+})
+
+(define_expand "usdot_prodpv1dipv4hi"
+  [(match_operand:PV1DI 0 "register_operand")
+   (match_operand:PV4HI 1 "register_operand")
+   (match_operand:PV4HI 2 "register_operand")
+   (match_operand:PV1DI 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_dot_product_64 (operands[0], operands[1], operands[2],
+				operands[3], false, true);
   DONE;
 })
 
