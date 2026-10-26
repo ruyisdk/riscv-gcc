@@ -12616,6 +12616,22 @@ simplify_comparison (enum rtx_code code, rtx *pop0, rtx *pop1)
 	  break;
 
 	case SUBREG:
+	  /* A mask that preserves the sign bit of a truncated value does
+	     not affect a sign comparison.  force_to_mode can leave such a
+	     mask when simplifying an extension in the wider mode.  */
+	  if (sign_bit_comparison_p
+	      && mode_width <= HOST_BITS_PER_WIDE_INT
+	      && subreg_lowpart_p (op0)
+	      && partial_subreg_p (op0)
+	      && GET_CODE (SUBREG_REG (op0)) == AND
+	      && CONST_INT_P (XEXP (SUBREG_REG (op0), 1))
+	      && (UINTVAL (XEXP (SUBREG_REG (op0), 1))
+		  & (HOST_WIDE_INT_1U << (mode_width - 1))))
+	    {
+	      op0 = gen_lowpart (mode, XEXP (SUBREG_REG (op0), 0));
+	      continue;
+	    }
+
 	  /* Check for the case where we are comparing A - C1 with C2, that is
 
 	       (subreg:MODE (plus (A) (-C1))) op (C2)
