@@ -3650,15 +3650,59 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
-;; Routes __builtin_convertvector (PV4HI->PV4QI) through truncpv4hipv4qi2 so
-;; combine can match the compound clip patterns before the fallback byte-pack
-;; split fires.
+;; Keep the small pack as one operation, allowing combine to absorb both
+;; source clamps and their shared bound before splitting the fallback.
+(define_insn_and_split "riscv_p_pack_trunc_pv2hi"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (vec_concat:PV4HI
+	    (match_operand:PV2HI 1 "register_operand" "r")
+	    (match_operand:PV2HI 2 "register_operand" "r"))))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR
+   && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx combined;
+  if (TARGET_64BIT)
+    {
+      rtx pair = gen_reg_rtx (PV2SImode);
+      emit_insn (gen_pack_concatpv2si (pair, gen_lowpart (SImode, operands[1]),
+				     gen_lowpart (SImode, operands[2])));
+      combined = gen_lowpart (PV4HImode, pair);
+    }
+  else
+    {
+      combined = gen_reg_rtx (PV4HImode);
+      /* Define the full pseudo with an undefined upper half.  Other
+	 register operands cannot always be widened into a register pair.  */
+      if (REG_P (operands[1]) && !HARD_REGISTER_P (operands[1]))
+	emit_move_insn (combined, gen_rtx_SUBREG (PV4HImode, operands[1], 0));
+      else
+	emit_move_insn (gen_lowpart (PV2HImode, combined), operands[1]);
+      emit_move_insn (gen_highpart (PV2HImode, combined), operands[2]);
+    }
+  emit_insn (gen_truncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")
+   (set (attr "length") (if_then_else (match_test "TARGET_64BIT")
+				       (const_int 8) (const_int 12)))])
+
 (define_expand "vec_pack_trunc_pv2hi"
   [(match_operand:PV4QI 0 "register_operand" "")
    (match_operand:PV2HI 1 "register_operand" "")	; lo half
    (match_operand:PV2HI 2 "register_operand" "")]	; hi half
   "TARGET_RVP"
 {
+  if (!TARGET_BIG_ENDIAN && !TARGET_VECTOR)
+    {
+      emit_insn (gen_riscv_p_pack_trunc_pv2hi (operands[0], operands[1],
+					    operands[2]));
+      DONE;
+    }
   rtx combined;
   if (TARGET_64BIT)
     {
@@ -3747,6 +3791,51 @@
   "pnclipup.<rvp_extend_width>\t%0,%1,%2"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
+
+;; The small-vector pack has two halfword pairs as inputs.  Form the full
+;; source before clipping, so either source can overlap the final result.
+(define_insn_and_split "*rvp_pack_ustrunc_small"
+  [(set (match_operand:PV4QI 0 "register_operand" "=r")
+	(truncate:PV4QI
+	  (vec_concat:PV4HI
+	    (umin:PV2HI (match_operand:PV2HI 1 "register_operand" "r")
+		       (match_operand:PV2HI 3 "immediate_operand"))
+	    (umin:PV2HI (match_operand:PV2HI 2 "register_operand" "r")
+		       (match_operand:PV2HI 4 "immediate_operand")))))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR
+   && can_create_pseudo_p ()
+   && riscv_const_vector_broadcast_val_p (operands[3], 255)
+   && riscv_const_vector_broadcast_val_p (operands[4], 255)"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx combined;
+  if (TARGET_64BIT)
+    {
+      rtx pair = gen_reg_rtx (PV2SImode);
+      emit_insn (gen_pack_concatpv2si (pair, gen_lowpart (SImode, operands[1]),
+				     gen_lowpart (SImode, operands[2])));
+      combined = gen_lowpart (PV4HImode, pair);
+    }
+  else
+    {
+      combined = gen_reg_rtx (PV4HImode);
+      /* Define the full pseudo with an undefined upper half.  Other
+	 register operands cannot always be widened into a register pair.  */
+      if (REG_P (operands[1]) && !HARD_REGISTER_P (operands[1]))
+	emit_move_insn (combined, gen_rtx_SUBREG (PV4HImode, operands[1], 0));
+      else
+	emit_move_insn (gen_lowpart (PV2HImode, combined), operands[1]);
+      emit_move_insn (gen_highpart (PV2HImode, combined), operands[2]);
+    }
+  emit_insn (gen_ustruncpv4hipv4qi2 (operands[0], combined));
+  DONE;
+}
+  [(set_attr "type" "arith")
+   (set_attr "mode" "DI")
+   (set (attr "length") (if_then_else (match_test "TARGET_64BIT")
+				       (const_int 8) (const_int 12)))])
 
 ;; The RV32 clips hold the shift amount themselves.
 (define_insn "*pnclipi_<rvp_extend_width>_rv32"

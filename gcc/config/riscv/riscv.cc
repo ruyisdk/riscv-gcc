@@ -4417,6 +4417,24 @@ riscv_p_unsigned_clip_cost (rtx x, machine_mode mode)
       || (mode != PV4QImode && mode != PV2HImode))
     return 0;
 
+  /* The small pack drops both clamps and their bounds.  Keep the two RV32
+     pair moves in the estimate even if they eventually coalesce.  */
+  if (!TARGET_BIG_ENDIAN && !TARGET_VECTOR && mode == PV4QImode
+      && GET_MODE (XEXP (x, 0)) == PV4HImode
+      && GET_CODE (XEXP (x, 0)) == VEC_CONCAT)
+    {
+      rtx lo = XEXP (XEXP (x, 0), 0);
+      rtx hi = XEXP (XEXP (x, 0), 1);
+      if (GET_MODE (lo) == PV2HImode && GET_CODE (lo) == UMIN
+	  && GET_MODE (hi) == PV2HImode && GET_CODE (hi) == UMIN
+	  && register_operand (XEXP (lo, 0), PV2HImode)
+	  && register_operand (XEXP (hi, 0), PV2HImode)
+	  && riscv_const_vector_broadcast_val_p (XEXP (lo, 1), 255)
+	  && riscv_const_vector_broadcast_val_p (XEXP (hi, 1), 255))
+	return COSTS_N_INSNS (TARGET_64BIT ? 2 : 3);
+      return 0;
+    }
+
   machine_mode wide_mode = mode == PV4QImode ? PV4HImode : PV2SImode;
   unsigned int bits = mode == PV4QImode ? 8 : 16;
   rtx min = XEXP (x, 0);
