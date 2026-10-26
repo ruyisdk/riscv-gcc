@@ -3840,6 +3840,9 @@ vect_recog_bitwise_average_pattern (vec_info *vinfo,
 			      vectype);
 }
 
+static gimple *vect_recog_promoted_sat_trunc_clamp (vec_info *, stmt_vec_info,
+						 tree *);
+
 /* Recognize cases in which the input to a cast is wider than its
    output, and the input is fed by a widening operation.  Fold this
    by removing the unnecessary intermediate widening.  E.g.:
@@ -3900,6 +3903,14 @@ vect_recog_cast_forwprop_pattern (vec_info *vinfo,
   if (!INTEGRAL_TYPE_P (lhs_type)
       && TYPE_SIGN (rhs_type) != TYPE_SIGN (unprom.type))
     return NULL;
+
+  /* Over-widening can expose a saturating pack behind this cast.  Prove
+     the clamp from original statements, whose uses are linked, before
+     replacing the cast with another synthetic conversion.  */
+  if (gimple *clamp = vect_recog_promoted_sat_trunc_clamp (vinfo,
+							last_stmt_info,
+							type_out))
+    return clamp;
 
   /* We can get the same result by casting UNPROM directly, to avoid
      the unnecessary widening and narrowing.  */
@@ -5076,6 +5087,139 @@ vect_recog_sat_trunc_pattern (vec_info *vinfo, stmt_vec_info stmt_vinfo,
   return NULL;
 }
 
+/* Build a signed saturating pack of INPUT to OTYPE if the target supports
+   its exact two-input vector form.  */
+
+static gimple *
+vect_build_sat_trunc_clamp (vec_info *vinfo, gimple *stmt, tree input,
+			  tree otype, tree *type_out)
+{
+  tree v_itype = get_vectype_for_scalar_type (vinfo, TREE_TYPE (input));
+  tree v_otype = get_vectype_for_scalar_type (vinfo, otype);
+  code_helper pack_code;
+  int multi_step = 0;
+  auto_vec<tree, 8> intermediate_types;
+  if (!v_itype || !v_otype
+      || !supportable_narrowing_operation (IFN_SAT_TRUNC, v_otype, v_itype,
+					   &pack_code, &multi_step,
+					   &intermediate_types))
+    return NULL;
+
+  gcc_assert (pack_code == VEC_PACK_SAT_EXPR && multi_step == 0);
+  gcall *call = gimple_build_call_internal (IFN_SAT_TRUNC, 1, input);
+  gimple_call_set_lhs (call, vect_recog_temp_ssa_var (otype));
+  gimple_call_set_nothrow (call, true);
+  gimple_set_location (call, gimple_location (stmt));
+  *type_out = v_otype;
+  return call;
+}
+
+/* Return the original internal assignment of NAME if USER is its only
+   nondebug use.  Do not follow replacement patterns: their SSA uses are
+   not linked, and cannot prove that the clamp has no other consumers.  */
+
+static gassign *
+vect_original_clamp_def (vec_info *vinfo, tree name, gimple *user)
+{
+  if (TREE_CODE (name) != SSA_NAME)
+    return NULL;
+  use_operand_p use;
+  gimple *use_stmt;
+  if (!single_imm_use (name, &use, &use_stmt) || use_stmt != user)
+    return NULL;
+  stmt_vec_info info = vinfo->lookup_def (name);
+  if (!info || is_pattern_stmt_p (info)
+      || STMT_VINFO_DEF_TYPE (info) != vect_internal_def)
+    return NULL;
+  return dyn_cast <gassign *> (info->stmt);
+}
+
+/* Recognize a clamp performed after a value-preserving signed promotion.
+   Cast forwarding would otherwise claim the final narrowing conversion
+   before the ordinary signed-clamp recognizer can see its narrow input.
+   Leave existing producer patterns intact and use the original input.  */
+
+static gimple *
+vect_recog_promoted_sat_trunc_clamp (vec_info *vinfo, stmt_vec_info stmt_info,
+				   tree *type_out)
+{
+  gassign *stmt = dyn_cast <gassign *> (stmt_info->stmt);
+  if (is_pattern_stmt_p (stmt_info) || !stmt
+      || !CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (stmt)))
+    return NULL;
+  tree otype = TREE_TYPE (gimple_assign_lhs (stmt));
+  tree outer_result = gimple_assign_rhs1 (stmt);
+  tree ctype = TREE_TYPE (outer_result);
+  if (!INTEGRAL_TYPE_P (otype) || TYPE_UNSIGNED (otype)
+      || !INTEGRAL_TYPE_P (ctype) || TYPE_UNSIGNED (ctype)
+      || !type_has_mode_precision_p (otype)
+      || !type_has_mode_precision_p (ctype)
+      || TYPE_PRECISION (ctype) <= 2 * TYPE_PRECISION (otype))
+    return NULL;
+
+  gassign *outer = vect_original_clamp_def (vinfo, outer_result, stmt);
+  if (!outer)
+    return NULL;
+  tree_code code = gimple_assign_rhs_code (outer);
+  if (code != MIN_EXPR && code != MAX_EXPR)
+    return NULL;
+  tree inner_result = gimple_assign_rhs1 (outer);
+  tree outer_bound = gimple_assign_rhs2 (outer);
+  if (TREE_CODE (inner_result) == INTEGER_CST)
+    std::swap (inner_result, outer_bound);
+  if (TREE_CODE (outer_bound) != INTEGER_CST)
+    return NULL;
+  gassign *inner = vect_original_clamp_def (vinfo, inner_result, outer);
+  if (!inner || gimple_assign_rhs_code (inner)
+		!= (code == MIN_EXPR ? MAX_EXPR : MIN_EXPR))
+    return NULL;
+  tree promoted = gimple_assign_rhs1 (inner);
+  tree inner_bound = gimple_assign_rhs2 (inner);
+  if (TREE_CODE (promoted) == INTEGER_CST)
+    std::swap (promoted, inner_bound);
+  if (TREE_CODE (promoted) != SSA_NAME
+      || TREE_CODE (inner_bound) != INTEGER_CST
+      || !types_compatible_p (ctype, TREE_TYPE (inner_result))
+      || !types_compatible_p (ctype, TREE_TYPE (promoted))
+      || !types_compatible_p (ctype, TREE_TYPE (inner_bound))
+      || !types_compatible_p (ctype, TREE_TYPE (outer_bound)))
+    return NULL;
+
+  unsigned oprec = TYPE_PRECISION (otype);
+  unsigned cprec = TYPE_PRECISION (ctype);
+  tree low = code == MIN_EXPR ? inner_bound : outer_bound;
+  tree high = code == MIN_EXPR ? outer_bound : inner_bound;
+  if (wi::to_wide (low)
+      != wide_int::from (wi::min_value (oprec, SIGNED), cprec, SIGNED)
+      || wi::to_wide (high)
+	 != wide_int::from (wi::max_value (oprec, SIGNED), cprec, SIGNED))
+    return NULL;
+
+  stmt_vec_info promotion_info = vinfo->lookup_def (promoted);
+  if (!promotion_info || is_pattern_stmt_p (promotion_info)
+      || STMT_VINFO_DEF_TYPE (promotion_info) != vect_internal_def)
+    return NULL;
+  gassign *promotion = dyn_cast <gassign *> (promotion_info->stmt);
+  if (!promotion
+      || !CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (promotion)))
+    return NULL;
+  tree input = gimple_assign_rhs1 (promotion);
+  tree itype = TREE_TYPE (input);
+  vect_def_type dt;
+  if (TREE_CODE (input) != SSA_NAME
+      || !INTEGRAL_TYPE_P (itype) || TYPE_UNSIGNED (itype)
+      || !type_has_mode_precision_p (itype)
+      || TYPE_PRECISION (itype) != 2 * oprec
+      || !vect_is_simple_use (input, vinfo, &dt))
+    return NULL;
+
+  gimple *call = vect_build_sat_trunc_clamp (vinfo, stmt, input, otype,
+					  type_out);
+  if (call)
+    vect_pattern_detected ("vect_recog_promoted_sat_trunc_clamp", stmt);
+  return call;
+}
+
 /* Recognize a signed clamp to the exact range of a narrower result when
    the target can combine two such vectors with a saturating pack.  Keep
    this separate from the existing unary SAT_TRUNC recognition.  */
@@ -5148,24 +5292,10 @@ vect_recog_sat_trunc_clamp_pattern (vec_info *vinfo, stmt_vec_info stmt_info,
   if (wi::to_wide (min_bound) != lower || wi::to_wide (max_bound) != upper)
     return NULL;
 
-  tree v_itype = get_vectype_for_scalar_type (vinfo, itype);
-  tree v_otype = get_vectype_for_scalar_type (vinfo, otype);
-  code_helper pack_code;
-  int multi_step = 0;
-  auto_vec<tree, 8> intermediate_types;
-  if (!v_itype || !v_otype
-      || !supportable_narrowing_operation (IFN_SAT_TRUNC, v_otype, v_itype,
-					   &pack_code, &multi_step,
-					   &intermediate_types))
-    return NULL;
-
-  gcc_assert (pack_code == VEC_PACK_SAT_EXPR && multi_step == 0);
-  gcall *call = gimple_build_call_internal (IFN_SAT_TRUNC, 1, input);
-  gimple_call_set_lhs (call, vect_recog_temp_ssa_var (otype));
-  gimple_call_set_nothrow (call, true);
-  gimple_set_location (call, gimple_location (stmt));
-  *type_out = v_otype;
-  vect_pattern_detected ("vect_recog_sat_trunc_clamp_pattern", stmt);
+  gimple *call = vect_build_sat_trunc_clamp (vinfo, stmt, input, otype,
+					  type_out);
+  if (call)
+    vect_pattern_detected ("vect_recog_sat_trunc_clamp_pattern", stmt);
   return call;
 }
 

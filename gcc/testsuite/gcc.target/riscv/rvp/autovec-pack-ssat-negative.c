@@ -25,7 +25,7 @@ CLAMP (small_s16, int8_t, int16_t, int16_t, -100, 100)
 CLAMP (near_s16, int8_t, int16_t, int16_t, -127, 127)
 CLAMP (small_s32, int16_t, int32_t, int32_t, -20000, 20000)
 CLAMP (near_s32, int16_t, int32_t, int32_t, -32768, 32766)
-CLAMP (promoted_s16, int8_t, int16_t, int32_t, -128, 127)
+CLAMP (wide_s32, int8_t, int32_t, int32_t, -128, 127)
 
 #undef CLAMP
 
@@ -79,5 +79,5 @@ shared_outer_s32 (int16_t *restrict dst, int32_t *restrict observed,
 
 /* Reject only the new recognition.  Existing unary or combine patterns may
    legitimately generate narrowing instructions for some of these cases.  */
-/* { dg-final { scan-tree-dump-not "vect_recog_sat_trunc_clamp_pattern" "vect" } } */
-/* { dg-final { scan-tree-dump-not "vect_recog_sat_trunc_clamp_pattern" "slp1" } } */
+/* { dg-final { scan-tree-dump-not "vect_recog_(promoted_)?sat_trunc_clamp" "vect" } } */
+/* { dg-final { scan-tree-dump-not "vect_recog_(promoted_)?sat_trunc_clamp" "slp1" } } */
