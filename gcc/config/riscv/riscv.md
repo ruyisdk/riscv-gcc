@@ -769,6 +769,11 @@
      pairs put the low word first, unlike big-endian scalar DI values.  */
   if (!TARGET_64BIT && TARGET_RVP)
     {
+      /* Scalar views of RVV registers need an explicit extraction before
+	 reload.  Packed P subregs already reside in general registers.  */
+      if (SUBREG_P (operands[1])
+	  && riscv_vector_mode_p (GET_MODE (SUBREG_REG (operands[1]))))
+	operands[1] = force_reg (DImode, operands[1]);
       if (!REG_P (operands[2]))
 	operands[2] = force_reg (DImode, operands[2]);
     }
@@ -938,8 +943,15 @@
         (minus:DI (match_operand:DI 1 "reg_or_0_operand")
                   (match_operand:DI 2 "register_operand")))]
   "TARGET_64BIT || (TARGET_RVP && !TARGET_BIG_ENDIAN)"
-  ""
-)
+{
+  /* RV32 P pairs cannot consume an RVV scalar view without an explicit
+     extraction.  Lower it while temporary pseudos are still available.  */
+  if (!TARGET_64BIT && TARGET_RVP)
+    for (unsigned int i = 1; i <= 2; ++i)
+      if (SUBREG_P (operands[i])
+	  && riscv_vector_mode_p (GET_MODE (SUBREG_REG (operands[i]))))
+	operands[i] = force_reg (DImode, operands[i]);
+})
 
 (define_insn "*subdi3"
   [(set (match_operand:DI 0            "register_operand" "= r")
