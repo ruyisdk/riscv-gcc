@@ -33,11 +33,213 @@ along with GCC; see the file COPYING3.  If not see
 #include "recog.h"
 #include "diagnostic-core.h"
 #include "expr.h"
+#include "expmed.h"
 #include "explow.h"
 #include "insn-config.h"
 #include "insn-attr.h"
 #include "emit-rtl.h"
 #include "optabs-tree.h"
+
+/* Pack COUNT bytes from VALS, starting at FIRST, using pair operations.
+   Each stage consumes only the defined low bits of the preceding stage.  */
+
+static rtx
+riscv_p_pack_bytes (rtx vals, unsigned int first, unsigned int count)
+{
+  if (count == 2)
+    {
+      rtx lo = force_reg (QImode, XVECEXP (vals, 0, first));
+      rtx hi = force_reg (QImode, XVECEXP (vals, 0, first + 1));
+      if (BYTES_BIG_ENDIAN)
+	std::swap (lo, hi);
+      rtx result = gen_reg_rtx (HImode);
+      emit_insn (gen_riscv_p_pack_byteshi (result, lo, hi));
+      return result;
+    }
+
+  gcc_assert (count == 4 || (TARGET_64BIT && count == 8));
+  rtx lo = riscv_p_pack_bytes (vals, first, count / 2);
+  rtx hi = riscv_p_pack_bytes (vals, first + count / 2, count / 2);
+  machine_mode mode = count == 4 ? PV2HImode : PV2SImode;
+  rtx result = gen_reg_rtx (mode);
+  if (count == 4)
+    emit_insn (gen_ppaire_concatpv2hi (result, lo, hi));
+  else
+    emit_insn (gen_pack_concatpv2si (result, lo, hi));
+  return gen_lowpart (count == 4 ? SImode : DImode, result);
+}
+
+/* Pack COUNT elements from VALS, starting at FIRST, into a scalar register.
+   Each element is zero-extended before shifting; no insertion needs to
+   preserve undefined or already-written bits in a partial vector.  */
+
+static rtx
+riscv_p_pack_elements (scalar_int_mode mode, scalar_mode inner_mode,
+		       rtx vals, unsigned int first, unsigned int count)
+{
+  /* Pairing variable bytes avoids the masks, shifts and ORs needed for a
+     scalar construction.  Leave constants to the scalar path, where
+     constant folding and omitted zero elements can be cheaper.  */
+  if (inner_mode == QImode && count >= 2)
+    {
+      bool variable_p = true;
+      for (unsigned int i = 0; i < count; ++i)
+	variable_p &= !CONST_INT_P (XVECEXP (vals, 0, first + i));
+      if (variable_p)
+	{
+	  rtx result = riscv_p_pack_bytes (vals, first, count);
+	  return convert_modes (mode, GET_MODE (result), result, true);
+	}
+    }
+  if (TARGET_64BIT && inner_mode == HImode && count == 2 && mode == SImode)
+    {
+      rtx pair = gen_reg_rtx (PV2HImode);
+      rtx lo = force_reg (HImode, XVECEXP (vals, 0, first));
+      rtx hi = force_reg (HImode, XVECEXP (vals, 0, first + 1));
+      emit_insn (gen_ppaire_concatpv2hi (pair, lo, hi));
+      return gen_lowpart (SImode, pair);
+    }
+  unsigned int bits = GET_MODE_BITSIZE (inner_mode);
+  scalar_int_mode arithmetic_mode = as_a<scalar_int_mode> (word_mode);
+  rtx result = NULL_RTX;
+  for (unsigned int i = 0; i < count; ++i)
+    {
+      if (XVECEXP (vals, 0, first + i) == CONST0_RTX (inner_mode))
+	continue;
+      unsigned int shift = (BYTES_BIG_ENDIAN ? count - 1 - i : i) * bits;
+      /* The highest element determines the sign extension of a word on
+	 RV64.  Keep that extension explicit instead of widening a word OR
+	 with unspecified upper bits.  Lower elements cannot change it.  */
+      scalar_int_mode shift_mode = shift + bits == GET_MODE_BITSIZE (mode)
+	? mode : arithmetic_mode;
+      rtx value = convert_modes (shift_mode, inner_mode,
+				XVECEXP (vals, 0, first + i), true);
+      if (shift)
+	value = expand_shift (LSHIFT_EXPR, shift_mode, value, shift,
+			      NULL_RTX, true);
+      value = convert_modes (arithmetic_mode, shift_mode, value, false);
+      result = result ? expand_binop (arithmetic_mode, ior_optab, result,
+				      value, NULL_RTX, true, OPTAB_DIRECT)
+		      : value;
+      gcc_assert (result);
+    }
+  return result ? gen_lowpart (mode, result) : CONST0_RTX (mode);
+}
+
+/* Initialize TARGET from the scalar elements in VALS.  Build repeated
+   groups once and broadcast them in a wider packed mode.  Keep a complete
+   scalar fallback for nonperiodic constructors.  */
+
+void
+riscv_p_expand_vec_init (rtx target, rtx vals)
+{
+  machine_mode mode = GET_MODE (target);
+  scalar_mode inner_mode = GET_MODE_INNER (mode);
+  unsigned int bits = GET_MODE_BITSIZE (inner_mode);
+  unsigned int count = GET_MODE_NUNITS (mode).to_constant ();
+  unsigned int bytes = GET_MODE_SIZE (mode).to_constant ();
+  bool constant_p = true;
+  bool repeatable_p = true;
+
+  gcc_assert (TARGET_RVP && (bytes == 4 || bytes == 8)
+	      && GET_CODE (vals) == PARALLEL
+	      && XVECLEN (vals, 0) == (int) count);
+
+  for (unsigned int i = 0; i < count; ++i)
+    {
+      rtx value = XVECEXP (vals, 0, i);
+      constant_p &= CONST_INT_P (value);
+      repeatable_p &= (CONST_INT_P (value)
+		       || register_operand (value, inner_mode));
+    }
+
+  if (constant_p)
+    {
+      emit_move_insn (target, gen_rtx_CONST_VECTOR (mode, XVEC (vals, 0)));
+      return;
+    }
+
+  for (unsigned int period = 1;
+       repeatable_p && period < count && period * bits <= 32; period *= 2)
+    {
+      bool matches = true;
+      for (unsigned int i = period; i < count; ++i)
+	if (!rtx_equal_p (XVECEXP (vals, 0, i),
+			  XVECEXP (vals, 0, i % period)))
+	  {
+	    matches = false;
+	    break;
+	  }
+      if (!matches)
+	continue;
+
+      scalar_int_mode group_mode
+	= int_mode_for_size (period * bits, 0).require ();
+      rtx group = XVECEXP (vals, 0, 0);
+      if (period != 1)
+	{
+	  scalar_int_mode packing_mode = group_mode == SImode
+	    ? SImode : as_a<scalar_int_mode> (word_mode);
+	  group = gen_lowpart (group_mode,
+			       riscv_p_pack_elements (packing_mode, inner_mode,
+					      vals, 0, period));
+	}
+
+      if (!TARGET_64BIT && group_mode == SImode)
+	{
+	  /* Keep word copies visible to subreg lowering.  Consumers of one
+	     half need not materialize a complete register-pair broadcast.  */
+	  rtx result = gen_reg_rtx (mode);
+	  group = force_reg (SImode, group);
+	  emit_move_insn (gen_lowpart (SImode, result), group);
+	  emit_move_insn (gen_highpart (SImode, result), group);
+	  emit_move_insn (target, result);
+	  return;
+	}
+
+      machine_mode broadcast_mode = mode;
+      if (period * bits == 16)
+	broadcast_mode = bytes == 4 ? PV2HImode : PV4HImode;
+      else if (period * bits == 32)
+	broadcast_mode = PV2SImode;
+      rtx result = expand_vector_broadcast (broadcast_mode,
+					   force_reg (group_mode, group));
+      gcc_assert (result);
+      emit_move_insn (target, gen_lowpart (mode, result));
+      return;
+    }
+
+  /* Do not coalesce memory operands, especially volatile loads.  Each
+     scalar value must be consumed in its original constructor position.
+     Use a temporary if TARGET could overwrite an input element.  */
+  rtx result = reg_overlap_mentioned_p (target, vals)
+    ? gen_reg_rtx (mode) : target;
+  if (inner_mode != QImode)
+    {
+      emit_move_insn (result, CONST0_RTX (mode));
+      for (unsigned int i = 0; i < count; ++i)
+	if (XVECEXP (vals, 0, i) != CONST0_RTX (inner_mode))
+	  store_bit_field (result, bits, i * bits, 0, 0, inner_mode,
+			   XVECEXP (vals, 0, i), false, false);
+      if (result != target)
+	emit_move_insn (target, result);
+      return;
+    }
+
+  unsigned int chunk = MIN (bytes, UNITS_PER_WORD);
+  scalar_int_mode chunk_mode = chunk == 4 ? SImode : DImode;
+  unsigned int per_chunk = chunk * BITS_PER_UNIT / bits;
+  for (unsigned int offset = 0; offset < bytes; offset += chunk)
+    {
+      rtx value = riscv_p_pack_elements
+	(chunk_mode, inner_mode, vals, offset * BITS_PER_UNIT / bits,
+	 per_chunk);
+      emit_move_insn (simplify_gen_subreg (chunk_mode, result, mode, offset),
+		      value);
+    }
+  if (result != target)
+    emit_move_insn (target, result);
+}
 
 /* Compute one physical halfword of the modular multiply-add/subtract SRC.
    WORD is its containing word's byte offset and HIGH_P selects its high

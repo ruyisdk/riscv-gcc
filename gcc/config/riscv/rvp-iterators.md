@@ -49,6 +49,11 @@
   (PV2HI "HI") (PV4HI "HI")
   (PV2SI "SI")])
 
+(define_mode_attr rvp_inner_mode [
+  (PV4QI "qi") (PV8QI "qi")
+  (PV2HI "hi") (PV4HI "hi")
+  (PV2SI "si")])
+
 ;; Constraint for PLI vec_duplicate
 (define_mode_attr dpli [
   (PV4QI "Os08") (PV8QI "Os08")

@@ -1751,6 +1751,16 @@
 ;;
 ;; These patterns are handled by riscv_output_move via riscv_output_pli.
 
+;; Initialize packed vectors from scalar elements, including repeated groups.
+(define_expand "vec_init<mode><rvp_inner_mode>"
+  [(match_operand:PVMOVE 0 "register_operand")
+   (match_operand 1 "")]
+  "TARGET_RVP"
+{
+  riscv_p_expand_vec_init (operands[0], operands[1]);
+  DONE;
+})
+
 ;; vec_duplicate patterns for PLI.B/PLI.H/PLI.W
 (define_insn "*riscv_pli_vec"
   [(set (match_operand:PVALL 0 "register_operand" "=r")
@@ -2172,6 +2182,20 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Only the low halfword is defined.  PPAIRE.B takes the low byte from each
+;; source, so neither source needs extending to XLEN first.
+(define_insn "riscv_p_pack_byteshi"
+  [(set (match_operand:HI 0 "register_operand" "=r")
+        (ior:HI
+          (zero_extend:HI (match_operand:QI 1 "register_operand" "r"))
+          (ashift:HI
+            (zero_extend:HI (match_operand:QI 2 "register_operand" "r"))
+            (const_int 8))))]
+  "TARGET_RVP"
+  "ppaire.b\t%0, %1, %2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "HI")])
+
 ;; Concatenate two halfwords into a PV2HI vector.  PPAIRE.H packs the low
 ;; halfword of each operand into a 32-bit word, which is what is needed for
 ;; both RV32 and RV64; on RV64 a plain PACK would instead concatenate the
@@ -2191,7 +2215,7 @@
   [(set_attr "type"  "arith")
    (set_attr "mode"  "SI")])
 
-(define_insn "*pack_concatpv2si"
+(define_insn "pack_concatpv2si"
   [(set (match_operand:PV2SI 0 "register_operand" "=r")
         (vec_concat:PV2SI
           (match_operand:SI 1 "register_operand" "r") 
