@@ -615,6 +615,75 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; The shifted product of two signed halfwords is in [-32767, 32768].
+;; Clamping its upper end therefore gives the signed Q15 product.  Keep
+;; the extension separate so a subsequent narrowing can discard it.
+(define_split
+  [(set (match_operand:PV2SI 0 "register_operand")
+	(smin:PV2SI
+	  (ashiftrt:PV2SI
+	    (mult:PV2SI
+	      (sign_extend:PV2SI
+		(match_operand:PV2HI 1 "register_operand"))
+	      (sign_extend:PV2SI
+		(match_operand:PV2HI 2 "register_operand")))
+	    (const_int 15))
+	  (match_operand:PV2SI 3 "immediate_operand")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && can_create_pseudo_p ()
+   && riscv_const_vector_broadcast_val_p (operands[3], 32767)"
+  [(set (match_dup 4)
+	(unspec:PV2HI [(match_dup 1) (match_dup 2)] UNSPEC_PMULQ))
+   (set (match_dup 0) (sign_extend:PV2SI (match_dup 4)))]
+  "{ operands[4] = gen_reg_rtx (PV2HImode); }")
+
+(define_split
+  [(set (match_operand:PV2SI 0 "register_operand")
+	(smin:PV2SI
+	  (ashiftrt:PV2SI
+	    (plus:PV2SI
+	      (mult:PV2SI
+		(sign_extend:PV2SI
+		  (match_operand:PV2HI 1 "register_operand"))
+		(sign_extend:PV2SI
+		  (match_operand:PV2HI 2 "register_operand")))
+	      (match_operand:PV2SI 3 "immediate_operand"))
+	    (const_int 15))
+	  (match_operand:PV2SI 4 "immediate_operand")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && can_create_pseudo_p ()
+   && riscv_const_vector_broadcast_val_p (operands[3], 16384)
+   && riscv_const_vector_broadcast_val_p (operands[4], 32767)"
+  [(set (match_dup 5)
+	(unspec:PV2HI [(match_dup 1) (match_dup 2)] UNSPEC_PMULQR))
+   (set (match_dup 0) (sign_extend:PV2SI (match_dup 5)))]
+  "{ operands[5] = gen_reg_rtx (PV2HImode); }")
+
+;; Keep the rounding constant inside the product so combine can also see
+;; the shift and upper clamp.  An unfused product still uses the ordinary
+;; widening multiply-accumulate sequence.
+(define_insn_and_split "*rvp_q15_round_product"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(plus:PV2SI
+	  (mult:PV2SI
+	    (sign_extend:PV2SI
+	      (match_operand:PV2HI 1 "register_operand" "r"))
+	    (sign_extend:PV2SI
+	      (match_operand:PV2HI 2 "register_operand" "r")))
+	  (match_operand:PV2SI 3 "immediate_operand" "i")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && can_create_pseudo_p ()
+   && riscv_const_vector_broadcast_val_p (operands[3], 16384)"
+  "#"
+  "&& 1"
+  [(set (match_dup 4) (match_dup 3))
+   (set (match_dup 0)
+	(plus:PV2SI
+	  (mult:PV2SI (sign_extend:PV2SI (match_dup 1))
+		     (sign_extend:PV2SI (match_dup 2)))
+	  (match_dup 4)))]
+  "{ operands[4] = gen_reg_rtx (PV2SImode); }"
+  [(set_attr "type" "simd")
+   (set (attr "length") (if_then_else (match_test "TARGET_64BIT")
+				     (const_int 16) (const_int 12)))])
+
 ;; Keep widening multiplication visible through combine, including the
 ;; accumulation when available.  RV64 uses ZIP followed by a packed product;
 ;; split before register allocation because these sequences need temporaries.
