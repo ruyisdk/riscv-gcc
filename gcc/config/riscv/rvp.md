@@ -5452,6 +5452,34 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
+;; Fold a seeded word reduction modulo 2^32.
+;; PREDSUM computes a native sum; truncate only after adding the seed.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (plus:SI
+	      (subreg:SI
+		(any_extract:DI (match_operand:DI 1 "register_operand")
+				(const_int 32) (const_int 32)) 0)
+	      (match_operand:SI 2 "register_operand"))
+	    (match_operand:SI 3 "register_operand"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && (rtx_equal_p (gen_lowpart (SImode, operands[1]), operands[2])
+       || rtx_equal_p (gen_lowpart (SImode, operands[1]), operands[3]))"
+  [(set (match_dup 4)
+	(unspec:DI [(match_dup 5) (match_dup 6)] UNSPEC_PREDSUM))
+   (set (match_dup 0) (sign_extend:DI (subreg:SI (match_dup 4) 0)))]
+{
+  operands[4] = gen_reg_rtx (DImode);
+  operands[5] = gen_lowpart (PV2SImode, operands[1]);
+  /* Only the low seed word contributes to the truncated result.  */
+  rtx seed = rtx_equal_p (gen_lowpart (SImode, operands[1]), operands[2])
+	     ? operands[3] : operands[2];
+  operands[6] = gen_lowpart (DImode, seed);
+})
+
 ;; Combine a widening conversion followed by a horizontal sum.  SLP can
 ;; introduce this form instead of the scalar lane extractions below.
 (define_insn "*rvp_reduc_widen_pv2hi<u>"
