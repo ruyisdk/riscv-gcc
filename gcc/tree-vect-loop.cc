@@ -11209,6 +11209,188 @@ vect_update_ivs_after_vectorizer_for_early_breaks (loop_vec_info loop_vinfo)
   gsi_insert_seq_before (&si, stmts, GSI_SAME_STMT);
 }
 
+/* Retain the scalar statement UID before vectorization removes stores.  */
+struct vect_epilogue_data_ref
+{
+  data_reference *dr;
+  unsigned uid;
+};
+
+/* Reuse the final vector data pointers in a scalar epilogue.  Keeping the
+   original bases live across the vector loop, only to reconstruct these
+   addresses from the iteration count, can require additional registers.
+
+   Handle ungrouped forward accesses with a constant initial displacement.
+   Require a full-vector main loop and a direct join of its exit and skip
+   paths, so the pointer advances exactly VF scalar iterations per vector
+   iteration.  Other peeling and control-flow shapes retain their existing
+   updates.  */
+
+static void
+vect_reuse_epilogue_data_ptrs
+  (loop_vec_info loop_vinfo, const vec<vect_epilogue_data_ref> &datarefs)
+{
+  loop_p loop = LOOP_VINFO_LOOP (loop_vinfo);
+  edge exit = LOOP_VINFO_MAIN_EXIT (loop_vinfo);
+  edge epilogue_exit = LOOP_VINFO_EPILOGUE_MAIN_EXIT (loop_vinfo);
+  unsigned HOST_WIDE_INT vf;
+  if (!epilogue_exit
+      || loop->inner
+      || LOOP_VINFO_EPILOGUE_P (loop_vinfo)
+      || loop_vinfo->epilogue_vinfo
+      || LOOP_VINFO_SCALAR_LOOP (loop_vinfo)
+      || LOOP_VINFO_EARLY_BREAKS (loop_vinfo)
+      || LOOP_VINFO_NITERS_UNCOUNTED_P (loop_vinfo)
+      || LOOP_VINFO_USING_PARTIAL_VECTORS_P (loop_vinfo)
+      || LOOP_VINFO_PEELING_FOR_ALIGNMENT (loop_vinfo)
+      || LOOP_VINFO_PEELING_FOR_GAPS (loop_vinfo)
+      || !LOOP_VINFO_VECT_FACTOR (loop_vinfo).is_constant (&vf)
+      || !single_pred_p (exit->dest))
+    return;
+
+  loop_p epilogue = epilogue_exit->src->loop_father;
+  if (epilogue == loop || epilogue->inner || !epilogue->num)
+    return;
+
+  basic_block merge = loop_preheader_edge (epilogue)->src;
+  if (EDGE_COUNT (merge->preds) != 2)
+    return;
+  edge main_e = find_edge (exit->dest, merge);
+  if (!main_e)
+    return;
+  edge skip_e = EDGE_PRED (merge, 0);
+  if (skip_e == main_e)
+    skip_e = EDGE_PRED (merge, 1);
+
+  hash_map<int_hash<unsigned, 0, UINT_MAX>, gassign *> copies;
+  basic_block *bbs = get_loop_body (epilogue);
+  for (unsigned i = 0; i < epilogue->num_nodes; ++i)
+    for (auto gsi = gsi_start_bb (bbs[i]); !gsi_end_p (gsi); gsi_next (&gsi))
+      if (gassign *stmt = dyn_cast<gassign *> (gsi_stmt (gsi)))
+	if (gimple_uid (stmt))
+	  copies.put (gimple_uid (stmt), stmt);
+  free (bbs);
+
+  for (const auto &entry : datarefs)
+    {
+      data_reference *dr = entry.dr;
+      gassign **copy = copies.get (entry.uid);
+      if (!copy || !DR_BASE_ADDRESS (dr) || !DR_INIT (dr)
+	  || !DR_OFFSET (dr) || !DR_STEP (dr)
+	  || TREE_CODE (DR_INIT (dr)) != INTEGER_CST
+	  || !integer_zerop (DR_OFFSET (dr)))
+	continue;
+      tree ref = (DR_IS_READ (dr)
+		  ? gimple_assign_rhs1 (*copy) : gimple_assign_lhs (*copy));
+      if (TREE_CODE (ref) != MEM_REF
+	  || TREE_CODE (TREE_OPERAND (ref, 1)) != INTEGER_CST
+	  || !tree_fits_uhwi_p (DR_STEP (dr))
+	  || !operand_equal_p (DR_STEP (dr), TYPE_SIZE_UNIT (TREE_TYPE (ref))))
+	continue;
+      tree base = DR_BASE_ADDRESS (dr);
+      if (!is_gimple_val (base)
+	  || (TREE_CODE (base) == SSA_NAME
+	      && !SSA_NAME_IS_DEFAULT_DEF (base)
+	      && !dominated_by_p (CDI_DOMINATORS, skip_e->src,
+				  gimple_bb (SSA_NAME_DEF_STMT (base)))))
+	continue;
+
+      tree init_offset = fold_convert (sizetype, DR_INIT (dr));
+      tree start = fold_build_pointer_plus (base, init_offset);
+
+      unsigned HOST_WIDE_INT step = tree_to_uhwi (DR_STEP (dr));
+      if (!step || vf > HOST_WIDE_INT_M1U / step)
+	continue;
+      tree final_ptr = NULL_TREE;
+      for (auto gsi = gsi_start_phis (loop->header);
+	   !gsi_end_p (gsi); gsi_next (&gsi))
+	{
+	  gphi *phi = gsi.phi ();
+	  tree name = gimple_phi_result (phi);
+	  if (!POINTER_TYPE_P (TREE_TYPE (name)))
+	    continue;
+	  tree initial = PHI_ARG_DEF_FROM_EDGE (phi, loop_preheader_edge (loop));
+	  if (!operand_equal_p (start, initial))
+	    {
+	      tree initial_base, initial_offset;
+	      split_constant_offset (initial, &initial_base, &initial_offset);
+	      if (!operand_equal_p (base, initial_base)
+		  || !operand_equal_p (init_offset,
+				       fold_convert (sizetype, initial_offset)))
+		continue;
+	    }
+	  tree next = PHI_ARG_DEF_FROM_EDGE (phi, loop_latch_edge (loop));
+	  tree value = next;
+	  unsigned HOST_WIDE_INT remaining = vf * step;
+	  unsigned budget = 16;
+	  while (value != name && TREE_CODE (value) == SSA_NAME && budget--)
+	    {
+	      gassign *def = dyn_cast<gassign *> (SSA_NAME_DEF_STMT (value));
+	      if (!def || gimple_assign_rhs_code (def) != POINTER_PLUS_EXPR
+		  || gimple_bb (def)->loop_father != loop
+		  || !dominated_by_p (CDI_DOMINATORS, exit->src, gimple_bb (def)))
+		break;
+	      tree inc = gimple_assign_rhs2 (def);
+	      if (!tree_fits_uhwi_p (inc) || tree_to_uhwi (inc) > remaining)
+		break;
+	      remaining -= tree_to_uhwi (inc);
+	      value = gimple_assign_rhs1 (def);
+	    }
+	  if (value == name && !remaining)
+	    {
+	      final_ptr = next;
+	      break;
+	    }
+	}
+      if (!final_ptr)
+	continue;
+
+      tree ptr_type = TREE_TYPE (TREE_OPERAND (ref, 0));
+      tree final_type = TREE_TYPE (final_ptr);
+      if (TYPE_PRECISION (ptr_type) != TYPE_PRECISION (final_type)
+	  || TYPE_ADDR_SPACE (TREE_TYPE (ptr_type))
+	     != TYPE_ADDR_SPACE (TREE_TYPE (final_type)))
+	continue;
+      tree exit_ptr = make_ssa_name (TREE_TYPE (final_ptr));
+      gphi *exit_phi = create_phi_node (exit_ptr, exit->dest);
+      add_phi_arg (exit_phi, final_ptr, exit, UNKNOWN_LOCATION);
+      auto exit_gsi = gsi_last_bb (exit->dest);
+      exit_ptr = force_gimple_operand_gsi
+	(&exit_gsi, fold_convert (ptr_type, exit_ptr), true, NULL_TREE,
+	 true, GSI_SAME_STMT);
+      auto skip_gsi = gsi_last_bb (skip_e->src);
+      tree skip_ptr = force_gimple_operand_gsi
+	(&skip_gsi, fold_convert (ptr_type, start), true, NULL_TREE,
+	 true, GSI_SAME_STMT);
+      tree init = make_ssa_name (ptr_type);
+      gphi *phi = create_phi_node (init, merge);
+      add_phi_arg (phi, exit_ptr, main_e, UNKNOWN_LOCATION);
+      add_phi_arg (phi, skip_ptr, skip_e, UNKNOWN_LOCATION);
+
+      gimple_stmt_iterator incr_gsi;
+      bool insert_after;
+      standard_iv_increment_position (epilogue, &incr_gsi, &insert_after);
+      tree before, after;
+      create_iv (init, PLUS_EXPR, DR_STEP (dr), NULL_TREE, epilogue,
+		 &incr_gsi, insert_after, &before, &after);
+      tree new_ref = unshare_expr (ref);
+      TREE_OPERAND (new_ref, 0) = before;
+      /* The vector pointer includes the initial displacement, including
+	 any offset carried by the original scalar MEM_REF.  */
+      TREE_OPERAND (new_ref, 1)
+	= build_zero_cst (TREE_TYPE (TREE_OPERAND (ref, 1)));
+      if (DR_IS_READ (dr))
+	gimple_assign_set_rhs1 (*copy, new_ref);
+      else
+	gimple_assign_set_lhs (*copy, new_ref);
+      update_stmt (*copy);
+      if (dump_enabled_p ())
+	dump_printf_loc (MSG_NOTE, vect_location,
+			 "reusing vector data pointer in scalar epilogue: %G",
+			 (gimple *) *copy);
+    }
+}
+
 /* Function vect_transform_loop.
 
    The analysis phase has determined that the loop is vectorizable.
@@ -11300,6 +11482,14 @@ vect_transform_loop (loop_vec_info loop_vinfo, gimple *loop_vectorized_call)
   tree nitersm1 = unshare_expr (LOOP_VINFO_NITERSM1 (loop_vinfo));
   tree advance;
   drs_init_vec orig_drs_init;
+  auto_vec<vect_epilogue_data_ref> epilogue_datarefs;
+  for (data_reference *dr : LOOP_VINFO_DATAREFS (loop_vinfo))
+    {
+      stmt_vec_info stmt_info = loop_vinfo->lookup_stmt (DR_STMT (dr));
+      if (stmt_info && gimple_uid (DR_STMT (dr))
+	  && !STMT_VINFO_GROUPED_ACCESS (stmt_info))
+	epilogue_datarefs.safe_push ({dr, gimple_uid (DR_STMT (dr))});
+    }
   epilogue = vect_do_peeling (loop_vinfo, niters, nitersm1, &niters_vector,
 			      &step_vector, &niters_vector_mult_vf, th,
 			      check_profitability, niters_no_overflow,
@@ -11584,6 +11774,8 @@ vect_transform_loop (loop_vec_info loop_vinfo, gimple *loop_vectorized_call)
      while to unroll more.  */
   if (LOOP_VINFO_USER_UNROLL (loop_vinfo))
     loop->unroll = 0;
+
+  vect_reuse_epilogue_data_ptrs (loop_vinfo, epilogue_datarefs);
 
   /* Free SLP instances here because otherwise stmt reference counting
      won't work.  */
