@@ -15263,9 +15263,13 @@ public:
 private:
   void record_scalar_qmul_costs ();
   void record_scalar_qmul_input (tree, gimple *, tree, tree);
+  bool record_qmul_addresses ();
 
   /* Original statements eliminated by a later scalar Q-format fusion.  */
   hash_set<gimple *> m_scalar_qmul_fused;
+  unsigned int m_address_updates = 0;
+  unsigned int m_peel_iters[3] = {};
+  unsigned int m_q31_operations = 0;
 };
 
 /* The generic model omits loop-control branches on both sides.  Once a
@@ -15290,12 +15294,107 @@ riscv_p_vector_costs::finish_cost (const vector_costs *scalar_costs)
 	    = m_costing_for_scalar ? vect_prologue : vect_body;
 	  unsigned int cost = vector_costs::add_stmt_cost
 	    (1, cond_branch_taken, NULL, NULL, NULL_TREE, 0, where);
+	  if (!TARGET_64BIT && m_address_updates)
+	    {
+	      vector_costs::add_stmt_cost (m_address_updates, scalar_stmt,
+					 NULL, NULL, NULL_TREE, 0, where);
+	      if (dump_enabled_p ())
+		dump_printf_loc (MSG_NOTE, vect_location,
+				 "RVP Q-format loop has %u pointer updates\n",
+				 m_address_updates);
+	    }
 	  if (dump_enabled_p ())
 	    dump_printf_loc (MSG_NOTE, vect_location,
 			     "RVP Q-format loop branch costs %u in %s loop\n",
 			     cost, m_costing_for_scalar ? "scalar" : "vector");
 	}
+  if (!TARGET_64BIT && !m_costing_for_scalar
+      && !m_scalar_qmul_fused.is_empty () && m_address_updates)
+    {
+      loop_vec_info loop_vinfo = as_a<loop_vec_info> (m_vinfo);
+      if (!LOOP_VINFO_NITERS_KNOWN_P (loop_vinfo))
+	{
+	  /* Form the vector trip count and end address, and initialize
+	     each independent pointer.  Recover a scalar index for tails.  */
+	  vector_costs::add_stmt_cost (m_address_updates + 2, scalar_stmt,
+				     NULL, NULL, NULL_TREE, 0, vect_prologue);
+	  if (m_peel_iters[vect_epilogue])
+	    vector_costs::add_stmt_cost (1, scalar_stmt, NULL, NULL,
+				       NULL_TREE, 0, vect_epilogue);
+	}
+      for (vect_cost_model_location where : { vect_prologue, vect_epilogue })
+	if (unsigned int n = m_peel_iters[where])
+	  {
+	    vector_costs::add_stmt_cost (n * m_address_updates, scalar_stmt,
+				       NULL, NULL, NULL_TREE, 0, where);
+	    /* The generic model already includes the peeled-loop guard.
+	       Additional scalar iterations still need loop control.  */
+	    if (n > 1)
+	      vector_costs::add_stmt_cost (n - 1, cond_branch_taken,
+					 NULL, NULL, NULL_TREE, 0, where);
+	  }
+
+      /* A Q31 pair still uses scalar arithmetic on RV32.  A second
+	 pair amortizes its pointer updates and branch without requiring
+	 a wider vector mode.  Reanalyze the unrolled loop normally.  */
+      if (m_q31_operations == 1 && m_address_updates <= 3
+	  && loop_vinfo->suggested_unroll_factor == 1
+	  && LOOP_VINFO_LOOP (loop_vinfo)->unroll != 1
+	  && !LOOP_VINFO_EPILOGUE_P (loop_vinfo))
+	m_suggested_unroll_factor = 2;
+    }
   vector_costs::finish_cost (scalar_costs);
+}
+
+/* Count independent unit-stride address streams.  Offsets encodable in
+   the same base register do not need separate induction updates.  Keep
+   the old model for more complicated access patterns or large groups.  */
+
+bool
+riscv_p_vector_costs::record_qmul_addresses ()
+{
+  loop_vec_info loop_vinfo = dyn_cast<loop_vec_info> (m_vinfo);
+  if (!loop_vinfo || LOOP_VINFO_LOOP (loop_vinfo)->inner
+      || LOOP_VINFO_DATAREFS (loop_vinfo).length () > 32)
+    return false;
+
+  auto_vec<data_reference *> streams;
+  for (data_reference *dr : LOOP_VINFO_DATAREFS (loop_vinfo))
+    {
+      stmt_vec_info stmt_info = m_vinfo->lookup_stmt (DR_STMT (dr));
+      if (!stmt_info
+	  || !STMT_VINFO_RELEVANT_P (vect_stmt_to_vectorize (stmt_info)))
+	continue;
+      if (!DR_STEP (dr) || !tree_fits_shwi_p (DR_STEP (dr)))
+	return false;
+      HOST_WIDE_INT step = tree_to_shwi (DR_STEP (dr));
+      if (step == 0)
+	continue;
+      tree size = TYPE_SIZE_UNIT (TREE_TYPE (DR_REF (dr)));
+      if (!size || !tree_fits_shwi_p (size)
+	  || step != tree_to_shwi (size) || step <= 0
+	  || !DR_BASE_ADDRESS (dr) || !DR_OFFSET (dr)
+	  || !DR_INIT (dr) || !tree_fits_shwi_p (DR_INIT (dr)))
+	return false;
+
+      bool shared = false;
+      for (data_reference *other : streams)
+	if (operand_equal_p (DR_BASE_ADDRESS (dr), DR_BASE_ADDRESS (other), 0)
+	    && operand_equal_p (DR_OFFSET (dr), DR_OFFSET (other), 0)
+	    && operand_equal_p (DR_STEP (dr), DR_STEP (other), 0)
+	    && wi::fits_shwi_p (wi::to_wide (DR_INIT (dr))
+			       - wi::to_wide (DR_INIT (other)))
+	    && SMALL_OPERAND ((wi::to_wide (DR_INIT (dr))
+			       - wi::to_wide (DR_INIT (other))).to_shwi ()))
+	  {
+	    shared = true;
+	    break;
+	  }
+      if (!shared)
+	streams.safe_push (dr);
+    }
+  m_address_updates = streams.length ();
+  return m_address_updates != 0;
 }
 
 /* Record OP's definition only if the scalar fusion removes all its uses.
@@ -15339,12 +15438,8 @@ riscv_p_vector_costs::record_scalar_qmul_input (tree op, gimple *parent,
 void
 riscv_p_vector_costs::record_scalar_qmul_costs ()
 {
-  /* Start with native single-register vectors.  On RV32, multiword
-     vectors can benefit primarily from fewer address updates, which
-     are not represented by the statement costs below.  Discounting
-     scalar arithmetic alone would lose profitable unrolled loops.  */
-  if (!TARGET_64BIT || !optimize || !flag_expensive_optimizations
-      || TARGET_BIG_ENDIAN)
+  if (!optimize || !flag_expensive_optimizations || TARGET_BIG_ENDIAN
+      || (!TARGET_64BIT && !record_qmul_addresses ()))
     return;
 
   for (unsigned int i = 0; i < m_vinfo->nbbs; ++i)
@@ -15448,6 +15543,11 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
 				   tree vectype, int misalign,
 				   vect_cost_model_location where)
 {
+  if (!TARGET_64BIT && !m_costing_for_scalar && stmt_info
+      && m_address_updates && where != vect_body
+      && (kind == scalar_load || kind == scalar_store))
+    m_peel_iters[where] = MAX (m_peel_iters[where], (unsigned int) count);
+
   if (kind == scalar_stmt && stmt_info
       && m_scalar_qmul_fused.contains (stmt_info->stmt))
     count = 0;
@@ -15493,7 +15593,11 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
 	  || TYPE_MODE (vectype) == PV2SImode)
       && (gimple_call_internal_p (stmt_info->stmt, IFN_SAT_MULHS)
 	  || gimple_call_internal_p (stmt_info->stmt, IFN_SAT_MULHRS)))
-    count *= 2;
+    {
+      if (TYPE_MODE (vectype) == PV2SImode && where == vect_body)
+	m_q31_operations += count;
+      count *= 2;
+    }
 
   if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
       && where == vect_body

@@ -3,8 +3,9 @@
 
 #include "qmul-cost.h"
 
-/* RV32 keeps its existing model until multiword loop control is costed.  */
-/* { dg-final { scan-tree-dump-not {>> 14[^\n]*times scalar_stmt costs 0} "vect" } } */
-/* { dg-final { scan-tree-dump-not {>> 30[^\n]*times scalar_stmt costs 0} "vect" } } */
-/* { dg-final { scan-tree-dump-not {RVP Q-format loop branch costs} "vect" } } */
+/* Scalar fusion and multiword loop-control costs are accounted together.  */
+/* { dg-final { scan-tree-dump {>> 14[^\n]*times scalar_stmt costs 0} "vect" } } */
+/* { dg-final { scan-tree-dump {>> 30[^\n]*times scalar_stmt costs 0} "vect" } } */
+/* { dg-final { scan-tree-dump {RVP Q-format loop branch costs} "vect" } } */
+/* { dg-final { scan-tree-dump {RVP Q-format loop has 3 pointer updates} "vect" } } */
 /* { dg-final { scan-tree-dump-times {LOOP VECTORIZED} 6 "vect" } } */

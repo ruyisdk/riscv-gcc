@@ -2874,8 +2874,9 @@ vect_analyze_loop_1 (class loop *loop, vec_info_shared *shared,
 		     GET_MODE_NAME (loop_vinfo->vector_mode));
 
   auto user_unroll = LOOP_VINFO_LOOP (loop_vinfo)->unroll;
-  if (res && !LOOP_VINFO_EPILOGUE_P (loop_vinfo)
-      /* Check to see if the user wants to unroll or if the target wants to.  */
+  if ((res || (suggested_unroll_factor > 1 && !fatal))
+      && !LOOP_VINFO_EPILOGUE_P (loop_vinfo)
+      /* A target unroll can also make an unprofitable loop worthwhile.  */
       && (suggested_unroll_factor > 1 || user_unroll > 1))
     {
       if (suggested_unroll_factor == 1)
@@ -2913,6 +2914,7 @@ vect_analyze_loop_1 (class loop *loop, vec_info_shared *shared,
 	      {
 		delete loop_vinfo;
 		loop_vinfo = unroll_vinfo;
+		res = new_res;
 	      }
 	    else
 	      delete unroll_vinfo;
