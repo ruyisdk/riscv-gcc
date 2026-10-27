@@ -3,7 +3,8 @@
 
 #include "mulhi-acc-loop.h"
 
-/* Keep the existing RV64 selection independent of the RV32 cost hook.  */
-/* { dg-final { scan-assembler-times {\tpmhracc\.w\t} 2 } } */
-/* { dg-final { scan-assembler-times {\tpmhraccu\.w\t} 1 } } */
-/* { dg-final { scan-assembler-times {\tpmhraccsu\.w\t} 2 } } */
+/* Both reductions and word-update maps use the fused operation.  The
+   signed count also includes the volatile-input reduction.  */
+/* { dg-final { scan-assembler-times {\tpmhracc\.w\t} 3 } } */
+/* { dg-final { scan-assembler-times {\tpmhraccu\.w\t} 2 } } */
+/* { dg-final { scan-assembler-times {\tpmhraccsu\.w\t} 4 } } */

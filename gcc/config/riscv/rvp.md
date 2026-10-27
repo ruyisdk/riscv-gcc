@@ -4268,6 +4268,28 @@
   DONE;
 })
 
+;; A store consumes only the modular word sum.  Matching it together with
+;; the addition lets combine place the fused operation after an intervening
+;; accumulator load, rather than at the earlier multiply's position.
+(define_split
+  [(set (match_operand:SI 0 "nonimmediate_operand")
+	(plus:SI
+	  (subreg:SI
+	    (unspec:PV2SI
+	      [(match_operand:PV2SI 1 "register_operand")
+	       (match_operand:PV2SI 2 "register_operand")]
+	      RVP_MULHI_ACC) 0)
+	  (match_operand:SI 3 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi_acc (operands[0], gen_lowpart (DImode, operands[1]),
+			    gen_lowpart (DImode, operands[2]), operands[3],
+			    <rvp_mulhi_acc_round>, <rvp_mulhi_acc_kind>);
+  DONE;
+})
+
 ;; -------------------------------------------------------------------------
 ;; USATI - Unsigned Saturation Immediate
 ;; -------------------------------------------------------------------------
