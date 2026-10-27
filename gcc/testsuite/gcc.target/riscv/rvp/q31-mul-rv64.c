@@ -6,4 +6,4 @@
 /* { dg-final { scan-tree-dump {\.SAT_MULHS .*vector_stmt costs 1 in body} "vect" } } */
 /* { dg-final { scan-tree-dump {\.SAT_MULHRS .*vector_stmt costs 1 in body} "vect" } } */
 /* { dg-final { scan-assembler-times {\tpmulq\.w\t} 9 } } */
-/* { dg-final { scan-assembler-times {\tpmulqr\.w\t} 9 } } */
+/* { dg-final { scan-assembler-times {\tpmulqr\.w\t} 12 } } */

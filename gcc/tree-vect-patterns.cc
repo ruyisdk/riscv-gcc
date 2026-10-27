@@ -3235,6 +3235,34 @@ vect_recog_over_widening_pattern (vec_info *vinfo,
   return pattern_stmt;
 }
 
+/* Return the internal definition of OP after peeling integral conversions
+   that preserve all PRECISION bits.  Do not look through a truncation or
+   promotion: callers must separately prove that interpreting those bits
+   with a different sign preserves the complete arithmetic result.  */
+
+static stmt_vec_info
+vect_get_same_precision_def (vec_info *vinfo, tree op, unsigned int precision)
+{
+  while (stmt_vec_info def_info = vect_get_internal_def (vinfo, op))
+    {
+      gassign *def = dyn_cast <gassign *> (def_info->stmt);
+      if (!def)
+	return NULL;
+      tree type = TREE_TYPE (gimple_assign_lhs (def));
+      if (!INTEGRAL_TYPE_P (type) || !type_has_mode_precision_p (type)
+	  || TYPE_PRECISION (type) != precision)
+	return NULL;
+      if (!CONVERT_EXPR_CODE_P (gimple_assign_rhs_code (def)))
+	return def_info;
+      op = gimple_assign_rhs1 (def);
+      type = TREE_TYPE (op);
+      if (!INTEGRAL_TYPE_P (type) || !type_has_mode_precision_p (type)
+	  || TYPE_PRECISION (type) != precision)
+	return NULL;
+    }
+  return NULL;
+}
+
 /* Recognize a signed scaled widening product followed by an upper clamp:
 
      wide product = (wide) a * (wide) b;
@@ -3244,7 +3272,9 @@ vect_recog_over_widening_pattern (vec_info *vinfo,
    ROUND is either zero or 2^(precision (narrow) - 2).  The exact product
    and optional rounding addition fit WIDE.  Only MIN (narrow) squared
    exceeds the narrow signed range after scaling; no lower clamp is needed.
-   This differs from MULHS and MULHRS, which wrap that exceptional result.  */
+   This differs from MULHS and MULHRS, which wrap that exceptional result.
+   Also recognize ((product >> (precision (narrow) - 2)) + 1) >> 1,
+   which rounds identically, including for negative products.  */
 
 static gimple *
 vect_recog_sat_mulhs_pattern (vec_info *vinfo,
@@ -3271,32 +3301,58 @@ vect_recog_sat_mulhs_pattern (vec_info *vinfo,
   tree amount = gimple_assign_rhs2 (shift);
   if (!tree_fits_uhwi_p (amount))
     return NULL;
+  unsigned int wide_precision = TYPE_PRECISION (lhs_type);
+  unsigned HOST_WIDE_INT scale = tree_to_uhwi (amount);
+  if (scale == 0 || scale >= wide_precision)
+    return NULL;
 
   stmt_vec_info product_info
-    = vect_get_internal_def (vinfo, gimple_assign_rhs1 (shift));
+    = vect_get_same_precision_def (vinfo, gimple_assign_rhs1 (shift),
+				   wide_precision);
   gassign *product
     = product_info ? dyn_cast <gassign *> (product_info->stmt) : NULL;
   if (!product)
     return NULL;
   tree round = NULL_TREE;
+  bool two_shifts = false;
   if (gimple_assign_rhs_code (product) == PLUS_EXPR)
     {
       round = gimple_assign_rhs2 (product);
-      if (TREE_CODE (round) != INTEGER_CST
-	  || !types_compatible_p (lhs_type,
-				 TREE_TYPE (gimple_assign_lhs (product))))
+
+      if (TREE_CODE (round) != INTEGER_CST)
 	return NULL;
       product_info
-	= vect_get_internal_def (vinfo, gimple_assign_rhs1 (product));
+	= vect_get_same_precision_def (vinfo, gimple_assign_rhs1 (product),
+				       wide_precision);
       product = product_info
 		? dyn_cast <gassign *> (product_info->stmt) : NULL;
       if (!product)
 	return NULL;
-    }
-  if (!types_compatible_p (lhs_type,
-			 TREE_TYPE (gimple_assign_lhs (product))))
-    return NULL;
 
+      if (scale == 1 && integer_onep (round)
+	  && gimple_assign_rhs_code (product) == RSHIFT_EXPR)
+	{
+	  tree inner_amount = gimple_assign_rhs2 (product);
+	  if (TYPE_UNSIGNED (TREE_TYPE (gimple_assign_lhs (product)))
+	      || !tree_fits_uhwi_p (inner_amount)
+	      || tree_to_uhwi (inner_amount) >= wide_precision - 1)
+	    return NULL;
+	  scale += tree_to_uhwi (inner_amount);
+	  two_shifts = true;
+	  product_info
+	    = vect_get_same_precision_def (vinfo,
+					   gimple_assign_rhs1 (product),
+					   wide_precision);
+	  if (!product_info)
+	    return NULL;
+	}
+    }
+
+  /* Over-widening can express the product and rounding addition modulo
+     2^W, followed by an equal-width signed conversion before the arithmetic
+     shift.  Signed N-bit inputs, 2N <= W and the exact rounding constant
+     below guarantee that both the product and rounded sum fit signed W.
+     Thus these sign changes lose neither a product bit nor its sign.  */
   vect_unpromoted_value unprom[2];
   tree narrow_type;
   if (vect_widened_op_tree (vinfo, product_info, MULT_EXPR, WIDEN_MULT_EXPR,
@@ -3305,11 +3361,10 @@ vect_recog_sat_mulhs_pattern (vec_info *vinfo,
       || !type_has_mode_precision_p (narrow_type))
     return NULL;
   unsigned int precision = TYPE_PRECISION (narrow_type);
-  unsigned int wide_precision = TYPE_PRECISION (lhs_type);
   if (precision < 2 || 2 * precision > wide_precision
-      || tree_to_uhwi (amount) != precision - 1
+      || scale != precision - 1
       || wi::to_wide (bound) != wi::mask (precision - 1, false, wide_precision)
-      || (round
+      || (round && !two_shifts
 	  && wi::to_wide (round)
 	     != wi::shifted_mask (precision - 2, 1, false, wide_precision)))
     return NULL;
