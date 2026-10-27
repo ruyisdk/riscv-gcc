@@ -672,6 +672,65 @@ riscv_p_expand_sad (rtx dest, rtx a, rtx b, rtx acc, bool unsigned_p)
     emit_move_insn (gen_lowpart (DImode, dest), sum);
 }
 
+/* Preserve the full native result of RV64 unsigned byte and halfword loads.
+   A plain SI destination hides the zero high bits from packed scalar idioms.
+   Use a promoted lowpart view without duplicating or widening the load.  */
+
+bool
+riscv_p_expand_zero_extend_load (rtx dest, rtx src)
+{
+  if (!TARGET_RVP || !TARGET_64BIT || TARGET_BIG_ENDIAN
+      || GET_MODE (dest) != SImode || !MEM_P (src))
+    return false;
+
+  gcc_assert (GET_MODE (src) == QImode || GET_MODE (src) == HImode);
+  rtx value = gen_reg_rtx (DImode);
+  emit_insn (gen_rtx_SET (value, gen_rtx_ZERO_EXTEND (DImode, src)));
+  rtx low = gen_lowpart (SImode, value);
+  SUBREG_PROMOTED_VAR_P (low) = 1;
+  /* Both extensions are valid for unsigned byte and halfword values.
+     Prefer the signed form used by ordinary RV64 word operations.  */
+  SUBREG_PROMOTED_SET (low, SRP_SIGNED);
+  emit_move_insn (dest, low);
+  return true;
+}
+
+/* Compute an absolute difference of proven unsigned halfword values.
+   Zero-extend to a complete physical word before interpreting the operands
+   as packed halfwords.  Only the low lane can then contribute a result.  */
+
+void
+riscv_p_expand_scalar_uabd (rtx dest, rtx lhs, rtx rhs)
+{
+  rtx inputs[2] = { lhs, rhs };
+  for (rtx &input : inputs)
+    {
+      /* A low word view can already have a fully zero-extended parent.
+	 Do not infer that property from the low word's range alone.  */
+      if (SUBREG_P (input) && known_eq (SUBREG_BYTE (input), 0)
+	  && GET_MODE (SUBREG_REG (input)) == word_mode
+	  && (nonzero_bits (SUBREG_REG (input), word_mode)
+	      & ~HOST_WIDE_INT_UC (65535)) == 0)
+	input = SUBREG_REG (input);
+      else
+	input = force_reg (word_mode, convert_to_mode (word_mode, input, true));
+    }
+  rtx value = GET_MODE (dest) == word_mode ? dest : gen_reg_rtx (word_mode);
+  emit_insn (TARGET_64BIT
+	     ? gen_riscv_p_scalar_uabdhidi (value, inputs[0], inputs[1])
+	     : gen_riscv_p_scalar_uabdhisi (value, inputs[0], inputs[1]));
+  if (value != dest)
+    {
+      gcc_assert (TARGET_64BIT && GET_MODE (dest) == SImode);
+      rtx low = gen_lowpart (SImode, value);
+      SUBREG_PROMOTED_VAR_P (low) = 1;
+      /* The result fits in an unsigned halfword, so either extension is
+	 valid.  Preserve the normal RV64 signed word-result convention.  */
+      SUBREG_PROMOTED_SET (low, SRP_SIGNED);
+      emit_move_insn (dest, low);
+    }
+}
+
 /* Expand RVP vector comparison.
    Implements vec_cmp<mode><mode> and vec_cmpu<mode><mode> patterns.  */
 void

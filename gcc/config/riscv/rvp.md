@@ -19,6 +19,11 @@
 
 (include "rvp-iterators.md")
 
+(define_c_enum "unspec" [
+  UNSPEC_RVP_SCALAR_UABDHI
+  UNSPEC_RVP_SCALAR_UABDAQI
+])
+
 ;; A one-element vector is a scalar doubleword in a GPR (or a GPR pair).
 ;; Keep it separate from the packed-lane arithmetic iterators.
 (define_expand "movpv1di"
@@ -4930,6 +4935,90 @@
 }
   [(set_attr "type" "arith")
    (set_attr "mode" "<GPR:MODE>")])
+
+;; Inputs have been proven unsigned halfwords.  Keep full-word operands
+;; in the UNSPEC so later passes retain the required zero extensions.
+;; The scalar result remains visibly zero-extended from a halfword.
+(define_insn "riscv_p_scalar_uabdhi<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(zero_extend:X
+	  (unspec:HI [(match_operand:X 1 "register_operand" "r")
+		      (match_operand:X 2 "register_operand" "r")]
+		     UNSPEC_RVP_SCALAR_UABDHI)))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "pabdu.h\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; If both native inputs are unsigned bytes, only the low byte contributes
+;; to PABDSUMAU.B.  Its XLEN-wide accumulation then implements the scalar
+;; addition, including wrapping at the native word width.  Record the
+;; range proof before it is lost, and leave the accumulator tie to register
+;; allocation rather than requiring identical pseudos here.
+(define_split
+  [(set (match_operand:X 0 "register_operand")
+	(plus:X
+	  (zero_extend:X
+	    (unspec:HI [(match_operand:X 1 "register_operand")
+			(match_operand:X 2 "register_operand")]
+		       UNSPEC_RVP_SCALAR_UABDHI))
+	  (match_operand:X 3 "register_operand")))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && can_create_pseudo_p ()
+   && (nonzero_bits (operands[1], <MODE>mode) & ~HOST_WIDE_INT_UC (255)) == 0
+   && (nonzero_bits (operands[2], <MODE>mode) & ~HOST_WIDE_INT_UC (255)) == 0"
+  [(const_int 0)]
+{
+  emit_insn (gen_riscv_p_scalar_uabdaqi<mode> (operands[0], operands[1],
+					    operands[2], operands[3]));
+  DONE;
+})
+
+;; The complete input registers have been proven to contain unsigned bytes.
+;; Retain their native modes so later passes preserve the zero upper lanes.
+(define_insn "riscv_p_scalar_uabdaqi<mode>"
+  [(set (match_operand:X 0 "register_operand" "=r")
+	(unspec:X [(match_operand:X 1 "register_operand" "r")
+		   (match_operand:X 2 "register_operand" "r")
+		   (match_operand:X 3 "register_operand" "0")]
+		  UNSPEC_RVP_SCALAR_UABDAQI))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+  "pabdsumau.b\t%0,%1,%2"
+  [(set_attr "type" "arith")
+   (set_attr "mode" "<MODE>")])
+
+;; A scalar difference of two unsigned halfwords fits in a signed word.
+;; Record the range proof in a packed operation while combine still has
+;; register bit information.  The other halfword lanes are explicitly zero.
+(define_split
+  [(set (match_operand:GPR 0 "register_operand")
+	(abs:GPR
+	  (minus:GPR (match_operand:GPR 1 "register_operand")
+		     (match_operand:GPR 2 "register_operand"))))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && can_create_pseudo_p ()
+   && (nonzero_bits (operands[1], <MODE>mode) & ~HOST_WIDE_INT_UC (65535)) == 0
+   && (nonzero_bits (operands[2], <MODE>mode) & ~HOST_WIDE_INT_UC (65535)) == 0"
+  [(const_int 0)]
+{
+  riscv_p_expand_scalar_uabd (operands[0], operands[1], operands[2]);
+  DONE;
+})
+
+;; Include the RV64 word-result extension in the replacement.  A separate
+;; word result would hide its range and retain an unnecessary SEXT.W.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (abs:SI
+	    (minus:SI (match_operand:SI 1 "register_operand")
+		      (match_operand:SI 2 "register_operand")))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN && can_create_pseudo_p ()
+   && (nonzero_bits (operands[1], SImode) & ~HOST_WIDE_INT_UC (65535)) == 0
+   && (nonzero_bits (operands[2], SImode) & ~HOST_WIDE_INT_UC (65535)) == 0"
+  [(const_int 0)]
+{
+  riscv_p_expand_scalar_uabd (operands[0], operands[1], operands[2]);
+  DONE;
+})
 
 ;; ABSW - Absolute Value Word (RV64 only)
 ;; absw rd, rs1: rd = sext.w(abs(rs1[31:0]))

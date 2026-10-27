@@ -1951,7 +1951,11 @@
   [(set (match_operand:GPR    0 "register_operand")
 	(zero_extend:GPR
 	    (match_operand:HI 1 "nonimmediate_operand")))]
-  "")
+  ""
+{
+  if (riscv_p_expand_zero_extend_load (operands[0], operands[1]))
+    DONE;
+})
 
 (define_insn_and_split "*zero_extendhi<GPR:mode>2"
   [(set (match_operand:GPR    0 "register_operand"     "=r,r")
@@ -1981,7 +1985,11 @@
   [(set (match_operand:SUPERQI    0 "register_operand")
 	(zero_extend:SUPERQI
 	    (match_operand:QI 1 "nonimmediate_operand")))]
-  "")
+  ""
+{
+  if (riscv_p_expand_zero_extend_load (operands[0], operands[1]))
+    DONE;
+})
 
 (define_insn "*zero_extendqi<SUPERQI:mode>2_internal"
   [(set (match_operand:SUPERQI 0 "register_operand"    "=r,r")

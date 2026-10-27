@@ -5275,6 +5275,13 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
       return false;
 
     case ZERO_EXTEND:
+      if (TARGET_RVP && mode == word_mode
+	  && GET_CODE (XEXP (x, 0)) == UNSPEC
+	  && XINT (XEXP (x, 0), 1) == UNSPEC_RVP_SCALAR_UABDHI)
+	{
+	  *total = COSTS_N_INSNS (1);
+	  return true;
+	}
       /* This is an SImode shift.  */
       if (GET_CODE (XEXP (x, 0)) == LSHIFTRT)
 	{
