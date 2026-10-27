@@ -3802,8 +3802,58 @@
    (set_attr "mode" "DI")])
 
 ;; -------------------------------------------------------------------------
-;; Rounded word products take bits 63:32 after adding exactly 2^31.
-;; This is not the scaled MULHRS optab or saturating Q-format multiplication.
+;; Word products take bits 63:32, optionally after adding exactly 2^31.
+;; These are not scaled MULHRS optabs or saturating Q-format products.
+
+;; An unrounded full-register product can use packed word multiplication
+;; only when both operands are extended words.  Preserve the requested
+;; signed or unsigned interpretation of the extracted high word.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(any_shiftrt:DI
+	  (mult:DI (match_operand:DI 1 "rvp_word_product_operand")
+		   (match_operand:DI 2 "rvp_word_product_operand"))
+	  (const_int 32)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_mulhi_p (operands[1], operands[2], <CODE> == LSHIFTRT)"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi (operands[0], operands[1], operands[2],
+			<CODE> == LSHIFTRT);
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(zero_extract:DI
+	  (mult:DI (match_operand:DI 1 "rvp_word_product_operand")
+		   (match_operand:DI 2 "rvp_word_product_operand"))
+	  (const_int 32) (const_int 32)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_mulhi_p (operands[1], operands[2], true)"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi (operands[0], operands[1], operands[2], true);
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:SI 0 "nonimmediate_operand")
+	(subreg:SI
+	  (any_shiftrt:DI
+	    (mult:DI (match_operand:DI 1 "rvp_word_product_operand")
+		     (match_operand:DI 2 "rvp_word_product_operand"))
+	    (const_int 32)) 0))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_round_mulhi_p (operands[1], operands[2])"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi (operands[0], operands[1], operands[2], true);
+  DONE;
+})
 
 (define_insn "*rvp_round_mulh<u>_si"
   [(set (match_operand:SI 0 "register_operand" "=r")

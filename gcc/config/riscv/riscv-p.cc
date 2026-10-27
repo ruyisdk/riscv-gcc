@@ -126,12 +126,23 @@ riscv_p_round_mulhi_kind (rtx lhs, rtx rhs)
   return -1;
 }
 
-/* Return whether LHS and RHS can use a rounded packed word product.  */
+/* Return whether LHS and RHS can use a packed word product.  */
 
 bool
 riscv_p_round_mulhi_p (rtx lhs, rtx rhs)
 {
   return riscv_p_round_mulhi_kind (lhs, rhs) >= 0;
+}
+
+/* A same-signed unrounded product followed by a logical shift already
+   has an efficient scalar implementation.  In particular, replacing a
+   compressed shift by a word zero extension can increase code size.  */
+
+bool
+riscv_p_mulhi_p (rtx lhs, rtx rhs, bool unsigned_p)
+{
+  int kind = riscv_p_round_mulhi_kind (lhs, rhs);
+  return kind >= 0 && (!unsigned_p || kind >= 2);
 }
 
 /* Extract a rounded product's high word, with logical extension if
@@ -196,6 +207,29 @@ riscv_p_low_word_packed_operand (rtx op)
     return op;
   return gen_lowpart (PV2SImode,
 		      riscv_p_mulhi_acc_operand (SUBREG_REG (op)));
+}
+
+/* Extract an unrounded word product's high word.  Prove and freeze input
+   signedness before discarding scalar extensions.  The complete packed
+   output remains explicit even though only its low word is consumed.  */
+
+void
+riscv_p_expand_mulhi (rtx target, rtx lhs, rtx rhs, bool unsigned_p)
+{
+  int kind = riscv_p_round_mulhi_kind (lhs, rhs);
+  gcc_assert (IN_RANGE (kind, 0, 3) && TARGET_64BIT);
+  lhs = gen_lowpart (PV2SImode, riscv_p_mulhi_acc_operand (lhs));
+  rhs = gen_lowpart (PV2SImode, riscv_p_mulhi_acc_operand (rhs));
+  rtx result = gen_reg_rtx (PV2SImode);
+  if (kind == 0)
+    emit_insn (gen_riscv_pmulh_i32x2 (result, lhs, rhs));
+  else if (kind == 1)
+    emit_insn (gen_riscv_pmulhu_u32x2 (result, lhs, rhs));
+  else if (kind == 2)
+    emit_insn (gen_riscv_pmulhsu_i32x2 (result, lhs, rhs));
+  else
+    emit_insn (gen_riscv_pmulhsu_i32x2 (result, rhs, lhs));
+  convert_move (target, gen_lowpart (SImode, result), unsigned_p);
 }
 
 /* Add a word product's high word to ACC modulo 2^32.  ROUND_P adds 2^31
