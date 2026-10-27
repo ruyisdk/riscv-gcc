@@ -3946,6 +3946,177 @@
   DONE;
 })
 
+;; Multiply-high accumulation wraps in the destination word.  It must not
+;; be confused with Q-format saturation or a full-width accumulator.
+;; Identify the complete fused operation for instruction costing without
+;; changing its scheduling type or charging for the implicit rounding bias.
+(define_attr "rvp_mulhi_acc" "no,yes" (const_string "no"))
+
+(define_insn "*rvp_mulh<u>_acc_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (subreg:SI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (any_extend:DI (match_operand:SI 2 "register_operand" "r"))) 4)
+	  (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "mhacc<u>\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "rvp_mulhi_acc" "yes")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_mulh<su>mixed_acc_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (subreg:SI
+	    (mult:DI
+	      (any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+	      (<rvp_other_extend>:DI
+		(match_operand:SI 2 "register_operand" "r"))) 4)
+	  (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "mhaccsu\t%0,<rvp_mixed_operands>"
+  [(set_attr "type" "simd")
+   (set_attr "rvp_mulhi_acc" "yes")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_round_mulh<u>_acc_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (subreg:SI
+	    (plus:DI
+	      (mult:DI
+		(any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(any_extend:DI (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 2147483648)) 4)
+	  (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "mhracc<u>\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "rvp_mulhi_acc" "yes")
+   (set_attr "mode" "SI")])
+
+(define_insn "*rvp_round_mulh<su>mixed_acc_si"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI
+	  (subreg:SI
+	    (plus:DI
+	      (mult:DI
+		(any_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		(<rvp_other_extend>:DI
+		  (match_operand:SI 2 "register_operand" "r")))
+	      (const_int 2147483648)) 4)
+	  (match_operand:SI 3 "register_operand" "0")))]
+  "TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN"
+  "mhraccsu\t%0,<rvp_mixed_operands>"
+  [(set_attr "type" "simd")
+   (set_attr "rvp_mulhi_acc" "yes")
+   (set_attr "mode" "SI")])
+
+;; RV64 combines a word addition with a high-word extraction.  Freeze the
+;; input range classification while splitting, before IRA loses the facts.
+(define_int_iterator RVP_WORD_ACC
+  [UNSPEC_PMHACC UNSPEC_PMHACCU UNSPEC_PMHACCSU
+   UNSPEC_PMHRACC UNSPEC_PMHRACCU UNSPEC_PMHRACCSU])
+
+(define_int_attr rvp_word_acc
+  [(UNSPEC_PMHACC "mhacc") (UNSPEC_PMHACCU "mhaccu")
+   (UNSPEC_PMHACCSU "mhaccsu") (UNSPEC_PMHRACC "mhracc")
+   (UNSPEC_PMHRACCU "mhraccu") (UNSPEC_PMHRACCSU "mhraccsu")])
+
+;; Keep the accumulator as an input until allocation ties it to the output.
+;; This avoids an explicit copy in combine's replacement sequence.
+(define_insn "riscv_p_<rvp_word_acc>_pv2si"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(unspec:PV2SI
+	  [(match_operand:PV2SI 3 "register_operand" "0")
+	   (match_operand:PV2SI 1 "register_operand" "r")
+	   (match_operand:PV2SI 2 "register_operand" "r")]
+	  RVP_WORD_ACC))]
+  "TARGET_RVP && TARGET_64BIT"
+  "p<rvp_word_acc>.w\t%0,%1,%2"
+  [(set_attr "type" "simd")
+   (set_attr "mode" "DI")])
+
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (subreg:SI
+	      (zero_extract:DI
+		(mult:DI
+		  (match_operand:DI 1 "rvp_word_product_operand")
+		  (match_operand:DI 2 "rvp_word_product_operand"))
+		(const_int 32) (const_int 32)) 0)
+	    (match_operand:SI 3 "register_operand"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_round_mulhi_p (operands[1], operands[2])"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi_acc (operands[0], operands[1], operands[2],
+			    operands[3], false);
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (subreg:SI
+	      (any_shiftrt:DI
+		(mult:DI
+		  (match_operand:DI 1 "rvp_word_product_operand")
+		  (match_operand:DI 2 "rvp_word_product_operand"))
+		(const_int 32)) 0)
+	    (match_operand:SI 3 "register_operand"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && riscv_p_round_mulhi_p (operands[1], operands[2])"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi_acc (operands[0], operands[1], operands[2],
+			    operands[3], false);
+  DONE;
+})
+
+;; Also fold a packed multiply-high already selected by an earlier split.
+;; Only its low word is consumed; the complete packed result is still
+;; represented in the replacement instruction.
+(define_int_iterator RVP_MULHI_ACC
+  [UNSPEC_PMULH UNSPEC_PMULHU UNSPEC_PMULHSU
+   UNSPEC_PMULHR UNSPEC_PMULHRU UNSPEC_PMULHRSU])
+
+(define_int_attr rvp_mulhi_acc_kind
+  [(UNSPEC_PMULH "0") (UNSPEC_PMULHU "1") (UNSPEC_PMULHSU "2")
+   (UNSPEC_PMULHR "0") (UNSPEC_PMULHRU "1") (UNSPEC_PMULHRSU "2")])
+
+(define_int_attr rvp_mulhi_acc_round
+  [(UNSPEC_PMULH "false") (UNSPEC_PMULHU "false")
+   (UNSPEC_PMULHSU "false") (UNSPEC_PMULHR "true")
+   (UNSPEC_PMULHRU "true") (UNSPEC_PMULHRSU "true")])
+
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(sign_extend:DI
+	  (plus:SI
+	    (subreg:SI
+	      (unspec:PV2SI
+		[(match_operand:PV2SI 1 "register_operand")
+		 (match_operand:PV2SI 2 "register_operand")]
+		RVP_MULHI_ACC) 0)
+	    (match_operand:SI 3 "register_operand"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi_acc (operands[0], gen_lowpart (DImode, operands[1]),
+			    gen_lowpart (DImode, operands[2]), operands[3],
+			    <rvp_mulhi_acc_round>, <rvp_mulhi_acc_kind>);
+  DONE;
+})
+
 ;; -------------------------------------------------------------------------
 ;; USATI - Unsigned Saturation Immediate
 ;; -------------------------------------------------------------------------

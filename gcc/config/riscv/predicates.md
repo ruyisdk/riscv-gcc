@@ -805,6 +805,21 @@
 
 ;; P-extension predicates
 
+;; A full register or an explicit extension of its low word.  The splitter
+;; separately proves the signedness before choosing a packed operation.
+(define_predicate "rvp_word_product_operand"
+  (match_code "reg,subreg,sign_extend,zero_extend,and")
+{
+  if (register_operand (op, mode))
+    return true;
+  if (GET_CODE (op) == SIGN_EXTEND || GET_CODE (op) == ZERO_EXTEND)
+    return register_operand (XEXP (op, 0), SImode);
+  return GET_CODE (op) == AND
+    && register_operand (XEXP (op, 0), DImode)
+    && CONST_INT_P (XEXP (op, 1))
+    && UINTVAL (XEXP (op, 1)) == GET_MODE_MASK (SImode);
+})
+
 (define_predicate "const_int4_operand"
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 15)")))

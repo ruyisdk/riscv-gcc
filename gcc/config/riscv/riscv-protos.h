@@ -153,6 +153,7 @@ extern bool riscv_p_small_pack_mems_p (rtx, rtx);
 extern rtx riscv_p_small_pack_mem (rtx, rtx);
 extern bool riscv_p_round_mulhi_p (rtx, rtx);
 extern void riscv_p_expand_round_mulhi (rtx, rtx, rtx, bool, int = -1);
+extern void riscv_p_expand_mulhi_acc (rtx, rtx, rtx, rtx, bool, int = -1);
 extern void riscv_p_expand_reduc_plus (rtx, rtx);
 extern void riscv_p_expand_dot_product_64 (rtx, rtx, rtx, rtx, bool, bool);
 extern void riscv_p_expand_sad (rtx, rtx, rtx, rtx, bool);

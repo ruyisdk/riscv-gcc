@@ -5409,6 +5409,18 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
       int reduction_cost = riscv_p_reduc_widen_cost (SET_SRC (x));
       if (reduction_cost)
 	return reduction_cost;
+
+      /* These complete RV32 operations are single multiply-accumulates.
+	 Do not charge separately for the widened product, high extraction
+	 or implicit rounding bias.  Recognition, not the shape filter alone,
+	 must confirm that the instruction can implement the whole expression.  */
+      if (!TARGET_64BIT && !TARGET_BIG_ENDIAN
+	  && GET_MODE (SET_DEST (x)) == SImode
+	  && GET_CODE (SET_SRC (x)) == PLUS
+	  && SUBREG_P (XEXP (SET_SRC (x), 0))
+	  && recog_memoized (insn) >= 0
+	  && get_attr_rvp_mulhi_acc (insn) == RVP_MULHI_ACC_YES)
+	return speed ? tune_param->int_mul[0] : COSTS_N_INSNS (1);
     }
   int cost = pattern_cost (x, speed);
 

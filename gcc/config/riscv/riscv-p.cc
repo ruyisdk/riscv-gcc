@@ -161,6 +161,68 @@ riscv_p_expand_round_mulhi (rtx target, rtx lhs, rtx rhs, bool unsigned_p,
   convert_move (target, gen_lowpart (SImode, result), unsigned_p);
 }
 
+/* Return a full register with the same low word as OP.  Input signedness
+   is already recorded in the selected packed operation, so its upper
+   word need not preserve an explicit scalar zero extension.  */
+
+static rtx
+riscv_p_mulhi_acc_operand (rtx op)
+{
+  if (GET_MODE (op) == SImode)
+    {
+      if (SUBREG_P (op) && GET_MODE (SUBREG_REG (op)) == DImode
+	  && subreg_lowpart_p (op))
+	return SUBREG_REG (op);
+      rtx result = gen_reg_rtx (DImode);
+      convert_move (result, op, false);
+      return result;
+    }
+  if (GET_CODE (op) == AND)
+    return XEXP (op, 0);
+  if (GET_CODE (op) == SIGN_EXTEND || GET_CODE (op) == ZERO_EXTEND)
+    return riscv_p_mulhi_acc_operand (XEXP (op, 0));
+  return op;
+}
+
+/* Add a word product's high word to ACC modulo 2^32.  ROUND_P adds 2^31
+   before extracting the product.  KIND has the same meaning as in
+   riscv_p_expand_round_mulhi.  Model both result lanes and then extend
+   the scalar result, so no upper bits of a live GPR are silently changed.  */
+
+void
+riscv_p_expand_mulhi_acc (rtx target, rtx lhs, rtx rhs, rtx acc,
+			bool round_p, int kind)
+{
+  if (kind < 0)
+    kind = riscv_p_round_mulhi_kind (lhs, rhs);
+  gcc_assert (IN_RANGE (kind, 0, 3) && TARGET_64BIT);
+  lhs = gen_lowpart (PV2SImode, riscv_p_mulhi_acc_operand (lhs));
+  rhs = gen_lowpart (PV2SImode, riscv_p_mulhi_acc_operand (rhs));
+  if (kind == 3)
+    std::swap (lhs, rhs);
+  rtx initial = gen_lowpart (PV2SImode, riscv_p_mulhi_acc_operand (acc));
+  rtx result = gen_reg_rtx (PV2SImode);
+  if (round_p)
+    {
+      if (kind == 0)
+	emit_insn (gen_riscv_p_mhracc_pv2si (result, lhs, rhs, initial));
+      else if (kind == 1)
+	emit_insn (gen_riscv_p_mhraccu_pv2si (result, lhs, rhs, initial));
+      else
+	emit_insn (gen_riscv_p_mhraccsu_pv2si (result, lhs, rhs, initial));
+    }
+  else
+    {
+      if (kind == 0)
+	emit_insn (gen_riscv_p_mhacc_pv2si (result, lhs, rhs, initial));
+      else if (kind == 1)
+	emit_insn (gen_riscv_p_mhaccu_pv2si (result, lhs, rhs, initial));
+      else
+	emit_insn (gen_riscv_p_mhaccsu_pv2si (result, lhs, rhs, initial));
+    }
+  convert_move (target, gen_lowpart (SImode, result), false);
+}
+
 /* Pack COUNT bytes from VALS, starting at FIRST, using pair operations.
    Each stage consumes only the defined low bits of the preceding stage.  */
 
