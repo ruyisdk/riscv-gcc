@@ -2755,6 +2755,22 @@ DEFINE_INT_AND_FLOAT_ROUND_FN (RINT)
     (with { tree stype = signed_type_for (TREE_TYPE (@0)); }
      (icmp (convert:stype @0) { build_int_cst (stype, 0); })))))
 
+#if GIMPLE
+/* A nonzero unsigned X cannot wrap when subtracting one.  Fold
+   X - 1 CMP C to X CMP C + 1 when the new bound does not wrap either.
+   This removes redundant latch-count adjustments from loop guards.  */
+(for cmp (lt le gt ge)
+ (simplify
+  (cmp (plus:s@2 @0 integer_minus_onep) INTEGER_CST@1)
+  (if (INTEGRAL_TYPE_P (TREE_TYPE (@0))
+       && TYPE_UNSIGNED (TREE_TYPE (@0))
+       && !integer_all_onesp (@1))
+   (with { int_range_max r; }
+    (if (gimple_match_range_of_expr (r, @0, @2)
+	 && !r.contains_p (wi::zero (TYPE_PRECISION (TREE_TYPE (@0)))))
+     (cmp @0 { wide_int_to_tree (TREE_TYPE (@1), wi::to_wide (@1) + 1); }))))))
+#endif
+
 /* X / 4 < Y / 4 iff X < Y when the division is known to be exact.  */
 (for cmp (simple_comparison)
  (simplify
