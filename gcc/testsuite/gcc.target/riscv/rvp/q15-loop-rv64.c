@@ -5,5 +5,5 @@
 
 /* { dg-final { scan-tree-dump {\.SAT_MULHS } "vect" } } */
 /* { dg-final { scan-tree-dump {\.SAT_MULHRS } "vect" } } */
-/* { dg-final { scan-assembler-times {\tpmulq\.h\t} 2 } } */
-/* { dg-final { scan-assembler-times {\tpmulqr\.h\t} 1 } } */
+/* { dg-final { scan-assembler-times {\tpmulq\.h\t} 13 } } */
+/* { dg-final { scan-assembler-times {\tpmulqr\.h\t} 8 } } */

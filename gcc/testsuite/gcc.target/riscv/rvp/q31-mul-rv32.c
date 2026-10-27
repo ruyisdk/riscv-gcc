@@ -5,6 +5,6 @@
 
 /* { dg-final { scan-tree-dump {\.SAT_MULHS .*vector_stmt costs 2 in body} "vect" } } */
 /* { dg-final { scan-tree-dump {\.SAT_MULHRS .*vector_stmt costs 2 in body} "vect" } } */
-/* { dg-final { scan-assembler-times {\tmulq\t} 6 } } */
-/* { dg-final { scan-assembler-times {\tmulqr\t} 6 } } */
+/* { dg-final { scan-assembler-times {\tmulq\t} 10 } } */
+/* { dg-final { scan-assembler-times {\tmulqr\t} 10 } } */
 /* { dg-final { scan-assembler-not {\tpmulqr?\.w\t} } } */

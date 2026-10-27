@@ -615,6 +615,54 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Scalar Q15 multiplication.  Extend each input to the full register so
+;; every unused halfword is zero or minus one and cannot saturate.
+(define_expand "<rvp_qmul_optab>hi3"
+  [(set (match_operand:HI 0 "register_operand")
+	(unspec:HI [(match_operand:HI 1 "register_operand")
+		    (match_operand:HI 2 "register_operand")]
+	 RVP_QMUL_OP))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR"
+{
+  rtx op1 = convert_to_mode (word_mode, operands[1], false);
+  rtx op2 = convert_to_mode (word_mode, operands[2], false);
+  machine_mode mode = TARGET_64BIT ? PV4HImode : PV2HImode;
+  rtx dest = gen_reg_rtx (mode);
+  op1 = gen_lowpart (mode, op1);
+  op2 = gen_lowpart (mode, op2);
+  if (TARGET_64BIT)
+    emit_insn (gen_riscv_<rvp_qmul_half>_i16x4_rv64 (dest, op1, op2));
+  else
+    emit_insn (gen_riscv_<rvp_qmul_half>_i16x2 (dest, op1, op2));
+  emit_move_insn (operands[0], gen_lowpart (HImode, dest));
+  DONE;
+})
+
+;; Scalar Q31 multiplication.  Sign-extend both inputs on RV64 so the unused
+;; high lanes cannot saturate, and model the complete packed result write.
+(define_expand "<rvp_qmul_optab>si3"
+  [(set (match_operand:SI 0 "register_operand")
+	(unspec:SI [(match_operand:SI 1 "register_operand")
+		    (match_operand:SI 2 "register_operand")]
+	 RVP_QMUL_OP))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR"
+{
+  if (TARGET_64BIT)
+    {
+      rtx op1 = convert_to_mode (DImode, operands[1], false);
+      rtx op2 = convert_to_mode (DImode, operands[2], false);
+      rtx dest = gen_reg_rtx (PV2SImode);
+      emit_insn (gen_riscv_<rvp_scalar_mul_packed>
+		 (dest, gen_lowpart (PV2SImode, op1),
+		  gen_lowpart (PV2SImode, op2)));
+      emit_move_insn (operands[0], gen_lowpart (SImode, dest));
+    }
+  else
+    emit_insn (gen_riscv_<rvp_scalar_mul_builtin>_rv32
+	       (operands[0], operands[1], operands[2]));
+  DONE;
+})
+
 ;; Saturating scaled multiplication used by vectorized fixed-point code.
 (define_expand "<rvp_qmul_optab><mode>3"
   [(set (match_operand:RVP_QMUL 0 "register_operand")
