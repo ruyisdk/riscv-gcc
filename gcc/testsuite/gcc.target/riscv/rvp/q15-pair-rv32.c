@@ -14,7 +14,7 @@
 
 #include "q15-pair.h"
 
-/* Only exact and widened Q15 results use the saturating operations.  */
-/* { dg-final { scan-assembler-times {\tpmulq\.h\t} 2 } } */
-/* { dg-final { scan-assembler-times {\tpmulqr\.h\t} 2 } } */
+/* Exact, widened and shared-product Q15 results use saturating operations.  */
+/* { dg-final { scan-assembler-times {\tpmulq\.h\t} 3 } } */
+/* { dg-final { scan-assembler-times {\tpmulqr\.h\t} 3 } } */
 /* { dg-final { check-function-bodies "**" "" } } */

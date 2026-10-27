@@ -5202,6 +5202,19 @@ or unsigned operation, and @var{N} is the size of @samp{wide} in bits.
 @var{m} is the mode for all 3 operands (narrow). The wide mode is not specified
 and is defined to fit the whole multiply.
 
+@mdindex ssmulhs@var{m}3
+@mdindex ssmulhrs@var{m}3
+@item @samp{ssmulhs@var{m}3}
+@itemx @samp{ssmulhrs@var{m}3}
+Signed saturating multiply high with scaling, optionally with rounding.
+All operands have the same signed integer mode @var{m}.  For elements of
+precision @var{P}, compute the exact product, add @code{2^(@var{P}-2)} for
+the rounding form, and divide by @code{2^(@var{P}-1)}, rounding toward
+negative infinity.  Saturate the result to the signed range of @var{m}
+instead of truncating it.  In particular, multiplying two minimum signed
+values produces the maximum signed value.  These operations describe only
+the result values, not an observable saturation flag.
+
 @mdindex sdiv_pow2@var{m}3
 @mdindex sdiv_pow2@var{m}3
 @item @samp{sdiv_pow2@var{m}3}

@@ -15356,6 +15356,16 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
       && gimple_call_internal_p (stmt_info->stmt, IFN_SAT_TRUNC))
     count *= 2;
 
+  /* Four Q15 or two Q31 products need two multiplications on RV32.
+     Two Q15 lanes and all RV64 forms use one instruction.  */
+  if (!m_costing_for_scalar && !TARGET_64BIT && kind == vector_stmt
+      && stmt_info && vectype
+      && (TYPE_MODE (vectype) == PV4HImode
+	  || TYPE_MODE (vectype) == PV2SImode)
+      && (gimple_call_internal_p (stmt_info->stmt, IFN_SAT_MULHS)
+	  || gimple_call_internal_p (stmt_info->stmt, IFN_SAT_MULHRS)))
+    count *= 2;
+
   if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
       && where == vect_body
       && riscv_pext_mode_supported_p (TYPE_MODE (vectype))

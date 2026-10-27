@@ -31,6 +31,14 @@
 ;; Halfword vectors with selected modular products on RV32.
 (define_mode_iterator RVP_EXTRACT_H [PV2HI PV4HI])
 
+;; Signed halfword and word vectors with saturating scaled products.
+(define_mode_iterator RVP_QMUL [PV2HI PV4HI PV2SI])
+(define_int_iterator RVP_QMUL_OP [UNSPEC_PMULQ UNSPEC_PMULQR])
+(define_int_attr rvp_qmul_optab
+  [(UNSPEC_PMULQ "ssmulhs") (UNSPEC_PMULQR "ssmulhrs")])
+(define_int_attr rvp_qmul_half
+  [(UNSPEC_PMULQ "pmulq") (UNSPEC_PMULQR "pmulqr")])
+
 ;; PVHW: 8-byte packed halfword and word modes (PV4HI + PV2SI).
 ;; Single register on RV64; register pair on RV32.
 ;; Used for instructions that have distinct DB/DH/DW (RV32) and B/H/W (RV64) forms.

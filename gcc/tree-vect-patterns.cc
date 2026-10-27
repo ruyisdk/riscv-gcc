@@ -3235,6 +3235,104 @@ vect_recog_over_widening_pattern (vec_info *vinfo,
   return pattern_stmt;
 }
 
+/* Recognize a signed scaled widening product followed by an upper clamp:
+
+     wide product = (wide) a * (wide) b;
+     wide scaled = (product + round) >> (precision (narrow) - 1);
+     wide result = MIN (scaled, MAX (narrow));
+
+   ROUND is either zero or 2^(precision (narrow) - 2).  The exact product
+   and optional rounding addition fit WIDE.  Only MIN (narrow) squared
+   exceeds the narrow signed range after scaling; no lower clamp is needed.
+   This differs from MULHS and MULHRS, which wrap that exceptional result.  */
+
+static gimple *
+vect_recog_sat_mulhs_pattern (vec_info *vinfo,
+			     stmt_vec_info last_stmt_info, tree *type_out)
+{
+  gassign *last_stmt = dyn_cast <gassign *> (last_stmt_info->stmt);
+  if (!last_stmt || gimple_assign_rhs_code (last_stmt) != MIN_EXPR)
+    return NULL;
+
+  tree lhs_type = TREE_TYPE (gimple_assign_lhs (last_stmt));
+  tree bound = gimple_assign_rhs2 (last_stmt);
+  if (!INTEGRAL_TYPE_P (lhs_type) || TYPE_UNSIGNED (lhs_type)
+      || !type_has_mode_precision_p (lhs_type)
+      || TREE_CODE (bound) != INTEGER_CST)
+    return NULL;
+
+  stmt_vec_info shift_info
+    = vect_get_internal_def (vinfo, gimple_assign_rhs1 (last_stmt));
+  gassign *shift = shift_info ? dyn_cast <gassign *> (shift_info->stmt) : NULL;
+  if (!shift || gimple_assign_rhs_code (shift) != RSHIFT_EXPR
+      || !types_compatible_p (lhs_type,
+			     TREE_TYPE (gimple_assign_lhs (shift))))
+    return NULL;
+  tree amount = gimple_assign_rhs2 (shift);
+  if (!tree_fits_uhwi_p (amount))
+    return NULL;
+
+  stmt_vec_info product_info
+    = vect_get_internal_def (vinfo, gimple_assign_rhs1 (shift));
+  gassign *product
+    = product_info ? dyn_cast <gassign *> (product_info->stmt) : NULL;
+  if (!product)
+    return NULL;
+  tree round = NULL_TREE;
+  if (gimple_assign_rhs_code (product) == PLUS_EXPR)
+    {
+      round = gimple_assign_rhs2 (product);
+      if (TREE_CODE (round) != INTEGER_CST
+	  || !types_compatible_p (lhs_type,
+				 TREE_TYPE (gimple_assign_lhs (product))))
+	return NULL;
+      product_info
+	= vect_get_internal_def (vinfo, gimple_assign_rhs1 (product));
+      product = product_info
+		? dyn_cast <gassign *> (product_info->stmt) : NULL;
+      if (!product)
+	return NULL;
+    }
+  if (!types_compatible_p (lhs_type,
+			 TREE_TYPE (gimple_assign_lhs (product))))
+    return NULL;
+
+  vect_unpromoted_value unprom[2];
+  tree narrow_type;
+  if (vect_widened_op_tree (vinfo, product_info, MULT_EXPR, WIDEN_MULT_EXPR,
+			    false, 2, unprom, &narrow_type) != 2
+      || TYPE_UNSIGNED (narrow_type)
+      || !type_has_mode_precision_p (narrow_type))
+    return NULL;
+  unsigned int precision = TYPE_PRECISION (narrow_type);
+  unsigned int wide_precision = TYPE_PRECISION (lhs_type);
+  if (precision < 2 || 2 * precision > wide_precision
+      || tree_to_uhwi (amount) != precision - 1
+      || wi::to_wide (bound) != wi::mask (precision - 1, false, wide_precision)
+      || (round
+	  && wi::to_wide (round)
+	     != wi::shifted_mask (precision - 2, 1, false, wide_precision)))
+    return NULL;
+
+  internal_fn ifn = round ? IFN_SAT_MULHRS : IFN_SAT_MULHS;
+  tree vectype = get_vectype_for_scalar_type (vinfo, narrow_type);
+  if (!vectype
+      || !direct_internal_fn_supported_p (ifn, vectype, OPTIMIZE_FOR_SPEED))
+    return NULL;
+  *type_out = get_vectype_for_scalar_type (vinfo, lhs_type);
+  if (!*type_out)
+    return NULL;
+
+  tree operands[2];
+  vect_convert_inputs (vinfo, last_stmt_info, 2, operands, narrow_type,
+		       unprom, vectype);
+  gcall *call = gimple_build_call_internal (ifn, 2, operands[0], operands[1]);
+  gimple_call_set_lhs (call, vect_recog_temp_ssa_var (narrow_type));
+  gimple_set_location (call, gimple_location (last_stmt));
+  vect_pattern_detected ("vect_recog_sat_mulhs_pattern", last_stmt);
+  return vect_convert_output (vinfo, last_stmt_info, lhs_type, call, vectype);
+}
+
 /* Recognize the following patterns:
 
      ATYPE a;  // narrower than TYPE
@@ -7863,6 +7961,7 @@ static vect_recog_func vect_vect_recog_func_ptrs[] = {
   { vect_recog_average_pattern, "average" },
   { vect_recog_bitwise_average_pattern, "bitwise_average" },
   { vect_recog_cond_expr_convert_pattern, "cond_expr_convert" },
+  { vect_recog_sat_mulhs_pattern, "sat_mult_high" },
   { vect_recog_mulhs_pattern, "mult_high" },
   { vect_recog_cast_forwprop_pattern, "cast_forwprop" },
   { vect_recog_widen_mult_pattern, "widen_mult" },

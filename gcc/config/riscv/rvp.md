@@ -615,6 +615,42 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
+;; Saturating scaled multiplication used by vectorized fixed-point code.
+(define_expand "<rvp_qmul_optab><mode>3"
+  [(set (match_operand:RVP_QMUL 0 "register_operand")
+	(unspec:RVP_QMUL [(match_operand:RVP_QMUL 1 "register_operand")
+			 (match_operand:RVP_QMUL 2 "register_operand")]
+	 RVP_QMUL_OP))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN && !TARGET_VECTOR"
+{
+  if (<MODE>mode == PV2HImode)
+    emit_insn (gen_riscv_<rvp_qmul_half>_i16x2
+	       (operands[0], operands[1], operands[2]));
+  else if (<MODE>mode == PV4HImode)
+    emit_insn (gen_riscv_<rvp_qmul_half>_i16x4
+	       (operands[0], operands[1], operands[2]));
+  else if (TARGET_64BIT)
+    emit_insn (gen_riscv_<rvp_scalar_mul_packed>
+	       (operands[0], operands[1], operands[2]));
+  else
+    {
+      /* RV32 has scalar Q31 products.  Use a fresh pair so overlapping
+	 inputs remain intact until both lane results have been computed.  */
+      rtx dest = gen_reg_rtx (PV2SImode);
+      rtx op1 = force_reg (PV2SImode, operands[1]);
+      rtx op2 = force_reg (PV2SImode, operands[2]);
+      for (unsigned int byte = 0; byte < 8; byte += 4)
+	{
+	  rtx lane = simplify_gen_subreg (SImode, dest, PV2SImode, byte);
+	  rtx a = simplify_gen_subreg (SImode, op1, PV2SImode, byte);
+	  rtx b = simplify_gen_subreg (SImode, op2, PV2SImode, byte);
+	  emit_insn (gen_riscv_<rvp_scalar_mul_builtin>_rv32 (lane, a, b));
+	}
+      emit_move_insn (operands[0], dest);
+    }
+  DONE;
+})
+
 ;; The shifted product of two signed halfwords is in [-32767, 32768].
 ;; Clamping its upper end therefore gives the signed Q15 product.  Keep
 ;; the extension separate so a subsequent narrowing can discard it.
