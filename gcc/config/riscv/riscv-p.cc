@@ -615,6 +615,42 @@ riscv_p_zero_accumulator_p (rtx reg, rtx_insn *insn)
   return false;
 }
 
+/* Return true if the native register containing word REG holds a byte SAD
+   result before INSN.  A native RV64 result is at most 2040.  Search only
+   recent instructions in this basic block, since word extensions are
+   common and an unbounded search could be quadratic.  */
+
+bool
+riscv_p_sad_word_result_p (rtx reg, rtx_insn *insn)
+{
+  gcc_assert (TARGET_64BIT && reload_completed && REG_P (reg)
+	      && GET_MODE (reg) == SImode && GP_REG_P (REGNO (reg)));
+  rtx native = gen_rtx_REG (DImode, REGNO (reg));
+  rtx_insn *head = BB_HEAD (BLOCK_FOR_INSN (insn));
+  unsigned int remaining = 16;
+  for (rtx_insn *prev = PREV_INSN (insn);
+       prev && prev != PREV_INSN (head); prev = PREV_INSN (prev))
+    {
+      if (!NONDEBUG_INSN_P (prev))
+	continue;
+      if (remaining-- == 0 || CALL_P (prev) || JUMP_P (prev)
+	  || volatile_insn_p (PATTERN (prev)))
+	return false;
+      if (reg_set_p (native, prev))
+	{
+	  rtx set = PATTERN (prev);
+	  if (GET_CODE (set) != SET
+	      || !rtx_equal_p (SET_DEST (set), native)
+	      || RTX_FRAME_RELATED_P (prev))
+	    return false;
+	  rtx src = SET_SRC (set);
+	  return GET_CODE (src) == UNSPEC && GET_MODE (src) == DImode
+	    && XINT (src, 1) == UNSPEC_PABDSUMU;
+	}
+    }
+  return false;
+}
+
 /* Accumulate byte or halfword differences into word or doubleword lanes.
    Keep the two word sums independent; RV64 PABDSUMAU.B instead reduces
    all eight bytes into a single doubleword.  */
@@ -703,15 +739,15 @@ riscv_p_expand_sad (rtx dest, rtx a, rtx b, rtx acc, bool unsigned_p)
     emit_move_insn (gen_lowpart (DImode, dest), sum);
 }
 
-/* Preserve the full native result of RV64 unsigned byte and halfword loads.
+/* Preserve the full native result of RV64 byte and halfword zero extensions.
    A plain SI destination hides the zero high bits from packed scalar idioms.
-   Use a promoted lowpart view without duplicating or widening the load.  */
+   Use a promoted lowpart view without duplicating or widening any load.  */
 
 bool
-riscv_p_expand_zero_extend_load (rtx dest, rtx src)
+riscv_p_expand_zero_extend (rtx dest, rtx src)
 {
   if (!TARGET_RVP || !TARGET_64BIT || TARGET_BIG_ENDIAN
-      || GET_MODE (dest) != SImode || !MEM_P (src))
+      || GET_MODE (dest) != SImode)
     return false;
 
   gcc_assert (GET_MODE (src) == QImode || GET_MODE (src) == HImode);

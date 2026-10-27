@@ -1953,7 +1953,7 @@
 	    (match_operand:HI 1 "nonimmediate_operand")))]
   ""
 {
-  if (riscv_p_expand_zero_extend_load (operands[0], operands[1]))
+  if (riscv_p_expand_zero_extend (operands[0], operands[1]))
     DONE;
 })
 
@@ -1987,7 +1987,7 @@
 	    (match_operand:QI 1 "nonimmediate_operand")))]
   ""
 {
-  if (riscv_p_expand_zero_extend_load (operands[0], operands[1]))
+  if (riscv_p_expand_zero_extend (operands[0], operands[1]))
     DONE;
 })
 

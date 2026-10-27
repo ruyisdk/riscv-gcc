@@ -7,10 +7,9 @@
 
 /*
 ** zero4:
-**  zext\.w\s+a0,a0
 **  zext\.w\s+a1,a1
-**  pabdsumu\.b\s+a5,a0,a1
-**  sext\.w\s+a0,a5
+**  zext\.w\s+a0,a0
+**  pabdsumu\.b\s+a0,a0,a1
 **  ret
 */
 

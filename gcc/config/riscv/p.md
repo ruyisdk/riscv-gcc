@@ -1237,6 +1237,38 @@
   [(set (match_dup 0)
 	(unspec:X [(match_dup 1) (match_dup 2)] UNSPEC_PABDSUMU))])
 
+;; A native RV64 byte SAD is at most 8 * 255, so extending its low word
+;; leaves the result unchanged.  Keep a separately live original result.
+(define_peephole2
+  [(set (match_operand:DI 0 "register_operand")
+	(unspec:DI [(match_operand:DI 1 "register_operand")
+		    (match_operand:DI 2 "register_operand")]
+		   UNSPEC_PABDSUMU))
+   (set (match_operand:DI 3 "register_operand")
+	(any_extend:DI (match_operand:SI 4 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT
+   && GP_REG_P (REGNO (operands[3]))
+   && REGNO (operands[0]) == REGNO (operands[4])
+   && (rtx_equal_p (operands[0], operands[3])
+       || peep2_reg_dead_p (2, operands[0]))"
+  [(set (match_dup 3)
+	(unspec:DI [(match_dup 1) (match_dup 2)] UNSPEC_PABDSUMU))])
+
+;; A shared native SAD result may be separated from its word extension by
+;; stores or other independent instructions.  Preserve its definition and
+;; replace only the extension, leaving any dead copy to normal cleanup.
+(define_peephole2
+  [(set (match_operand:DI 0 "register_operand")
+	(any_extend:DI (match_operand:SI 1 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT
+   && GP_REG_P (REGNO (operands[0]))
+   && GP_REG_P (REGNO (operands[1]))
+   && riscv_p_sad_word_result_p (operands[1], peep2_next_insn (0))"
+  [(set (match_dup 0) (match_dup 2))]
+{
+  operands[2] = gen_rtx_REG (DImode, REGNO (operands[1]));
+})
+
 (define_expand "riscv_pabdsumu_u8x4_u32"
   [(set (match_operand:SI 0 "register_operand")
 	(unspec:SI [(match_operand:PV4QI 1 "register_operand")

@@ -12,6 +12,21 @@
 **  pabdu\.h\s+a0,[a-z][0-9]+,[a-z][0-9]+
 **  ret
 */
+
+/* Preserve the native zero extension after assembling unaligned halfwords.
+   Each input must still be read as two bytes.
+** packed_load:
+**  lbu\s+[a-z][0-9]+,2\(a0\)
+**  lbu\s+[a-z][0-9]+,2\(a1\)
+**  lbu\s+[a-z][0-9]+,1\(a0\)
+**  lbu\s+[a-z][0-9]+,1\(a1\)
+**  slli\s+[a-z][0-9]+,[a-z][0-9]+,8
+**  slli\s+[a-z][0-9]+,[a-z][0-9]+,8
+**  or\s+[a-z][0-9]+,[a-z][0-9]+,[a-z][0-9]+
+**  or\s+[a-z][0-9]+,[a-z][0-9]+,[a-z][0-9]+
+**  pabdu\.h\s+a0,[a-z][0-9]+,[a-z][0-9]+
+**  ret
+*/
 /*
 ** load_half:
 **  lhu\s+[a-z][0-9]+,0\(a0\)
