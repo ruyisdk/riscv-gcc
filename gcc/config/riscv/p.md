@@ -1190,6 +1190,53 @@
   "pabdsumau.b\t%0,%1,%2"
   [(set_attr "type" "simd")])
 
+;; Fold zero accumulators after register allocation, without changing the
+;; allocation of live packed inputs.  The clear must not also supply an input.
+;; A following copy can be removed when the temporary result is dead.
+(define_peephole2
+  [(set (match_operand:X 0 "register_operand")
+	(const_int 0))
+   (set (match_dup 0)
+	(unspec:X [(match_dup 0)
+		   (match_operand:X 1 "register_operand")
+		   (match_operand:X 2 "register_operand")]
+		  UNSPEC_PABDSUMAU))
+   (set (match_operand:X 3 "register_operand") (match_dup 0))]
+  "TARGET_RVP && GP_REG_P (REGNO (operands[3]))
+   && !reg_overlap_mentioned_p (operands[0], operands[1])
+   && !reg_overlap_mentioned_p (operands[0], operands[2])
+   && peep2_reg_dead_p (3, operands[0])"
+  [(set (match_dup 3)
+	(unspec:X [(match_dup 1) (match_dup 2)] UNSPEC_PABDSUMU))])
+
+(define_peephole2
+  [(set (match_operand:X 0 "register_operand")
+	(const_int 0))
+   (set (match_dup 0)
+	(unspec:X [(match_dup 0)
+		   (match_operand:X 1 "register_operand")
+		   (match_operand:X 2 "register_operand")]
+		  UNSPEC_PABDSUMAU))]
+  "TARGET_RVP
+   && !reg_overlap_mentioned_p (operands[0], operands[1])
+   && !reg_overlap_mentioned_p (operands[0], operands[2])"
+  [(set (match_dup 0)
+	(unspec:X [(match_dup 1) (match_dup 2)] UNSPEC_PABDSUMU))])
+
+;; Nonadjacent clears can be separated by loads or operand extensions.
+;; Replace only the arithmetic operation; liveness decides whether the
+;; earlier zero definition is still needed by another use or an EH edge.
+(define_peephole2
+  [(set (match_operand:X 0 "register_operand")
+	(unspec:X [(match_dup 0)
+		   (match_operand:X 1 "register_operand")
+		   (match_operand:X 2 "register_operand")]
+		  UNSPEC_PABDSUMAU))]
+  "TARGET_RVP
+   && riscv_p_zero_accumulator_p (operands[0], peep2_next_insn (0))"
+  [(set (match_dup 0)
+	(unspec:X [(match_dup 1) (match_dup 2)] UNSPEC_PABDSUMU))])
+
 (define_expand "riscv_pabdsumu_u8x4_u32"
   [(set (match_operand:SI 0 "register_operand")
 	(unspec:SI [(match_operand:PV4QI 1 "register_operand")

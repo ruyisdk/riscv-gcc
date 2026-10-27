@@ -584,6 +584,37 @@ riscv_p_expand_dot_product_64 (rtx dest, rtx a, rtx b, rtx acc,
     emit_move_insn (gen_lowpart (DImode, dest), sum);
 }
 
+/* Return true if REG has a complete constant-zero definition before INSN
+   in the same basic block, with no intervening definition or clobber.
+   Do not remove that definition here: later DCE must preserve any uses
+   by other instructions, packed inputs or exceptional successors.  */
+
+bool
+riscv_p_zero_accumulator_p (rtx reg, rtx_insn *insn)
+{
+  gcc_assert (reload_completed && REG_P (reg) && GP_REG_P (REGNO (reg)));
+
+  rtx_insn *head = BB_HEAD (BLOCK_FOR_INSN (insn));
+  for (rtx_insn *prev = PREV_INSN (insn);
+       prev && prev != PREV_INSN (head); prev = PREV_INSN (prev))
+    {
+      if (!NONDEBUG_INSN_P (prev))
+	continue;
+      if (CALL_P (prev) || JUMP_P (prev)
+	  || volatile_insn_p (PATTERN (prev)))
+	return false;
+      if (reg_set_p (reg, prev))
+	{
+	  rtx set = PATTERN (prev);
+	  return GET_CODE (set) == SET
+	    && rtx_equal_p (SET_DEST (set), reg)
+	    && SET_SRC (set) == const0_rtx
+	    && !RTX_FRAME_RELATED_P (prev);
+	}
+    }
+  return false;
+}
+
 /* Accumulate byte or halfword differences into word or doubleword lanes.
    Keep the two word sums independent; RV64 PABDSUMAU.B instead reduces
    all eight bytes into a single doubleword.  */
