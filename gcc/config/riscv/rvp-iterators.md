@@ -129,6 +129,8 @@
 
 ;; Byte and halfword dot products accumulating into packed words.
 (define_mode_iterator RVP_DOT [PV8QI PV4HI])
+;; Word and doubleword accumulators for byte and halfword SAD reductions.
+(define_mode_iterator RVP_SAD_ACC [PV2SI PV1DI])
 (define_mode_attr rvp_dot_signed
   [(PV8QI "pm4adda_i8x8") (PV4HI "pm2adda_i16x4")])
 (define_mode_attr rvp_dot_unsigned

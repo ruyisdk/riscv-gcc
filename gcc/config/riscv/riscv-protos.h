@@ -155,6 +155,7 @@ extern bool riscv_p_round_mulhi_p (rtx, rtx);
 extern void riscv_p_expand_round_mulhi (rtx, rtx, rtx, bool, int = -1);
 extern void riscv_p_expand_reduc_plus (rtx, rtx);
 extern void riscv_p_expand_dot_product_64 (rtx, rtx, rtx, rtx, bool, bool);
+extern void riscv_p_expand_sad (rtx, rtx, rtx, rtx, bool);
 extern void riscv_p_expand_mul_acc_lane (rtx, rtx, unsigned int, bool, bool);
 #ifdef GCC_TARGET_H
 extern bool riscv_expand_pext_vec_perm_const (machine_mode, machine_mode, rtx,

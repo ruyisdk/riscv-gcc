@@ -584,6 +584,94 @@ riscv_p_expand_dot_product_64 (rtx dest, rtx a, rtx b, rtx acc,
     emit_move_insn (gen_lowpart (DImode, dest), sum);
 }
 
+/* Accumulate byte or halfword differences into word or doubleword lanes.
+   Keep the two word sums independent; RV64 PABDSUMAU.B instead reduces
+   all eight bytes into a single doubleword.  */
+
+void
+riscv_p_expand_sad (rtx dest, rtx a, rtx b, rtx acc, bool unsigned_p)
+{
+  machine_mode mode = GET_MODE (a);
+  gcc_assert (mode == PV8QImode || mode == PV4HImode);
+  if (mode == PV4HImode || !unsigned_p)
+    {
+      rtx diff = gen_reg_rtx (mode);
+      if (mode == PV4HImode)
+	emit_insn (unsigned_p ? gen_uabdpv4hi3 (diff, a, b)
+		   : gen_sabdpv4hi3 (diff, a, b));
+      else
+	emit_insn (gen_sabdpv8qi3 (diff, a, b));
+
+      /* Even signed inputs can differ by 255 or 65535.  Their absolute
+	 differences must therefore feed an unsigned reduction.  */
+
+      if (GET_MODE (dest) == PV1DImode)
+	{
+	  rtx output = gen_lowpart (DImode, dest);
+	  rtx input = gen_lowpart (DImode, acc);
+	  emit_insn (mode == PV8QImode
+		     ? gen_riscv_predsumu_u8x8_u64 (output, diff, input)
+		     : gen_riscv_predsumu_u16x4_u64 (output, diff, input));
+	}
+      else
+	{
+	  rtx ones = force_reg (mode, CONST1_RTX (mode));
+	  emit_insn (mode == PV4HImode
+		     ? gen_udot_prodpv2sipv4hi (dest, diff, ones, acc)
+		     : gen_udot_prodpv2sipv8qi (dest, diff, ones, acc));
+	}
+      return;
+    }
+
+  if (GET_MODE (dest) == PV2SImode)
+    {
+      if (TARGET_64BIT)
+	{
+	  rtx diff = gen_reg_rtx (PV8QImode);
+	  rtx ones = force_reg (PV8QImode, CONST1_RTX (PV8QImode));
+	  emit_insn (gen_uabdpv8qi3 (diff, a, b));
+	  emit_insn (gen_udot_prodpv2sipv8qi (dest, diff, ones, acc));
+	}
+      else
+	{
+	  rtx sum[2];
+	  for (unsigned int i = 0; i < 2; ++i)
+	    {
+	      sum[i] = gen_reg_rtx (SImode);
+	      emit_move_insn (sum[i], riscv_subword (acc, i));
+	      emit_insn (gen_riscv_pabdsumau_si_rv32
+			 (sum[i], riscv_subword (a, i), riscv_subword (b, i)));
+	    }
+	  /* Consume both inputs before writing a possibly overlapping pair.  */
+	  emit_move_insn (riscv_subword (dest, false), sum[0]);
+	  emit_move_insn (riscv_subword (dest, true), sum[1]);
+	}
+      return;
+    }
+
+  gcc_assert (GET_MODE (dest) == PV1DImode);
+  if (!TARGET_64BIT)
+    {
+      rtx sum = gen_reg_rtx (DImode);
+      emit_insn (gen_riscv_pabdsumu_u8x8_u64 (sum, a, b));
+      emit_insn (gen_adddi3 (gen_lowpart (DImode, dest), sum,
+			    gen_lowpart (DImode, acc)));
+      return;
+    }
+
+  /* Let the incoming accumulator coalesce with the destination, but do
+     not overwrite either input before the read-modify-write operation.  */
+  bool direct_p = (REG_P (dest) && REGNO (dest) >= FIRST_PSEUDO_REGISTER
+		   && !reg_overlap_mentioned_p (dest, a)
+		   && !reg_overlap_mentioned_p (dest, b));
+  rtx sum = direct_p ? gen_lowpart (DImode, dest) : gen_reg_rtx (DImode);
+  emit_move_insn (sum, gen_lowpart (DImode, acc));
+  emit_insn (gen_riscv_pabdsumau_di_rv64
+	     (sum, gen_lowpart (DImode, a), gen_lowpart (DImode, b)));
+  if (!direct_p)
+    emit_move_insn (gen_lowpart (DImode, dest), sum);
+}
+
 /* Expand RVP vector comparison.
    Implements vec_cmp<mode><mode> and vec_cmpu<mode><mode> patterns.  */
 void

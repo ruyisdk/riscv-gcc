@@ -15316,6 +15316,26 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
     count *= 2;
 
   if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
+      && where == vect_body
+      && riscv_pext_mode_supported_p (TYPE_MODE (vectype))
+      && is_gimple_assign (stmt_info->stmt)
+      && gimple_assign_rhs_code (stmt_info->stmt) == SAD_EXPR)
+    {
+      tree input_type = TREE_TYPE (gimple_assign_rhs1 (stmt_info->stmt));
+      bool bytes_p = TYPE_PRECISION (input_type) == 8;
+      bool wide_p = TYPE_MODE (vectype) == PV1DImode;
+      if (bytes_p && TYPE_UNSIGNED (input_type))
+	/* Native unsigned byte reductions need two partial sums and a
+	   widening accumulation for a doubleword result on RV32.  */
+	count *= wide_p ? (TARGET_64BIT ? 1 : 3) : 2;
+      else
+	/* An absolute difference followed by a reduction or dot product.
+	   RV32 needs a further instruction for a widening accumulation
+	   or for the second word dot product.  */
+	count *= TARGET_64BIT ? 2 : 3;
+    }
+
+  if (!m_costing_for_scalar && kind == vector_stmt && stmt_info && vectype
       && riscv_pext_mode_supported_p (TYPE_MODE (vectype))
       && known_gt (GET_MODE_SIZE (TYPE_MODE (vectype)), UNITS_PER_WORD)
       && is_gimple_assign (stmt_info->stmt))

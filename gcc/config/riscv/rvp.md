@@ -5089,6 +5089,30 @@
   DONE;
 })
 
+;; Byte and halfword differences feed independent word sums or one
+;; doubleword sum.  The absolute differences are unsigned in both cases.
+(define_expand "usad<RVP_SAD_ACC:mode><RVP_DOT:mode>"
+  [(match_operand:RVP_SAD_ACC 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:RVP_DOT 2 "register_operand")
+   (match_operand:RVP_SAD_ACC 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_sad (operands[0], operands[1], operands[2], operands[3], true);
+  DONE;
+})
+
+(define_expand "ssad<RVP_SAD_ACC:mode><RVP_DOT:mode>"
+  [(match_operand:RVP_SAD_ACC 0 "register_operand")
+   (match_operand:RVP_DOT 1 "register_operand")
+   (match_operand:RVP_DOT 2 "register_operand")
+   (match_operand:RVP_SAD_ACC 3 "register_operand")]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN"
+{
+  riscv_p_expand_sad (operands[0], operands[1], operands[2], operands[3], false);
+  DONE;
+})
+
 ;; Four full halfword products contribute to a doubleword accumulator.
 (define_expand "sdot_prodpv1dipv4hi"
   [(match_operand:PV1DI 0 "register_operand")
