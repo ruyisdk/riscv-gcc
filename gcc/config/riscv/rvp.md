@@ -462,6 +462,44 @@
   DONE;
 })
 
+;; Masks used only by a word product need not occupy complete register
+;; pairs.  Keep the expression together until its scalar expansion.
+(define_insn_and_split "*rvp_masked_mulpv2si3"
+  [(set (match_operand:PV2SI 0 "register_operand" "=r")
+	(mult:PV2SI
+	  (and:PV2SI
+	    (match_operand:PV2SI 1 "register_operand" "r")
+	    (match_operand:PV2SI 2 "riscv_p_bitwise_operand" "Wpl"))
+	  (and:PV2SI
+	    (match_operand:PV2SI 3 "register_operand" "r")
+	    (match_operand:PV2SI 4 "riscv_p_bitwise_operand" "Wpl"))))]
+  "TARGET_RVP && !TARGET_64BIT && can_create_pseudo_p ()
+   && riscv_p_bitwise_imm_p (operands[2])
+   && riscv_p_bitwise_imm_p (operands[4])"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  rtx product[2];
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      rtx lhs = gen_reg_rtx (SImode);
+      rtx rhs = gen_reg_rtx (SImode);
+      emit_insn (gen_andsi3 (lhs, riscv_subword (operands[1], i != 0),
+			    riscv_subword (operands[2], i != 0)));
+      emit_insn (gen_andsi3 (rhs, riscv_subword (operands[3], i != 0),
+			    riscv_subword (operands[4], i != 0)));
+      product[i] = gen_reg_rtx (SImode);
+      emit_insn (gen_mulsi3 (product[i], lhs, rhs));
+    }
+  /* Consume both inputs before writing any overlapping destination.  */
+  for (unsigned int i = 0; i < 2; ++i)
+    emit_move_insn (riscv_subword (operands[0], i != 0), product[i]);
+  DONE;
+}
+  [(set_attr "type" "imul")
+   (set_attr "length" "32")])
+
 ;; Split PV2SI multiplication into element-wise scalar multiplications
 ;; when the pattern cannot be combined into more efficient forms (like PWMUL).
 ;; On RV32, PV2SI use register pairs,
