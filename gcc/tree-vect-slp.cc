@@ -8439,10 +8439,12 @@ vect_make_slp_decision (loop_vec_info loop_vinfo)
 	decided_to_slp++;
 
       else if (stmt_info && is_gimple_assign (stmt_info->stmt)
-	       && gimple_assign_rhs_code (stmt_info->stmt) == DOT_PROD_EXPR)
+	       && (gimple_assign_rhs_code (stmt_info->stmt) == DOT_PROD_EXPR
+		   || gimple_assign_rhs_code (stmt_info->stmt) == SAD_EXPR))
 	{
-	  /* A widening dot product can consume multiple input elements
-	     even when the accumulator has just one element.  */
+	  /* A widening dot product or sum of absolute differences can
+	     consume multiple input elements even when the accumulator
+	     has just one element.  */
 	  slp_tree input = SLP_TREE_CHILDREN (root)[0];
 	  if (SLP_TREE_VECTYPE (input)
 	      && known_gt (TYPE_VECTOR_SUBPARTS (SLP_TREE_VECTYPE (input)),

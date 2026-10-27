@@ -14096,9 +14096,8 @@ supportable_widening_operation (code_helper code,
       break;
 
     case SAD_EXPR:
-      c1 = SAD_EXPR;
-      c2 = SAD_EXPR;
-      break;
+      *code1 = *code2 = SAD_EXPR;
+      return directly_supported_p (code, vectype_out, vectype_in);
 
     case VEC_WIDEN_MULT_EVEN_EXPR:
       /* Support the recursion induced just above.  */
