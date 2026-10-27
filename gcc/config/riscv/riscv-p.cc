@@ -184,6 +184,20 @@ riscv_p_mulhi_acc_operand (rtx op)
   return op;
 }
 
+/* Return a packed register with the same low word as OP.  The caller must
+   discard the upper lane of the packed result before using this value.  */
+
+rtx
+riscv_p_low_word_packed_operand (rtx op)
+{
+  gcc_assert (GET_MODE (op) == PV2SImode
+	      && rvp_low_word_packed_operand (op, PV2SImode));
+  if (register_operand (op, PV2SImode))
+    return op;
+  return gen_lowpart (PV2SImode,
+		      riscv_p_mulhi_acc_operand (SUBREG_REG (op)));
+}
+
 /* Add a word product's high word to ACC modulo 2^32.  ROUND_P adds 2^31
    before extracting the product.  KIND has the same meaning as in
    riscv_p_expand_round_mulhi.  Model both result lanes and then extend

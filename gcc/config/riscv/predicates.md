@@ -820,6 +820,19 @@
     && UINTVAL (XEXP (op, 1)) == GET_MODE_MASK (SImode);
 })
 
+;; A packed register or a view of an explicitly extended scalar word.
+;; Only a splitter that discards the upper result lane may remove the
+;; extension; a full packed operation still observes both input lanes.
+(define_predicate "rvp_low_word_packed_operand"
+  (match_code "reg,subreg")
+{
+  if (register_operand (op, mode))
+    return true;
+  return SUBREG_P (op) && subreg_lowpart_p (op)
+    && GET_MODE (SUBREG_REG (op)) == DImode
+    && rvp_word_product_operand (SUBREG_REG (op), DImode);
+})
+
 (define_predicate "const_int4_operand"
   (and (match_code "const_int")
        (match_test "IN_RANGE (INTVAL (op), 0, 15)")))

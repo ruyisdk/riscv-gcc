@@ -4039,6 +4039,59 @@
   [(set_attr "type" "simd")
    (set_attr "mode" "DI")])
 
+;; Scalar consumers discard the upper packed result lane.  Remove explicit
+;; input word extensions only in this context, and keep the complete packed
+;; definition in the replacement so allocation accounts for both lanes.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(any_extend:DI
+	  (subreg:SI
+	    (unspec:PV2SI
+	      [(match_operand:PV2SI 3 "rvp_low_word_packed_operand")
+	       (match_operand:PV2SI 1 "rvp_low_word_packed_operand")
+	       (match_operand:PV2SI 2 "rvp_low_word_packed_operand")]
+	      RVP_WORD_ACC) 0)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && (!register_operand (operands[1], PV2SImode)
+       || !register_operand (operands[2], PV2SImode)
+       || !register_operand (operands[3], PV2SImode))"
+  [(const_int 0)]
+{
+  rtx result = gen_reg_rtx (PV2SImode);
+  for (int i = 1; i <= 3; ++i)
+    operands[i] = riscv_p_low_word_packed_operand (operands[i]);
+  emit_insn (gen_riscv_p_<rvp_word_acc>_pv2si (result, operands[1],
+					   operands[2], operands[3]));
+  convert_move (operands[0], gen_lowpart (SImode, result),
+		<CODE> == ZERO_EXTEND);
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:SI 0 "register_operand")
+	(subreg:SI
+	  (unspec:PV2SI
+	    [(match_operand:PV2SI 3 "rvp_low_word_packed_operand")
+	     (match_operand:PV2SI 1 "rvp_low_word_packed_operand")
+	     (match_operand:PV2SI 2 "rvp_low_word_packed_operand")]
+	    RVP_WORD_ACC) 0))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && (!register_operand (operands[1], PV2SImode)
+       || !register_operand (operands[2], PV2SImode)
+       || !register_operand (operands[3], PV2SImode))"
+  [(const_int 0)]
+{
+  rtx result = gen_reg_rtx (PV2SImode);
+  for (int i = 1; i <= 3; ++i)
+    operands[i] = riscv_p_low_word_packed_operand (operands[i]);
+  emit_insn (gen_riscv_p_<rvp_word_acc>_pv2si (result, operands[1],
+					   operands[2], operands[3]));
+  emit_move_insn (operands[0], gen_lowpart (SImode, result));
+  DONE;
+})
+
 (define_split
   [(set (match_operand:DI 0 "register_operand")
 	(sign_extend:DI
@@ -4087,6 +4140,54 @@
 (define_int_iterator RVP_MULHI_ACC
   [UNSPEC_PMULH UNSPEC_PMULHU UNSPEC_PMULHSU
    UNSPEC_PMULHR UNSPEC_PMULHRU UNSPEC_PMULHRSU])
+
+;; The same low-word proof applies without an accumulator.  Do not include
+;; saturating Q-format products, whose unused lanes may affect VXSAT.
+(define_split
+  [(set (match_operand:DI 0 "register_operand")
+	(any_extend:DI
+	  (subreg:SI
+	    (unspec:PV2SI
+	      [(match_operand:PV2SI 1 "rvp_low_word_packed_operand")
+	       (match_operand:PV2SI 2 "rvp_low_word_packed_operand")]
+	      RVP_MULHI_ACC) 0)))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && (!register_operand (operands[1], PV2SImode)
+       || !register_operand (operands[2], PV2SImode))"
+  [(const_int 0)]
+{
+  rtx result = gen_reg_rtx (PV2SImode);
+  operands[1] = riscv_p_low_word_packed_operand (operands[1]);
+  operands[2] = riscv_p_low_word_packed_operand (operands[2]);
+  emit_insn (gen_riscv_<rvp_scalar_mul_packed> (result, operands[1],
+					    operands[2]));
+  convert_move (operands[0], gen_lowpart (SImode, result),
+		<CODE> == ZERO_EXTEND);
+  DONE;
+})
+
+(define_split
+  [(set (match_operand:SI 0 "register_operand")
+	(subreg:SI
+	  (unspec:PV2SI
+	    [(match_operand:PV2SI 1 "rvp_low_word_packed_operand")
+	     (match_operand:PV2SI 2 "rvp_low_word_packed_operand")]
+	    RVP_MULHI_ACC) 0))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()
+   && (!register_operand (operands[1], PV2SImode)
+       || !register_operand (operands[2], PV2SImode))"
+  [(const_int 0)]
+{
+  rtx result = gen_reg_rtx (PV2SImode);
+  operands[1] = riscv_p_low_word_packed_operand (operands[1]);
+  operands[2] = riscv_p_low_word_packed_operand (operands[2]);
+  emit_insn (gen_riscv_<rvp_scalar_mul_packed> (result, operands[1],
+					    operands[2]));
+  emit_move_insn (operands[0], gen_lowpart (SImode, result));
+  DONE;
+})
 
 (define_int_attr rvp_mulhi_acc_kind
   [(UNSPEC_PMULH "0") (UNSPEC_PMULHU "1") (UNSPEC_PMULHSU "2")
