@@ -2639,7 +2639,7 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
   bool have_mult = false;
   bool swap_i2i3 = false;
   bool split_i2i3 = false;
-  bool split_note_pair = false;
+  bool split_pair = false;
   bool changed_i3_dest = false;
   bool i2_was_move = false, i3_was_move = false;
   int n_auto_inc = 0;
@@ -3659,17 +3659,16 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
      insns.  There are two ways to do this.  It can be split using a
      machine-specific method (like when you have an addition of a large
      constant) or by combine in the function find_split_point.  Also allow
-     the machine-specific split for two insns when substituting a REG_EQUAL
-     expression.  That split must strictly reduce the estimated cost.  */
+     the machine-specific split for two insns.  That split must strictly
+     reduce the estimated cost.  */
 
-  if ((i1 || i2mod == i2)
-      && insn_code_number < 0 && GET_CODE (newpat) == SET
+  if (insn_code_number < 0 && GET_CODE (newpat) == SET
       && asm_noperands (newpat) < 0)
     {
       rtx parallel, *split;
       rtx_insn *m_split_insn;
       unsigned int old_nregs, new_nregs;
-      split_note_pair = !i1;
+      split_pair = !i1;
 
       /* See if the MD file can split NEWPAT.  If it can't, see if letting it
 	 use I2DEST as a scratch register will help.  In the latter case,
@@ -4229,7 +4228,7 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
   /* Reject this combination if insn_cost reports that the replacement
      instructions are more expensive than the originals.  */
   if (!combine_validate_cost (i0, i1, i2, i3, newpat, newi2pat, other_pat,
-			      split_note_pair))
+			      split_pair))
     {
       undo_all ();
       return 0;
@@ -4245,7 +4244,7 @@ try_combine (rtx_insn *i3, rtx_insn *i2, rtx_insn *i1, rtx_insn *i0,
   if (equal_note && XEXP (equal_note, 0)
       && !CONSTANT_P (XEXP (equal_note, 0))
       && !newi2pat && !undobuf.other_insn
-      && !split_note_pair && !split_i2i3
+      && !split_pair && !split_i2i3
       && substed_i2 && !added_sets_2 && !i2dest_in_i2src
       && !i3_subst_into_i2 && !changed_i3_dest && !swap_i2i3
       && !i3dest_killed && REG_P (i2dest)
