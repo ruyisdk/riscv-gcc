@@ -651,9 +651,9 @@ riscv_p_sad_word_result_p (rtx reg, rtx_insn *insn)
   return false;
 }
 
-/* Accumulate byte or halfword differences into word or doubleword lanes.
-   Keep the two word sums independent; RV64 PABDSUMAU.B instead reduces
-   all eight bytes into a single doubleword.  */
+/* Accumulate byte or halfword differences for a reassociable reduction.
+   Keep word accumulation modular; RV64 PABDSUMAU.B instead accumulates
+   into a single doubleword and would carry between the partial sums.  */
 
 void
 riscv_p_expand_sad (rtx dest, rtx a, rtx b, rtx acc, bool unsigned_p)
@@ -694,10 +694,15 @@ riscv_p_expand_sad (rtx dest, rtx a, rtx b, rtx acc, bool unsigned_p)
     {
       if (TARGET_64BIT)
 	{
-	  rtx diff = gen_reg_rtx (PV8QImode);
-	  rtx ones = force_reg (PV8QImode, CONST1_RTX (PV8QImode));
-	  emit_insn (gen_uabdpv8qi3 (diff, a, b));
-	  emit_insn (gen_udot_prodpv2sipv8qi (dest, diff, ones, acc));
+	  /* SAD reductions do not require a particular distribution of the
+	     partial sums.  Sum all eight differences into the low word,
+	     leaving the high word zero, then add modulo the word width.
+	     This avoids the constant needed by the byte dot product without
+	     allowing a low-word carry to enter the high accumulator.  */
+	  rtx sum = gen_reg_rtx (DImode);
+	  emit_insn (gen_riscv_pabdsumu_di_rv64
+		     (sum, gen_lowpart (DImode, a), gen_lowpart (DImode, b)));
+	  emit_insn (gen_addpv2si3 (dest, gen_lowpart (PV2SImode, sum), acc));
 	}
       else
 	{
