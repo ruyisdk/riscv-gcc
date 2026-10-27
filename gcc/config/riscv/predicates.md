@@ -27,6 +27,11 @@
   (ior (match_operand 0 "const_arith_operand")
        (match_operand 0 "register_operand")))
 
+(define_predicate "riscv_p_bitwise_operand"
+  (ior (match_operand 0 "register_operand")
+       (and (match_code "const_vector")
+	    (match_test "riscv_p_bitwise_imm_p (op)"))))
+
 (define_predicate "prefetch_const_operand"
   (and (match_code "const_int")
        (match_test "(IN_RANGE (INTVAL (op),  0, 511))")))

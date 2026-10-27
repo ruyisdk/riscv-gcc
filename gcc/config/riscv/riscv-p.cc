@@ -40,6 +40,32 @@ along with GCC; see the file COPYING3.  If not see
 #include "emit-rtl.h"
 #include "optabs-tree.h"
 
+/* Return true if each physical word of OP is a logical immediate.  Check
+   the complete bit pattern, rather than the range of individual lanes.  */
+
+bool
+riscv_p_bitwise_imm_p (rtx op)
+{
+  if (!CONST_VECTOR_P (op))
+    return false;
+
+  machine_mode mode = GET_MODE (op);
+  if (mode != PV4QImode && mode != PV2HImode
+      && mode != PV8QImode && mode != PV4HImode && mode != PV2SImode)
+    return false;
+
+  unsigned int bytes = GET_MODE_SIZE (mode).to_constant ();
+  scalar_int_mode part_mode = bytes == 4 || !TARGET_64BIT ? SImode : DImode;
+  unsigned int part_bytes = GET_MODE_SIZE (part_mode);
+  for (unsigned int offset = 0; offset < bytes; offset += part_bytes)
+    {
+      rtx part = simplify_subreg (part_mode, op, mode, offset);
+      if (!part || !CONST_INT_P (part) || !SMALL_OPERAND (INTVAL (part)))
+	return false;
+    }
+  return true;
+}
+
 /* Return true if LO and HI can be read as one aligned PV4HI value.
    Preserve the little-endian lane order and the exact accessed range.  */
 

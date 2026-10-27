@@ -1664,8 +1664,15 @@
   DONE;
 })
 
-;; Bitwise operations for 4-byte vector modes (always single register)
-(define_insn "<optab><mode>3"
+;; Keep encodable masks visible until the packed operations are split.
+(define_expand "<optab><mode>3"
+  [(set (match_operand:PVMOVE 0 "register_operand")
+	(any_bitwise:PVMOVE (match_operand:PVMOVE 1 "register_operand")
+			   (match_operand:PVMOVE 2 "riscv_p_bitwise_operand")))]
+  "TARGET_RVP")
+
+;; Bitwise operations for 4-byte vector modes (always single register).
+(define_insn "*rvp_<optab><mode>3"
   [(set (match_operand:PV32 0 "register_operand" "=r")
 	(any_bitwise:PV32 (match_operand:PV32 1 "register_operand" "r")
 			  (match_operand:PV32 2 "register_operand" "r")))]
@@ -1673,14 +1680,6 @@
   "<insn>\t%0,%1,%2"
   [(set_attr "type" "logical")
    (set_attr "mode" "<MODE>")])
-
-;; Expose 8-byte logical operations through the standard optabs on both
-;; XLENs.  RV32 implements them with two scalar register operations.
-(define_expand "<optab><mode>3"
-  [(set (match_operand:PV64 0 "register_operand")
-	(any_bitwise:PV64 (match_operand:PV64 1 "register_operand")
-			 (match_operand:PV64 2 "register_operand")))]
-  "TARGET_RVP")
 
 ;; Bitwise operations for 8-byte vectors on RV64 (single register instruction).
 (define_insn "*rvp_<optab><mode>3_rv64"
@@ -1715,6 +1714,57 @@
   }
   [(set_attr "type" "logical")
    (set_attr "mode" "<MODE>")])
+
+;; Each scalar word uses an ordinary logical immediate.  With just one
+;; register input, order the writes to preserve any overlapping source.
+;; Expose RV32 scalar-pair inputs before allocation so their independent
+;; words need not remain a single live range.  Keep packed inputs intact.
+(define_insn_and_split "*rvp_<optab><mode>3_imm"
+  [(set (match_operand:PVMOVE 0 "register_operand" "=r")
+	(any_bitwise:PVMOVE
+	  (match_operand:PVMOVE 1 "register_operand" "r")
+	  (match_operand:PVMOVE 2 "riscv_p_bitwise_operand" "Wpl")))]
+  "TARGET_RVP && riscv_p_bitwise_imm_p (operands[2])"
+  "#"
+  "&& (reload_completed
+       || (!TARGET_64BIT && can_create_pseudo_p ()
+	   && known_eq (GET_MODE_SIZE (<MODE>mode), 8)
+	   && SUBREG_P (operands[1])
+	   && GET_MODE (SUBREG_REG (operands[1])) == DImode))"
+  [(const_int 0)]
+{
+  unsigned int bytes = GET_MODE_SIZE (<MODE>mode).to_constant ();
+  scalar_int_mode part_mode = bytes == 4 || !TARGET_64BIT ? SImode : DImode;
+  unsigned int part_bytes = GET_MODE_SIZE (part_mode);
+  unsigned int count = bytes / part_bytes;
+  rtx dest[2], src[2], mask[2];
+  for (unsigned int i = 0; i < count; ++i)
+    {
+      unsigned int offset = i * part_bytes;
+      dest[i] = simplify_gen_subreg (part_mode, operands[0], <MODE>mode,
+				    offset);
+      src[i] = simplify_gen_subreg (part_mode, operands[1], <MODE>mode,
+				   offset);
+      mask[i] = simplify_gen_subreg (part_mode, operands[2], <MODE>mode,
+				    offset);
+    }
+  if (count == 2 && reg_overlap_mentioned_p (dest[0], src[1]))
+    {
+      std::swap (dest[0], dest[1]);
+      std::swap (src[0], src[1]);
+      std::swap (mask[0], mask[1]);
+    }
+  for (unsigned int i = 0; i < count; ++i)
+    emit_insn (gen_rtx_SET (dest[i],
+			   gen_rtx_<CODE> (part_mode, src[i], mask[i])));
+  DONE;
+}
+  [(set_attr "type" "logical")
+   (set_attr "mode" "<MODE>")
+   (set (attr "length")
+	(if_then_else (match_test "!TARGET_64BIT
+				  && known_eq (GET_MODE_SIZE (<MODE>mode), 8)")
+		      (const_int 8) (const_int 4)))])
 
 ;; Packed forms of the Zbb inverted logical operations.  Keep the complete
 ;; expression until after reload so combine can also build masked moves.

@@ -142,6 +142,7 @@ extern void riscv_expand_ustrunc (rtx, rtx);
 extern void riscv_expand_sstrunc (rtx, rtx);
 extern void riscv_p_expand_vec_cmp (rtx *);
 extern void riscv_p_expand_vec_init (rtx, rtx);
+extern bool riscv_p_bitwise_imm_p (rtx);
 extern void riscv_p_expand_vcond_mask (rtx *);
 extern void riscv_p_expand_extend (rtx, rtx, bool);
 extern void riscv_p_expand_unpack (rtx, rtx, bool, bool);

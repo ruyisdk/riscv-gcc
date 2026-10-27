@@ -4547,6 +4547,13 @@ static bool
 riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UNUSED,
 		 int *total, bool speed)
 {
+  if (TARGET_RVP && (outer_code == AND || outer_code == IOR || outer_code == XOR)
+      && riscv_p_bitwise_imm_p (x))
+    {
+      *total = 0;
+      return true;
+    }
+
   if (TARGET_RVP && TARGET_64BIT && mode == SImode
       && riscv_p_halfword_pair_si_p (x))
     {
