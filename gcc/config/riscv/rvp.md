@@ -3513,7 +3513,7 @@
         (mult:SI (zero_extend:SI (match_operand:HI 1 "register_operand" "r"))
                  (sign_extend:SI (match_operand:HI 2 "register_operand" "r"))))]
   "TARGET_RVP && !TARGET_64BIT"
-  "mulsu.h00\t%0, %1, %2"
+  "mulsu.h00\t%0, %2, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3523,7 +3523,7 @@
         (mult:DI (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
                  (sign_extend:DI (match_operand:SI 2 "register_operand" "r"))))]
   "TARGET_RVP && TARGET_64BIT"
-  "mulsu.w00\t%0, %1, %2"
+  "mulsu.w00\t%0, %2, %1"
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
