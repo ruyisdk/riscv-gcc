@@ -4183,11 +4183,15 @@ build_saturation_binary_arith_call_and_insert (gimple_stmt_iterator *gsi,
 /* Recognize an exact signed widening product, optionally rounded by half
    a unit, scaled to the input precision and saturated at its signed maximum.
    This also handles scalar epilogues left after vector pattern recognition.
-   Keep the wide result conversion, since other users may observe it.  */
+   Return its internal function and narrow operands, or IFN_LAST on failure.
+   This does not modify the IL or require target support.  */
 
-static void
-match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
+internal_fn
+gimple_match_saturation_mulhs (gassign *stmt, tree *op0_out, tree *op1_out)
 {
+  if (gimple_assign_rhs_code (stmt) != MIN_EXPR)
+    return IFN_LAST;
+
   tree lhs = gimple_assign_lhs (stmt);
   tree wide_type = TREE_TYPE (lhs);
   tree bound = gimple_assign_rhs2 (stmt);
@@ -4195,26 +4199,26 @@ match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
   if (TREE_CODE (wide_type) != INTEGER_TYPE || TYPE_UNSIGNED (wide_type)
       || !type_has_mode_precision_p (wide_type)
       || TREE_CODE (bound) != INTEGER_CST || TREE_CODE (value) != SSA_NAME)
-    return;
+    return IFN_LAST;
 
   gassign *shift = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (value));
   if (!shift || gimple_assign_rhs_code (shift) != RSHIFT_EXPR
       || !types_compatible_p (wide_type, TREE_TYPE (value)))
-    return;
+    return IFN_LAST;
   tree amount = gimple_assign_rhs2 (shift);
   if (!tree_fits_uhwi_p (amount))
-    return;
+    return IFN_LAST;
   unsigned HOST_WIDE_INT scale = tree_to_uhwi (amount);
   unsigned int wide_precision = TYPE_PRECISION (wide_type);
   if (scale == 0 || scale >= wide_precision)
-    return;
+    return IFN_LAST;
 
   value = gimple_assign_rhs1 (shift);
   if (TREE_CODE (value) != SSA_NAME)
-    return;
+    return IFN_LAST;
   gassign *product = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (value));
   if (!product || !types_compatible_p (wide_type, TREE_TYPE (value)))
-    return;
+    return IFN_LAST;
 
   /* ((product >> (P - 2)) + 1) >> 1 has the same rounding as adding
      2^(P - 2) to the exact product before shifting by P - 1.  The input
@@ -4226,22 +4230,22 @@ match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
       value = gimple_assign_rhs1 (product);
       if (TREE_CODE (value) != SSA_NAME
 	  || !types_compatible_p (wide_type, TREE_TYPE (value)))
-	return;
+	return IFN_LAST;
       gassign *inner = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (value));
       if (!inner || gimple_assign_rhs_code (inner) != RSHIFT_EXPR)
-	return;
+	return IFN_LAST;
       tree inner_amount = gimple_assign_rhs2 (inner);
       if (!tree_fits_uhwi_p (inner_amount)
 	  || tree_to_uhwi (inner_amount) >= wide_precision - 1)
-	return;
+	return IFN_LAST;
       scale += tree_to_uhwi (inner_amount);
       value = gimple_assign_rhs1 (inner);
       if (TREE_CODE (value) != SSA_NAME
 	  || !types_compatible_p (wide_type, TREE_TYPE (value)))
-	return;
+	return IFN_LAST;
       product = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (value));
       if (!product)
-	return;
+	return IFN_LAST;
       two_shifts = true;
     }
 
@@ -4249,29 +4253,29 @@ match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
   if (gimple_assign_rhs_code (product) == PLUS_EXPR)
     {
       if (two_shifts)
-	return;
+	return IFN_LAST;
       round = gimple_assign_rhs2 (product);
       value = gimple_assign_rhs1 (product);
       if (TREE_CODE (round) != INTEGER_CST || TREE_CODE (value) != SSA_NAME
 	  || !types_compatible_p (wide_type, TREE_TYPE (value)))
-	return;
+	return IFN_LAST;
       product = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (value));
       if (!product)
-	return;
+	return IFN_LAST;
     }
 
   enum tree_code code = gimple_assign_rhs_code (product);
   if (code == WIDEN_MULT_PLUS_EXPR && !round && !two_shifts)
     round = gimple_assign_rhs3 (product);
   else if (code != WIDEN_MULT_EXPR && code != MULT_EXPR)
-    return;
+    return IFN_LAST;
 
   tree op0 = gimple_assign_rhs1 (product);
   tree op1 = gimple_assign_rhs2 (product);
   if (code == MULT_EXPR
       && (!types_compatible_p (wide_type, TREE_TYPE (op0))
 	  || !types_compatible_p (wide_type, TREE_TYPE (op1))))
-    return;
+    return IFN_LAST;
 
   /* Widening multiplication may itself have promoted the operands, for
      example from short to int when multiplying into long long.  Recover
@@ -4281,24 +4285,23 @@ match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
   tree *ops[] = { &op0, &op1 };
   for (tree *op : ops)
     {
-
       tree type = TREE_TYPE (*op);
       if (TREE_CODE (type) != INTEGER_TYPE || TYPE_UNSIGNED (type)
 	  || !type_has_mode_precision_p (type))
-	return;
+	return IFN_LAST;
       while (TYPE_PRECISION (type) > precision)
 	{
 	  if (TREE_CODE (*op) != SSA_NAME)
-	    return;
+	    return IFN_LAST;
 	  gassign *convert = dyn_cast <gassign *> (SSA_NAME_DEF_STMT (*op));
 	  if (!convert || !gimple_assign_cast_p (convert))
-	    return;
+	    return IFN_LAST;
 	  tree from = gimple_assign_rhs1 (convert);
 	  tree from_type = TREE_TYPE (from);
 	  if (TREE_CODE (from_type) != INTEGER_TYPE || TYPE_UNSIGNED (from_type)
 	      || !type_has_mode_precision_p (from_type)
 	      || TYPE_PRECISION (from_type) >= TYPE_PRECISION (type))
-	    return;
+	    return IFN_LAST;
 	  *op = from;
 	  type = from_type;
 	}
@@ -4308,7 +4311,7 @@ match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
   if (TREE_CODE (narrow_type) != INTEGER_TYPE || TYPE_UNSIGNED (narrow_type)
       || !type_has_mode_precision_p (narrow_type)
       || !types_compatible_p (narrow_type, TREE_TYPE (op1)))
-    return;
+    return IFN_LAST;
   if (TYPE_PRECISION (narrow_type) != precision
       || precision < 2 || 2 * precision > wide_precision
       || wi::to_wide (bound) != wi::mask (precision - 1, false, wide_precision)
@@ -4316,10 +4319,23 @@ match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
 	  && (TREE_CODE (round) != INTEGER_CST
 	      || wi::to_wide (round)
 		 != wi::shifted_mask (precision - 2, 1, false, wide_precision))))
-    return;
+    return IFN_LAST;
 
-  build_saturation_binary_arith_call_and_replace
-    (gsi, round || two_shifts ? IFN_SAT_MULHRS : IFN_SAT_MULHS, lhs, op0, op1);
+  *op0_out = op0;
+  *op1_out = op1;
+  return round || two_shifts ? IFN_SAT_MULHRS : IFN_SAT_MULHS;
+}
+
+/* Replace a recognized scalar Q-format expression with its optab call.  */
+
+static void
+match_saturation_mulhs (gimple_stmt_iterator *gsi, gassign *stmt)
+{
+  tree op0, op1;
+  internal_fn ifn = gimple_match_saturation_mulhs (stmt, &op0, &op1);
+  if (ifn != IFN_LAST)
+    build_saturation_binary_arith_call_and_replace
+      (gsi, ifn, gimple_assign_lhs (stmt), op0, op1);
 }
 
 /*

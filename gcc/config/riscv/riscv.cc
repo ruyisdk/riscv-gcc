@@ -76,6 +76,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-iterator.h"
 #include "gimple-expr.h"
 #include "tree-vectorizer.h"
+#include "tree-ssa-math-opts.h"
+#include "optabs-tree.h"
 #include "gcse.h"
 #include "tree-dfa.h"
 #include "target-globals.h"
@@ -15247,13 +15249,136 @@ class riscv_p_vector_costs : public vector_costs
 public:
   riscv_p_vector_costs (vec_info *vinfo, bool costing_for_scalar)
     : vector_costs (vinfo, costing_for_scalar)
-  {}
+  {
+    record_scalar_qmul_costs ();
+  }
 
   unsigned int add_stmt_cost (int count, vect_cost_for_stmt kind,
 			      stmt_vec_info stmt_info, slp_tree node,
 			      tree vectype, int misalign,
 			      vect_cost_model_location where) override;
+
+  void finish_cost (const vector_costs *) override;
+
+private:
+  void record_scalar_qmul_costs ();
+  void record_scalar_qmul_input (tree, gimple *, tree, tree);
+
+  /* Original statements eliminated by a later scalar Q-format fusion.  */
+  hash_set<gimple *> m_scalar_qmul_fused;
 };
+
+/* The generic model omits loop-control branches on both sides.  Once a
+   scalar Q-format chain has fused, loop control is a larger part of the
+   scalar iteration.  Charge a branch per scalar or vector iteration
+   rather than inflating the fused arithmetic cost.  Keep the original
+   accounting for loops without a proven scalar fusion.  */
+
+void
+riscv_p_vector_costs::finish_cost (const vector_costs *scalar_costs)
+{
+  if (!m_scalar_qmul_fused.is_empty ())
+    if (loop_vec_info loop_vinfo = dyn_cast <loop_vec_info> (m_vinfo))
+      if (!LOOP_VINFO_LOOP (loop_vinfo)->inner
+	  && (!LOOP_VINFO_NITERS_KNOWN_P (loop_vinfo)
+	      || (m_costing_for_scalar
+		  ? known_gt (LOOP_VINFO_INT_NITERS (loop_vinfo), 1U)
+		  : known_gt (LOOP_VINFO_INT_NITERS (loop_vinfo),
+			      LOOP_VINFO_VECT_FACTOR (loop_vinfo)))))
+	{
+	  vect_cost_model_location where
+	    = m_costing_for_scalar ? vect_prologue : vect_body;
+	  unsigned int cost = vector_costs::add_stmt_cost
+	    (1, cond_branch_taken, NULL, NULL, NULL_TREE, 0, where);
+	  if (dump_enabled_p ())
+	    dump_printf_loc (MSG_NOTE, vect_location,
+			     "RVP Q-format loop branch costs %u in %s loop\n",
+			     cost, m_costing_for_scalar ? "scalar" : "vector");
+	}
+  vector_costs::finish_cost (scalar_costs);
+}
+
+/* Record OP's definition only if the scalar fusion removes all its uses.
+   Stop at the narrow operands, shared values and block boundaries.  Pattern
+   statements belong to the vector loop and are not scalar uses.  */
+
+void
+riscv_p_vector_costs::record_scalar_qmul_input (tree op, gimple *parent,
+					     tree op0, tree op1)
+{
+  if (TREE_CODE (op) != SSA_NAME || op == op0 || op == op1)
+    return;
+  stmt_vec_info def_info = m_vinfo->lookup_def (op);
+  gassign *def = def_info ? dyn_cast <gassign *> (def_info->stmt) : NULL;
+  if (!def || gimple_bb (def) != gimple_bb (parent))
+    return;
+
+  imm_use_iterator iter;
+  use_operand_p use;
+  FOR_EACH_IMM_USE_FAST (use, iter, op)
+    {
+      gimple *user = USE_STMT (use);
+      if (is_gimple_debug (user) || user == parent)
+	continue;
+      stmt_vec_info user_info = m_vinfo->lookup_stmt (user);
+      if (!user_info || !is_pattern_stmt_p (user_info))
+	return;
+    }
+
+  if (m_scalar_qmul_fused.add (def))
+    return;
+  for (unsigned int i = 1; i < gimple_num_ops (def); ++i)
+    record_scalar_qmul_input (gimple_op (def, i), def, op0, op1);
+}
+
+/* Use exactly the scalar pass's matching rules, rather than assuming every
+   vector pattern can also be fused in the scalar loop.  The final narrowing
+   must consume the whole clamp result, so that no wide sign extension is
+   needed.  Keep the clamp's cost for the multiply instruction itself.  */
+
+void
+riscv_p_vector_costs::record_scalar_qmul_costs ()
+{
+  /* Start with native single-register vectors.  On RV32, multiword
+     vectors can benefit primarily from fewer address updates, which
+     are not represented by the statement costs below.  Discounting
+     scalar arithmetic alone would lose profitable unrolled loops.  */
+  if (!TARGET_64BIT || !optimize || !flag_expensive_optimizations
+      || TARGET_BIG_ENDIAN)
+    return;
+
+  for (unsigned int i = 0; i < m_vinfo->nbbs; ++i)
+    for (gimple_stmt_iterator si = gsi_start_bb (m_vinfo->bbs[i]);
+	 !gsi_end_p (si); gsi_next (&si))
+      {
+	gassign *stmt = dyn_cast <gassign *> (gsi_stmt (si));
+	if (!stmt || gimple_assign_rhs_code (stmt) != MIN_EXPR)
+	  continue;
+	tree op0, op1;
+	internal_fn ifn = gimple_match_saturation_mulhs (stmt, &op0, &op1);
+	if (ifn == IFN_LAST
+	    || !direct_internal_fn_supported_p (ifn, TREE_TYPE (op0),
+					       OPTIMIZE_FOR_BOTH))
+	  continue;
+
+	use_operand_p use;
+	gimple *user;
+	if (!single_imm_use (gimple_assign_lhs (stmt), &use, &user)
+	    || gimple_bb (user) != gimple_bb (stmt))
+	  continue;
+	gassign *cast = dyn_cast <gassign *> (user);
+	if (!cast || !gimple_assign_cast_p (cast))
+	  continue;
+	tree type = TREE_TYPE (gimple_assign_lhs (cast));
+	if (TREE_CODE (type) != INTEGER_TYPE
+	    || !type_has_mode_precision_p (type)
+	    || TYPE_PRECISION (type) != TYPE_PRECISION (TREE_TYPE (op0)))
+	  continue;
+
+	m_scalar_qmul_fused.add (cast);
+	record_scalar_qmul_input (gimple_assign_rhs1 (stmt), stmt, op0, op1);
+      }
+}
 
 /* Match the scalar widening product implemented by MUL.H00/MULSU.H00.  */
 
@@ -15323,6 +15448,10 @@ riscv_p_vector_costs::add_stmt_cost (int count, vect_cost_for_stmt kind,
 				   tree vectype, int misalign,
 				   vect_cost_model_location where)
 {
+  if (kind == scalar_stmt && stmt_info
+      && m_scalar_qmul_fused.contains (stmt_info->stmt))
+    count = 0;
+
   if (!TARGET_64BIT && kind == scalar_stmt && stmt_info
       && riscv_p_scalar_fused_p (m_vinfo, stmt_info))
     count = 0;
