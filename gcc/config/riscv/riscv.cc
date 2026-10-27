@@ -4320,6 +4320,34 @@ riscv_is_extend_p (rtx x)
   return GET_CODE (x) == SIGN_EXTEND || GET_CODE (x) == ZERO_EXTEND;
 }
 
+/* Return true if X is an RV32 widening add or accumulate.  Match only
+   register operands accepted by WADD[AU], including the one-source
+   accumulator form.  Do not hide loads or mixed-sign extensions.  */
+
+static bool
+riscv_p_widening_add_p (rtx x)
+{
+  if (GET_MODE (x) != DImode || GET_CODE (x) != PLUS)
+    return false;
+
+  rtx op0 = XEXP (x, 0);
+  rtx op1 = XEXP (x, 1);
+  if (register_operand (op1, DImode))
+    {
+      if (riscv_is_extend_p (op0))
+	return register_operand (XEXP (op0, 0), SImode);
+      if (GET_CODE (op0) != PLUS)
+	return false;
+      op1 = XEXP (op0, 1);
+      op0 = XEXP (op0, 0);
+    }
+
+  return riscv_is_extend_p (op0)
+	 && GET_CODE (op1) == GET_CODE (op0)
+	 && register_operand (XEXP (op0, 0), SImode)
+	 && reg_or_0_operand (XEXP (op1, 0), SImode);
+}
+
 /* Get the expected shift amount for MACC patterns based on MODE.
    Returns 16 for SImode, 32 for DImode, and 0 for other modes.  */
 
@@ -4967,6 +4995,12 @@ riscv_rtx_costs (rtx x, machine_mode mode, int outer_code, int opno ATTRIBUTE_UN
       return false;
 
     case PLUS:
+      if (TARGET_RVP && !TARGET_64BIT && !TARGET_BIG_ENDIAN
+	  && riscv_p_widening_add_p (x))
+	{
+	  *total = COSTS_N_INSNS (1);
+	  return true;
+	}
       /* RVP MULH.H0 idiom.  Combine builds
 	   (plus:SI (lshiftrt:SI (mult:SI ...) (const_int 16))
 		    (ashift:SI (subreg:SI (mult:DI ...) 4) (const_int 16)))
