@@ -5929,10 +5929,10 @@ default_builtin_alias (const builtin_description &d, const char *canonical_name,
 /* LTO validates streamed declarations against the original registration
    profile; it does not need to materialize the public catalog.  */
 static bool
-registration_signature (unsigned int code, const profile_info &profile,
+registration_signature (unsigned int code, const builtin_description &d,
+			const profile_info &profile,
 			type_index &type, prototype_index &prototype)
 {
-  const auto &d = builtin_description_for (code);
   bool runtime = profile.n == 0;
   if (exponent_p (d.expansion) && !runtime)
     return false;
@@ -6015,7 +6015,7 @@ register_functions ()
       const builtin_description &d = builtin_description_for (i);
       type_index type;
       prototype_index prototype;
-      if (!registration_signature (i, *active_profile (), type, prototype))
+      if (!registration_signature (i, d, *active_profile (), type, prototype))
 	continue;
       unsigned int code = (i << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       char name[160];
@@ -6166,7 +6166,8 @@ builtin_decl (unsigned int code, bool initialize_p)
       type_index type;
       prototype_index prototype;
       return (lto_registration_profile
-	      && registration_signature (code, *lto_registration_profile,
+	      && registration_signature (code, builtin_description_for (code),
+					 *lto_registration_profile,
 					 type, prototype))
 	? integer_zero_node : error_mark_node;
     }
@@ -6211,7 +6212,8 @@ run_lto_registration_selftests ()
 	{
 	  type_index type;
 	  prototype_index prototype;
-	  bool present = registration_signature (i, profile, type, prototype);
+	  bool present = registration_signature (i, builtin_description_for (i),
+					 profile, type, prototype);
 	  tree expected = present ? integer_zero_node : error_mark_node;
 	  ASSERT_EQ (builtin_decl (i, false), expected);
 	  ASSERT_EQ (builtin_decl (i, true), expected);
