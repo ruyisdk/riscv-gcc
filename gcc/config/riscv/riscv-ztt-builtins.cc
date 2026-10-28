@@ -4089,6 +4089,11 @@ run_decoder_anchor_selftests ()
 	matmul_limit = i + 1;
       if (legacy_elementwise_anchor_p (i))
 	elementwise_limit = i + 1;
+      if (d.prototype == PROTO_A_A_M_M && matmul_variant (d.expansion) >= 0)
+	{
+	  ASSERT_TRUE (stored_index > 0);
+	  ASSERT_EQ (stored_builtin_code (stored_index - 1), i);
+	}
       if (op < 0 || t.accumulator || floating_descriptor_p (t.descriptor))
 	continue;
       unsigned int q = exact_log2 (t.rows * t.columns);
@@ -4811,10 +4816,12 @@ decode_mixed_builtin (unsigned int code, mixed_description &result)
       static bool initialized;
       if (!initialized)
 	{
-	  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+	  for (unsigned int i = 0;
+	       i < ARRAY_SIZE (stored_builtin_descriptions); ++i)
 	    {
-	      const auto &d = builtin_description_for (i);
-	      int variant = matmul_variant (d.expansion);
+	      const auto &d = stored_builtin_descriptions[i];
+	      int variant = matmul_variant
+		(static_cast<expansion_index> (d.expansion));
 	      if (variant < 0 || d.prototype != PROTO_A_A_M_M
 		  || extended_integer_p (types[d.type].descriptor)
 		  || floating_descriptor_p (types[d.type].descriptor))
@@ -4824,7 +4831,7 @@ decode_mixed_builtin (unsigned int code, mixed_description &result)
 		= anchors[variant][exact_log2 (t.columns)]
 			 [mixed_dtype_number (t.descriptor)];
 	      gcc_assert (!anchor);
-	      anchor = i + 1;
+	      anchor = stored_builtin_code (i) + 1;
 	    }
 	  initialized = true;
 	}

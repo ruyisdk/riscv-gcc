@@ -212,6 +212,8 @@ numeric cache retains original first-match codes and missing results.
 Wide anchor lookup still includes Scalar families, but checks only the first
 TC of each compact destination group.  Later TC variants cannot match the
 canonical prototype; group boundaries and public anchor codes stay intact.
+Wide matmul anchors scan stored records only.  Compact Scalar and exponent
+families contain no matrix-multiply entries; cached anchors retain public codes.
 
 Structural folding
 ------------------
