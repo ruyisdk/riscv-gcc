@@ -177,8 +177,10 @@ canonical names use the existing destination/source type builders and local
 prefix cache after profile checks; public names and code order are unchanged.
 The contiguous wide Scalar interval stores one descriptor per operation and
 decodes destination/TC ordinals using the existing type axis.  Narrow
-destinations in this interval have wide TC entries only.  Other catalog
-records retain their order, with compact indices mapped back to public codes.
+destinations in this interval have wide TC entries only.  Narrow Scalar
+records use four historical intervals and a family-order map over the same
+operation descriptors and type axis.  Compact stored indices map back to
+public codes without changing either narrow or wide interval boundaries.
 
 Structural folding
 ------------------

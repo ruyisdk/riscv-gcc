@@ -1022,11 +1022,63 @@ static_assert (exponent_types[wide_scalar_type_first + wide_scalar_narrow_types]
 static_assert (exponent_types[wide_scalar_type_first + 10 * 4 * 11 - 1]
 	       == TYPE_U128_ROD_32X1);
 
+/* Narrow Scalar families were appended in a different order and four ranges.  */
+static constexpr unsigned char narrow_scalar_order[] =
+{
+#define ZTT_NSC_FAMILY(OP, ...) \
+  (ZTT_BUILTIN_##OP##_I8_RNU_1X1_I64_RNU - wide_scalar_first) \
+    / wide_scalar_per_operation,
+#define ZTT_INTRINSIC(ID, NAME, PROTO, EXPAND, TYPE)
+#include "riscv-ztt-intrinsics.def"
+#undef ZTT_INTRINSIC
+#undef ZTT_NSC_FAMILY
+};
+
+struct narrow_scalar_range
+{
+  unsigned int first;
+  unsigned int count;
+  unsigned int family;
+};
+
+static constexpr unsigned int narrow_scalar_per_operation
+  = wide_scalar_narrow_types * 24;
+static constexpr narrow_scalar_range narrow_scalar_ranges[] =
+{
+  { ZTT_BUILTIN_MBCAST_M_X_I8_RNU_1X1_I8_RNU,
+    narrow_scalar_per_operation, 0 },
+  { ZTT_BUILTIN_MADD_EW_X_I8_RNU_1X1_I8_RNU,
+    14 * narrow_scalar_per_operation, 1 },
+  { ZTT_BUILTIN_MMULACC_EW_X_I8_RNU_1X1_I8_RNU,
+    4 * narrow_scalar_per_operation, 15 },
+  { ZTT_BUILTIN_MCMPGE_EW_X_I8_RNU_1X1_I8_RNU,
+    2 * narrow_scalar_per_operation, 19 }
+};
+static constexpr unsigned int narrow_scalar_count
+  = ARRAY_SIZE (narrow_scalar_order) * narrow_scalar_per_operation;
+static_assert (ARRAY_SIZE (narrow_scalar_order) == ARRAY_SIZE (wide_scalar_families)
+	       && narrow_scalar_count == 133056);
+static_assert (ZTT_BUILTIN_MBCAST_M_X_U32_ROD_32X1_U32_ROD
+	       == narrow_scalar_ranges[0].first + narrow_scalar_ranges[0].count - 1);
+static_assert (ZTT_BUILTIN_MXOR_EW_X_U32_ROD_32X1_U32_ROD
+	       == narrow_scalar_ranges[1].first + narrow_scalar_ranges[1].count - 1);
+static_assert (ZTT_BUILTIN_MMULSUB_EW_X_U32_ROD_32X1_U32_ROD
+	       == narrow_scalar_ranges[2].first + narrow_scalar_ranges[2].count - 1);
+static_assert (ZTT_BUILTIN_MCMPLT_EW_X_U32_ROD_32X1_U32_ROD
+	       == narrow_scalar_ranges[3].first + narrow_scalar_ranges[3].count - 1);
+
 static constexpr unsigned int
 stored_builtin_code (unsigned int index)
 {
-  unsigned int code
-    = index < wide_scalar_first ? index : index + wide_scalar_count;
+  unsigned int code = index;
+  for (const auto &range : narrow_scalar_ranges)
+    {
+      if (code < range.first)
+	break;
+      code += range.count;
+    }
+  if (code >= wide_scalar_first)
+    code += wide_scalar_count;
   return code < exponent_first ? code : code + exponent_count;
 }
 
@@ -1059,16 +1111,18 @@ static constexpr stored_builtin_description stored_builtin_descriptions[] =
 {
 #define ZTT_EXPONENT_FAMILY(OP, SPELLING, PROTO)
 #define ZTT_WSC_FAMILY(OP, NAME, KIND)
+#define ZTT_NSC_FAMILY(OP, ...)
 #define ZTT_INTRINSIC(ID, NAME, PROTO, EXPAND, TYPE) \
   { stored_builtin_name (EXPAND_##EXPAND, NAME), \
     PROTO_##PROTO, EXPAND_##EXPAND, TYPE_##TYPE },
 #include "riscv-ztt-intrinsics.def"
 #undef ZTT_INTRINSIC
+#undef ZTT_NSC_FAMILY
 #undef ZTT_WSC_FAMILY
 #undef ZTT_EXPONENT_FAMILY
 };
 static_assert (ARRAY_SIZE (stored_builtin_descriptions) + exponent_count
-	       + wide_scalar_count
+	       + wide_scalar_count + narrow_scalar_count
 	       == ZTT_BUILTIN_MAX);
 
 /* Map stable builtin codes to stored metadata or compact family entries.
@@ -1076,6 +1130,22 @@ static_assert (ARRAY_SIZE (stored_builtin_descriptions) + exponent_count
 static constexpr builtin_description
 builtin_description_for (unsigned int code)
 {
+  unsigned int index = code;
+  for (const auto &range : narrow_scalar_ranges)
+    {
+      if (code < range.first)
+	break;
+      if (code < range.first + range.count)
+	{
+	  unsigned int offset = code - range.first;
+	  unsigned int op = range.family + offset / narrow_scalar_per_operation;
+	  const auto &f = wide_scalar_families[narrow_scalar_order[op]];
+	  offset %= narrow_scalar_per_operation;
+	  return { f.name, static_cast<prototype_index> (f.narrow + offset % 24),
+		   f.expansion, exponent_types[wide_scalar_type_first + offset / 24] };
+	}
+      index -= range.count;
+    }
   if (code >= wide_scalar_first && code < wide_scalar_first + wide_scalar_count)
     {
       unsigned int offset = code - wide_scalar_first;
@@ -1104,8 +1174,8 @@ builtin_description_for (unsigned int code)
       d.type = exponent_types[offset % exponent_type_count];
       return d;
     }
-  unsigned int index = code - (code < wide_scalar_first ? 0 : wide_scalar_count)
-    - (code < exponent_first ? 0 : exponent_count);
+  index -= (code < wide_scalar_first ? 0 : wide_scalar_count)
+    + (code < exponent_first ? 0 : exponent_count);
   const auto &d = stored_builtin_descriptions[index];
   return { d.name, static_cast<prototype_index> (d.prototype),
 	   static_cast<expansion_index> (d.expansion),
@@ -3858,7 +3928,11 @@ run_decoder_anchor_selftests ()
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const auto d = builtin_description_for (i);
-      if (!(i >= wide_scalar_first && i < wide_scalar_first + wide_scalar_count)
+      bool narrow = false;
+      for (const auto &range : narrow_scalar_ranges)
+	narrow |= i >= range.first && i < range.first + range.count;
+      if (!narrow
+	  && !(i >= wide_scalar_first && i < wide_scalar_first + wide_scalar_count)
 	  && !(i >= exponent_first && i < exponent_first + exponent_count))
 	{
 	  ASSERT_EQ (stored_builtin_code (stored_index), i);
@@ -4272,6 +4346,8 @@ run_wide_signature_selftests ()
 #define ZTT_WIDE_SCALAR_OP(OP, NAME, KIND) \
   check_scalar_name (ZTT_BUILTIN_##OP##_I8_RNU_1X1_I8_RNU, \
 		     "__riscv_ztt_" #NAME "_i8_rnu_1x1_i8_rnu"); \
+  check_scalar_name (ZTT_BUILTIN_##OP##_U32_ROD_32X1_U32_ROD, \
+		     "__riscv_ztt_" #NAME "_u32_rod_32x1_u32_rod"); \
   check_scalar_name (ZTT_BUILTIN_##OP##_I8_RNU_1X1_I64_RNU, \
 		     "__riscv_ztt_" #NAME "_i8_rnu_1x1_i64_rnu"); \
   check_scalar_name (ZTT_BUILTIN_##OP##_U32_ROD_32X1_U128_ROD, \
@@ -4284,6 +4360,8 @@ run_wide_signature_selftests ()
 #undef ZTT_WIDE_SCALAR_OP
   check_scalar_name (ZTT_BUILTIN_MBCAST_M_X_I8_RNU_1X1_I8_RNU,
 		     "__riscv_ztt_mbcast_m_x_i8_rnu_1x1_i8_rnu");
+  check_scalar_name (ZTT_BUILTIN_MBCAST_M_X_U32_ROD_32X1_U32_ROD,
+		     "__riscv_ztt_mbcast_m_x_u32_rod_32x1_u32_rod");
   check_scalar_name (ZTT_BUILTIN_MBCAST_M_X_U128_ROD_32X1_U128_ROD,
 		     "__riscv_ztt_mbcast_m_x_u128_rod_32x1_u128_rod");
   ASSERT_STREQ (canonical_builtin_name
