@@ -15255,6 +15255,23 @@ public:
     }
   };
 
+  /* These operations neither observe GROUP nor change any matrix datatype.  */
+  static bool reload_gap_p (rtx pat, rtx group)
+  {
+    if (GET_CODE (pat) != SET
+	|| reg_overlap_mentioned_p (group, SET_DEST (pat))
+	|| reg_overlap_mentioned_p (group, SET_SRC (pat)))
+      return false;
+    if (md_raw_transfer_p (pat) && private_slot_p (SET_DEST (pat)))
+      return MEM_ADDR_SPACE (SET_DEST (pat)) == ADDR_SPACE_GENERIC;
+    rtx src = SET_SRC (pat);
+    return REG_P (SET_DEST (pat)) && m_mode_p (GET_MODE (SET_DEST (pat)))
+      && GET_CODE (src) == UNSPEC_VOLATILE && XVECLEN (src, 0) == 7
+      && (XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_M
+	  || XINT (src, 1) == UNSPECV_ZTT_STATE_ELEMENTWISE_X)
+      && XVECEXP (src, 0, 2) == const0_rtx && !contains_mem_rtx_p (pat);
+  }
+
   /* Every changed packet must be overwritten before its Md can be observed.  */
   static reload_preparation
   reload_preparation_point (rtx_insn *use, rtx group, rtx descriptor,
@@ -15337,6 +15354,8 @@ public:
 	      return { p, definition, step, ~prepared };
 	    continue;
 	  }
+	if (reload_gap_p (pat, group))
+	  continue;
 	if (private_scalar_transfer_p (p)
 	    && MEM_ADDR_SPACE (SET_SRC (pat)) == ADDR_SPACE_GENERIC)
 	  continue;
@@ -18782,6 +18801,52 @@ run_partial_reload_selftests ()
 	  (use, group, d, 1, prepared);
 	ASSERT_EQ (plan.point, test == 1 || test == 2 ? nullptr : first);
       }
+  for (unsigned int test = 0; test != 16; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      machine_mode mode = matrix_mode (1);
+      rtx group = gen_rtx_REG (matrix_mode (2), M_REG_FIRST);
+      rtx d = gen_rtx_REG (Pmode, 10), a = gen_rtx_REG (Pmode, 11);
+      rtx slot = gen_rtx_MEM (mode, a);
+      set_mem_attrs_for_spill (slot);
+      rtx_insn *first = emit_insn
+	(gen_rtx_SET (gen_rtx_REG (mode, M_REG_FIRST), slot));
+      if (test < 5)
+	{
+	  rtx mem = copy_rtx (slot);
+	  if (test == 2) set_mem_expr (mem, NULL_TREE);
+	  if (test == 3) MEM_VOLATILE_P (mem) = 1;
+	  if (test == 4) MEM_NOTRAP_P (mem) = 0;
+	  emit_insn (gen_rtx_SET
+	    (mem, gen_rtx_REG (mode, M_REG_FIRST + (test == 1 ? 0 : 4))));
+	}
+      else if (test == 11)
+	emit_call_insn (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, a), const0_rtx));
+      else if (test == 12)
+	emit_insn (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      else
+	{
+	  bool matrix = test == 9 || test == 10 || test == 14;
+	  if (test == 14) mode = matrix_mode (2);
+	  rtx dst = gen_rtx_REG (mode, M_REG_FIRST + (test == 6 ? 1 : 4));
+	  rtx lhs = gen_rtx_REG
+	    (mode, M_REG_FIRST + (test == 7 ? 0 : test == 14 ? 1 : 6));
+	  rtx rhs = matrix
+	    ? gen_rtx_REG (mode, M_REG_FIRST + (test == 10 ? 0 : 8))
+	    : gen_rtx_REG (SImode, 12);
+	  emit_insn (gen_ztt_state_common_prepared
+	    (matrix ? UNSPECV_ZTT_STATE_ELEMENTWISE_M : UNSPECV_ZTT_STATE_ELEMENTWISE_X,
+	     mode, Pmode, dst, lhs, rhs, test == 8 ? d : const0_rtx,
+	     GEN_INT (test == 14 ? 16 : 8), test == 15 ? d : const0_rtx,
+	     GEN_INT (20), GEN_INT (test == 14 ? 8322 : matrix ? 4161 : 65)));
+	}
+      emit_insn (gen_rtx_SET (gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 1), slot));
+      rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+      flag_non_call_exceptions = test == 13;
+      auto plan = local_raw_spill::reload_preparation_point (use, group, d, 1);
+      bool expected = test == 0 || test == 5 || test == 9 || test == 15;
+      ASSERT_EQ (plan.point, expected ? first : nullptr);
+    }
   reload_completed = saved_reload;
   flag_non_call_exceptions = non_call;
   riscv_ztt_profile_string = profile;
