@@ -627,6 +627,9 @@ overlap and datatype rules; multi-packet sources retain their preparation.
 Row/column broadcasts and shifts use the same complete-reload
 proof. Their data operation, control operand and destination setup rules
 remain unchanged.
+Internal complete-value copies use this proof before copying a live old
+destination. The source reloads and mmov.m.m remain; destination Md setup
+still follows the existing disjoint-group rule.
 
 M-to-ACC transfers apply the complete-reload proof to each source packet,
 including tuple and packed groups. Destination Ad setup and the transfers

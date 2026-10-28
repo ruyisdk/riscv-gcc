@@ -15512,24 +15512,43 @@ reuse_local_md ()
 		  state.note_descriptor_use (descriptor);
 		  break;
 		case UNSPECV_ZTT_STATE_COPY:
-		  group = XVECEXP (src, 0, 0);
-		  descriptor = XVECEXP (src, 0, 1);
-		  if (XVECLEN (src, 0) == 3 && state.matches (group, descriptor))
-		    {
-		      rtx setup = state.matches (SET_DEST (set), descriptor)
-			? const0_rtx : descriptor;
-		      rtx prepared = gen_ztt_state_copy_prepared
-			(GET_MODE (group), Pmode, SET_DEST (set), group, setup);
-		      bool changed = validate_change
-			(insn, &PATTERN (insn), prepared, false);
-		      gcc_assert (changed);
-		      df_insn_rescan (insn);
-		      cleanup = true;
-		    }
-		  note_stores (insn, invalidate_md_store, &state);
-		  state.remember (group, descriptor);
-		  state.remember (SET_DEST (set), descriptor);
-		  continue;
+		  {
+		    group = XVECEXP (src, 0, 0);
+		    descriptor = XVECEXP (src, 0, 1);
+		    bool pending = XVECLEN (src, 0) == 3;
+		    bool ready = pending && state.matches (group, descriptor);
+		    local_raw_spill::reload_preparation reload_before;
+		    if (pending && !ready)
+		      reload_before = local_raw_spill::reload_preparation_point
+			(insn, group, descriptor, m_nregs (GET_MODE (group)));
+		    if (pending && (ready || reload_before))
+		      {
+			if (reload_before)
+			  state.invalidate (group);
+			rtx setup = state.matches (SET_DEST (set), descriptor)
+			  ? const0_rtx : descriptor;
+			rtx prepared = gen_ztt_state_copy_prepared
+			  (GET_MODE (group), Pmode, SET_DEST (set), group, setup);
+			bool changed = validate_change
+			  (insn, &PATTERN (insn), prepared, false);
+			gcc_assert (changed);
+			if (changed && reload_before)
+			  {
+			    reload_before.emit (group, descriptor, insn);
+			    descriptor_cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file,
+				       "Prepare Md before copy reload %d for insn %d\n",
+				       INSN_UID (reload_before.point), INSN_UID (insn));
+			  }
+			df_insn_rescan (insn);
+			cleanup = true;
+		      }
+		    note_stores (insn, invalidate_md_store, &state);
+		    state.remember (group, descriptor);
+		    state.remember (SET_DEST (set), descriptor);
+		    continue;
+		  }
 		case UNSPECV_ZTT_STATE_ROWCOL:
 		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
 		  {
