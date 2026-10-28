@@ -445,6 +445,10 @@ inputs are invariant along that axis.  Generic carrier calls revalidate their
 explicit datatype metadata; equal physical modes alone do not establish this
 proof.  The operation remains, including rounding, saturation and floating
 flags; neither input's live range is extended.
+One data-Scalar operation also preserves the source axis when its M input and
+result have the same logical type.  The validated scalar may have a different
+TC/RM; its conversion and the original operation remain.  Old-destination
+forms and intervening memory accesses do not satisfy this proof.
 Floating carrier calls are checked against their exact destination metadata.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.

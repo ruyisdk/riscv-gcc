@@ -8740,6 +8740,23 @@ describe_structure_binary (gimple *&call, type_index type,
   return d.type == type && operation.data == type && operation.count == type;
 }
 
+static bool
+structure_scalar_producer_p (gimple *&call, type_index type)
+{
+  if (!strip_structure_call_view (call, type))
+    return false;
+  unsigned int code = structure_builtin_code (call, 5);
+  if (!numeric_scalar_code_p (code))
+    return false;
+  tree args[5];
+  for (unsigned int i = 0; i < 5; ++i)
+    args[i] = gimple_call_arg (call, i);
+  builtin_description d;
+  scalar_description operation;
+  return describe_integer_scalar (code, 5, args, d, operation)
+    && d.type == type && operation.source == type;
+}
+
 /* A reduction broadcasts its result along the reduced axis.  Keep the fold
    and its conversions, rounding and status effects as the producer.  */
 static bool
@@ -8814,6 +8831,23 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	  if (strip_structure_view (input, operation.source, producers, end)
 	      && axis_invariant_structure_producer_p
 		   (SSA_NAME_DEF_STMT (input), operation.source, expansion,
+		    producers, end, false))
+	    {
+	      producers[end++] = SSA_NAME_DEF_STMT (input);
+	      if (call != producer)
+		producers[end++] = call;
+	      count = end;
+	      return true;
+	    }
+	}
+      call = producer;
+      if (count <= 10 && structure_scalar_producer_p (call, type))
+	{
+	  tree input = gimple_call_arg (call, 0);
+	  unsigned int end = count;
+	  if (strip_structure_view (input, type, producers, end)
+	      && axis_invariant_structure_producer_p
+		   (SSA_NAME_DEF_STMT (input), type, expansion,
 		    producers, end, false))
 	    {
 	      producers[end++] = SSA_NAME_DEF_STMT (input);
