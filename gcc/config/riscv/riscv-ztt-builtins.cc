@@ -8462,6 +8462,31 @@ uniform_structure_producer_p (gimple *producer, type_index type)
   return false;
 }
 
+static bool
+axis_invariant_structure_producer_p (gimple *producer, type_index type,
+				    expansion_index expansion)
+{
+  if (uniform_structure_producer_p (producer, type))
+    return true;
+  unsigned int code = structure_builtin_code (producer, 0);
+  if (code >= ZTT_BUILTIN_MAX)
+    return false;
+  const auto d = builtin_description_for (code);
+  if (d.type != type)
+    return false;
+  switch (expansion)
+    {
+    case EXPAND_MROWBCAST_EW_X:
+    case EXPAND_MROWGATHER_EW:
+      return d.expansion == EXPAND_MCOLID_EW;
+    case EXPAND_MCOLBCAST_EW_X:
+    case EXPAND_MCOLGATHER_EW:
+      return d.expansion == EXPAND_MROWID_EW;
+    default:
+      return false;
+    }
+}
+
 /* Retain the common producer as a local ownership witness.  */
 static bool
 same_structure_value_p (tree left, tree right, type_index type,
@@ -8815,7 +8840,10 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
 	  reusable = strip_structure_view (value, d.type, producers, count)
 	    && strip_structure_copies (value, d.type, producers, count,
 				       true, scatter)
-	    && uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type);
+	    && (scatter
+		? uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type)
+		: axis_invariant_structure_producer_p
+		    (SSA_NAME_DEF_STMT (value), d.type, d.expansion));
 	  if (reusable)
 	    {
 	      producers[count++] = SSA_NAME_DEF_STMT (value);
@@ -8916,7 +8944,7 @@ repeated_broadcast_value (const builtin_description &d,
   tree control = gimple_call_arg (stmt, 1);
   if (TREE_CODE (control) == INTEGER_CST
       && wi::extract_uhwi (wi::to_wide (control), 0, 32) == 0
-      && uniform_structure_producer_p (producer, d.type))
+      && axis_invariant_structure_producer_p (producer, d.type, d.expansion))
     {
       producers[count++] = producer;
       return local_structure_producers_p (gsi, producers, count)

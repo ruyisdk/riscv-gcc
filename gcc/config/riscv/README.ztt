@@ -381,6 +381,10 @@ Gathers from these uniform values reuse the input when an independent local
 store keeps the complete index value live.  Both operands must be non-packed
 basic Squares.  Gather indices wrap by masking, so arbitrary integer index
 bits are valid.  Original constructors, conversions and user loads remain.
+The same proof covers row broadcast/gather of column indices and column
+broadcast/gather of row indices: each selected row or column is identical.
+Index constructors retain their runtime representability checks, broadcasts
+still require zero low control bits, and gathers retain the index store.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.
 Integer scatter-add with an exact zero contribution likewise reuses its old
