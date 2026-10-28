@@ -8580,8 +8580,8 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
     : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
 }
 
-/* Broadcasts copy bits, including floating NaN payloads.  The first call
-   retains the control-range and ownership checks.  */
+/* Broadcasts copy bits, including floating NaN payloads.  Keep range checks
+   unless the index is known valid.  */
 static tree
 repeated_broadcast_value (const builtin_description &d,
 			  gimple_stmt_iterator *gsi, gcall *stmt)
@@ -8601,12 +8601,39 @@ repeated_broadcast_value (const builtin_description &d,
   if (!strip_structure_copies (value, d.type, producers, count, true))
     return NULL_TREE;
   gimple *producer = SSA_NAME_DEF_STMT (value);
+  tree control = gimple_call_arg (stmt, 1);
+  if (TREE_CODE (control) == INTEGER_CST
+      && wi::extract_uhwi (wi::to_wide (control), 0, 32) == 0
+      && is_gimple_call (producer))
+    {
+      unsigned int nargs = gimple_call_num_args (producer);
+      unsigned int code = structure_builtin_code (producer, nargs);
+      bool uniform = false;
+      if (nargs == 0 && code < ZTT_BUILTIN_MAX)
+	{
+	  const auto source = builtin_description_for (code);
+	  uniform = source.type == d.type
+	    && source.expansion == EXPAND_MZERO_2D_M;
+	}
+      else if (nargs == 1 && nominal_raw_broadcast_p (code))
+	{
+	  unsigned int dst = (code - nominal_broadcast_base)
+	    / numeric_scalar_dtype_count;
+	  tree arg = gimple_call_arg (producer, 0);
+	  uniform = dst == d.type && check_nominal_call (code, 1, &arg);
+	}
+      if (uniform)
+	{
+	  producers[count++] = producer;
+	  return local_structure_producers_p (gsi, producers, count)
+	    ? result : NULL_TREE;
+	}
+    }
   unsigned int code = structure_builtin_code (producer);
   if (code >= ZTT_BUILTIN_MAX)
     return NULL_TREE;
   const auto source = builtin_description_for (code);
   producers[count++] = producer;
-  tree control = gimple_call_arg (stmt, 1);
   tree source_control = gimple_call_arg (producer, 1);
   bool reusable_control = operand_equal_p (source_control, control, 0);
   if (TREE_CODE (control) == INTEGER_CST)

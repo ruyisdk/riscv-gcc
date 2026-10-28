@@ -360,6 +360,10 @@ broadcasts copy element bits without conversion or rounding, preserving
 NaN payloads and signed zeros.  Other differing controls and intervening
 state or memory operations do not qualify.
 
+Index-zero row/column broadcasts also reuse same-type zero and nominal
+scalar-broadcast results within that window.  The original constructor and
+scalar conversion remain; nonzero and dynamic indices retain their checks.
+
 The bounded copy search also recognizes zero-offset row/column shifts of
 complete basic Squares, using their existing full-value copy semantics.
 Such shifts may serve as terminal ownership witnesses.  Repeated broadcasts
