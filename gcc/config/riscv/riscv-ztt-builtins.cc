@@ -16444,6 +16444,8 @@ reuse_local_md ()
       path.leave (bb, state);
     }
   /* Dropping private operands exposes dead address and stride calculations.  */
+  if (riscv_ztt_rebase_stack_addresses ())
+    cleanup = descriptor_cleanup = true;
   if (cleanup)
     run_fast_dce ();
   if (riscv_ztt_remove_unused_workspace ())

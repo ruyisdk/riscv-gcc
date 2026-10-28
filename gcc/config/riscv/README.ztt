@@ -946,6 +946,11 @@ but no longer needs source descriptor GPRs.  Fast RTL DCE removes their dead
 address calculations before debug locations are computed.  Frame layout
 and runtime-N validation remain unchanged.  Partly prepared matmul keeps
 its private operands.
+In runtime-profile leaf functions, full-width address arithmetic can use
+SP plus an immediate when it equals the tracked FP/scale expression.
+Actual stack adjustments establish the relation; conflicting CFG joins
+reject it, and other register values stay local to each block.  Allocation,
+memory operations and CFA rules are unchanged.
 After DCE, leaf functions with no live stack references can
 drop an unused AME workspace allocation/release pair.  Both adjustments
 use the proven frame-size coefficient.

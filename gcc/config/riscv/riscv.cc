@@ -9590,6 +9590,8 @@ riscv_ztt_incoming_arg_load_p (rtx pat)
 }
 
 #if CHECKING_P
+static void riscv_ztt_stack_selftests (basic_block);
+
 void
 selftest::riscv_ztt_workspace_selftests ()
 {
@@ -9702,6 +9704,7 @@ selftest::riscv_ztt_workspace_selftests ()
   set_mem_expr (SET_SRC (incoming), NULL_TREE);
   ASSERT_FALSE (riscv_ztt_incoming_arg_load_p (incoming));
   end_sequence ();
+  riscv_ztt_stack_selftests (bb);
 }
 #endif
 
@@ -9874,6 +9877,287 @@ riscv_ztt_remove_unused_workspace ()
   delete_insn (allocate);
   delete_insn (release);
   return true;
+}
+
+/* Full-width affine values relative to the current FP and AME scale.
+   Unsigned arithmetic also proves the identities modulo RV32 XLEN.  */
+struct riscv_ztt_stack_value
+{
+  bool known;
+  unsigned HOST_WIDE_INT fp, scale, offset;
+
+  bool operator== (const riscv_ztt_stack_value &other) const
+  {
+    return known == other.known
+      && (!known || (fp == other.fp && scale == other.scale
+		    && offset == other.offset));
+  }
+};
+
+static riscv_ztt_stack_value
+riscv_ztt_stack_expr (rtx x, const riscv_ztt_stack_value *regs,
+		      unsigned int depth = 8)
+{
+  if (!depth)
+    return {};
+  if (CONST_INT_P (x))
+    return {true, 0, 0, (unsigned HOST_WIDE_INT) INTVAL (x)};
+  if (GET_MODE (x) != Pmode)
+    return {};
+  if (REG_P (x) && GP_REG_P (REGNO (x)))
+    return regs[REGNO (x) - GP_REG_FIRST];
+  enum rtx_code code = GET_CODE (x);
+  if (code != PLUS && code != MINUS && code != NEG
+      && code != ASHIFT && code != MULT)
+    return {};
+  auto a = riscv_ztt_stack_expr (XEXP (x, 0), regs, depth - 1);
+  if (!a.known)
+    return {};
+  if (code == NEG)
+    return {true, -a.fp, -a.scale, -a.offset};
+  auto b = riscv_ztt_stack_expr (XEXP (x, 1), regs, depth - 1);
+  if (!b.known)
+    return {};
+  if (code == PLUS)
+    return {true, a.fp + b.fp, a.scale + b.scale, a.offset + b.offset};
+  if (code == MINUS)
+    return {true, a.fp - b.fp, a.scale - b.scale, a.offset - b.offset};
+  if (code == MULT && !a.fp && !a.scale)
+    std::swap (a, b);
+  if (b.fp || b.scale)
+    return {};
+  if (code == ASHIFT)
+    {
+      if (b.offset >= GET_MODE_BITSIZE (Pmode))
+	return {};
+      b.offset = HOST_WIDE_INT_1U << b.offset;
+    }
+  return {true, a.fp * b.offset, a.scale * b.offset, a.offset * b.offset};
+}
+
+static void
+riscv_ztt_stack_clobber (rtx x, const_rtx, void *data)
+{
+  auto regs = static_cast<riscv_ztt_stack_value *> (data);
+  if (SUBREG_P (x))
+    x = SUBREG_REG (x);
+  if (!REG_P (x) || !GP_REG_P (REGNO (x)))
+    return;
+  unsigned int end = end_hard_regno (GET_MODE (x), REGNO (x));
+  for (unsigned int i = REGNO (x); i < end && GP_REG_P (i); ++i)
+    regs[i - GP_REG_FIRST] = {};
+}
+
+/* Track SP from actual adjustments.  Only its FP/scale relation crosses
+   blocks; ordinary address values are local to each block.  */
+static riscv_ztt_stack_value
+riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
+		       bool rewrite, bool &changed)
+{
+  riscv_ztt_stack_value regs[32] = {};
+  const unsigned int fp_reg = HARD_FRAME_POINTER_REGNUM - GP_REG_FIRST;
+  const unsigned int sp_reg = STACK_POINTER_REGNUM - GP_REG_FIRST;
+  const unsigned int scale_reg = RISCV_ZTT_SCALE_REGNUM - GP_REG_FIRST;
+  rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
+  auto anchors = [&] () {
+    regs[fp_reg] = {true, 1, 0, 0};
+    regs[scale_reg] = {true, 0, 1, 0};
+    regs[sp_reg] = sp;
+  };
+  anchors ();
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      rtx set = PATTERN (insn);
+      bool full_set = GET_CODE (set) == SET && REG_P (SET_DEST (set))
+	&& GET_MODE (SET_DEST (set)) == Pmode
+	&& GP_REG_P (REGNO (SET_DEST (set)));
+      auto value = full_set ? riscv_ztt_stack_expr (SET_SRC (set), regs)
+	: riscv_ztt_stack_value {};
+      bool fp_changed = modified_in_p (hard_frame_pointer_rtx, insn);
+      bool scale_changed = modified_in_p (scale, insn);
+      bool sp_changed = modified_in_p (stack_pointer_rtx, insn);
+      if (rewrite && full_set && !fp_changed && !scale_changed && !sp_changed
+	  && !RTX_FRAME_RELATED_P (insn) && !prologue_epilogue_contains (insn)
+	  && sp.known && sp.scale && value.known && value.fp == 1
+	  && value.scale == sp.scale
+	  && (GET_CODE (SET_SRC (set)) == PLUS
+	      || GET_CODE (SET_SRC (set)) == MINUS))
+	{
+	  HOST_WIDE_INT offset = trunc_int_for_mode (value.offset - sp.offset,
+						   Pmode);
+	  if (SMALL_OPERAND (offset))
+	    {
+	      rtx addr = plus_constant (Pmode, stack_pointer_rtx, offset);
+	      if (!rtx_equal_p (addr, SET_SRC (set))
+		  && validate_change (insn, &SET_SRC (set), addr, false))
+		{
+		  df_insn_rescan (insn);
+		  changed = true;
+		  if (dump_file)
+		    fprintf (dump_file, "Rebase AME stack address at insn %d\n",
+			     INSN_UID (insn));
+		}
+	    }
+	}
+      if (sp_changed)
+	sp = full_set && REGNO (SET_DEST (set)) == STACK_POINTER_REGNUM
+	  && value.known && value.fp == 1 ? value : riscv_ztt_stack_value {};
+      if (fp_changed)
+	{
+	  sp = {};
+	  if (full_set && REGNO (SET_DEST (set)) == HARD_FRAME_POINTER_REGNUM)
+	    {
+	      rtx src = SET_SRC (set);
+	      if (GET_CODE (src) == PLUS
+		  && rtx_equal_p (XEXP (src, 0), stack_pointer_rtx)
+		  && CONST_INT_P (XEXP (src, 1)))
+		sp = {true, 1, 0,
+		      -(unsigned HOST_WIDE_INT) INTVAL (XEXP (src, 1))};
+	    }
+	}
+      if (scale_changed && sp.known && sp.scale)
+	sp = {};
+      if (fp_changed || scale_changed)
+	memset (regs, 0, sizeof regs);
+      else
+	{
+	  note_stores (insn, riscv_ztt_stack_clobber, regs);
+	  if (full_set)
+	    regs[REGNO (SET_DEST (set)) - GP_REG_FIRST] = value;
+	}
+      anchors ();
+    }
+  return sp;
+}
+
+#if CHECKING_P
+static void
+riscv_ztt_stack_selftests (basic_block bb)
+{
+  using namespace selftest;
+  riscv_ztt_stack_value regs[32] = {};
+  rtx fp = hard_frame_pointer_rtx, sp = stack_pointer_rtx;
+  rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
+  rtx a = gen_rtx_REG (Pmode, 5), b = gen_rtx_REG (Pmode, 6);
+  regs[REGNO (fp)] = {true, 1, 0, 0};
+  regs[REGNO (scale)] = {true, 0, 1, 0};
+  rtx size = gen_rtx_ASHIFT (Pmode, scale, GEN_INT (4));
+  rtx addr = gen_rtx_MINUS (Pmode, fp, size);
+  riscv_ztt_stack_value expected = {true, 1, -HOST_WIDE_INT_1U * 16, 0};
+  ASSERT_TRUE (riscv_ztt_stack_expr (addr, regs) == expected);
+  regs[5] = expected;
+  expected.offset = -HOST_WIDE_INT_1U * 56;
+  ASSERT_TRUE (riscv_ztt_stack_expr (plus_constant (Pmode, a, -56), regs)
+	       == expected);
+  ASSERT_FALSE (riscv_ztt_stack_expr (gen_rtx_MULT (Pmode, a, scale), regs)
+		.known);
+  ASSERT_FALSE (riscv_ztt_stack_expr (gen_rtx_PLUS (Pmode, a, b), regs).known);
+  ASSERT_FALSE (riscv_ztt_stack_expr
+		(gen_rtx_LSHIFTRT (Pmode, a, GEN_INT (1)), regs).known);
+  ASSERT_FALSE (riscv_ztt_stack_expr
+		(gen_rtx_ASHIFT (Pmode, scale, GEN_INT (GET_MODE_BITSIZE (Pmode))),
+		 regs).known);
+  ASSERT_FALSE (riscv_ztt_stack_expr (gen_rtx_REG (QImode, 5), regs).known);
+  ASSERT_FALSE (riscv_ztt_stack_expr (addr, regs, 1).known);
+  riscv_ztt_stack_clobber (gen_rtx_REG (QImode, 5), nullptr, regs);
+  ASSERT_FALSE (regs[5].known);
+  ASSERT_TRUE (regs[REGNO (fp)].known);
+
+  rtx_insn *head = BB_HEAD (bb), *end = BB_END (bb);
+  auto append = [bb] (rtx pat) {
+    rtx_insn *insn = emit_insn (pat);
+    set_block_for_insn (insn, bb);
+  };
+  auto finish = [bb, head, end] (riscv_ztt_stack_value initial) {
+    BB_HEAD (bb) = get_insns ();
+    BB_END (bb) = get_last_insn ();
+    bool changed = false;
+    auto result = riscv_ztt_stack_block (bb, initial, false, changed);
+    ASSERT_FALSE (changed);
+    BB_HEAD (bb) = head;
+    BB_END (bb) = end;
+    end_sequence ();
+    return result;
+  };
+  start_sequence ();
+  append (gen_rtx_SET (fp, plus_constant (Pmode, sp, 208)));
+  append (gen_rtx_SET (scale, b));
+  append (gen_rtx_SET (a, size));
+  append (gen_rtx_SET (sp, gen_rtx_MINUS (Pmode, sp, a)));
+  expected.offset = -HOST_WIDE_INT_1U * 208;
+  ASSERT_TRUE (finish ({}) == expected);
+  start_sequence ();
+  append (gen_rtx_SET (sp, plus_constant (Pmode, sp, -16)));
+  auto adjusted = expected;
+  adjusted.offset -= 16;
+  ASSERT_TRUE (finish (expected) == adjusted);
+  start_sequence ();
+  append (gen_rtx_SET (scale, b));
+  ASSERT_FALSE (finish (expected).known);
+  start_sequence ();
+  append (gen_rtx_SET (fp, b));
+  ASSERT_FALSE (finish (expected).known);
+  start_sequence ();
+  append (gen_rtx_SET (sp, b));
+  ASSERT_FALSE (finish (expected).known);
+  start_sequence ();
+  append (gen_rtx_CLOBBER (VOIDmode, a));
+  ASSERT_TRUE (finish (expected) == expected);
+}
+#endif
+
+bool
+riscv_ztt_rebase_stack_addresses ()
+{
+  if (!riscv_ztt::runtime_profile_p () || !riscv_ztt_explicit_state_p ()
+      || !frame_pointer_needed || !crtl->is_leaf || cfun->calls_alloca
+      || cfun->calls_setjmp || cfun->has_nonlocal_label || crtl->calls_eh_return
+      || crtl->stack_realign_needed || flag_non_call_exceptions
+      || flag_stack_clash_protection || flag_stack_check || flag_stack_protect
+      || cfun->machine->naked_p || cfun->machine->interrupt_handler_p
+      || cfun->machine->frame.vmask || get_frame_size ().coeffs[2] <= 0)
+    return false;
+  auto_vec<riscv_ztt_stack_value> states;
+  auto_vec<unsigned char> seen;
+  states.safe_grow_cleared (last_basic_block_for_fn (cfun));
+  seen.safe_grow_cleared (last_basic_block_for_fn (cfun));
+  auto_vec<basic_block, 16> worklist;
+  basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+  worklist.safe_push (entry);
+  seen[entry->index] = 1;
+  bool changed = false;
+  while (!worklist.is_empty ())
+    {
+      basic_block bb = worklist.pop ();
+      auto state = states[bb->index];
+      if (bb != entry)
+	state = riscv_ztt_stack_block (bb, state, false, changed);
+      edge e;
+      edge_iterator ei;
+      FOR_EACH_EDGE (e, ei, bb->succs)
+	{
+	  if (e->flags & (EDGE_ABNORMAL | EDGE_ABNORMAL_CALL | EDGE_EH | EDGE_FAKE))
+	    return false;
+	  if (e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+	    continue;
+	  if (!seen[e->dest->index])
+	    {
+	      seen[e->dest->index] = 1;
+	      states[e->dest->index] = state;
+	      worklist.safe_push (e->dest);
+	    }
+	  else if (!(states[e->dest->index] == state))
+	    return false;
+	}
+    }
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    if (seen[bb->index])
+      riscv_ztt_stack_block (bb, states[bb->index], true, changed);
+  return changed;
 }
 
 /* Return true if the current function must save register REGNO.  */
