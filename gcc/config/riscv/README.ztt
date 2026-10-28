@@ -186,6 +186,9 @@ narrow interval scan and subtract its complete prefix directly.
 Store lookup scans only stored metadata, since the compact Scalar families
 contain no stores.  Matches map back to the original public codes; the
 cache retains the first matching code and the missing-entry sentinel.
+Column extract/transfer and matmul redirection also scan stored records.
+Their cache maps only eligible records back to the first public code;
+compact Scalar families do not enter these redirect domains.
 
 Structural folding
 ------------------

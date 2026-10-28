@@ -2824,17 +2824,19 @@ redirect_builtin_code (prototype_index prototype, expansion_index expansion,
   static unsigned int scanned;
   if (unsigned int *code = codes.get (key))
     return *code;
-  while (scanned < ZTT_BUILTIN_MAX)
+  while (scanned < ARRAY_SIZE (stored_builtin_descriptions))
     {
-      unsigned int i = scanned++;
-      const auto &d = builtin_description_for (i);
-      unsigned int candidate = redirect_key (d.prototype, d.expansion, d.type);
+      const auto &d = stored_builtin_descriptions[scanned++];
+      unsigned int candidate = redirect_key
+	(static_cast<prototype_index> (d.prototype),
+	 static_cast<expansion_index> (d.expansion),
+	 static_cast<type_index> (d.type));
       if (candidate == UINT_MAX)
 	continue;
       bool present;
       unsigned int &code = codes.get_or_insert (candidate, &present);
       if (!present)
-	code = i;
+	code = stored_builtin_code (scanned - 1);
       if (candidate == key)
 	return code;
     }
