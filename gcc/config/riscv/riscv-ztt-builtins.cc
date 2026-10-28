@@ -9953,10 +9953,16 @@ same_matrix_arguments_p (tree exp, type_index type, unsigned int inputs,
   return TREE_CODE (a) == SSA_NAME && a == b;
 }
 
+struct concat_operand
+{
+  rtx value[2] = {};
+};
+
 static bool concat_operand_sources (tree, type_index, unsigned int,
-				    unsigned int, rtx *, bool = false,
+				    unsigned int, concat_operand *, bool = false,
 				    tree = NULL_TREE);
-static rtx concat_operand_part (rtx *, unsigned int, unsigned int, unsigned int);
+static rtx concat_operand_part (concat_operand *, unsigned int, unsigned int,
+			       unsigned int);
 
 /* A retained local input can produce zero without reading each tuple part.  */
 static rtx
@@ -10055,7 +10061,7 @@ expand_elementwise (const builtin_description &d,
     count = force_reg (Pmode, count);
   rtx result = gen_reg_rtx (modes[0]);
   const auto &f = operation.formation;
-  rtx sources[2][2];
+  concat_operand sources[2][2];
   bool concat[2] = {};
   for (unsigned int operand = 1; operand < (scalar ? 2U : 3U); ++operand)
     {
@@ -10136,10 +10142,91 @@ ter_structure_view_p (gimple *stmt)
     && get_gimple_for_ssa_name (lhs) == stmt;
 }
 
+/* Recover at most four complete inputs from two levels of concatenation.  */
+static bool
+nested_concat_sources (gimple *parent, type_index half,
+		       unsigned int half_insns, unsigned int step,
+		       gimple *const *outer, unsigned int count,
+		       gimple *load, concat_operand *sources)
+{
+  if (half_insns < 2 || half_insns % 2)
+    return false;
+  gimple *producers[6];
+  for (unsigned int i = 0; i < count; ++i)
+    producers[i] = outer[i];
+  tree inputs[4];
+  type_index quarter = TYPE_MAX;
+  rtx values[4];
+  for (unsigned int i = 0; i < 2; ++i)
+    {
+      tree value = gimple_call_arg (parent, i);
+      if (!has_single_use (value)
+	  || !strip_structure_view (value, half, producers, count)
+	  || !has_single_use (value))
+	return false;
+      gimple *producer = SSA_NAME_DEF_STMT (value);
+      unsigned int code = structure_builtin_code (producer);
+      if (code >= ZTT_BUILTIN_MAX)
+	return false;
+      const auto d = builtin_description_for (code);
+      if (d.expansion != EXPAND_MCONCAT || d.type != half)
+	return false;
+      quarter = m_utility_source_type (d.prototype, half);
+      if (quarter == TYPE_MAX
+	  || type_nregs (quarter) != half_insns / 2 * step)
+	return false;
+      producers[count++] = producer;
+      for (unsigned int j = 0; j < 2; ++j)
+	{
+	  tree input = gimple_call_arg (producer, j);
+	  if (TREE_CODE (input) != SSA_NAME
+	      || type_for_tree (TREE_TYPE (input)) != quarter
+	      || var_to_partition (SA.map, input) == NO_PARTITION)
+	    return false;
+	  rtx reg = get_rtx_for_ssa_name (input);
+	  if (!reg || !REG_P (reg) || REGNO (reg) < FIRST_PSEUDO_REGISTER)
+	    return false;
+	  inputs[2 * i + j] = input;
+	  values[2 * i + j] = reg;
+	}
+    }
+  auto gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
+  if (!local_structure_producers_p (&gsi, producers, count, load))
+    return false;
+  unsigned int seen = 0, wanted = (1U << count) - 1;
+  for (gsi_prev_nondebug (&gsi); seen != wanted; gsi_prev_nondebug (&gsi))
+    {
+      gimple *stmt = gsi_stmt (gsi);
+      for (unsigned int i = 0; i < count; ++i)
+	if (stmt == producers[i])
+	  seen |= 1U << i;
+      tree lhs = gimple_get_lhs (stmt);
+      if (!lhs || !m_mode_p (TYPE_MODE (TREE_TYPE (lhs)))
+	  || ter_structure_view_p (stmt))
+	continue;
+      if (TREE_CODE (lhs) != SSA_NAME
+	  || var_to_partition (SA.map, lhs) == NO_PARTITION)
+	return false;
+      rtx dest = get_rtx_for_ssa_name (lhs);
+      if (!dest || !REG_P (dest) || REGNO (dest) < FIRST_PSEUDO_REGISTER)
+	return false;
+      for (rtx reg : values)
+	if (reg_overlap_mentioned_p (dest, reg))
+	  return false;
+    }
+  for (unsigned int i = 0; i < 4; ++i)
+    sources[i / 2].value[i % 2]
+      = force_reg (type_mode (quarter), expand_normal (inputs[i]));
+  if (dump_file)
+    fprintf (dump_file, "Use nested concat inputs\n");
+  return true;
+}
+
 /* Use complete concat halves without moving the original ownership access.  */
 static bool
 concat_operand_sources (tree pair, type_index type,
-			unsigned int insns, unsigned int step, rtx *sources,
+			unsigned int insns, unsigned int step,
+			concat_operand *sources,
 			bool shared_input, tree companion)
 {
   unsigned int half_insns = insns / 2;
@@ -10219,21 +10306,27 @@ concat_operand_sources (tree pair, type_index type,
   if (shared_input && has_single_use (gimple_call_arg (producer, 0))
       && has_single_use (gimple_call_arg (producer, 1)))
     return false;
+  if (nested_concat_sources (producer, half, half_insns, step,
+			     producers, count, load, sources))
+    return true;
   for (unsigned int i = 0; i < 2; ++i)
-    sources[i] = force_reg (type_mode (half),
-			    expand_normal (gimple_call_arg (producer, i)));
+    sources[i].value[0]
+      = force_reg (type_mode (half), expand_normal (gimple_call_arg (producer, i)));
   return true;
 }
 
 static rtx
-concat_operand_part (rtx *sources, unsigned int insns, unsigned int step,
+concat_operand_part (concat_operand *sources, unsigned int insns, unsigned int step,
 		     unsigned int i)
 {
   unsigned int half_insns = insns / 2;
-  rtx group = sources[i / half_insns];
+  const auto &source = sources[i / half_insns];
+  i %= half_insns;
+  unsigned int parts = source.value[1] ? half_insns / 2 : half_insns;
+  rtx group = source.value[i / parts];
   machine_mode mode = matrix_mode (step);
   return simplify_gen_subreg (mode, group, GET_MODE (group),
-			      GET_MODE_SIZE (mode) * (i % half_insns));
+			      GET_MODE_SIZE (mode) * (i % parts));
 }
 
 /* Avoid extending both recovered halves across an ACC spill boundary.  */
@@ -10343,7 +10436,7 @@ expand_conversion (const builtin_description &d,
       return result;
     }
   const auto &f = operation.formation;
-  rtx sources[2];
+  concat_operand sources[2];
   bool concat = concat_operand_sources (CALL_EXPR_ARG (exp, 0),
 					operation.source, f.insns, f.step[1],
 					sources);
@@ -10425,7 +10518,7 @@ expand_scalar (const builtin_description &d, const scalar_description &operation
   rtx scalar_descriptor = exponent ? const0_rtx : GEN_INT (types[operation.scalar].descriptor);
   rtx result = gen_reg_rtx (modes[0]);
   const auto &f = operation.formation;
-  rtx sources[2];
+  concat_operand sources[2];
   bool concat = concat_operand_sources (CALL_EXPR_ARG (exp, ternary >= 0 ? 1 : 0),
 					operation.source, f.insns, f.step[1],
 					sources, ternary >= 0);
@@ -10571,7 +10664,7 @@ expand_memory (const builtin_description &d, tree exp, rtx target)
   rtx stride = variant == 1 ? const0_rtx : force_reg (Pmode, scalar_stride);
   rtx value = store_p ? matrix_register (mode, exp, variant == 1 ? 1 : 2)
     : (packets == 1 ? result_register (mode, target) : gen_reg_rtx (mode));
-  rtx sources[2];
+  concat_operand sources[2];
   bool concat = store_p && concat_operand_sources
     (CALL_EXPR_ARG (exp, variant == 1 ? 1 : 2), d.type, packets, group,
      sources);
@@ -10737,7 +10830,7 @@ expand_matmul (const builtin_description &d, unsigned int lhs_dtype,
   type_index rhs_type = matrix_type_index
     (rhs_dtype, shape.rhs_column ? shape.squares : 1,
      shape.rhs_column ? 1 : shape.squares);
-  rtx lhs_sources[2], rhs_sources[2];
+  concat_operand lhs_sources[2], rhs_sources[2];
   /* Unequal packet widths can increase spill pressure after substitution.  */
   bool same_steps = formation.lhs_step == formation.rhs_step;
   bool lhs_concat = same_steps && concat_operand_sources
@@ -11123,7 +11216,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 		fprintf (dump_file, "Forward zero M to ACC\n");
 	      return target;
 	    }
-	  rtx sources[2];
+	  concat_operand sources[2];
 	  if (optimize && runtime_profile_p ()
 	      && acc_nregs (mode) >= 2 * acc_transfer_accs (mode)
 	      && acc_full_m_nregs (mode) < active_profile ()->mregs
@@ -11132,7 +11225,8 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 					 2, acc_full_m_nregs (mode) / 2, sources))
 	    {
 	      emit_insn (gen_ztt_typed_acc_from_concat
-			 (mode, target, sources[0], sources[1], descriptor));
+			 (mode, target, sources[0].value[0], sources[1].value[0],
+			  descriptor));
 	      if (dump_file)
 		fprintf (dump_file, "Use concat inputs for M-to-ACC\n");
 	      return target;
@@ -11231,7 +11325,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
       machine_mode part_mode = matrix_mode (group);
       poly_int64 part_size = GET_MODE_SIZE (part_mode);
       rtx memory = NULL_RTX, lhs = NULL_RTX, rhs = NULL_RTX;
-      rtx sources[2][2];
+      concat_operand sources[2][2];
       bool concat[2] = {};
       if (d.expansion == EXPAND_MSS_RM)
 	{
