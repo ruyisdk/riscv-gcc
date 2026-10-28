@@ -708,6 +708,9 @@ intersection with the entry state can remove repeated input preparation.
 Calls, asm, unknown operations and other loop shapes discard loop facts.
 After cleanup refreshes liveness, a dead prologue scale result triggers one
 final DCE pass.  N validation, fixed register saves and CFI remain intact.
+The loop proof also accepts complete common binary groups with matching
+constant descriptors. Skipped input preparation requires an independent
+body fact; mixed types and partial group overlap remain boundaries.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
 Narrow broadcast queries read the GPR constant cache directly and truncate

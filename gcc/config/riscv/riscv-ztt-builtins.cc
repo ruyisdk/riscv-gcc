@@ -14088,6 +14088,60 @@ record_binary_md (rtx_insn *insn, rtx lhs, rtx rhs, rtx dest,
   state.remember (dest, descriptor);
 }
 
+static void
+record_common_md (rtx_insn *insn, rtx dest, rtx src, unsigned int steps,
+		  bool scalar, bool old_dest, local_md_state &state)
+{
+  note_stores (insn, invalidate_md_store, &state);
+  /* Follow packet setup order; overlapping facts cannot coexist.  */
+  for (unsigned int pos = 0; pos < 3; ++pos)
+    {
+      unsigned int i = old_dest ? pos : (pos + 1) % 3;
+      if (scalar && i == 2)
+	continue;
+      rtx reg = i ? XVECEXP (src, 0, i - 1) : dest;
+      unsigned int count = m_nregs (GET_MODE (reg));
+      unsigned int step = datatype_step (steps, i);
+      gcc_assert (step && count % step == 0);
+      state.invalidate (reg);
+      for (unsigned int r = 0; r < count; r += step)
+	state.remember (gen_rtx_REG (matrix_mode (step), REGNO (reg) + r),
+			XVECEXP (src, 0, 2 + i));
+    }
+}
+
+/* Limit the loop proof to complete binary groups with one constant Md.  */
+static bool
+md_loop_common_p (rtx set, local_md_state &state)
+{
+  rtx src = SET_SRC (set);
+  if (XVECLEN (src, 0) != 9)
+    return false;
+  rtx regs[] = { SET_DEST (set), XVECEXP (src, 0, 0), XVECEXP (src, 0, 1) };
+  unsigned int steps = UINTVAL (XVECEXP (src, 0, 7));
+  unsigned int mask = UINTVAL (XVECEXP (src, 0, 8));
+  rtx value = NULL_RTX;
+  for (unsigned int i = 0; i != 3; ++i)
+    {
+      rtx descriptor = XVECEXP (src, 0, 2 + i);
+      if (!local_md_state::full_gpr_p (descriptor)
+	  || GET_MODE (regs[i]) != GET_MODE (regs[0])
+	  || datatype_step (steps, i) != m_nregs (GET_MODE (regs[i])))
+	return false;
+      rtx current = state.descriptor_value (descriptor);
+      if (!CONST_INT_P (current) || (value && !rtx_equal_p (value, current)))
+	return false;
+      value = current;
+      if ((mask & (1U << i)) && !state.matches (regs[i], descriptor))
+	return false;
+      for (unsigned int j = 0; j < i; ++j)
+	if (reg_overlap_mentioned_p (regs[i], regs[j])
+	    && !rtx_equal_p (regs[i], regs[j]))
+	  return false;
+    }
+  return true;
+}
+
 /* Compute a backedge state without assuming any loop-entry facts.  */
 static bool
 md_loop_exit (basic_block bb, local_md_state &state)
@@ -14116,6 +14170,15 @@ md_loop_exit (basic_block bb, local_md_state &state)
       rtx group = SET_DEST (set), descriptor;
       switch (XINT (src, 1))
 	{
+	case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE:
+	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT:
+	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
+	  if (!md_loop_common_p (set, state))
+	    return false;
+	  record_common_md (insn, group, src, UINTVAL (XVECEXP (src, 0, 7)),
+			    false, false, state);
+	  continue;
 	case UNSPECV_ZTT_STATE_LOAD:
 	  descriptor = XVECEXP (src, 0, 1);
 	  break;
@@ -16219,23 +16282,8 @@ reuse_local_md ()
 				       INSN_UID (insn));
 			  }
 		      }
-		    note_stores (insn, invalidate_md_store, &state);
-		    /* Follow packet setup order; overlapping facts cannot coexist.  */
-		    for (unsigned int pos = 0; pos < 3; ++pos)
-		      {
-			unsigned int i = old_dest ? pos : (pos + 1) % 3;
-			if (scalar && i == 2)
-			  continue;
-			rtx reg = i ? XVECEXP (src, 0, i - 1) : SET_DEST (set);
-			unsigned int count = m_nregs (GET_MODE (reg));
-			unsigned int step = datatype_step (UINTVAL (steps), i);
-			gcc_assert (step && count % step == 0);
-			state.invalidate (reg);
-			for (unsigned int r = 0; r < count; r += step)
-			  state.remember
-			    (gen_rtx_REG (matrix_mode (step), REGNO (reg) + r),
-			     XVECEXP (src, 0, 2 + i));
-		      }
+		    record_common_md (insn, SET_DEST (set), src, UINTVAL (steps),
+				      scalar, old_dest, state);
 		    continue;
 		  }
 		case UNSPECV_ZTT_STATE_ADD:
@@ -17560,6 +17608,63 @@ run_md_reuse_selftests ()
 	    if (test == 3)
 	      ASSERT_RTX_EQ (descriptor, entry.descriptor_value (descriptor));
 	  }
+	reload_completed = saved_reload;
+	riscv_ztt_profile_string = profile;
+      }
+  if (TARGET_ZTT)
+    for (unsigned int test = 0; test != 12; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	int saved_reload = reload_completed;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	reload_completed = 1;
+	riscv_ztt_note_call_boundary ();
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *insn = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = insn;
+	  return insn;
+	};
+	machine_mode mode = test == 6 || test == 7 ? ZTTMR2mode : ZTTMR1mode;
+	rtx descriptor = gen_rtx_REG (Pmode, 10);
+	rtx other = gen_rtx_REG (Pmode, 12);
+	rtx a = gen_rtx_REG (mode, M_REG_FIRST + 8);
+	rtx b = gen_rtx_REG (mode, M_REG_FIRST + (test == 7 ? 9 : 10));
+	rtx dest = gen_rtx_REG (mode, M_REG_FIRST + 12);
+	rtx slot = gen_rtx_MEM (mode, gen_rtx_REG (Pmode, 11));
+	rtx steps = GEN_INT (test == 7 ? 8322 : 4161);
+	if (test != 4)
+	  append (gen_rtx_SET (descriptor, GEN_INT (32)));
+	if (test == 5)
+	  append (gen_rtx_SET (other, GEN_INT (64)));
+	if (test == 1)
+	  append (gen_ztt_typed_msettyp_p0 (mode, Pmode, a, descriptor));
+	if (test == 3)
+	  append (gen_ztt_state_common_prepared
+		  (UNSPECV_ZTT_STATE_ELEMENTWISE_M, mode, Pmode, dest, a, b,
+		   descriptor, descriptor, descriptor, GEN_INT (7), steps));
+	else
+	  append (gen_ztt_state_elementwise
+		  (UNSPECV_ZTT_STATE_ELEMENTWISE_M, mode, Pmode, dest, a,
+		   test == 11 ? a : b, descriptor, descriptor,
+		   test == 5 ? other : descriptor, slot, const0_rtx,
+		   GEN_INT (7), steps, gen_rtx_SCRATCH (Pmode),
+		   GEN_INT (test == 1 || test == 2 ? 2 : 0)));
+	if (test == 8)
+	  append (gen_rtx_SET (descriptor, GEN_INT (64)));
+	if (test == 9)
+	  append (gen_ztt_typed_msettyp_p0
+		  (ZTTMR2mode, Pmode, gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 8),
+		   descriptor));
+	if (test == 10)
+	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
+	local_md_state state;
+	bool valid = md_loop_exit (bb, state);
+	ASSERT_EQ (test == 0 || test == 1 || test == 8 || test == 9 || test == 11,
+		   valid);
+	if (valid)
+	  ASSERT_EQ (test != 9, state.matches (a, GEN_INT (32)));
 	reload_completed = saved_reload;
 	riscv_ztt_profile_string = profile;
       }
