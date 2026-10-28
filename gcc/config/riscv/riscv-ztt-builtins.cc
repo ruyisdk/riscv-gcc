@@ -14559,6 +14559,7 @@ public:
   {
     rtx_insn *point = nullptr;
     rtx_insn *definition = nullptr;
+    unsigned int packet_step = 0;
 
     explicit operator bool () const { return point != nullptr; }
 
@@ -14578,10 +14579,17 @@ public:
 			 INSN_UID (definition), INSN_UID (point));
 	      break;
 	    }
-      rtx_insn *setup = emit_insn_before
-	(gen_ztt_typed_msettyp_p0
-	 (GET_MODE (group), Pmode, group, descriptor), point);
-      df_insn_rescan (setup);
+      unsigned int nregs = m_nregs (GET_MODE (group));
+      gcc_assert (packet_step && nregs % packet_step == 0);
+      for (unsigned int i = 0; i < nregs; i += packet_step)
+	{
+	  rtx packet = packet_step == nregs ? group
+	    : gen_rtx_REG (matrix_mode (packet_step), REGNO (group) + i);
+	  rtx_insn *setup = emit_insn_before
+	    (gen_ztt_typed_msettyp_p0
+	     (GET_MODE (packet), Pmode, packet, descriptor), point);
+	  df_insn_rescan (setup);
+	}
     }
   };
 
@@ -14597,7 +14605,8 @@ public:
       return {};
     unsigned int nregs = m_nregs (GET_MODE (group));
     unsigned int first = REGNO (group) - M_REG_FIRST;
-    if (step != nregs || first % nregs || first + nregs > M_REG_NUM)
+    if (!pow2p_hwi (step) || step > nregs
+	|| first % nregs || first + nregs > M_REG_NUM)
       return {};
     unsigned HOST_WIDE_INT seen = 0;
     unsigned HOST_WIDE_INT full = (HOST_WIDE_INT_1U << nregs) - 1;
@@ -14648,7 +14657,7 @@ public:
 	    if (member < nregs)
 	      seen |= HOST_WIDE_INT_1U << member;
 	    if (seen == full)
-	      return { p, definition };
+	      return { p, definition, step };
 	    continue;
 	  }
 	if (private_scalar_reload_p (p)
@@ -18345,7 +18354,7 @@ run_md_reuse_selftests ()
 	flag_strict_aliasing = strict;
 	riscv_ztt_profile_string = profile;
       }
-  for (unsigned int test = 0; test != 34; ++test)
+  for (unsigned int test = 0; test != 39; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       const char *profile = riscv_ztt_profile_string;
@@ -18353,7 +18362,7 @@ run_md_reuse_selftests ()
       int saved_reload = reload_completed, non_call = flag_non_call_exceptions;
       reload_completed = 1;
       flag_non_call_exceptions = test == 27;
-      unsigned int nregs = test == 32 ? 1 : test == 33 ? 32 : 8;
+      unsigned int nregs = test == 32 ? 1 : test == 33 || test == 38 ? 32 : 8;
       rtx group = gen_rtx_REG (matrix_mode (nregs), M_REG_FIRST);
       rtx a = gen_rtx_REG (Pmode, 10), d = gen_rtx_REG (Pmode, 11);
       rtx b = gen_rtx_REG (Pmode, 12), descriptor = d;
@@ -18430,15 +18439,19 @@ run_md_reuse_selftests ()
 	  }
 	}
       rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+      unsigned int step = test == 31 ? 4 : test == 34 ? 0 : test == 35 ? 3
+	: test == 36 ? 16 : test >= 37 ? 1 : nregs;
       auto plan = local_raw_spill::reload_preparation_point
-	(use, group, descriptor, test == 31 ? 4 : nregs);
+	(use, group, descriptor, step);
       rtx_insn *point = plan.point;
       bool expected = TARGET_ZTT && (test <= 3 || test == 11 || test == 22
-				     || test == 24 || test >= 32);
+				     || test == 24 || test == 31 || test == 32
+				     || test == 33 || test >= 37);
       char context[64];
       snprintf (context, sizeof context, "private reload preparation %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
       ASSERT_EQ_AT (loc, expected ? first : nullptr, point);
+      ASSERT_EQ_AT (loc, expected ? step : 0, plan.packet_step);
       reload_completed = saved_reload;
       flag_non_call_exceptions = non_call;
       riscv_ztt_profile_string = profile;

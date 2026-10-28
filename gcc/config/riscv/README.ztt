@@ -622,8 +622,8 @@ allocated M group, mode and Md.  Output and instruction length use the same
 predicate; before allocation, length assumes both sources need preparation.
 Private MEM and scratch operands remain in RTL.
 
-Common input preparation can set Md before a complete packet's private raw
-reloads instead of saving and reloading that packet again at the consumer.
+Common input preparation can set Md before a complete group's private raw
+reloads instead of saving and reloading that group again at the consumer.
 A 64-instruction same-block scan requires every member to be overwritten,
 an unchanged descriptor, and compatible input groups. Only private nontrapping
 loads and plain GPR address calculations may intervene. Calls, state access,
@@ -631,12 +631,15 @@ stores, frame changes and non-call exceptions retain the original preparation.
 Identical common inputs with the same packet step and descriptor share one
 preparation, using the existing input-order mask. Partial overlaps and
 conflicting descriptors keep their original preservation sequences.
+Mixed-width consumers may contain several datatype packets in one group.
+Each packet gets its own setter before the complete reloads; adjacent
+packets are not treated as a single larger datatype group.
 Row-major, column-major and strided stores use the same proof for their
 single source packet. The user store retains its original memory operands
 and position; only its private preservation sequence is replaced.
 Conversions and structural unary operations also use this proof for a
-single complete source packet. Destination setup still follows the unary
-overlap and datatype rules; multi-packet sources retain their preparation.
+complete source group. Destination setup still follows the unary overlap
+and datatype rules.
 Row/column broadcasts and shifts use the same complete-reload
 proof. Their data operation, control operand and destination setup rules
 remain unchanged.
