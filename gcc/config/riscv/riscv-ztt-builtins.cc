@@ -14188,7 +14188,6 @@ public:
   static bool prepared_matrix_p (rtx pat)
   {
     if (GET_CODE (pat) != SET || !REG_P (SET_DEST (pat))
-	|| !m_mode_p (GET_MODE (SET_DEST (pat)))
 	|| GET_CODE (SET_SRC (pat)) != UNSPEC_VOLATILE
 	|| contains_mem_rtx_p (pat))
       return false;
@@ -14210,7 +14209,11 @@ public:
       case UNSPECV_ZTT_SETTYP_P0:
       case UNSPECV_ZTT_STATE_ZERO: case UNSPECV_ZTT_BROADCAST:
       case UNSPECV_ZTT_INDEX_CONSTRUCT:
-	return true;
+      case UNSPECV_ZTT_ACC_TO_M:
+	return m_mode_p (GET_MODE (SET_DEST (pat)));
+      case UNSPECV_ZTT_ACC_CLEAR: case UNSPECV_ZTT_ACC_ZERO:
+      case UNSPECV_ZTT_ACC_FROM_M: case UNSPECV_ZTT_ACC_MMUL:
+	return acc_mode_p (GET_MODE (SET_DEST (pat)));
       default:
 	return false;
       }
@@ -16811,7 +16814,10 @@ run_md_reuse_selftests ()
 		    UNSPECV_ZTT_STATE_ROWCOL, UNSPECV_ZTT_STATE_COPY,
 		    UNSPECV_ZTT_STATE_ZIP_VALUE, UNSPECV_ZTT_SETTYP_P0,
 		    UNSPECV_ZTT_STATE_ZERO,
-		    UNSPECV_ZTT_BROADCAST, UNSPECV_ZTT_INDEX_CONSTRUCT })
+		    UNSPECV_ZTT_BROADCAST, UNSPECV_ZTT_INDEX_CONSTRUCT,
+		    UNSPECV_ZTT_ACC_CLEAR, UNSPECV_ZTT_ACC_ZERO,
+		    UNSPECV_ZTT_ACC_TO_M, UNSPECV_ZTT_ACC_FROM_M,
+		    UNSPECV_ZTT_ACC_MMUL })
     for (unsigned int test = 0; test != 10; ++test)
       {
 	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
@@ -16835,7 +16841,18 @@ run_md_reuse_selftests ()
 	};
 	append (gen_rtx_SET (slot, m));
 	rtvec args;
-	if (code == UNSPECV_ZTT_STATE_ZERO || code == UNSPECV_ZTT_SETTYP_P0)
+	if (code == UNSPECV_ZTT_ACC_TO_M)
+	  args = gen_rtvec (3, gen_rtx_REG (ZTTAR1mode, ACC_REG_FIRST),
+			    desc, const0_rtx);
+	else if (code == UNSPECV_ZTT_ACC_CLEAR || code == UNSPECV_ZTT_ACC_ZERO
+		 || code == UNSPECV_ZTT_ACC_FROM_M || code == UNSPECV_ZTT_ACC_MMUL)
+	  {
+	    m = gen_rtx_REG (ZTTAR1mode, ACC_REG_FIRST);
+	    args = code == UNSPECV_ZTT_ACC_FROM_M ? gen_rtvec (2, a, desc)
+	      : code == UNSPECV_ZTT_ACC_MMUL ? gen_rtvec (4, m, a, b, const0_rtx)
+	      : gen_rtvec (1, desc);
+	  }
+	else if (code == UNSPECV_ZTT_STATE_ZERO || code == UNSPECV_ZTT_SETTYP_P0)
 	  args = gen_rtvec (1, desc);
 	else if (code == UNSPECV_ZTT_BROADCAST)
 	  args = gen_rtvec (3, addr, desc, desc);
