@@ -3813,6 +3813,29 @@
 				    (const_int 12)
 				    (const_int 16))))])
 
+(define_insn_and_split "*branch_on_low_bit<X:mode>"
+  [(set (pc)
+	(if_then_else
+	    (match_operator 0 "equality_operator"
+		[(zero_extract:X (match_operand:X 2 "register_operand" "r")
+				 (const_int 1)
+				 (match_operand 3 "const_int_operand"))
+		 (const_int 0)])
+	    (label_ref (match_operand 1))
+	    (pc)))
+   (clobber (match_scratch:X 4 "=&r"))]
+  "!TARGET_XANDESPERF && IN_RANGE (INTVAL (operands[3]), 0, IMM_BITS - 2)"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 4) (and:X (match_dup 2) (match_dup 3)))
+   (set (pc)
+	(if_then_else (match_op_dup 0 [(match_dup 4) (const_int 0)])
+		      (label_ref (match_dup 1)) (pc)))]
+{
+  operands[3] = GEN_INT (HOST_WIDE_INT_1U << INTVAL (operands[3]));
+}
+  [(set_attr "type" "branch")])
+
 (define_insn_and_split "*branch_on_bit<X:mode>"
   [(set (pc)
 	(if_then_else
