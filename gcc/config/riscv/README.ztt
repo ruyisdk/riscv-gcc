@@ -203,6 +203,9 @@ cache retains the first matching code and the missing-entry sentinel.
 Column extract/transfer and matmul redirection also scan stored records.
 Their cache maps only eligible records back to the first public code;
 compact Scalar families do not enter these redirect domains.
+Extended integer unary anchors use the same stored-record traversal.
+Compact Scalar and exponent families cannot supply unary anchors; the
+numeric cache retains original first-match codes and missing results.
 
 Structural folding
 ------------------

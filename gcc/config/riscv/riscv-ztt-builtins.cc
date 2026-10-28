@@ -3672,11 +3672,12 @@ decode_integer_unary_builtin (unsigned int code, unsigned int &canonical,
   unsigned int &anchor = anchors[op][shape][dst];
   if (!anchor)
     {
-      while (scanned < ZTT_BUILTIN_MAX)
+      /* Compact Scalar and exponent families contain no unary anchors.  */
+      while (scanned < ARRAY_SIZE (stored_builtin_descriptions))
 	{
-	  unsigned int i = scanned++;
-	  const auto &d = builtin_description_for (i);
-	  unsigned int operation = wide_operation (d.expansion);
+	  const auto &d = stored_builtin_descriptions[scanned++];
+	  unsigned int operation
+	    = wide_operation (static_cast<expansion_index> (d.expansion));
 	  if (!integer_unary_operation_p (operation) || types[d.type].accumulator
 	      || floating_descriptor_p (types[d.type].descriptor))
 	    continue;
@@ -3687,7 +3688,7 @@ decode_integer_unary_builtin (unsigned int code, unsigned int &canonical,
 	  gcc_assert (s < wide_shape_count && n < integer_dtype_count);
 	  unsigned int &entry = anchors[operation][s][n];
 	  if (!entry)
-	    entry = i + 1;
+	    entry = stored_builtin_code (scanned - 1) + 1;
 	  if (anchor)
 	    break;
 	}
@@ -4077,6 +4078,8 @@ run_decoder_anchor_selftests ()
 	}
       if (integer_unary_operation_p (op))
 	{
+	  ASSERT_TRUE (stored_index > 0);
+	  ASSERT_EQ (stored_builtin_code (stored_index - 1), i);
 	  unsigned int key
 	    = (op * wide_shape_count + shape) * integer_dtype_count
 	      + integer_dtype_number (t.descriptor);
