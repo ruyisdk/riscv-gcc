@@ -1013,6 +1013,9 @@ Private scalar spills can remain if every access is SP-relative, fits the
 fixed local area and lies between the allocation and release on every path.
 Removing the scalable gap relocates those slots together, keeping their
 offsets and memory operations.  The fixed saves and CFA do not move.
+Fixed local GPR accesses and constant local addresses also remain in place
+when their complete range lies below the saved-register area.  Unknown
+indexed frame addresses continue to retain the scalable allocation.
 At two-predecessor joins, bounded local rescans retain only identical stack
 address facts established independently on both paths.
 Proven debug slot locations are adjusted to their new fixed FP offsets,
