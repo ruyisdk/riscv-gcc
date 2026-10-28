@@ -8740,12 +8740,55 @@ static bool concat_operand_sources (tree, type_index, unsigned int,
 				    unsigned int, rtx *, bool = false);
 static rtx concat_operand_part (rtx *, unsigned int, unsigned int, unsigned int);
 
+/* A retained local input can produce zero without reading each tuple part.  */
+static rtx
+expand_self_zero (const builtin_description &d, tree exp)
+{
+  if (!optimize || !runtime_profile_p ()
+      || !currently_expanding_gimple_stmt
+      || (d.expansion != EXPAND_MXOR_EW
+	  && d.expansion != EXPAND_MANDNOT_EW)
+      || d.type == TYPE_MAX || types[d.type].accumulator
+      || floating_descriptor_p (types[d.type].descriptor)
+      || types[d.type].rows * types[d.type].columns <= 1)
+    return NULL_RTX;
+  unsigned int dtype = types[d.type].descriptor;
+  if ((dtype & 0xff) < active_profile ()->uds)
+    return NULL_RTX;
+  tree left = CALL_EXPR_ARG (exp, 0), right = CALL_EXPR_ARG (exp, 1);
+  gimple *producers[12];
+  unsigned int count = 0;
+  auto gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
+  if (!same_structure_value_p (left, right, d.type, producers, count)
+      || (!stored_binary_input_p (left, &gsi)
+	  && !stored_binary_input_p (right, &gsi))
+      || !local_structure_producers_p (&gsi, producers, count))
+    return NULL_RTX;
+  unsigned int group = (dtype & 0xff) / active_profile ()->uds;
+  machine_mode mode = type_mode (d.type), part_mode = matrix_mode (group);
+  rtx result = gen_reg_rtx (mode);
+  riscv_ztt_note_descriptor (dtype);
+  emit_clobber (result);
+  for (unsigned int i = 0; i < type_nregs (d.type) / group; ++i)
+    {
+      rtx part = simplify_gen_subreg (part_mode, result, mode,
+				     GET_MODE_SIZE (part_mode) * i);
+      emit_insn (gen_ztt_typed_mzero_2d_m (part_mode, part, GEN_INT (dtype)));
+    }
+  if (dump_file)
+    fprintf (dump_file, "Zero identical integer tuple inputs\n");
+  return result;
+}
+
 static rtx
 expand_elementwise (const builtin_description &d,
 		    const elementwise_description &operation, tree exp)
 {
   if (indexed_variant (d.expansion) >= 0)
     return expand_indexed (d, operation, exp);
+  if (d.type == operation.data && d.type == operation.count)
+    if (rtx zero = expand_self_zero (d, exp))
+      return zero;
   bool scalar = operation.count == TYPE_MAX;
   int ternary = ternary_variant (d.expansion);
   int arithmetic = arithmetic_variant (d.expansion);
@@ -9672,6 +9715,9 @@ expand_builtin (unsigned int code, tree exp, rtx target)
     }
   machine_mode mode = type_mode (d.type);
   rtx descriptor = GEN_INT (dtype);
+
+  if (rtx zero = expand_self_zero (d, exp))
+    return zero;
 
   if (memory_variant (d.expansion) > 0)
     return expand_memory (d, exp, target);
