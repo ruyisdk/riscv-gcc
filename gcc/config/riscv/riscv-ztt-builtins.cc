@@ -14189,9 +14189,12 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_CONVERT_REUSE:
     case UNSPECV_ZTT_STATE_STRUCTURAL:
     case UNSPECV_ZTT_STATE_STRUCTURAL_REUSE:
+      mask = 6;
+      break;
     case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
     case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
       mask = 6;
+      metadata = 4;
       break;
     case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
     case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE:
@@ -17224,6 +17227,11 @@ run_md_reuse_selftests ()
   unary[0] = unary[1];
   unary[2] = unary[3];
   unary[4] = GEN_INT (pack_datatype_steps (1, 1));
+  ASSERT_EQ (conversion_length (unary, true), 4U);
+  unary[0] = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
+  unary[3] = GEN_INT (0x40000040);
+  ASSERT_EQ (conversion_length (unary, true), 12U);
+  unary[2] = const0_rtx;
   ASSERT_EQ (conversion_length (unary, true), 4U);
   rtx common[] = { gen_rtx_REG (ZTTMR2mode, M_REG_FIRST),
 		   gen_rtx_REG (ZTTMR4mode, M_REG_FIRST + 4),

@@ -522,7 +522,7 @@ floating register view, avoiding cross-class operands during allocation.
 Local datatype preparation
 --------------------------
 
-Prepared common operations keep proven datatype metadata as constants,
+Prepared common and unary operations keep proven datatype metadata as constants,
 allowing dead GPR definitions to disappear.  Destination setup and scalar
 TC writes still require GPR operands; packet and overlap checks are unchanged.
 

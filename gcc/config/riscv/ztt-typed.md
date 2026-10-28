@@ -1394,7 +1394,7 @@
         (unspec_volatile:ZTT_M
           [(match_operand 1 "register_operand" "Wmr")
            (match_operand:P 2 "reg_or_0_operand" "rJ")
-           (match_operand:P 3 "register_operand" "r")
+           (match_operand:P 3 "reg_or_int_operand" "rn")
            (match_operand 4 "const_int_operand" "n")
            (match_operand 5 "const_int_operand" "n")]
           ZTT_STATE_UNARY_PREPARED))]
