@@ -17705,6 +17705,13 @@ riscv_use_by_pieces_infrastructure_p (unsigned HOST_WIDE_INT size,
 				      unsigned alignment,
 				      enum by_pieces_operation op, bool speed_p)
 {
+  /* Byte constants need no source loads or source address.  */
+  if (op == STORE_BY_PIECES && speed_p && STRICT_ALIGNMENT
+      && alignment == BITS_PER_UNIT && size <= UNITS_PER_WORD
+      && (stringop_strategy & STRATEGY_SCALAR)
+      && !(TARGET_VECTOR && (stringop_strategy & STRATEGY_VECTOR)))
+    return true;
+
   /* Query the expanders whether they can handle the given operation.  */
   if ((op == CLEAR_BY_PIECES || op == SET_BY_PIECES)
       && speed_p && size > UNITS_PER_WORD)
