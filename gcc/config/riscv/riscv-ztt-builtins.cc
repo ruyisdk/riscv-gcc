@@ -13521,10 +13521,8 @@ public:
 };
 
 /* Track complete physical M groups and their descriptor values.  */
-class local_md_state
+struct local_md_scalars
 {
-  struct fact { rtx group; rtx descriptor; unsigned int identity; }
-    facts[M_REG_NUM] = {};
   rtx constants[32] = {}; /* GP_REG_NUM depends on the active RVE option.  */
   unsigned int identities[32] = {};
   unsigned int next_identity = 0;
@@ -13532,6 +13530,12 @@ class local_md_state
   unsigned int descriptor_used = 0;
   unsigned int next_definition = 0;
   rtx scalar_type = nullptr;
+};
+
+class local_md_state : private local_md_scalars
+{
+  struct fact { rtx group; rtx descriptor; unsigned int identity; }
+    facts[M_REG_NUM] = {};
   /* Some facts may depend on a physical GPR instead of a value identity.  */
   bool register_descriptors = false;
   unsigned int occupied = 0;
@@ -13543,6 +13547,21 @@ class local_md_state
   }
 
 public:
+  /* Unoccupied fact slots are not part of a path's state.  */
+  void copy_from (const local_md_state &other)
+  {
+    if (this == &other)
+      return;
+    local_md_scalars::operator= (other);
+    register_descriptors = other.register_descriptors;
+    occupied = other.occupied;
+    for (unsigned int mask = occupied; mask; mask &= mask - 1)
+      {
+	unsigned int i = ctz_hwi (mask);
+	facts[i] = other.facts[i];
+      }
+  }
+
   void clear ()
   {
     memset (constants, 0, sizeof (constants));
@@ -14045,7 +14064,7 @@ public:
 	for (i = 0; i < ARRAY_SIZE (pending); ++i)
 	  if (single_pred_p (bb) && pending[i] && pending[i]->dest == bb)
 	    {
-	      state = saved[i];
+	      state.copy_from (saved[i]);
 	      if (dump_file)
 		fprintf (dump_file, "Restore Md on branch edge %d -> %d\n",
 			 pending[i]->src->index, bb->index);
@@ -14078,7 +14097,7 @@ public:
 		break;
 	      }
 	  pending[slot] = e;
-	  saved[slot] = state;
+	  saved[slot].copy_from (state);
 	  next = (slot + 1) % ARRAY_SIZE (pending);
 	  break;
 	}
@@ -19147,12 +19166,19 @@ run_md_reuse_selftests ()
       for (unsigned int i = 0; i < M_REG_NUM; i += width)
 	full.remember (gen_rtx_REG (matrix_mode (width), M_REG_FIRST + i),
 		       descriptor);
+      local_md_state snapshot;
+      snapshot.copy_from (full);
+      snapshot.copy_from (snapshot);
+      for (unsigned int i = 0; i < M_REG_NUM; i += width)
+	ASSERT_TRUE (snapshot.matches (M_REG_FIRST + i, matrix_mode (width),
+				      GEN_INT (32)));
       for (bool ame_only : { false, true })
 	{
 	  local_md_state empty = full;
 	  if (ame_only) empty.clear_ame ();
 	  else empty.clear ();
-	  local_md_state copy = empty, joined = full;
+	  local_md_state copy = full, joined = full;
+	  copy.copy_from (empty);
 	  joined.intersect_constants (copy);
 	  for (unsigned int i = 0; i < M_REG_NUM; i += width)
 	    {
@@ -19169,7 +19195,8 @@ run_md_reuse_selftests ()
 	}
       for (unsigned int member = 0; member < M_REG_NUM; ++member)
 	{
-	  local_md_state one = full;
+	  local_md_state one;
+	  one.copy_from (full);
 	  rtx write = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + member);
 	  one.invalidate (write);
 	  local_md_state joined = full;
@@ -19196,6 +19223,40 @@ run_md_reuse_selftests ()
 	  ASSERT_FALSE (joined.matches (M_REG_LAST, ZTTMR1mode, descriptor));
 	}
     }
+  {
+    local_md_state original, snapshot;
+    rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+    rtx dynamic = gen_rtx_REG (Pmode, 12), copied = gen_rtx_REG (Pmode, 13);
+    rtx use = gen_rtx_USE (VOIDmode, a);
+    rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_LAST);
+    original.record_constant (b, GEN_INT (32));
+    original.note_descriptor_use (b);
+    original.record_constant (a, GEN_INT (32));
+    ASSERT_FALSE (original.record_scalar_type (a));
+    original.remember (m, dynamic);
+    original.record_copy (copied, original.descriptor_identity (dynamic));
+    snapshot.copy_from (original);
+    ASSERT_TRUE (snapshot.matches (m, copied));
+    ASSERT_TRUE (snapshot.record_scalar_type (a));
+    ASSERT_RTX_EQ (snapshot.descriptor_register (a, use), b);
+    ASSERT_TRUE (snapshot.redundant_descriptor_p (b, GEN_INT (32)));
+    ASSERT_EQ (snapshot.descriptor_identity (gen_rtx_REG (Pmode, 14)),
+	       original.descriptor_identity (gen_rtx_REG (Pmode, 14)));
+    snapshot.record_constant (a, GEN_INT (64));
+    ASSERT_RTX_EQ (original.descriptor_value (a), GEN_INT (32));
+    snapshot.invalidate (dynamic);
+    ASSERT_TRUE (snapshot.matches (m, copied));
+    snapshot.invalidate (copied);
+    ASSERT_FALSE (snapshot.matches (m, copied));
+    ASSERT_TRUE (original.matches (m, copied));
+    rtx fixed = gen_rtx_REG (Pmode, GP_REG_FIRST + 3);
+    original.remember (m, fixed);
+    snapshot.copy_from (original);
+    ASSERT_TRUE (snapshot.matches (m, fixed));
+    snapshot.invalidate (fixed);
+    ASSERT_FALSE (snapshot.matches (m, fixed));
+    ASSERT_TRUE (original.matches (m, fixed));
+  }
   for (unsigned int count : { 1U, 2U, 4U, 8U, 16U, 32U })
     for (unsigned int offset : { 0U, M_REG_NUM - count })
       for (bool constant : { false, true })

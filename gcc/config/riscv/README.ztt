@@ -634,6 +634,8 @@ Private MEM and scratch operands remain in RTL.
 
 Md fact resets clear the occupancy bitmap; lookups reject unoccupied slots
 before reading their old contents. GPR constant and identity resets are unchanged.
+Branch snapshots copy only occupied Md facts, while retaining all scalar
+constants, dynamic identities and descriptor ordering information.
 
 Common input preparation can set Md before a complete group's private raw
 reloads instead of saving and reloading that group again at the consumer.
