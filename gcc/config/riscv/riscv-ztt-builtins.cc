@@ -8776,7 +8776,9 @@ expand_self_zero (const builtin_description &d, tree exp)
   gimple *producers[12];
   unsigned int count = 0;
   auto gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
-  if (!same_structure_value_p (left, right, d.type, producers, count)
+  if (!strip_structure_view (left, d.type, producers, count)
+      || !strip_structure_view (right, d.type, producers, count)
+      || !same_structure_value_p (left, right, d.type, producers, count)
       || (!stored_binary_input_p (left, &gsi)
 	  && !stored_binary_input_p (right, &gsi))
       || !local_structure_producers_p (&gsi, producers, count))

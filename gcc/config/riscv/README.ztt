@@ -333,6 +333,9 @@ Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently
 stored input and preserves its producer.  Single-part and packed values retain
 the binary operation.
+One exact-type carrier view per operand is unwrapped before checking that
+store.  The view remains in the bounded proof; arithmetic conversion and
+mixed datatypes do not qualify.
 
 An integer XOR pair cancels a repeated input, returning the other inner
 input.  The inner result and intervening copies must have single uses,
