@@ -372,6 +372,10 @@ basic Squares.  Gather indices wrap by masking, so arbitrary integer index
 bits are valid.  Original constructors, conversions and user loads remain.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.
+Integer scatter-add with an exact zero contribution likewise reuses its old
+destination for arbitrary masked indices kept live by a complete local store.
+Both operands remain non-packed basic Squares; floating additions and a zero
+old destination alone do not satisfy this rule.
 
 The bounded copy search also recognizes zero-offset row/column shifts of
 complete basic Squares, using their existing full-value copy semantics.

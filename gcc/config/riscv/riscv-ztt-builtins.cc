@@ -8571,9 +8571,10 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
   gimple *producers[16];
   unsigned int count = 0;
   tree result = data;
-  /* Gather masks each index, so every element of a uniform input survives.
+  /* Masked indices preserve uniform gathers and integer zero contributions.
      Keep the index live through an independent complete store.  */
-  if (!scatter && d.type == operation.data && type_nregs (d.type)
+  if ((!scatter || scatter_add) && d.type == operation.data
+      && type_nregs (d.type)
       && types[d.type].rows == 1 && types[d.type].columns == 1
       && (types[d.type].descriptor & 0xff) >= active_profile ()->uds
       && type_nregs (operation.count)
@@ -8582,17 +8583,24 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
       && (types[operation.count].descriptor & 0xff) >= active_profile ()->uds)
     {
       tree value = data, saved = index;
-      if (strip_structure_view (value, d.type, producers, count)
-	  && strip_structure_copies (value, d.type, producers, count, true)
-	  && uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type)
+      bool reusable = scatter_add
+	? structure_zero_p (value, d.type, producers, count)
+	: (strip_structure_view (value, d.type, producers, count)
+	   && strip_structure_copies (value, d.type, producers, count, true)
+	   && uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type));
+      if (reusable
 	  && (stored_binary_input_p (index, gsi)
 	      || (strip_structure_view (saved, operation.count, producers, count)
 		  && saved != index && stored_binary_input_p (saved, gsi))))
 	{
-	  producers[count++] = SSA_NAME_DEF_STMT (value);
+	  if (!scatter_add)
+	    producers[count++] = SSA_NAME_DEF_STMT (value);
 	  if (local_structure_producers_p (gsi, producers, count))
-	    return useless_type_conversion_p (lhs_type, TREE_TYPE (data)) ? data
-	      : build1 (VIEW_CONVERT_EXPR, lhs_type, data);
+	    {
+	      result = scatter_add ? gimple_call_arg (stmt, 0) : data;
+	      return useless_type_conversion_p (lhs_type, TREE_TYPE (result))
+		? result : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
+	    }
 	}
       count = 0;
     }
