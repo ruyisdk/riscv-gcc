@@ -445,6 +445,8 @@ nonvolatile arguments during expansion and allow complete old/source reuse
 even at O0 or with a live original.  Distinct core inputs must fit the M
 bank; impossible assignments are diagnosed before allocation.  Other live
 old values retain independent allocation.
+For groups wider than four registers, three identical complete inputs with
+a dying old destination use one matching reload operand outside bank limits.
 The shared-input proof follows up to four exact-type SSA copies, including
 explicit mcopy, through one same-mode carrier view. Copy calls stay in
 place for ownership checking. Loads, volatile accesses, conversions and

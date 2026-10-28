@@ -12313,7 +12313,8 @@ lower_explicit_state ()
 		      state_code = UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT;
 		  }
 		bool reuse = state_code != UNSPECV_ZTT_STATE_TERNARY;
-		if (ternary_bank_reuse && left && right && old_left && old_right)
+		if ((ternary_bank_reuse || (dead_old && m_nregs (mode) > 4))
+		    && left && right && old_left && old_right)
 		  emit_insn (gen_ztt_state_ternary_shared
 			     (mode, Pmode, dest, XVECEXP (src, 0, 0), descriptor,
 			      scratch, stride ? stride : const0_rtx,
