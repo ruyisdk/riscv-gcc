@@ -14079,6 +14079,15 @@ record_scalar_md (rtx_insn *insn, local_md_state &state)
 }
 
 static void
+record_unary_md (rtx_insn *insn, rtx source, rtx dest, rtx descriptor,
+		 local_md_state &state)
+{
+  note_stores (insn, invalidate_md_store, &state);
+  state.remember (source, descriptor);
+  state.remember (dest, descriptor);
+}
+
+static void
 record_binary_md (rtx_insn *insn, rtx lhs, rtx rhs, rtx dest,
 		  rtx descriptor, local_md_state &state)
 {
@@ -14112,7 +14121,7 @@ record_common_md (rtx_insn *insn, rtx dest, rtx src, unsigned int steps,
 
 /* Limit the loop proof to complete binary groups with one constant Md.  */
 static bool
-md_loop_common_p (rtx set, local_md_state &state)
+md_loop_common_p (rtx set, bool scalar, local_md_state &state)
 {
   rtx src = SET_SRC (set);
   if (XVECLEN (src, 0) != 9)
@@ -14121,7 +14130,7 @@ md_loop_common_p (rtx set, local_md_state &state)
   unsigned int steps = UINTVAL (XVECEXP (src, 0, 7));
   unsigned int mask = UINTVAL (XVECEXP (src, 0, 8));
   rtx value = NULL_RTX;
-  for (unsigned int i = 0; i != 3; ++i)
+  for (unsigned int i = 0; i != (scalar ? 2U : 3U); ++i)
     {
       rtx descriptor = XVECEXP (src, 0, 2 + i);
       if (!local_md_state::full_gpr_p (descriptor)
@@ -14174,10 +14183,27 @@ md_loop_exit (basic_block bb, local_md_state &state)
 	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE:
 	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_LEFT:
 	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
-	  if (!md_loop_common_p (set, state))
+	case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+	case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
+	  if (!md_loop_common_p (set, common_scalar_p (XINT (src, 1)), state))
 	    return false;
+	  /* This scan establishes matrix facts, not amestype availability.  */
 	  record_common_md (insn, group, src, UINTVAL (XVECEXP (src, 0, 7)),
-			    false, false, state);
+			    common_scalar_p (XINT (src, 1)), false, state);
+	  continue;
+	case UNSPECV_ZTT_STATE_ROWCOL:
+	case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
+	  if (XVECLEN (src, 0) != 5)
+	    return false;
+	  descriptor = XVECEXP (src, 0, 2);
+	  group = XVECEXP (src, 0, 0);
+	  if (!local_md_state::full_gpr_p (descriptor)
+	      || !CONST_INT_P (state.descriptor_value (descriptor))
+	      || GET_MODE (group) != GET_MODE (SET_DEST (set))
+	      || (reg_overlap_mentioned_p (group, SET_DEST (set))
+		  && !rtx_equal_p (group, SET_DEST (set))))
+	    return false;
+	  record_unary_md (insn, group, SET_DEST (set), descriptor, state);
 	  continue;
 	case UNSPECV_ZTT_STATE_LOAD:
 	  descriptor = XVECEXP (src, 0, 1);
@@ -15958,9 +15984,7 @@ reuse_local_md ()
 			df_insn_rescan (insn);
 			cleanup = true;
 		      }
-		    note_stores (insn, invalidate_md_store, &state);
-		    state.remember (group, descriptor);
-		    state.remember (SET_DEST (set), descriptor);
+		    record_unary_md (insn, group, SET_DEST (set), descriptor, state);
 		    continue;
 		  }
 		case UNSPECV_ZTT_STATE_ROWCOL:
@@ -16003,9 +16027,7 @@ reuse_local_md ()
 			  fprintf (dump_file, "Reuse Md for rowcol at insn %d\n",
 				   INSN_UID (insn));
 		      }
-		    note_stores (insn, invalidate_md_store, &state);
-		    state.remember (group, descriptor);
-		    state.remember (SET_DEST (set), descriptor);
+		    record_unary_md (insn, group, SET_DEST (set), descriptor, state);
 		    continue;
 		  }
 		case UNSPECV_ZTT_STATE_ZIP_VALUE:
@@ -17665,6 +17687,71 @@ run_md_reuse_selftests ()
 		   valid);
 	if (valid)
 	  ASSERT_EQ (test != 9, state.matches (a, GEN_INT (32)));
+	reload_completed = saved_reload;
+	riscv_ztt_profile_string = profile;
+      }
+  if (TARGET_ZTT)
+    for (unsigned int test = 0; test != 12; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	int saved_reload = reload_completed;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	reload_completed = 1;
+	riscv_ztt_note_call_boundary ();
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *insn = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = insn;
+	  return insn;
+	};
+	machine_mode mode = test == 11 ? ZTTMR2mode : ZTTMR1mode;
+	rtx descriptor = gen_rtx_REG (Pmode, 10);
+	rtx other = gen_rtx_REG (Pmode, 12);
+	rtx tc = gen_rtx_REG (Pmode, 13);
+	rtx value = gen_rtx_REG (Pmode, 14);
+	rtx a = gen_rtx_REG (mode, M_REG_FIRST + 8);
+	rtx dest = gen_rtx_REG (mode, M_REG_FIRST + (test == 11 ? 9 : 10));
+	rtx slot = gen_rtx_MEM (mode, gen_rtx_REG (Pmode, 11));
+	if (test != 2 && test != 7)
+	  append (gen_rtx_SET (descriptor, GEN_INT (32)));
+	append (gen_rtx_SET (tc, GEN_INT (64)));
+	if (test == 1)
+	  append (gen_rtx_SET (other, GEN_INT (64)));
+	if (test == 5)
+	  append (gen_ztt_typed_msettyp_p0 (mode, Pmode, a, descriptor));
+	if (test < 6)
+	  {
+	    if (test == 3)
+	      append (gen_ztt_state_common_prepared
+		      (UNSPECV_ZTT_STATE_ELEMENTWISE_X, mode, Pmode, dest, a, value,
+		       descriptor, descriptor, tc, GEN_INT (18), GEN_INT (65)));
+	    else
+	      append (gen_ztt_state_elementwise
+		      (UNSPECV_ZTT_STATE_ELEMENTWISE_X, mode, Pmode, dest, a, value,
+		       descriptor, test == 1 ? other : descriptor, tc,
+		       slot, const0_rtx, GEN_INT (18), GEN_INT (65),
+		       gen_rtx_SCRATCH (Pmode), GEN_INT (test >= 4 ? 2 : 0)));
+	  }
+	else if (test == 8)
+	  append (gen_ztt_state_rowcol_prepared
+		  (mode, Pmode, dest, a, gen_rtx_REG (SImode, 14),
+		   descriptor, const0_rtx));
+	else
+	  append (gen_ztt_state_rowcol
+		  (UNSPECV_ZTT_STATE_ROWCOL, mode, Pmode, test == 10 ? a : dest,
+		   a, gen_rtx_REG (SImode, 14), descriptor, slot,
+		   const0_rtx, const0_rtx));
+	if (test == 9)
+	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
+	local_md_state state;
+	bool valid = md_loop_exit (bb, state);
+	ASSERT_EQ (test == 0 || test == 5 || test == 6 || test == 10, valid);
+	if (valid)
+	  {
+	    ASSERT_TRUE (state.matches (a, GEN_INT (32)));
+	    ASSERT_FALSE (state.record_scalar_type (tc));
+	  }
 	reload_completed = saved_reload;
 	riscv_ztt_profile_string = profile;
       }
