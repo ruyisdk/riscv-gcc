@@ -14187,6 +14187,23 @@ public:
   /* Prepared register operations have no private preservation transfers.  */
   static bool prepared_matrix_p (rtx pat)
   {
+    if (GET_CODE (pat) == PARALLEL && XVECLEN (pat, 0) == 6)
+      {
+	rtx set = XVECEXP (pat, 0, 0);
+	if (GET_CODE (set) != SET || !REG_P (SET_DEST (set))
+	    || !REG_P (SET_SRC (set))
+	    || !acc_mode_p (GET_MODE (SET_DEST (set)))
+	    || GET_MODE (SET_DEST (set)) != GET_MODE (SET_SRC (set)))
+	  return false;
+	for (unsigned int i = 1; i != 6; ++i)
+	  {
+	    rtx x = XVECEXP (pat, 0, i);
+	    if (GET_CODE (x) != (i == 5 ? USE : CLOBBER)
+		|| (!REG_P (XEXP (x, 0)) && GET_CODE (XEXP (x, 0)) != SCRATCH))
+	      return false;
+	  }
+	return true;
+      }
     if (GET_CODE (pat) != SET || !REG_P (SET_DEST (pat))
 	|| GET_CODE (SET_SRC (pat)) != UNSPEC_VOLATILE
 	|| contains_mem_rtx_p (pat))
@@ -16817,8 +16834,9 @@ run_md_reuse_selftests ()
 		    UNSPECV_ZTT_BROADCAST, UNSPECV_ZTT_INDEX_CONSTRUCT,
 		    UNSPECV_ZTT_ACC_CLEAR, UNSPECV_ZTT_ACC_ZERO,
 		    UNSPECV_ZTT_ACC_TO_M, UNSPECV_ZTT_ACC_FROM_M,
-		    UNSPECV_ZTT_ACC_MMUL })
-    for (unsigned int test = 0; test != 10; ++test)
+		    UNSPECV_ZTT_ACC_MMUL, UNSPECV_ZTT })
+    for (unsigned int test = 0; test != (code == UNSPECV_ZTT ? 12U : 10U);
+	 ++test)
       {
 	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
 	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
@@ -16888,9 +16906,28 @@ run_md_reuse_selftests ()
 	  args = gen_rtvec (3, a, b, desc);
 	rtx pat = gen_rtx_SET (m, gen_rtx_UNSPEC_VOLATILE
 	  (GET_MODE (m), args, test == 7 ? UNSPECV_ZTT : code));
+	/* The generic code selects a plain ACC register copy.  */
+	bool acc_copy = code == UNSPECV_ZTT && test != 7;
+	if (acc_copy)
+	  pat = gen_rtx_SET (gen_rtx_REG (ZTTAR1mode, ACC_REG_FIRST),
+			     gen_rtx_REG (ZTTAR1mode, ACC_REG_FIRST + 1));
 	if (test == 8)
 	  SET_DEST (pat) = addr;
-	if (test == 5)
+	else if (test == 10)
+	  SET_DEST (pat) = gen_rtx_MEM (ZTTAR1mode, addr);
+	else if (test == 11)
+	  SET_SRC (pat) = gen_rtx_MEM (ZTTAR1mode, addr);
+	if (acc_copy)
+	  pat = gen_rtx_PARALLEL (VOIDmode, gen_rtvec
+	    (6, pat, gen_rtx_CLOBBER (VOIDmode,
+				    test == 5 ? copy_rtx (slot) : b),
+	     gen_rtx_CLOBBER (VOIDmode, desc),
+	     gen_rtx_CLOBBER (VOIDmode, test >= 10 ? gen_rtx_REG (Pmode, 12)
+						: gen_rtx_SCRATCH (Pmode)),
+	     gen_rtx_CLOBBER (VOIDmode, test >= 10 ? gen_rtx_REG (Pmode, 13)
+							: gen_rtx_SCRATCH (Pmode)),
+	     gen_rtx_USE (VOIDmode, gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM))));
+	else if (test == 5)
 	  pat = gen_rtx_PARALLEL (VOIDmode, gen_rtvec
 	    (2, pat, gen_rtx_CLOBBER (VOIDmode, copy_rtx (slot))));
 	rtx_insn *operation = append (pat);
