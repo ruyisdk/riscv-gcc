@@ -706,6 +706,8 @@ For a single-block loop with one adjacent external entry, an independent
 scan from empty state establishes the backedge facts.  Their constant
 intersection with the entry state can remove repeated input preparation.
 Calls, asm, unknown operations and other loop shapes discard loop facts.
+After cleanup refreshes liveness, a dead prologue scale result triggers one
+final DCE pass.  N validation, fixed register saves and CFI remain intact.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
 Narrow broadcast queries read the GPR constant cache directly and truncate

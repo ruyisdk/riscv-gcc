@@ -15666,6 +15666,28 @@ shorten_rowcol_control (rtx_insn *insn, rtx control, local_md_state &state)
   return false;
 }
 
+/* Cleanup can expose a dead scale only after loop liveness is recomputed.  */
+static bool
+unused_prologue_scale_p ()
+{
+  if (!flag_dce || !runtime_profile_p ()
+      || global_regs[RISCV_ZTT_SCALE_REGNUM])
+    return false;
+  for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    if (NONDEBUG_INSN_P (insn) && prologue_contains (insn)
+	&& !RTX_FRAME_RELATED_P (insn) && GET_CODE (PATTERN (insn)) == SET)
+      {
+	rtx set = PATTERN (insn), dest = SET_DEST (set);
+	if (local_md_state::full_gpr_p (dest)
+	    && REGNO (dest) == RISCV_ZTT_SCALE_REGNUM
+	    && (GET_CODE (SET_SRC (set)) == MULT
+		|| GET_CODE (SET_SRC (set)) == LSHIFTRT)
+	    && find_reg_note (insn, REG_UNUSED, dest))
+	  return true;
+      }
+  return false;
+}
+
 /* Reuse Md along proven paths and constant-state joins after allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -16588,6 +16610,13 @@ reuse_local_md ()
 	{
 	  df_note_add_problem ();
 	  df_analyze ();
+	  if (unused_prologue_scale_p ())
+	    {
+	      if (dump_file)
+		fprintf (dump_file, "Clean dead AME scale after liveness update\n");
+	      run_fast_dce ();
+	      df_analyze ();
+	    }
 	}
       return TODO_df_finish;
     }
