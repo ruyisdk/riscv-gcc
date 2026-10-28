@@ -10728,7 +10728,7 @@ riscv_ztt_stack_mem (rtx set, bool raw_m)
     && known_le (GET_MODE_SIZE (GET_MODE (*loc)), UNITS_PER_WORD) ? loc : nullptr;
 }
 
-/* Use SP directly in affine address sums without increasing encoding size.  */
+/* Reuse a known base in affine sums without increasing encoding size.  */
 static bool
 riscv_ztt_fold_stack_base (rtx_insn *insn, riscv_ztt_stack_value *regs,
 			   riscv_ztt_stack_value sp)
@@ -10736,6 +10736,8 @@ riscv_ztt_fold_stack_base (rtx_insn *insn, riscv_ztt_stack_value *regs,
   rtx set = PATTERN (insn);
   if (GET_CODE (set) != SET || RTX_FRAME_RELATED_P (insn)
       || !REG_P (SET_DEST (set)) || !GP_REG_P (REGNO (SET_DEST (set)))
+      || fixed_regs[REGNO (SET_DEST (set))]
+      || global_regs[REGNO (SET_DEST (set))]
       || GET_MODE (SET_DEST (set)) != Pmode
       || GET_CODE (SET_SRC (set)) != PLUS)
     return false;
@@ -10749,15 +10751,22 @@ riscv_ztt_fold_stack_base (rtx_insn *insn, riscv_ztt_stack_value *regs,
     {
       rtx base = XEXP (src, i);
       if (!REG_P (base) || !GP_REG_P (REGNO (base))
-	  || fixed_regs[REGNO (base)] || global_regs[REGNO (base)]
-	  || riscv_ztt_stack_address (riscv_ztt_stack_expr (base, regs), sp)
-	     != stack_pointer_rtx)
+	  || fixed_regs[REGNO (base)] || global_regs[REGNO (base)])
+	continue;
+      auto base_value = riscv_ztt_stack_expr (base, regs);
+      rtx replacement = nullptr;
+      if (riscv_ztt_stack_address (base_value, sp) == stack_pointer_rtx)
+	replacement = stack_pointer_rtx;
+      else if (!rtx_equal_p (base, SET_DEST (set))
+	       && regs[REGNO (SET_DEST (set)) - GP_REG_FIRST] == base_value)
+	replacement = SET_DEST (set);
+      if (!replacement)
 	continue;
       /* The length attribute does not account for assembler compression.  */
       if ((TARGET_RVC || TARGET_ZCA) && rtx_equal_p (SET_DEST (set), base))
 	continue;
       int length = get_attr_length (insn);
-      validate_change (insn, &XEXP (src, i), stack_pointer_rtx, true);
+      validate_change (insn, &XEXP (src, i), replacement, true);
       if (!verify_changes (0) || get_attr_length (insn) > length)
 	{
 	  cancel_changes (0);
@@ -11044,6 +11053,43 @@ riscv_ztt_stack_selftests (basic_block bb)
 	}
       else
 	ASSERT_RTX_EQ (SET_SRC (PATTERN (insn)), original);
+      end_sequence ();
+    }
+
+  for (unsigned int test = 0; test != 16; ++test)
+    {
+      riscv_ztt_stack_value facts[32] = {};
+      facts[REGNO (a)] = facts[REGNO (b)] = {true, 1, 0, -16U};
+      facts[REGNO (scale)] = {true, 0, 1, 0};
+      if (test == 2) facts[REGNO (b)].offset += 16;
+      if (test == 3) facts[REGNO (b)].scale += 1;
+      if (test == 4) facts[REGNO (b)] = {};
+      if (test == 5) facts[REGNO (a)] = {};
+      if (test == 12) facts[REGNO (a)].fp = facts[REGNO (b)].fp = 0;
+      if (test == 13)
+	riscv_ztt_stack_clobber (gen_rtx_REG (QImode, REGNO (b)), nullptr, facts);
+      rtx left = test == 11 ? b : a;
+      rtx right = test == 6 ? GEN_INT (16) : scale;
+      rtx dest = test == 10 ? gen_rtx_REG (HImode, REGNO (b))
+	: test == 15 ? sp : b;
+      rtx sum = test == 1 ? gen_rtx_PLUS (Pmode, right, left)
+	: test == 14 ? gen_rtx_MINUS (Pmode, left, right)
+	: gen_rtx_PLUS (Pmode, left, right);
+      rtx original = copy_rtx (sum);
+      start_sequence ();
+      rtx_insn *insn = emit_insn (gen_rtx_SET (dest, sum));
+      if (test == 7) RTX_FRAME_RELATED_P (insn) = 1;
+      auto fixed = fixed_regs[REGNO (b)], global = global_regs[REGNO (b)];
+      if (test == 8) fixed_regs[REGNO (b)] = 1;
+      if (test == 9) global_regs[REGNO (b)] = 1;
+      bool changed = riscv_ztt_fold_stack_base (insn, facts, {});
+      ASSERT_EQ (changed, test < 2);
+      if (changed)
+	ASSERT_RTX_EQ (XEXP (SET_SRC (PATTERN (insn)), test == 1 ? 1 : 0), b);
+      else
+	ASSERT_RTX_EQ (SET_SRC (PATTERN (insn)), original);
+      fixed_regs[REGNO (b)] = fixed;
+      global_regs[REGNO (b)] = global;
       end_sequence ();
     }
 
