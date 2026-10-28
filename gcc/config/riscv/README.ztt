@@ -100,6 +100,9 @@ roots those tails until their function types retain them.
 Index, stride, offset and exponent signatures share three control tails
 in the same temporary cache.  The size_t, int and long parameter types
 remain distinct, including on RV32 where int and long have equal widths.
+Load signatures share pointer argument lists by exact C pointer type,
+separately for plain and strided loads.  Temporary GC-rooted maps retain
+these lists without merging result types or pointer element identities.
 Ordinary M-only binary and ternary signatures similarly prepend one
 parameter to the cached unary or binary argument list.
 Exponent accumulation reuses the ordinary exponent parameter tail.

@@ -1907,6 +1907,7 @@ struct GTY (()) nominal_registration_cache
   vec<tree, va_gc> *blocks[riscv_ztt::TYPE_MAX];
   tree scalar_args[numeric_scalar_dtype_count + 1];
   tree control_args[3];
+  hash_map<tree, tree> *load_args[2];
 };
 static GTY (()) nominal_registration_cache *nominal_registration_types;
 
@@ -2626,6 +2627,23 @@ registration_control_args (tree control)
 
 static tree registration_function_type (prototype_index, type_index);
 
+/* Load result types can share an immutable pointer argument list.  */
+static tree
+registration_load_args (tree pointer, bool stride)
+{
+  hash_map<tree, tree> *&cache
+    = nominal_registration_types->load_args[stride];
+  if (!cache)
+    cache = hash_map<tree, tree>::create_ggc ();
+  if (tree *args = cache->get (pointer))
+    return *args;
+  tree tail = stride ? registration_control_args (size_type_node)
+    : void_list_node;
+  tree args = tree_cons (NULL_TREE, pointer, tail);
+  cache->put (pointer, args);
+  return args;
+}
+
 static tree
 build_function_type (prototype_index prototype, type_index type)
 {
@@ -2667,12 +2685,11 @@ build_function_type (prototype_index prototype, type_index type)
     case PROTO_A_VOID:
       return build_function_type_list (ztt_m_type_node, NULL_TREE);
     case PROTO_M_CONST_PTR:
-      return build_function_type_list (ztt_m_type_node, const_element_ptr,
-				       NULL_TREE);
+      return ::build_function_type
+	(ztt_m_type_node, registration_load_args (const_element_ptr, false));
     case PROTO_M_CONST_PTR_STRIDE:
       return ::build_function_type
-	(ztt_m_type_node, tree_cons (NULL_TREE, const_element_ptr,
-				    registration_control_args (size_type_node)));
+	(ztt_m_type_node, registration_load_args (const_element_ptr, true));
     case PROTO_VOID_PTR_STRIDE_M:
     case PROTO_VOID_PTR_M:
       {
