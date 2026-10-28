@@ -16346,13 +16346,13 @@ scalar_stack_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
 }
 
 static bool
-reuse_scalar_stack_load (rtx_insn *load, unsigned int &budget)
+reuse_scalar_stack_load (rtx_insn *load, unsigned int &budget, bool forward = false)
 {
   rtx set = scalar_stack_transfer (load);
   if (!set)
     return false;
   basic_block bb = BLOCK_FOR_INSN (load);
-  rtx_insn *insn = next_nonnote_nondebug_insn_bb (load);
+  rtx_insn *insn = forward ? nullptr : next_nonnote_nondebug_insn_bb (load);
   if (!insn || BLOCK_FOR_INSN (insn) != bb || RTX_FRAME_RELATED_P (insn)
       || recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET
       || side_effects_p (PATTERN (insn)) || !md_scalar_insn_p (PATTERN (insn))
@@ -16368,7 +16368,7 @@ reuse_scalar_stack_load (rtx_insn *load, unsigned int &budget)
       ++distance;
       --budget;
       rtx source = scalar_stack_carrier (prev, SET_SRC (set));
-      if (!source || (!insn && !rtx_equal_p (source, SET_DEST (set)))
+      if (!source || (!forward && !insn && !rtx_equal_p (source, SET_DEST (set)))
 	  || !scalar_stack_path_p (load, source, SET_SRC (set), budget))
 	continue;
       if (rtx_equal_p (source, SET_DEST (set)))
@@ -16378,18 +16378,23 @@ reuse_scalar_stack_load (rtx_insn *load, unsigned int &budget)
 	  delete_insn (load);
 	  return true;
 	}
-      int length = get_attr_length (insn);
-      validate_replace_src_group (SET_DEST (set), source, insn);
-      if (!verify_changes (0) || get_attr_length (insn) > length)
+      rtx_insn *target = insn ? insn : load;
+      int length = get_attr_length (target);
+      if (insn)
+	validate_replace_src_group (SET_DEST (set), source, insn);
+      else
+	validate_change (load, &SET_SRC (set), source, true);
+      if (!verify_changes (0) || get_attr_length (target) > length)
 	{
 	  cancel_changes (0);
 	  continue;
 	}
       confirm_change_group ();
-      remove_reg_equal_equiv_notes (insn);
-      df_insn_rescan (insn);
+      remove_reg_equal_equiv_notes (target);
+      df_insn_rescan (target);
       if (dump_file)
-	fprintf (dump_file, "Reuse scalar stack value at insn %d\n", INSN_UID (insn));
+	fprintf (dump_file, "%s scalar stack value at insn %d\n",
+		 insn ? "Reuse" : "Forward", INSN_UID (target));
       return true;
     }
   return false;
@@ -16403,16 +16408,18 @@ reuse_scalar_stack_operands ()
   bool changed = false;
   unsigned int budget = 2048;
   basic_block bb;
-  FOR_EACH_BB_FN (bb, cfun)
-    {
-      rtx_insn *insn, *next;
-      FOR_BB_INSNS_SAFE (bb, insn, next)
-	{
-	  if (!budget)
-	    return changed;
-	  changed |= reuse_scalar_stack_load (insn, budget);
-	}
-    }
+  /* Keep load witnesses until direct uses have been simplified.  */
+  for (unsigned int pass = 0; pass != 2; ++pass)
+    FOR_EACH_BB_FN (bb, cfun)
+      {
+	rtx_insn *insn, *next;
+	FOR_BB_INSNS_SAFE (bb, insn, next)
+	  {
+	    if (!budget)
+	      return changed;
+	    changed |= reuse_scalar_stack_load (insn, budget, pass != 0);
+	  }
+      }
   return changed;
 }
 
@@ -17737,12 +17744,17 @@ run_scalar_spill_path_selftests ()
 	  rtx src = test == 36 ? gen_rtx_AND (Pmode, tmp, GEN_INT (15)) : tmp;
 	  rtx_insn *use = append (join, gen_rtx_SET (dest, src));
 	  if (test == 36) add_reg_note (use, REG_EQUAL, copy_rtx (src));
-	  ASSERT_EQ_AT (loc, test != 38, reuse_scalar_stack_operands ());
+	  ASSERT_TRUE_AT (loc, reuse_scalar_stack_operands ());
 	  ASSERT_TRUE_AT (loc, rtx_equal_p (dest, SET_DEST (PATTERN (use))));
 	  ASSERT_EQ_AT (loc, test != 38, reg_referenced_p (reg, PATTERN (use)));
 	  ASSERT_EQ_AT (loc, test == 38, reg_referenced_p (tmp, PATTERN (use)));
 	  ASSERT_FALSE_AT (loc, find_reg_equal_equiv_note (use));
 	  ASSERT_FALSE_AT (loc, load->deleted ());
+	  if (test == 38)
+	    {
+	      ASSERT_TRUE_AT (loc, MEM_VOLATILE_P (SET_DEST (PATTERN (use))));
+	      ASSERT_TRUE_AT (loc, rtx_equal_p (reg, SET_SRC (PATTERN (load))));
+	    }
 	}
       if (test >= 39)
 	{
@@ -17771,7 +17783,7 @@ run_scalar_spill_disjoint_selftests ()
   using namespace selftest;
   if (!TARGET_ZTT)
     return;
-  for (unsigned int test = 0; test != 23; ++test)
+  for (unsigned int test = 0; test != 26; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       int reload = reload_completed, strict_aliasing = flag_strict_aliasing;
@@ -17788,7 +17800,8 @@ run_scalar_spill_disjoint_selftests ()
 	set_block_for_insn (insn, bb);
 	return BB_END (bb) = insn;
       };
-      rtx reg = gen_rtx_REG (Pmode, 25), tmp = gen_rtx_REG (Pmode, 11);
+      rtx reg = gen_rtx_REG (Pmode, 25);
+      rtx tmp = gen_rtx_REG (Pmode, test == 25 ? 24 : 11);
       rtx pointer = gen_rtx_REG (Pmode, 10);
       rtx mem = gen_rtx_MEM (Pmode, plus_constant (Pmode, stack_pointer_rtx, 64));
       set_mem_attrs_for_spill (mem);
@@ -17828,7 +17841,7 @@ run_scalar_spill_disjoint_selftests ()
 	    : test == 10 ? hard_frame_pointer_rtx : reg;
 	  append (gen_rtx_SET (changed, plus_constant (Pmode, changed, 16)));
 	}
-      rtx dest = test == 13 || test == 16 ? tmp : reg;
+      rtx dest = test == 13 || test == 16 || test >= 23 ? tmp : reg;
       rtx_insn *load = append (gen_rtx_SET (dest, copy_rtx (mem)));
       if (test == 14)
 	{
@@ -17837,26 +17850,39 @@ run_scalar_spill_disjoint_selftests ()
 	  make_edge (next, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
 	  bb = next;
 	}
+      else if (test == 23)
+	append (gen_rtx_SET (reg, const0_rtx));
+      else if (test == 25)
+	{
+	  rtx_insn *call = emit_call_insn_after
+	    (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (bb));
+	  set_block_for_insn (call, bb);
+	  BB_END (bb) = call;
+	}
       else if (test != 16)
 	append (gen_rtx_SET (pointer, const0_rtx));
       rtx_insn *use = append (gen_rtx_SET
 	(pointer, gen_rtx_PLUS (Pmode, dest, const1_rtx)));
+      if (test == 24)
+	append (gen_rtx_SET (gen_rtx_REG (Pmode, 12), dest));
       bool expected = test <= 3 || (test >= 12 && test <= 16)
-	|| test == 19 || test == 22;
+	|| test == 19 || test == 22 || test >= 23;
       unsigned int budget = test == 17 ? 0 : 2048;
       char context[64];
       snprintf (context, sizeof context, "disjoint scalar spill case %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
       ASSERT_EQ_AT (loc, expected && test != 2,
 		    scalar_stack_path_p (load, reg, mem, budget));
-      expected &= test != 2 && test != 13;
+      expected &= test != 2;
       budget = test == 17 ? 0 : 2048;
       bool changed = test == 14 || test == 19 ? reuse_scalar_stack_operands ()
-	: reuse_scalar_stack_load (load, budget);
+	: reuse_scalar_stack_load (load, budget, test == 13 || test >= 23);
       ASSERT_EQ_AT (loc, expected, changed);
-      ASSERT_EQ_AT (loc, expected && test != 16, load->deleted ());
+      ASSERT_EQ_AT (loc, expected && dest == reg, load->deleted ());
       ASSERT_TRUE_AT (loc, rtx_equal_p (pointer, SET_DEST (PATTERN (use))));
-      ASSERT_EQ_AT (loc, test != 13, reg_referenced_p (reg, PATTERN (use)));
+      ASSERT_EQ_AT (loc, test != 13 && test < 23, reg_referenced_p (reg, PATTERN (use)));
+      if (test == 13 || test >= 23)
+	ASSERT_TRUE_AT (loc, rtx_equal_p (reg, SET_SRC (PATTERN (load))));
       reload_completed = reload;
       flag_strict_aliasing = strict_aliasing;
       riscv_ztt_profile_string = profile;
