@@ -8308,9 +8308,11 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
       return useless_type_conversion_p (lhs_type, TREE_TYPE (repeated))
 	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
   if (!same && (d.expansion == EXPAND_MAND_EW
+		|| d.expansion == EXPAND_MANDNOT_EW
 		|| (d.expansion == EXPAND_MMIN_EW
 		    && !(types[d.type].descriptor & (1U << 30)))))
-    for (unsigned int side = 0; side < 2; ++side)
+    for (unsigned int side = 0;
+	 side < (d.expansion == EXPAND_MANDNOT_EW ? 1U : 2U); ++side)
       {
 	count = 0;
 	tree zero = gimple_call_arg (stmt, side);
