@@ -10540,6 +10540,13 @@ riscv_ztt_remove_unused_workspace ()
 	  || !rtx_equal_p (SET_DEST (pat), stack_pointer_rtx))
 	return false;
       rtx src = SET_SRC (pat);
+      if (!RTX_FRAME_RELATED_P (insn) && epilogue_contains (insn)
+	  && rtx_equal_p (src, plus_constant (Pmode, hard_frame_pointer_rtx,
+					    -fixed_frame)))
+	{
+	  releases.safe_push (insn);
+	  continue;
+	}
       if ((GET_CODE (src) != PLUS && GET_CODE (src) != MINUS)
 	  || !rtx_equal_p (XEXP (src, 0), stack_pointer_rtx))
 	return false;
@@ -10885,6 +10892,36 @@ riscv_ztt_fold_stack_offset (rtx_insn *insn, riscv_ztt_stack_value *regs)
   return false;
 }
 
+/* Replace a proven scalable pop while keeping the fixed FP-based CFA.  */
+static bool
+riscv_ztt_fold_stack_release (rtx_insn *insn, riscv_ztt_stack_value sp,
+			      riscv_ztt_stack_value value)
+{
+  rtx set = PATTERN (insn);
+  if (!sp.known || sp.fp != 1 || !sp.scale
+      || !value.known || value.fp != 1 || value.scale
+      || GET_CODE (set) != SET
+      || !rtx_equal_p (SET_DEST (set), stack_pointer_rtx)
+      || GET_CODE (SET_SRC (set)) != PLUS
+      || !rtx_equal_p (XEXP (SET_SRC (set), 0), stack_pointer_rtx)
+      || RTX_FRAME_RELATED_P (insn)
+      || !riscv_ztt_workspace_notes_p (REG_NOTES (insn)))
+    return false;
+  HOST_WIDE_INT offset = trunc_int_for_mode (value.offset, Pmode);
+  /* A nonzero FP offset can widen a compressed SP add.  */
+  if (!SMALL_OPERAND (offset)
+      || ((TARGET_RVC || TARGET_ZCA) && offset))
+    return false;
+  rtx replacement = plus_constant (Pmode, hard_frame_pointer_rtx, offset);
+  if (!validate_change (insn, &SET_SRC (set), replacement, false))
+    return false;
+  remove_reg_equal_equiv_notes (insn);
+  while (rtx note = find_reg_note (insn, REG_DEAD, NULL_RTX))
+    remove_note (insn, note);
+  df_insn_rescan (insn);
+  return true;
+}
+
 /* Track SP from actual adjustments and optionally retain register facts.  */
 static riscv_ztt_stack_value
 riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
@@ -10919,6 +10956,14 @@ riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
       bool scale_changed = modified_in_p (scale, insn);
       bool sp_changed = modified_in_p (stack_pointer_rtx, insn);
 
+      if (rewrite && epilogue_contains (insn)
+	  && riscv_ztt_fold_stack_release (insn, sp, value))
+	{
+	  changed = true;
+	  if (dump_file)
+	    fprintf (dump_file, "Restore AME stack from frame pointer at insn %d\n",
+		     INSN_UID (insn));
+	}
       if (rewrite && !fp_changed && !scale_changed && !sp_changed
 	  && !RTX_FRAME_RELATED_P (insn) && !prologue_epilogue_contains (insn))
 	{
@@ -11205,6 +11250,55 @@ riscv_ztt_stack_selftests (basic_block bb)
 	ASSERT_RTX_EQ (SET_SRC (PATTERN (insn)), original);
       fixed_regs[REGNO (b)] = fixed;
       global_regs[REGNO (b)] = global;
+      end_sequence ();
+    }
+
+  for (unsigned int test = 0; test != 24; ++test)
+    {
+      auto initial = stack;
+      riscv_ztt_stack_value result = {true, 1, 0, -HOST_WIDE_INT_1U * 48};
+      if (test == 1) result.offset = 0;
+      if (test == 2) initial.known = false;
+      if (test == 3) initial.fp = 0;
+      if (test == 4) initial.scale = 0;
+      if (test == 5) result.known = false;
+      if (test == 6) result.fp = 0;
+      if (test == 7) result.scale = 1;
+      if (test == 13) result.offset = 2048;
+      if (test == 14) result.offset = -HOST_WIDE_INT_1U * 2049;
+      if (test == 15) result.offset = -HOST_WIDE_INT_1U * 2048;
+      if (test == 16) result.offset = 2047;
+      if (test == 17) result.offset = (HOST_WIDE_INT_1U << 32) - 48;
+      if (test == 19) result.fp = 2;
+      if (test == 20) initial.fp = 2;
+      rtx src = test == 9 ? gen_rtx_MINUS (Pmode, sp, a)
+	: gen_rtx_PLUS (Pmode, test == 10 ? fp : sp, a);
+      rtx pat = test == 21 ? gen_rtx_USE (VOIDmode, a)
+	: gen_rtx_SET (test == 8 ? b : sp, src);
+      rtx original = copy_rtx (pat);
+      start_sequence ();
+      rtx_insn *insn = emit_insn (pat);
+      set_block_for_insn (insn, bb);
+      if (test == 11) RTX_FRAME_RELATED_P (insn) = 1;
+      if (test == 12) add_reg_note (insn, REG_EQUAL, fp);
+      if (test == 18) add_reg_note (insn, REG_CFA_ADJUST_CFA,
+	gen_rtx_SET (sp, plus_constant (Pmode, fp, -48)));
+      if (test == 22) add_reg_note (insn, REG_DEAD, a);
+      if (test == 23) add_reg_note (insn, REG_EQUIV, const0_rtx);
+      bool changed = riscv_ztt_fold_stack_release (insn, initial, result);
+      bool expected_change = test == 1
+	|| ((!TARGET_RVC && !TARGET_ZCA)
+	    && (test == 0 || test == 15 || test == 16
+		|| (test == 17 && !TARGET_64BIT) || test == 22 || test == 23));
+      ASSERT_EQ (changed, expected_change);
+      if (changed)
+	{
+	  ASSERT_RTX_EQ (SET_SRC (pat), plus_constant
+	    (Pmode, fp, trunc_int_for_mode (result.offset, Pmode)));
+	  ASSERT_EQ (REG_NOTES (insn), NULL_RTX);
+	}
+      else
+	ASSERT_RTX_EQ (pat, original);
       end_sequence ();
     }
 

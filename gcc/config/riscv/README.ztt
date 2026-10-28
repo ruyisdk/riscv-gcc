@@ -1002,6 +1002,10 @@ without retaining CFG snapshots.  Allocation,
 memory operations and CFA rules are unchanged.  Ordinary GPR loads/stores
 can use the same proven SP-relative address directly, retaining the MEM
 mode and attributes; dead intermediate address registers are then removed.
+At epilogues, a proven scalable pop can restore SP from FP plus a small
+constant.  This retains the fixed frame and CFA; nonzero offsets are excluded
+with C/Zca to preserve compressed adds.  Workspace cleanup recognizes this
+release only at the original fixed-frame offset.
 After DCE, leaf functions with no live stack references can
 drop an unused AME workspace allocation and its release sites.  Every
 adjustment uses the proven frame-size coefficient.
