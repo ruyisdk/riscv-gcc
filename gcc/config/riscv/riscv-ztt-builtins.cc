@@ -2815,11 +2815,40 @@ matrix_operation_name (char *name, size_t size, const char *operation,
   return name - begin;
 }
 
+/* Operation strings are immutable during a registration walk.  */
+struct scalar_name_cache
+{
+  const char *operation = nullptr;
+  type_index type = TYPE_MAX;
+  size_t lengths[2] = {};
+  char prefixes[2][160];
+};
+
 static void
 integer_scalar_name (char *name, size_t size, const char *operation,
-		     type_index dst, type_index tc, bool alias)
+		     type_index dst, type_index tc, bool alias,
+		     scalar_name_cache *cache = nullptr)
 {
-  size_t used = matrix_operation_name (name, size, operation, dst, alias);
+  size_t used;
+  if (cache)
+    {
+      if (cache->operation != operation || cache->type != dst)
+	{
+	  cache->operation = operation;
+	  cache->type = dst;
+	  cache->lengths[0] = cache->lengths[1] = 0;
+	}
+      size_t &length = cache->lengths[alias];
+      if (!length)
+	length = matrix_operation_name (cache->prefixes[alias],
+					 sizeof (cache->prefixes[alias]),
+					 operation, dst, alias);
+      gcc_assert (length < size);
+      memcpy (name, cache->prefixes[alias], length);
+      used = length;
+    }
+  else
+    used = matrix_operation_name (name, size, operation, dst, alias);
   const char *ctype = scalar_datatype_name (types[tc].descriptor, alias);
   size_t length = strlen (ctype);
   gcc_assert (used + 1 + length < size);
@@ -2841,7 +2870,8 @@ canonical_builtin_name (const builtin_description &d, char (&name)[160])
 
 static tree
 integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
-				type_index dst, type_index tc)
+				type_index dst, type_index tc,
+				scalar_name_cache *names = nullptr)
 {
   if (in_lto_p)
     return integer_zero_node;
@@ -2850,7 +2880,8 @@ integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
   if (!decl && initialize_p)
     {
       char name[160];
-      integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, false);
+      integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc,
+			   false, names);
       unsigned int c = (code - integer_broadcast_code_base)
 	% integer_scalar_dtype_count;
       tree ftype = nominal_registration_type (dst, c, 1);
@@ -2860,7 +2891,8 @@ integer_broadcast_builtin_decl (unsigned int code, bool initialize_p,
       integer_broadcast_decls.put (slot, decl);
       if (!((types[dst].descriptor | types[tc].descriptor) & (3U << 27)))
 	{
-	  integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, true);
+	  integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc,
+			       true, names);
 	  simulate_builtin_function_decl
 	    (input_location, name, ftype, fullcode, NULL, function_attributes ());
 	}
@@ -2898,7 +2930,8 @@ integer_scalar_old_p (unsigned int op)
 
 static tree
 integer_scalar_public_decl (unsigned int code, bool initialize_p,
-			    unsigned int op, type_index dst, type_index tc)
+			    unsigned int op, type_index dst, type_index tc,
+			    scalar_name_cache *names = nullptr)
 {
   if (in_lto_p)
     return integer_zero_node;
@@ -2929,13 +2962,15 @@ integer_scalar_public_decl (unsigned int code, bool initialize_p,
       tree ftype = nominal_registration_type
 	(dst, index % integer_scalar_dtype_count, old ? 3 : 2);
       char name[160];
-      integer_scalar_name (name, sizeof (name), integer_scalar_names[op], dst, tc, false);
+      integer_scalar_name (name, sizeof (name), integer_scalar_names[op],
+			   dst, tc, false, names);
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       decl = simulate_builtin_function_decl
 	(input_location, name, ftype, fullcode, NULL, function_attributes ());
       if (!((types[dst].descriptor | types[tc].descriptor) & (3U << 27)))
 	{
-	  integer_scalar_name (name, sizeof (name), integer_scalar_names[op], dst, tc, true);
+	  integer_scalar_name (name, sizeof (name), integer_scalar_names[op],
+			       dst, tc, true, names);
 	  simulate_builtin_function_decl
 	    (input_location, name, ftype, fullcode, NULL, function_attributes ());
 	}
@@ -3208,7 +3243,8 @@ nominal_registration_type (type_index dst, unsigned int c, unsigned int nargs)
 
 static tree
 floating_broadcast_builtin_decl (unsigned int code, bool initialize_p,
-				 type_index dst, type_index tc)
+				 type_index dst, type_index tc,
+				 scalar_name_cache *names = nullptr)
 {
   if (in_lto_p)
     return integer_zero_node;
@@ -3221,14 +3257,16 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p,
 	% numeric_scalar_dtype_count;
       tree ftype = nominal_registration_type (dst, c, 1);
       char name[160];
-      integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, false);
+      integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc,
+			   false, names);
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       decl = simulate_builtin_function_decl
 	(input_location, name, ftype, fullcode, NULL, function_attributes ());
       floating_broadcast_decls.put (slot, decl);
       if (default_scalar_rm_p (types[dst].descriptor) && default_scalar_rm_p (desc))
 	{
-	  integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc, true);
+	  integer_scalar_name (name, sizeof (name), "mbcast_m_x", dst, tc,
+			       true, names);
 	  simulate_builtin_function_decl
 	    (input_location, name, ftype, fullcode, NULL, function_attributes ());
 	}
@@ -3247,7 +3285,8 @@ floating_broadcast_builtin_decl (unsigned int code, bool initialize_p)
 
 static tree
 floating_scalar_public_decl (unsigned int code, bool initialize_p,
-			     unsigned int op, type_index dst, type_index tc)
+			     unsigned int op, type_index dst, type_index tc,
+			     scalar_name_cache *names = nullptr)
 {
   if (in_lto_p)
     return integer_zero_node;
@@ -3280,13 +3319,13 @@ floating_scalar_public_decl (unsigned int code, bool initialize_p,
 	(dst, index % numeric_scalar_dtype_count, old ? 3 : 2);
       const char *operation = numeric_scalar_name (op);
       char name[160];
-      integer_scalar_name (name, sizeof (name), operation, dst, tc, false);
+      integer_scalar_name (name, sizeof (name), operation, dst, tc, false, names);
       unsigned int fullcode = (code << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       decl = simulate_builtin_function_decl
 	(input_location, name, ftype, fullcode, NULL, function_attributes ());
       if (default_scalar_rm_p (types[dst].descriptor) && default_scalar_rm_p (desc))
 	{
-	  integer_scalar_name (name, sizeof (name), operation, dst, tc, true);
+	  integer_scalar_name (name, sizeof (name), operation, dst, tc, true, names);
 	  simulate_builtin_function_decl
 	    (input_location, name, ftype, fullcode, NULL, function_attributes ());
 	}
@@ -3937,7 +3976,8 @@ run_scalar_full_name_selftests ()
 	  }
       ASSERT_NE (sources[n], TYPE_MAX);
     }
-  auto check = [] (const char *op, type_index dst, type_index tc, bool alias) {
+  scalar_name_cache cache;
+  auto check = [&] (const char *op, type_index dst, type_index tc, bool alias) {
     char expected[160], actual[162];
     int length = snprintf (expected, sizeof (expected),
 			   "__riscv_ztt_%s_%s_%ux%u_%s", op,
@@ -3945,11 +3985,15 @@ run_scalar_full_name_selftests ()
 			   types[dst].rows, types[dst].columns,
 			   scalar_datatype_name (types[tc].descriptor, alias));
     ASSERT_TRUE (length > 0 && static_cast<size_t> (length) < sizeof (expected));
-    memset (actual, '#', sizeof (actual));
-    integer_scalar_name (actual + 1, length + 1, op, dst, tc, alias);
-    ASSERT_STREQ (expected, actual + 1);
-    ASSERT_EQ (actual[0], '#');
-    ASSERT_EQ (actual[length + 2], '#');
+    for (auto *names : { static_cast<scalar_name_cache *> (nullptr),
+			&cache, &cache })
+      {
+	memset (actual, '#', sizeof (actual));
+	integer_scalar_name (actual + 1, length + 1, op, dst, tc, alias, names);
+	ASSERT_STREQ (expected, actual + 1);
+	ASSERT_EQ (actual[0], '#');
+	ASSERT_EQ (actual[length + 2], '#');
+      }
   };
   auto check_operation = [] (const char *op, type_index dst, bool alias) {
     char expected[160], actual[162];
@@ -6072,6 +6116,7 @@ register_functions ()
   if (profile.n == 0)
     {
       auto_vec<scalar_registration_group> integer_candidates, floating_candidates;
+      scalar_name_cache names;
       collect_scalar_registration_groups (integer_candidates, false);
       collect_scalar_registration_groups (floating_candidates, true);
       type_index scalar_types[numeric_scalar_dtype_count];
@@ -6082,7 +6127,7 @@ register_functions ()
 	     c < integer_scalar_dtype_count; ++c)
 	  integer_broadcast_builtin_decl
 	    (integer_broadcast_code_base + candidate.payload + c, true,
-	     candidate.dst, scalar_types[c]);
+	     candidate.dst, scalar_types[c], &names);
       for (unsigned int op = 0; op < integer_scalar_operations; ++op)
 	for (const auto &candidate : integer_candidates)
 	  for (unsigned int c = candidate.first_tc;
@@ -6090,7 +6135,7 @@ register_functions ()
 	    integer_scalar_public_decl (integer_scalar_public_base
 					+ op * integer_broadcast_code_count
 					+ candidate.payload + c, true, op,
-					candidate.dst, scalar_types[c]);
+					candidate.dst, scalar_types[c], &names);
       for (unsigned int op = 0; op < floating_scalar_operations; ++op)
 	for (const auto &candidate : floating_candidates)
 	  if (floating_scalar_operation_p
@@ -6100,13 +6145,13 @@ register_functions ()
 	      floating_scalar_public_decl (floating_scalar_public_base
 					   + op * floating_broadcast_code_count
 					   + candidate.payload + c, true, op,
-					   candidate.dst, scalar_types[c]);
+					   candidate.dst, scalar_types[c], &names);
       for (const auto &candidate : floating_candidates)
 	for (unsigned int c = candidate.first_tc;
 	     c < numeric_scalar_dtype_count; ++c)
 	  floating_broadcast_builtin_decl
 	    (floating_broadcast_code_base + candidate.payload + c, true,
-	     candidate.dst, scalar_types[c]);
+	     candidate.dst, scalar_types[c], &names);
     }
   for (auto &entries : registration_function_types)
     vec_free (entries);
