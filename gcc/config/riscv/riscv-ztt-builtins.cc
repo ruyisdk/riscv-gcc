@@ -14843,7 +14843,9 @@ class local_raw_spill
 	  {
 	    rtx pat = PATTERN (p);
 	    if (interleaved
-		&& (register_vector_p (p) || private_scalar_transfer_p (p)))
+		&& (register_vector_p (p) || private_scalar_transfer_p (p)
+		    || (NONJUMP_INSN_P (p) && !RTX_FRAME_RELATED_P (p)
+			&& recog_memoized (p) >= 0 && prepared_matrix_p (pat))))
 	      {
 		if (modified_in_p (lhs, p) || modified_in_p (rhs, p))
 		  return false;
@@ -15278,6 +15280,69 @@ public:
     return changed;
   }
 
+  /* A complete local overwrite kills an unobserved private save.  */
+  static bool remove_overwritten_stores (basic_block bb)
+  {
+    tree decl = get_spill_slot_decl (false);
+    rtx canonical = decl ? DECL_RTL_IF_SET (decl) : nullptr;
+    if (!canonical || !MEM_P (canonical) || !MEM_ALIAS_SET (canonical)
+	|| cfun->stdarg || cfun->calls_setjmp || cfun->has_nonlocal_label
+	|| crtl->calls_eh_return || flag_non_call_exceptions)
+      return false;
+    edge e;
+    edge_iterator ei;
+    FOR_EACH_EDGE (e, ei, bb->succs)
+      if (e->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_CROSSING))
+	return false;
+    bool changed = false;
+    unsigned int candidates = 0;
+    rtx_insn *insn, *prev;
+    FOR_BB_INSNS_REVERSE_SAFE (bb, insn, prev)
+      {
+	if (!NONDEBUG_INSN_P (insn))
+	  continue;
+	if (++candidates > 128)
+	  break;
+	rtx pat = PATTERN (insn);
+	if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	    || recog_memoized (insn) < 0 || !md_raw_transfer_p (pat)
+	    || !private_slot_p (SET_DEST (pat))
+	    || MEM_ALIAS_SET (SET_DEST (pat)) != MEM_ALIAS_SET (canonical))
+	  continue;
+	local_raw_spill saved;
+	saved.redundant_reload_p (pat, insn);
+	unsigned int count = 0;
+	for (rtx_insn *p = NEXT_INSN (insn); p && p != NEXT_INSN (BB_END (bb));
+	     p = NEXT_INSN (p))
+	  {
+	    if (!INSN_P (p))
+	      continue;
+	    if ((!DEBUG_INSN_P (p) && ++count > 64)
+		|| !tail_insn_p (p, [&] (rtx x) { return saved.spill_read_p (x); }))
+	      break;
+	    rtx next = PATTERN (p);
+	    if (!NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
+		|| !md_raw_transfer_p (next))
+	      continue;
+	    rtx dest = SET_DEST (next);
+	    if (private_slot_p (dest) && GET_MODE (dest) == GET_MODE (saved.mem)
+		&& MEM_ALIAS_SET (dest) == MEM_ALIAS_SET (canonical)
+		&& MEM_ADDR_SPACE (dest) == MEM_ADDR_SPACE (saved.mem)
+		&& known_eq (MEM_OFFSET (dest), MEM_OFFSET (saved.mem))
+		&& saved.same_address_p (dest, p, true))
+	      {
+		if (dump_file)
+		  fprintf (dump_file, "Drop overwritten private spill at insn %d\n",
+			   INSN_UID (insn));
+		delete_insn (insn);
+		changed = true;
+		break;
+	      }
+	  }
+      }
+    return changed;
+  }
+
   /* Revisit split members after all reloads in the return tail are cleaned.  */
   static bool remove_dead_tail (basic_block bb)
   {
@@ -15678,6 +15743,8 @@ reuse_cleaned_descriptors (bool &spill_cleanup)
 	}
       path.leave (bb, state);
       if (explicit_state && local_raw_spill::remove_dead_tail (bb))
+	changed = spill_cleanup = true;
+      if (explicit_state && local_raw_spill::remove_overwritten_stores (bb))
 	changed = spill_cleanup = true;
     }
   return changed;
@@ -18745,6 +18812,109 @@ run_md_reuse_selftests ()
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;
       riscv_ztt_profile_string = profile;
+    }
+  for (unsigned int test = 0; test != 42; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+      basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+      make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      const char *profile = riscv_ztt_profile_string;
+      riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+      int non_call = flag_non_call_exceptions, reload = reload_completed;
+      reload_completed = 1;
+      rtx addr = gen_rtx_REG (Pmode, 10), other_addr = gen_rtx_REG (Pmode, 11);
+      rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx other = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (slot);
+      rtx dest = copy_rtx (slot), disjoint = copy_rtx (slot);
+      set_mem_offset (disjoint, GET_MODE_SIZE (ZTTMR1mode));
+      if (test == 3) set_mem_offset (dest, GET_MODE_SIZE (ZTTMR1mode));
+      if (test == 14) MEM_VOLATILE_P (slot) = 1;
+      if (test == 15) MEM_NOTRAP_P (slot) = 0;
+      if (test == 16) set_mem_alias_set (slot, 0);
+      if (test == 17) clear_mem_size (slot);
+      if (test == 18) clear_mem_offset (slot);
+      if (test == 19) set_mem_expr (slot, nullptr);
+      if (test == 20) MEM_VOLATILE_P (dest) = 1;
+      if (test == 21) MEM_NOTRAP_P (dest) = 0;
+      if (test == 22) clear_mem_offset (dest);
+      if (test == 23) set_mem_size (dest, GET_MODE_SIZE (ZTTMR1mode) - 1);
+      if (test == 24) set_mem_addr_space (dest, 1);
+      auto append = [&] (rtx pattern) {
+	rtx_insn *p = emit_insn_after (pattern, BB_END (bb));
+	BB_END (bb) = p;
+	return p;
+      };
+      rtx_insn *first = append (gen_rtx_SET (slot, m));
+      if (test == 25) RTX_FRAME_RELATED_P (first) = 1;
+      if (test == 1)
+	{
+	  append (gen_rtx_SET (other_addr, addr));
+	  XEXP (dest, 0) = other_addr;
+	}
+      if (test == 2 || test == 34)
+	append (gen_rtx_SET (addr, gen_rtx_PLUS (Pmode, addr, GEN_INT (16))));
+      if (test == 34)
+	append (gen_rtx_SET (addr, gen_rtx_PLUS (Pmode, addr, GEN_INT (-16))));
+      if (test == 4 || test == 5 || test == 31)
+	{
+	  rtx read = test == 5 ? disjoint : copy_rtx (slot);
+	  if (test == 31) set_mem_alias_set (read, 0);
+	  append (gen_rtx_SET (other, read));
+	}
+      if (test == 6 || test == 39)
+	append (gen_rtx_SET (other, gen_rtx_UNSPEC_VOLATILE
+	  (ZTTMR1mode, gen_rtvec (2, m, other_addr), UNSPECV_ZTT_STATE_COPY)));
+      if (test == 7)
+	append (gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, m), UNSPECV_ZTT));
+      if (test == 8) append (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      if (test == 9)
+	BB_END (bb) = emit_call_insn_after
+	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, addr), const0_rtx), BB_END (bb));
+      if (test == 10 || test == 11)
+	BB_END (bb) = emit_debug_insn_after
+	  (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				test == 10 ? slot : disjoint, VAR_INIT_STATUS_INITIALIZED),
+	   BB_END (bb));
+      if (test == 12) flag_non_call_exceptions = 1;
+      if (test == 13) single_succ_edge (bb)->flags |= EDGE_EH;
+      if (test == 40 || test == 41)
+	make_edge (bb, bb, EDGE_DFS_BACK | (test == 41 ? EDGE_EH : 0));
+      if (test == 27) cfun->stdarg = true;
+      if (test == 28) cfun->calls_setjmp = true;
+      if (test == 29) cfun->has_nonlocal_label = true;
+      if (test == 30) crtl->calls_eh_return = true;
+      if (test == 33) append (gen_rtx_SET (disjoint, other));
+      if (test == 36 || test == 37)
+	for (unsigned int i = 0; i != (test == 36 ? 63U : 64U); ++i)
+	  append (gen_rtx_SET (other_addr, GEN_INT (i)));
+      if (test == 38)
+	append (gen_rtx_SET (other_addr, gen_rtx_PLUS (Pmode, addr, GEN_INT (16))));
+      if (test == 38) XEXP (dest, 0) = other_addr;
+      rtx_insn *second = nullptr;
+      if (test != 35)
+	second = append (gen_rtx_SET (dest, other));
+      if (test == 26) RTX_FRAME_RELATED_P (second) = 1;
+      if (test == 32) append (gen_rtx_SET (m, dest));
+      if (test == 39)
+	append (gen_rtx_SET (slot, m));
+      BB_END (bb) = emit_jump_insn_after
+	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)), BB_END (bb));
+      bool expected = TARGET_ZTT && typed_profile_p () && riscv_ztt_explicit_state_p ()
+	&& (test == 0 || test == 1 || test == 5 || test == 6 || test == 11
+	    || test == 32 || test == 33 || test == 34 || test == 36
+	    || test == 39 || test == 40);
+      char context[64];
+      snprintf (context, sizeof context, "private overwrite case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected, local_raw_spill::remove_overwritten_stores (bb));
+      ASSERT_EQ_AT (loc, expected, first->deleted ());
+      if (second) ASSERT_EQ_AT (loc, expected && test == 39, second->deleted ());
+      ASSERT_FALSE (local_raw_spill::remove_overwritten_stores (bb));
+      riscv_ztt_profile_string = profile;
+      flag_non_call_exceptions = non_call;
+      reload_completed = reload;
     }
   for (unsigned int test = 0; test != 24; ++test)
     {

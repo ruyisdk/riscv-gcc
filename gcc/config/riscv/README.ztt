@@ -925,6 +925,10 @@ Normal ACC register copies may also intervene, including their M/GPR
 scratch clobbers.  Memory copies and borrowed-bank forms remain excluded.
 The shared unread-tail proof also removes XLEN GPR stores to private
 spill slots.  The same alias, range, nontrapping and frame checks apply.
+A local scan also removes raw M saves fully overwritten before any read.
+It checks at most 128 trailing instructions and 64 instructions per save,
+requiring equal spill ranges and proven equal address values. Calls, asm,
+possible reads, exceptional edges and frame-related saves stop deletion.
 Dead fixed-size locals do not prevent removal of an unused scalable
 workspace.  The matched scalable adjustment pair is removed only after
 the existing reference checks; fixed adjustments and CFA remain intact.
