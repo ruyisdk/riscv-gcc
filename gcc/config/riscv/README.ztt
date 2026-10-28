@@ -468,6 +468,9 @@ inputs are invariant along that axis.  Generic carrier calls revalidate their
 explicit datatype metadata; equal physical modes alone do not establish this
 proof.  The operation remains, including rounding, saturation and floating
 flags; neither input's live range is extended.
+Difference, half-difference, mean, comparison and conditional selection use
+the same proof.  Predicates, selected data and any old destination must all
+have the result type and invariant axis; the original computation remains.
 Matrix shifts and OR-NOT use the same proof.  Both data and shift-amount
 matrices must be invariant on the selected axis and have the result type;
 the shift operation and its full-width count interpretation remain unchanged.

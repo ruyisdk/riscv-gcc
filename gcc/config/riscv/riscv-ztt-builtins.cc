@@ -9003,6 +9003,15 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    {
 	    case EXPAND_MADD_EW:
 	    case EXPAND_MSUB_EW:
+	    case EXPAND_MABSDIFF_EW:
+	    case EXPAND_MHDIFF_EW:
+	    case EXPAND_MMEAN_EW:
+	    case EXPAND_MCMPGE_EW:
+	    case EXPAND_MCMPLT_EW:
+	    case EXPAND_MSELGE_EW:
+	    case EXPAND_MSELLT_EW:
+	    case EXPAND_MCMOVGE_EW:
+	    case EXPAND_MCMOVLT_EW:
 	    case EXPAND_MMUL_EW:
 	    case EXPAND_MMULNEG_EW:
 	    case EXPAND_MMIN_EW:
