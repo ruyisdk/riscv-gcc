@@ -10778,6 +10778,113 @@ riscv_ztt_fold_stack_base (rtx_insn *insn, riscv_ztt_stack_value *regs,
   return false;
 }
 
+/* Prove the temporary is overwritten before any later observation.  */
+static bool
+riscv_ztt_stack_temporary_dead_p (rtx_insn *insn, rtx reg)
+{
+  if (rtx_equal_p (SET_DEST (PATTERN (insn)), reg))
+    return true;
+  unsigned int budget = 32;
+  for (rtx_insn *next = NEXT_INSN (insn); next && budget;
+       next = NEXT_INSN (next))
+    {
+      if (BLOCK_FOR_INSN (next) != BLOCK_FOR_INSN (insn))
+	return false;
+      if (!INSN_P (next))
+	continue;
+      --budget;
+      rtx pat = PATTERN (next);
+      if (!CALL_P (next) && GET_CODE (pat) == SET
+	  && rtx_equal_p (SET_DEST (pat), reg)
+	  && !reg_overlap_mentioned_p (reg, SET_SRC (pat)))
+	return true;
+      if (reg_overlap_mentioned_p (reg, pat))
+	return false;
+      if (CALL_P (next))
+	return (!CALL_INSN_FUNCTION_USAGE (next)
+		|| !reg_overlap_mentioned_p (reg, CALL_INSN_FUNCTION_USAGE (next)))
+	  && insn_callee_abi (next).clobbers_reg_p (Pmode, REGNO (reg));
+      if (JUMP_P (next) || asm_noperands (pat) >= 0
+	  || GET_CODE (pat) == ASM_INPUT)
+	return false;
+    }
+  return false;
+}
+
+/* (offset + C1) + (FP + C2) can use FP and one combined constant.  */
+static bool
+riscv_ztt_fold_stack_offset (rtx_insn *insn, riscv_ztt_stack_value *regs)
+{
+  rtx set = PATTERN (insn);
+  if (GET_CODE (set) != SET || RTX_FRAME_RELATED_P (insn)
+      || !REG_P (SET_DEST (set)) || GET_MODE (SET_DEST (set)) != Pmode
+      || !GP_REG_P (REGNO (SET_DEST (set)))
+      || fixed_regs[REGNO (SET_DEST (set))]
+      || global_regs[REGNO (SET_DEST (set))]
+      || GET_CODE (SET_SRC (set)) != PLUS)
+    return false;
+  rtx src = SET_SRC (set);
+  for (unsigned int i = 0; i != 2; ++i)
+    {
+      rtx base = XEXP (src, i), tmp = XEXP (src, 1 - i);
+      if (!REG_P (base) || !GP_REG_P (REGNO (base))
+	  || !REG_P (tmp) || !GP_REG_P (REGNO (tmp))
+	  || fixed_regs[REGNO (tmp)] || global_regs[REGNO (tmp)])
+	continue;
+      auto bv = riscv_ztt_stack_expr (base, regs);
+      auto tv = riscv_ztt_stack_expr (tmp, regs);
+      if (!bv.known || bv.fp != 1 || bv.scale || !bv.offset
+	  || !tv.known || tv.fp || !tv.scale)
+	continue;
+      rtx_insn *prev = PREV_INSN (insn);
+      while (prev && BLOCK_FOR_INSN (prev) == BLOCK_FOR_INSN (insn)
+	     && !NONDEBUG_INSN_P (prev))
+	{
+	  if (DEBUG_INSN_P (prev) && reg_overlap_mentioned_p (tmp, PATTERN (prev)))
+	    return false;
+	  prev = PREV_INSN (prev);
+	}
+      if (!prev || BLOCK_FOR_INSN (prev) != BLOCK_FOR_INSN (insn)
+	  || !NONJUMP_INSN_P (prev) || RTX_FRAME_RELATED_P (prev)
+	  || prologue_epilogue_contains (prev))
+	continue;
+      rtx def = PATTERN (prev);
+      if (GET_CODE (def) != SET || !rtx_equal_p (SET_DEST (def), tmp)
+	  || GET_CODE (SET_SRC (def)) != PLUS
+	  || !REG_P (XEXP (SET_SRC (def), 0))
+	  || !CONST_INT_P (XEXP (SET_SRC (def), 1))
+	  || !riscv_ztt_stack_temporary_dead_p (insn, tmp))
+	continue;
+      rtx add = SET_SRC (def);
+      HOST_WIDE_INT old = INTVAL (XEXP (add, 1));
+      HOST_WIDE_INT offset = trunc_int_for_mode (bv.offset + old, Pmode);
+      if (!SMALL_OPERAND (offset))
+	continue;
+      if ((TARGET_RVC || TARGET_ZCA)
+	  && (rtx_equal_p (SET_DEST (set), base)
+	      || (rtx_equal_p (tmp, XEXP (add, 0))
+		  && IN_RANGE (old, -32, 31) && !IN_RANGE (offset, -32, 31))))
+	continue;
+      int length = get_attr_length (insn) + get_attr_length (prev);
+      validate_change (prev, &XEXP (add, 1), GEN_INT (offset), true);
+      validate_change (insn, &XEXP (src, i), hard_frame_pointer_rtx, true);
+      if (!verify_changes (0)
+	  || get_attr_length (insn) + get_attr_length (prev) > length)
+	{
+	  cancel_changes (0);
+	  return false;
+	}
+      confirm_change_group ();
+      remove_reg_equal_equiv_notes (prev);
+      while (rtx note = find_reg_note (insn, REG_DEAD, NULL_RTX))
+	remove_note (insn, note);
+      df_insn_rescan (prev);
+      regs[REGNO (tmp) - GP_REG_FIRST].offset += bv.offset;
+      return true;
+    }
+  return false;
+}
+
 /* Track SP from actual adjustments and optionally retain register facts.  */
 static riscv_ztt_stack_value
 riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
@@ -10834,6 +10941,14 @@ riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
 	      changed = true;
 	      if (dump_file)
 		fprintf (dump_file, "Reuse AME stack base at insn %d\n",
+			 INSN_UID (insn));
+	    }
+	  if (riscv_ztt_fold_stack_offset (insn, regs))
+	    {
+	      df_insn_rescan (insn);
+	      changed = true;
+	      if (dump_file)
+		fprintf (dump_file, "Combine AME stack offsets at insn %d\n",
 			 INSN_UID (insn));
 	    }
 	  rtx *mem = riscv_ztt_stack_mem (set, true);
@@ -11090,6 +11205,84 @@ riscv_ztt_stack_selftests (basic_block bb)
 	ASSERT_RTX_EQ (SET_SRC (PATTERN (insn)), original);
       fixed_regs[REGNO (b)] = fixed;
       global_regs[REGNO (b)] = global;
+      end_sequence ();
+    }
+
+  for (unsigned int test = 0; test != 27; ++test)
+    {
+      riscv_ztt_stack_value facts[32] = {};
+      rtx temp = a, base = b, dest = gen_rtx_REG (Pmode, 7);
+      if (test == 26) temp = gen_rtx_REG (Pmode, 9);
+      HOST_WIDE_INT c1 = test == 15 ? 31 : test == 18 ? 16 : -16;
+      HOST_WIDE_INT c2 = test == 7 ? -2048 : test == 15 ? 16 : -16;
+      facts[REGNO (temp)] = {true, 0, 1, (unsigned HOST_WIDE_INT) c1};
+      facts[REGNO (base)] = {true, 1, 0, (unsigned HOST_WIDE_INT) c2};
+      facts[REGNO (fp)] = {true, 1, 0, 0};
+      if (test == 3) facts[REGNO (base)].offset = 0;
+      if (test == 4) facts[REGNO (base)] = {};
+      if (test == 5) facts[REGNO (base)].scale = 1;
+      if (test == 6) facts[REGNO (temp)].fp = 1;
+      if (test == 19) facts[REGNO (base)].fp = 2;
+      if (test == 2) dest = temp;
+      if (test == 16) dest = base;
+      auto fixed = fixed_regs[REGNO (temp)], global = global_regs[REGNO (temp)];
+      if (test == 12) fixed_regs[REGNO (temp)] = 1;
+      if (test == 13) global_regs[REGNO (temp)] = 1;
+      start_sequence ();
+      auto add_insn = [bb] (rtx pat) {
+	rtx_insn *p = emit_insn (pat);
+	set_block_for_insn (p, bb);
+	return p;
+      };
+      rtx_insn *prev = add_insn
+	(gen_rtx_SET (temp, plus_constant (Pmode, test == 15 ? temp : scale, c1)));
+      if (test == 8) RTX_FRAME_RELATED_P (prev) = 1;
+      if (test == 14) add_insn (gen_rtx_SET (dest, const0_rtx));
+      rtx sum = test == 1 ? gen_rtx_PLUS (Pmode, base, temp)
+	: gen_rtx_PLUS (Pmode, temp, base);
+      rtx old = copy_rtx (sum);
+      rtx_insn *use = add_insn (gen_rtx_SET (dest, sum));
+      if (test == 9) RTX_FRAME_RELATED_P (use) = 1;
+      if (test == 10) add_insn (gen_rtx_USE (VOIDmode, temp));
+      if (test == 20)
+	{
+	  rtx_insn *debug = emit_debug_insn (gen_rtx_VAR_LOCATION
+	    (VOIDmode, create_tmp_var (ptr_type_node), temp, VAR_INIT_STATUS_INITIALIZED));
+	  set_block_for_insn (debug, bb);
+	}
+      if (test == 21 || test == 22 || test == 25 || test == 26)
+	{
+	  rtx call = gen_rtx_CALL (test == 25 ? Pmode : VOIDmode, gen_rtx_MEM (QImode,
+	    gen_rtx_SYMBOL_REF (Pmode, "ztt_offset_call")), const0_rtx);
+	  rtx_insn *p = emit_call_insn (test == 25 ? gen_rtx_SET (temp, call) : call);
+	  set_block_for_insn (p, bb);
+	  if (test == 22 || test == 25)
+	    CALL_INSN_FUNCTION_USAGE (p) = gen_rtx_EXPR_LIST
+	      (VOIDmode, gen_rtx_USE (VOIDmode, temp), nullptr);
+	}
+      if (test == 23)
+	for (unsigned int j = 0; j != 32; ++j)
+	  add_insn (gen_rtx_SET (dest, const0_rtx));
+      if (test == 24)
+	add_insn (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      add_insn (gen_rtx_SET (test == 11 ? gen_rtx_REG (QImode, REGNO (temp))
+			    : temp, const0_rtx));
+      bool changed = riscv_ztt_fold_stack_offset (use, facts);
+      bool wanted = test < 3 || test == 17 || test == 18 || test == 21
+	|| ((test == 15 || test == 16) && !TARGET_RVC && !TARGET_ZCA);
+      ASSERT_EQ (changed, wanted);
+      if (changed)
+	{
+	  ASSERT_EQ (INTVAL (XEXP (SET_SRC (PATTERN (prev)), 1)), c1 + c2);
+	  ASSERT_RTX_EQ (XEXP (SET_SRC (PATTERN (use)), test == 1 ? 0 : 1), fp);
+	}
+      else
+	{
+	  ASSERT_RTX_EQ (SET_SRC (PATTERN (use)), old);
+	  ASSERT_EQ (INTVAL (XEXP (SET_SRC (PATTERN (prev)), 1)), c1);
+	}
+      fixed_regs[REGNO (temp)] = fixed;
+      global_regs[REGNO (temp)] = global;
       end_sequence ();
     }
 
