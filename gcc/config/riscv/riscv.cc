@@ -9563,7 +9563,7 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
 /* Incoming scalar arguments are above the fixed CFA, outside the scalable
    workspace.  Their loads and debug locations survive allocation removal.  */
 static bool
-riscv_ztt_incoming_arg_p (rtx src, rtx base)
+riscv_ztt_incoming_arg_p (const_rtx src, const_rtx base)
 {
   if (!src)
     return false;
@@ -9572,19 +9572,40 @@ riscv_ztt_incoming_arg_p (rtx src, rtx base)
   if (!MEM_P (src) || !MEM_EXPR (src)
       || TREE_CODE (MEM_EXPR (src)) != PARM_DECL)
     return false;
-  rtx addr = XEXP (src, 0);
+  const_rtx addr = XEXP (src, 0);
   if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1))
       && INTVAL (XEXP (addr, 1)) >= 0)
     addr = XEXP (addr, 0);
   return rtx_equal_p (addr, base);
 }
 
+/* Compound debug values can retain accesses to the unchanged caller frame.  */
+static bool
+riscv_ztt_incoming_arg_debug_p (rtx loc)
+{
+  if (!loc)
+    return false;
+  subrtx_iterator::array_type array;
+  FOR_EACH_SUBRTX (iter, array, loc, ALL)
+    {
+      const_rtx x = *iter;
+      if (riscv_ztt_incoming_arg_p (x, hard_frame_pointer_rtx))
+	iter.skip_subrtxes ();
+      else if (REG_P (x)
+	       && (reg_overlap_mentioned_p (stack_pointer_rtx, x)
+		   || reg_overlap_mentioned_p (hard_frame_pointer_rtx, x)
+		   || reg_overlap_mentioned_p (frame_pointer_rtx, x)
+		   || reg_overlap_mentioned_p (arg_pointer_rtx, x)))
+	return false;
+    }
+  return true;
+}
+
 static bool
 riscv_ztt_incoming_arg_load_p (rtx pat)
 {
   if (GET_CODE (pat) == VAR_LOCATION)
-    return riscv_ztt_incoming_arg_p (PAT_VAR_LOCATION_LOC (pat),
-				     hard_frame_pointer_rtx);
+    return riscv_ztt_incoming_arg_debug_p (PAT_VAR_LOCATION_LOC (pat));
   if (GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
       && GP_REG_P (REGNO (SET_DEST (pat)))
       && !reg_overlap_mentioned_p (stack_pointer_rtx, SET_DEST (pat))
@@ -9806,6 +9827,30 @@ riscv_ztt_workspace_single_selftests ()
   ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
 		(gen_rtx_VAR_LOCATION (Pmode, parm, NULL_RTX,
 				       VAR_INIT_STATUS_UNKNOWN)));
+  for (unsigned int test = 0; test != 12; ++test)
+    {
+      rtx value = copy_rtx (SET_SRC (incoming));
+      rtx other = GEN_INT (4);
+      switch (test)
+	{
+	case 1: other = copy_rtx (narrow); break;
+	case 2: value = gen_rtx_ZERO_EXTEND (Pmode, copy_rtx (narrow)); break;
+	case 3: value = gen_rtx_NEG (Pmode, value); break;
+	case 4: other = stack_pointer_rtx; break;
+	case 5: other = hard_frame_pointer_rtx; break;
+	case 6: other = frame_pointer_rtx; break;
+	case 7: other = arg_pointer_rtx; break;
+	case 8: XEXP (value, 0) = plus_constant (Pmode, hard_frame_pointer_rtx, -1); break;
+	case 9: set_mem_expr (value, NULL_TREE); break;
+	case 10: XEXP (value, 0) = stack_pointer_rtx; break;
+	case 11: set_mem_expr (value, build_decl (UNKNOWN_LOCATION, VAR_DECL,
+					       NULL_TREE, integer_type_node)); break;
+	}
+      rtx loc = gen_rtx_PLUS (Pmode, value, other);
+      ASSERT_EQ (riscv_ztt_incoming_arg_load_p
+		 (gen_rtx_VAR_LOCATION (Pmode, parm, loc, VAR_INIT_STATUS_INITIALIZED)),
+		 test < 4);
+    }
   set_mem_expr (SET_SRC (incoming), NULL_TREE);
   ASSERT_FALSE (riscv_ztt_incoming_arg_load_p (incoming));
   ASSERT_TRUE (riscv_ztt_workspace_notes_p (NULL_RTX));
