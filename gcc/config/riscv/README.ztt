@@ -697,6 +697,9 @@ private workspace strides; both input values must match through the same
 bounded walk.  At the same program point, matching addends are cancelled
 before further expansion to retain the existing node bound.  Other modes,
 memory operands and division remain excluded.
+Failed structural proofs are retried once with address-context
+simplification to compact repeated strides under the same limits.
+Successful structural matches retain their original representation.
 The store remains; frame operations, fixed/global register definitions, memory or
 matrix operations and unknown patterns end this spill fact.  After removing
 a reload, a bounded same-block return-tail scan can also remove its private

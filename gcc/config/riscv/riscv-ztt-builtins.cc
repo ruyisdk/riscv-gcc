@@ -13623,6 +13623,28 @@ class local_raw_spill
     return true;
   }
 
+  /* Compact substituted strides using the normal address representation.  */
+  static rtx compact_address (rtx x, simplify_context &ctx)
+  {
+    if (GET_MODE (x) != Pmode
+	|| (GET_CODE (x) != PLUS && GET_CODE (x) != MINUS
+	    && GET_CODE (x) != NEG && GET_CODE (x) != ASHIFT
+	    && GET_CODE (x) != MULT))
+      return x;
+    rtx op0 = compact_address (XEXP (x, 0), ctx);
+    if (GET_CODE (x) == NEG)
+      return ctx.simplify_gen_unary (NEG, Pmode, op0, Pmode);
+    rtx op1 = compact_address (XEXP (x, 1), ctx);
+    return ctx.simplify_gen_binary (GET_CODE (x), Pmode, op0, op1);
+  }
+
+  static rtx compact_address (rtx x)
+  {
+    simplify_context ctx;
+    ctx.mem_depth = 1;
+    return compact_address (x, ctx);
+  }
+
   static void cancel_address_terms (rtx &lhs, rtx &rhs)
   {
     while (GET_CODE (lhs) == PLUS && GET_CODE (rhs) == PLUS
@@ -13644,8 +13666,8 @@ class local_raw_spill
   }
 
   /* Compare address values before STORE within a bounded local window.  */
-  bool same_address_p (rtx src, rtx_insn *load,
-		       bool interleaved = false) const
+  bool compare_address_p (rtx src, rtx_insn *load,
+			  bool interleaved, bool compact) const
   {
     if (!store || !load)
       return false;
@@ -13691,6 +13713,11 @@ class local_raw_spill
 		/* Both expressions now refer to the same program point.  */
 		cancel_address_terms (lhs, rhs);
 	      }
+	    if (compact)
+	      {
+		lhs = compact_address (lhs);
+		rhs = compact_address (rhs);
+	      }
 	    if (!address_expr_p (lhs) || !address_expr_p (rhs))
 	      return false;
 	  }
@@ -13698,6 +13725,13 @@ class local_raw_spill
 	  return true;
       }
     return false;
+  }
+
+  bool same_address_p (rtx src, rtx_insn *load,
+		       bool interleaved = false) const
+  {
+    return compare_address_p (src, load, interleaved, false)
+      || compare_address_p (src, load, interleaved, true);
   }
 
   static bool private_slot_p (rtx x)
@@ -16737,6 +16771,49 @@ run_md_reuse_selftests ()
 		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 local_raw_spill::interleaved_reload_p (load));
     }
+  for (unsigned int steps : { 6U, 7U, 11U, 15U })
+    for (unsigned int test = 0; test != 8; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+	rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+	rtx base = gen_rtx_REG (Pmode, 12), factor = gen_rtx_REG (Pmode, 13);
+	rtx left = gen_rtx_REG (Pmode, 14), right = gen_rtx_REG (Pmode, 15);
+	rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+	rtx slot = gen_rtx_MEM (ZTTMR1mode, a);
+	set_mem_attrs_for_spill (slot);
+	rtx other = copy_rtx (slot);
+	XEXP (other, 0) = b;
+	emit_insn (gen_rtx_SET (left, gen_rtx_ASHIFT (Pmode, factor, GEN_INT (4))));
+	emit_insn (gen_rtx_SET (a, base));
+	for (unsigned int i = 0; i < steps; ++i)
+	  emit_insn (gen_rtx_SET (a, gen_rtx_PLUS (Pmode, a, left)));
+	if (test == 6)
+	  MEM_NOTRAP_P (slot) = 0;
+	emit_insn (gen_rtx_SET (slot, value));
+	if (test == 1 || test == 2)
+	  {
+	    rtx changed = test == 1 ? factor : base;
+	    emit_insn (gen_rtx_SET (changed, gen_rtx_PLUS (Pmode, changed, const1_rtx)));
+	  }
+	if (test == 7)
+	  emit_insn (gen_rtx_ASM_INPUT (VOIDmode, ""));
+	emit_insn (gen_rtx_SET (right, gen_rtx_ASHIFT (Pmode, factor, GEN_INT (4))));
+	emit_insn (gen_rtx_SET (b, base));
+	for (unsigned int i = 0; i < steps; ++i)
+	  emit_insn (gen_rtx_SET (b, gen_rtx_PLUS (Pmode, b, right)));
+	if (test == 3)
+	  emit_insn (gen_rtx_SET (b, gen_rtx_PLUS (Pmode, b, const1_rtx)));
+	if (test == 4)
+	  set_mem_offset (other, GET_MODE_SIZE (ZTTMR1mode));
+	if (test == 5)
+	  MEM_VOLATILE_P (other) = 1;
+	rtx_insn *load = emit_insn (gen_rtx_SET (value, other));
+	bool result = local_raw_spill::interleaved_reload_p (load);
+	if (result != (test == 0))
+	  fail_formatted (SELFTEST_LOCATION, "address steps %u case %u: %u",
+			  steps, test, result);
+	ASSERT_EQ (test == 0, result);
+      }
   for (int code : { UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT,
 		   UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT })
     {
