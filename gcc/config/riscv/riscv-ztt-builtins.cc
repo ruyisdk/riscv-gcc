@@ -8196,11 +8196,12 @@ local_structure_gap_p (gimple *stmt)
   return true;
 }
 
-/* Keep producer calls as ownership witnesses.  Only cross scalar work and
-   geometry reads, not memory accesses, other calls or state changes.  */
+/* Keep producer calls as ownership witnesses.  RETAINED is an additional
+   statement whose unchanged placement and result are checked by the caller.  */
 static bool
 local_structure_producers_p (gimple_stmt_iterator *gsi,
-			    gimple *const *producers, unsigned int count)
+			    gimple *const *producers, unsigned int count,
+			    gimple *retained = nullptr)
 {
   gcc_assert (count && count <= 16);
   for (unsigned int i = 0; i < count; ++i)
@@ -8223,7 +8224,7 @@ local_structure_producers_p (gimple_stmt_iterator *gsi,
       if (seen != before)
 	continue;
 
-      if (!local_structure_gap_p (stmt))
+      if (stmt != retained && !local_structure_gap_p (stmt))
 	return false;
     }
   return false;
@@ -9953,7 +9954,8 @@ same_matrix_arguments_p (tree exp, type_index type, unsigned int inputs,
 }
 
 static bool concat_operand_sources (tree, type_index, unsigned int,
-				    unsigned int, rtx *, bool = false);
+				    unsigned int, rtx *, bool = false,
+				    tree = NULL_TREE);
 static rtx concat_operand_part (rtx *, unsigned int, unsigned int, unsigned int);
 
 /* A retained local input can produce zero without reading each tuple part.  */
@@ -10060,7 +10062,9 @@ expand_elementwise (const builtin_description &d,
       concat[operand - 1] = concat_operand_sources
 	(CALL_EXPR_ARG (exp, operand - (ternary < 0)), indices[operand],
 	 f.insns, f.step[operand], sources[operand - 1],
-	 ternary >= 0 || (!scalar && f.step[1] != f.step[2]));
+	 ternary >= 0 || (!scalar && f.step[1] != f.step[2]),
+	 !scalar && ternary < 0 && indices[1] == indices[2]
+	 ? CALL_EXPR_ARG (exp, 2 - operand) : NULL_TREE);
       if (concat[operand - 1] && dump_file)
 	fprintf (dump_file, "Use concat inputs for elementwise operand %u\n",
 		 operand);
@@ -10136,7 +10140,7 @@ ter_structure_view_p (gimple *stmt)
 static bool
 concat_operand_sources (tree pair, type_index type,
 			unsigned int insns, unsigned int step, rtx *sources,
-			bool shared_input)
+			bool shared_input, tree companion)
 {
   unsigned int half_insns = insns / 2;
   if (!optimize || !runtime_profile_p () || !half_insns
@@ -10164,16 +10168,49 @@ concat_operand_sources (tree pair, type_index type,
     return false;
   gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
   producers[count++] = producer;
-  if (!local_structure_producers_p (&gsi, producers, count))
+  gimple *load = nullptr;
+  if (companion && !flag_non_call_exceptions
+      && TREE_CODE (companion) == SSA_NAME
+      && type_for_tree (TREE_TYPE (companion)) == type)
+    {
+      gimple *stmt = SSA_NAME_DEF_STMT (companion);
+      unsigned int nargs = is_gimple_call (stmt)
+	? gimple_call_num_args (stmt) : 0;
+      unsigned int c = structure_builtin_code (stmt, nargs);
+      if (c < ZTT_BUILTIN_MAX
+	  && builtin_description_for (c).expansion == EXPAND_MLS_RM)
+	load = stmt;
+    }
+  if (!local_structure_producers_p (&gsi, producers, count, load))
     return false;
-  /* SSA partitions are already assigned; do not cross a new M definition.  */
+  /* SSA partitions are assigned; crossed definitions must preserve halves.  */
   for (gsi_prev_nondebug (&gsi); gsi_stmt (gsi) != producer;
        gsi_prev_nondebug (&gsi))
     if (gsi_stmt (gsi) != view)
       if (tree lhs = gimple_get_lhs (gsi_stmt (gsi)))
 	if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs)))
 	    && !ter_structure_view_p (gsi_stmt (gsi)))
-	  return false;
+	  {
+	    if (gsi_stmt (gsi) != load || TREE_CODE (lhs) != SSA_NAME
+		|| var_to_partition (SA.map, lhs) == NO_PARTITION)
+	      return false;
+	    rtx dest = get_rtx_for_ssa_name (lhs);
+	    if (!dest || !REG_P (dest) || REGNO (dest) < FIRST_PSEUDO_REGISTER)
+	      return false;
+	    /* The retained companion load must not overwrite either half.  */
+	    for (unsigned int i = 0; i < 2; ++i)
+	      {
+		tree input = gimple_call_arg (producer, i);
+		if (TREE_CODE (input) != SSA_NAME
+		    || var_to_partition (SA.map, input) == NO_PARTITION)
+		  return false;
+		rtx source = get_rtx_for_ssa_name (input);
+		if (!source || !REG_P (source)
+		    || REGNO (source) < FIRST_PSEUDO_REGISTER
+		    || reg_overlap_mentioned_p (dest, source))
+		  return false;
+	      }
+	  }
   for (unsigned int i = 0; i < 2; ++i)
     if (TREE_CODE (gimple_call_arg (producer, i)) != SSA_NAME
 	|| type_for_tree (TREE_TYPE (gimple_call_arg (producer, i))) != half)
@@ -11221,7 +11258,7 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 		{
 		  concat[operand] = concat_operand_sources
 		    (CALL_EXPR_ARG (exp, operand), d.type, chunks, group,
-		     sources[operand]);
+		     sources[operand], false, CALL_EXPR_ARG (exp, 1 - operand));
 		  if (concat[operand] && dump_file)
 		    fprintf (dump_file,
 			     "Use concat inputs for elementwise operand %u\n",
