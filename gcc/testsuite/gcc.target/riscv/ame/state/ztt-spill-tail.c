@@ -4,6 +4,6 @@
 
 #include "ztt-spill-tail.h"
 
-/* { dg-final { scan-rtl-dump-times "Drop dead private spill" 3 "ztt_md_reuse" } } */
-/* { dg-final { scan-rtl-dump-times "Drop redundant raw reload" 6 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Drop dead private spill" 4 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Drop redundant raw reload" 10 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {\tmrowscatadd\.ew\t} 8 } } */

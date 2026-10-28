@@ -13789,6 +13789,35 @@ public:
     return false;
   }
 
+  /* Prepared register operations have no private preservation transfers.  */
+  static bool prepared_matrix_p (rtx pat)
+  {
+    if (GET_CODE (pat) != SET || !REG_P (SET_DEST (pat))
+	|| !m_mode_p (GET_MODE (SET_DEST (pat)))
+	|| GET_CODE (SET_SRC (pat)) != UNSPEC_VOLATILE
+	|| contains_mem_rtx_p (pat))
+      return false;
+    switch (XINT (SET_SRC (pat), 1))
+      {
+      case UNSPECV_ZTT_STATE_ADD: case UNSPECV_ZTT_STATE_SUB:
+      case UNSPECV_ZTT_STATE_MIN: case UNSPECV_ZTT_STATE_MAX:
+      case UNSPECV_ZTT_STATE_AND: case UNSPECV_ZTT_STATE_ANDNOT:
+      case UNSPECV_ZTT_STATE_OR: case UNSPECV_ZTT_STATE_ORNOT:
+      case UNSPECV_ZTT_STATE_XOR:
+      case UNSPECV_ZTT_STATE_ELEMENTWISE_M:
+      case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
+      case UNSPECV_ZTT_STATE_GATHER: case UNSPECV_ZTT_STATE_SCATTER:
+      case UNSPECV_ZTT_STATE_TERNARY: case UNSPECV_ZTT_STATE_TERNARY_X:
+      case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
+      case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
+      case UNSPECV_ZTT_STATE_ROWCOL: case UNSPECV_ZTT_STATE_COPY:
+      case UNSPECV_ZTT_STATE_ZIP_VALUE:
+	return true;
+      default:
+	return false;
+      }
+  }
+
   /* A private spill is dead if the remaining return tail cannot read it.  */
   bool remove_dead_store ()
   {
@@ -13848,6 +13877,8 @@ public:
 	if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
 	    && md_preserving_vector_p (get_attr_type (p), pat)
 	    && !spill_read_p (pat))
+	  continue;
+	if (NONJUMP_INSN_P (p) && prepared_matrix_p (pat))
 	  continue;
 	if (!NONJUMP_INSN_P (p) || GET_CODE (pat) != SET)
 	  return false;
@@ -16296,6 +16327,107 @@ run_md_reuse_selftests ()
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;
     }
+  for (int code : { UNSPECV_ZTT_STATE_ADD, UNSPECV_ZTT_STATE_SUB,
+		    UNSPECV_ZTT_STATE_MIN, UNSPECV_ZTT_STATE_MAX,
+		    UNSPECV_ZTT_STATE_AND, UNSPECV_ZTT_STATE_ANDNOT,
+		    UNSPECV_ZTT_STATE_OR, UNSPECV_ZTT_STATE_ORNOT,
+		    UNSPECV_ZTT_STATE_XOR, UNSPECV_ZTT_STATE_ELEMENTWISE_M,
+		    UNSPECV_ZTT_STATE_ELEMENTWISE_X, UNSPECV_ZTT_STATE_GATHER,
+		    UNSPECV_ZTT_STATE_SCATTER, UNSPECV_ZTT_STATE_TERNARY,
+		    UNSPECV_ZTT_STATE_TERNARY_X,
+		    UNSPECV_ZTT_STATE_CONVERT_PREPARED,
+		    UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED,
+		    UNSPECV_ZTT_STATE_ROWCOL, UNSPECV_ZTT_STATE_COPY,
+		    UNSPECV_ZTT_STATE_ZIP_VALUE })
+    for (unsigned int test = 0; test != 10; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+	const char *saved_profile = riscv_ztt_profile_string;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	int saved_reload = reload_completed, non_call = flag_non_call_exceptions;
+	reload_completed = 1;
+	rtx addr = gen_rtx_REG (Pmode, 10);
+	rtx desc = gen_rtx_REG (Pmode, 11);
+	rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+	rtx a = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 2);
+	rtx b = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 4);
+	rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+	set_mem_attrs_for_spill (slot);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *p = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = p;
+	  return p;
+	};
+	append (gen_rtx_SET (slot, m));
+	rtvec args;
+	if (code == UNSPECV_ZTT_STATE_COPY)
+	  args = gen_rtvec (2, a, desc);
+	else if (code == UNSPECV_ZTT_STATE_ROWCOL)
+	  args = gen_rtvec (4, a, const0_rtx, desc, const0_rtx);
+	else if (code == UNSPECV_ZTT_STATE_ZIP_VALUE)
+	  {
+	    m = gen_rtx_REG (ZTTMR2mode, M_REG_FIRST);
+	    args = gen_rtvec (2, m, const0_rtx);
+	  }
+	else if (code == UNSPECV_ZTT_STATE_CONVERT_PREPARED
+		 || code == UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED)
+	  args = gen_rtvec (5, a, desc, desc,
+			   GEN_INT (pack_datatype_steps (1, 1)), const0_rtx);
+	else if (code == UNSPECV_ZTT_STATE_GATHER
+		 || code == UNSPECV_ZTT_STATE_ELEMENTWISE_M
+		 || code == UNSPECV_ZTT_STATE_ELEMENTWISE_X
+		 || common_old_dest_p (code))
+	  {
+	    bool old = common_old_dest_p (code);
+	    args = gen_rtvec (8, a, common_scalar_p (code) ? addr : b,
+			     desc, desc, desc, const0_rtx,
+			     GEN_INT (pack_datatype_steps (1, 1, 1)), m);
+	    if (!old)
+	      args = gen_rtvec (7, RTVEC_ELT (args, 0), RTVEC_ELT (args, 1),
+			       desc, desc, desc, const0_rtx, RTVEC_ELT (args, 6));
+	  }
+	else
+	  args = gen_rtvec (3, a, b, desc);
+	rtx pat = gen_rtx_SET (m, gen_rtx_UNSPEC_VOLATILE
+	  (GET_MODE (m), args, test == 7 ? UNSPECV_ZTT : code));
+	if (test == 8)
+	  SET_DEST (pat) = addr;
+	if (test == 5)
+	  pat = gen_rtx_PARALLEL (VOIDmode, gen_rtvec
+	    (2, pat, gen_rtx_CLOBBER (VOIDmode, copy_rtx (slot))));
+	rtx_insn *operation = append (pat);
+	if (TARGET_ZTT && test != 5 && test != 7 && test != 8)
+	  ASSERT_TRUE (recog_memoized (operation) >= 0);
+	if (test == 1 || test == 9)
+	  {
+	    rtx read = copy_rtx (slot);
+	    if (test == 9)
+	      set_mem_offset (read, GET_MODE_SIZE (ZTTMR1mode));
+	    append (gen_rtx_SET (a, read));
+	  }
+	else if (test == 2)
+	  BB_END (bb) = emit_debug_insn_after
+	    (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				   slot, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+	else if (test == 3)
+	  append (gen_rtx_ASM_INPUT (VOIDmode, ""));
+	else if (test == 4)
+	  flag_non_call_exceptions = 1;
+	else if (test == 6)
+	  for (unsigned int i = 0; i != 32; ++i)
+	    append (gen_rtx_SET (desc, GEN_INT (i)));
+	BB_END (bb) = emit_jump_insn_after
+	  (gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
+	   BB_END (bb));
+	ASSERT_EQ (TARGET_ZTT && (test == 0 || test == 9),
+		   local_raw_spill::remove_dead_tail (bb));
+	ASSERT_FALSE (local_raw_spill::remove_dead_tail (bb));
+	reload_completed = saved_reload;
+	flag_non_call_exceptions = non_call;
+	riscv_ztt_profile_string = saved_profile;
+      }
   for (unsigned int test = 0; test != 24; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
