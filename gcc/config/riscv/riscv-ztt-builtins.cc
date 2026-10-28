@@ -13502,6 +13502,7 @@ class local_md_state
   rtx scalar_type = nullptr;
   /* Some facts may depend on a physical GPR instead of a value identity.  */
   bool register_descriptors = false;
+  unsigned int occupied = 0;
 
   static rtx substitute (rtx x, const_rtx, void *data)
   {
@@ -13520,6 +13521,7 @@ public:
     next_definition = 0;
     scalar_type = nullptr;
     register_descriptors = false;
+    occupied = 0;
   }
 
   void clear_ame ()
@@ -13527,6 +13529,7 @@ public:
     memset (facts, 0, sizeof (facts));
     scalar_type = nullptr;
     register_descriptors = false;
+    occupied = 0;
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
       if (fixed_regs[GP_REG_FIRST + i] || global_regs[GP_REG_FIRST + i])
 	{
@@ -13539,10 +13542,17 @@ public:
   /* Dynamic identities and definition order are local to each path.  */
   void intersect_constants (const local_md_state &other)
   {
-    for (auto &f : facts)
-      if (f.group && (f.identity || !CONST_INT_P (f.descriptor)
-		      || !other.matches (f.group, f.descriptor)))
-	f.group = nullptr;
+    for (unsigned int mask = occupied; mask; mask &= mask - 1)
+      {
+	unsigned int i = ctz_hwi (mask);
+	auto &f = facts[i];
+	if (f.identity || !CONST_INT_P (f.descriptor)
+	    || !other.matches (f.group, f.descriptor))
+	  {
+	    f.group = nullptr;
+	    occupied &= ~(1U << i);
+	  }
+      }
     register_descriptors = false;
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
       if (constants[i] && (!other.constants[i]
@@ -13704,11 +13714,18 @@ public:
       && (!direct || (REGNO (reg) < GP_REG_FIRST + GP_REG_NUM
 		      && END_REGNO (reg) > GP_REG_FIRST));
     if (matrix || descriptor)
-      for (auto &f : facts)
-	if (f.group && ((matrix && reg_overlap_mentioned_p (reg, f.group))
-		       || (descriptor && !f.identity
-			   && reg_overlap_mentioned_p (reg, f.descriptor))))
-	  f.group = nullptr;
+      for (unsigned int mask = occupied; mask; mask &= mask - 1)
+	{
+	  unsigned int i = ctz_hwi (mask);
+	  auto &f = facts[i];
+	  if ((matrix && reg_overlap_mentioned_p (reg, f.group))
+	      || (descriptor && !f.identity
+		  && reg_overlap_mentioned_p (reg, f.descriptor)))
+	    {
+	      f.group = nullptr;
+	      occupied &= ~(1U << i);
+	    }
+	}
     unsigned int first = GP_REG_FIRST, end = GP_REG_FIRST + GP_REG_NUM;
     if (direct)
       {
@@ -13797,6 +13814,7 @@ public:
     invalidate (group);
     auto &f = facts[REGNO (group) - M_REG_FIRST];
     f = { group, descriptor_value (descriptor), descriptor_identity (descriptor) };
+    occupied |= 1U << (REGNO (group) - M_REG_FIRST);
     register_descriptors |= !f.identity && REG_P (f.descriptor);
   }
 };
@@ -18921,6 +18939,44 @@ run_md_reuse_selftests ()
   ASSERT_FALSE (state.matches (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1), desc));
   const char *saved_profile = riscv_ztt_profile_string;
   riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+  /* Exercise sparse, dense and highest-bit facts through copies and joins.  */
+  for (unsigned int width : { 1U, 2U, 4U, 8U, 16U, 32U })
+    {
+      local_md_state full;
+      rtx descriptor = gen_rtx_REG (Pmode, 10);
+      full.record_constant (descriptor, GEN_INT (32));
+      for (unsigned int i = 0; i < M_REG_NUM; i += width)
+	full.remember (gen_rtx_REG (matrix_mode (width), M_REG_FIRST + i),
+		       descriptor);
+      for (unsigned int member = 0; member < M_REG_NUM; ++member)
+	{
+	  local_md_state one = full;
+	  rtx write = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + member);
+	  one.invalidate (write);
+	  local_md_state joined = full;
+	  joined.intersect_constants (one);
+	  for (unsigned int i = 0; i < M_REG_NUM; i += width)
+	    {
+	      rtx group = gen_rtx_REG (matrix_mode (width), M_REG_FIRST + i);
+	      bool remains = !reg_overlap_mentioned_p (write, group);
+	      ASSERT_EQ (one.matches (group, GEN_INT (32)), remains);
+	      ASSERT_EQ (joined.matches (group, GEN_INT (32)), remains);
+	      joined.invalidate (group);
+	      ASSERT_FALSE (joined.matches (group, GEN_INT (32)));
+	    }
+	  joined.remember (gen_rtx_REG (ZTTMR1mode, M_REG_LAST), descriptor);
+	  ASSERT_TRUE (joined.matches (M_REG_LAST, ZTTMR1mode, GEN_INT (32)));
+	  joined.clear_ame ();
+	  ASSERT_FALSE (joined.matches (M_REG_LAST, ZTTMR1mode, GEN_INT (32)));
+	  joined.remember (gen_rtx_REG (ZTTMR32mode, M_REG_FIRST), descriptor);
+	  joined.invalidate (write);
+	  ASSERT_FALSE (joined.matches (M_REG_FIRST, ZTTMR32mode, GEN_INT (32)));
+	  joined.clear ();
+	  joined.remember (gen_rtx_REG (ZTTMR1mode, M_REG_LAST), descriptor);
+	  joined.invalidate (descriptor);
+	  ASSERT_FALSE (joined.matches (M_REG_LAST, ZTTMR1mode, descriptor));
+	}
+    }
   for (unsigned int count : { 1U, 2U, 4U, 8U, 16U, 32U })
     for (unsigned int offset : { 0U, M_REG_NUM - count })
       for (bool constant : { false, true })

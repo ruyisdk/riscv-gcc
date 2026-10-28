@@ -693,6 +693,9 @@ Md invalidation skips unrelated register banks. A conservative flag records
 facts that depend directly on a GPR; constants and versioned descriptors do
 not require a fact scan for GPR writes. Partial writes retain overlap checks,
 and the separate GPR value cache is still invalidated.
+A physical-group occupancy bitmap skips empty Md slots during invalidation
+and constant-state intersection. Clearing, replacing and copying state keep
+the bitmap synchronized; overlap and descriptor identity checks are unchanged.
 Cache-block clean, flush, invalidate and zero preserve Md and amestype.
 Their memory operations remain in place and stop private spill reuse.
 Standard thread-fence patterns preserve register and datatype facts, but
