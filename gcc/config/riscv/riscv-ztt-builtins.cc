@@ -11926,8 +11926,6 @@ live_old_copy_sites (bitmap sites)
 	       || (GET_CODE (src) == UNSPEC_VOLATILE
 		   && XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS))
 	      && REG_P (SET_DEST (set))
-	      && (!scalar
-		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5)))
 	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	    bitmap_set_bit (sites, INSN_UID (insn));
 	}
@@ -11965,28 +11963,29 @@ live_old_copy_sites (bitmap sites)
 		|| (GET_CODE (src) == UNSPEC_VOLATILE
 		    && XINT (src, 1) == UNSPECV_ZTT_TERNARY_X_FLAGS);
 	      /* Inputs coexist with the result even when its pseudo is reused.  */
-	      if (!scalar)
+	      rtx inputs[] = { XVECEXP (src, 0, 0), XVECEXP (src, 0, 5),
+			       XVECEXP (src, 0, 1) };
+	      for (unsigned int i = 0; i < (scalar ? 2U : 3U); ++i)
 		{
-		  rtx inputs[] = { XVECEXP (src, 0, 0), XVECEXP (src, 0, 1),
-				   XVECEXP (src, 0, 5) };
-		  for (unsigned int i = 0; i < ARRAY_SIZE (inputs); ++i)
-		    {
-		      rtx input = inputs[i];
-		      if (!REG_P (input) || REGNO (input) < FIRST_PSEUDO_REGISTER)
-			{ needed = active_profile ()->mregs + 1; break; }
-		      bool duplicate = false;
-		      for (unsigned int j = 0; j < i; ++j)
-			duplicate |= rtx_equal_p (input, inputs[j]);
-		      if (!duplicate && (REGNO (input) == REGNO (dest)
-				 || !bitmap_bit_p (live, REGNO (input))))
-			needed += m_nregs (GET_MODE (input));
-		    }
+		  rtx input = inputs[i];
+		  if (!REG_P (input) || REGNO (input) < FIRST_PSEUDO_REGISTER)
+		    { needed = active_profile ()->mregs + 1; break; }
+		  bool duplicate = false;
+		  for (unsigned int j = 0; j < i; ++j)
+		    duplicate |= rtx_equal_p (input, inputs[j]);
+		  if (!duplicate && (REGNO (input) == REGNO (dest)
+			     || !bitmap_bit_p (live, REGNO (input))))
+		    needed += m_nregs (GET_MODE (input));
 		}
 	      if (needed > active_profile ()->mregs)
 		bitmap_clear_bit (sites, INSN_UID (insn));
 	      /* Scalar controls compete with live-group descriptors for GPRs.  */
-	      if (scalar && needed > 2 * m_nregs (GET_MODE (dest)))
-		bitmap_clear_bit (sites, INSN_UID (insn));
+	      if (scalar)
+		{
+		  unsigned int groups = rtx_equal_p (inputs[0], inputs[1]) ? 2 : 3;
+		  if (needed > groups * m_nregs (GET_MODE (dest)))
+		    bitmap_clear_bit (sites, INSN_UID (insn));
+		}
 	    }
 	  df_simulate_one_insn_backwards (bb, insn, live);
 	}
@@ -12409,8 +12408,6 @@ lower_explicit_state ()
 		&& m_nregs (mode) == groups[0]
 		&& mode == GET_MODE (XVECEXP (src, 0, 0))
 		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
-		&& (code != UNSPEC_ZTT_TERNARY_X
-		    || rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0)))
 		&& (scalar
 		    || (mode == GET_MODE (XVECEXP (src, 0, 1))
 			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))))
