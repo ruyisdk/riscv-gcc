@@ -8829,20 +8829,33 @@ describe_structure_elementwise (gimple *&call, type_index type,
 }
 
 static bool
-structure_scalar_producer_p (gimple *&call, type_index type)
+structure_scalar_producer_p (gimple *&call, type_index type, unsigned int &values)
 {
-  if (!strip_structure_call_view (call, type))
+  if (!strip_structure_call_view (call, type) || !is_gimple_call (call))
     return false;
-  unsigned int code = structure_builtin_code (call, 5);
-  if (!numeric_scalar_code_p (code))
+  unsigned int nargs = gimple_call_num_args (call);
+  if (nargs != 4 && nargs != 5)
     return false;
+  unsigned int code = structure_builtin_code (call, nargs);
   tree args[5];
-  for (unsigned int i = 0; i < 5; ++i)
+  for (unsigned int i = 0; i < nargs; ++i)
     args[i] = gimple_call_arg (call, i);
   builtin_description d;
   scalar_description operation;
-  return describe_integer_scalar (code, 5, args, d, operation)
-    && d.type == type && operation.source == type;
+  if (exponent_code_p (code))
+    {
+      if (!describe_exponent (code, nargs, args, d, operation))
+	return false;
+      values = nargs - 3;
+    }
+  else
+    {
+      if (nargs != 5 || !numeric_scalar_code_p (code)
+	  || !describe_integer_scalar (code, nargs, args, d, operation))
+	return false;
+      values = 1;
+    }
+  return d.type == type && operation.source == type;
 }
 
 /* A reduction broadcasts its result along the reduced axis.  Keep the fold
@@ -8931,16 +8944,23 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    }
 	}
       call = producer;
-      if (count <= 10 && structure_scalar_producer_p (call, type))
+      unsigned int values;
+      if (count <= 10 && structure_scalar_producer_p (call, type, values)
+	  && count <= (values == 1 ? 10U : 6U))
 	{
-	  tree input = gimple_call_arg (call, 0);
-	  unsigned int end = count;
-	  if (strip_structure_view (input, type, producers, end)
-	      && axis_invariant_structure_producer_p
-		   (SSA_NAME_DEF_STMT (input), type, expansion,
-		    producers, end, false))
+	  unsigned int end = count, side;
+	  for (side = 0; side < values; ++side)
 	    {
+	      tree input = gimple_call_arg (call, side);
+	      if (!strip_structure_view (input, type, producers, end)
+		  || !axis_invariant_structure_producer_p
+		       (SSA_NAME_DEF_STMT (input), type, expansion,
+			producers, end, false))
+		break;
 	      producers[end++] = SSA_NAME_DEF_STMT (input);
+	    }
+	  if (side == values)
+	    {
 	      if (call != producer)
 		producers[end++] = call;
 	      count = end;
@@ -8948,7 +8968,6 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    }
 	}
       call = producer;
-      unsigned int values;
       if (describe_structure_elementwise (call, type, d, values)
 	  && ((values == 2 && count <= 6
 	       && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M))
