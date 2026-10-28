@@ -14219,6 +14219,60 @@ class local_raw_spill
 public:
   void clear () { reg = mem = nullptr; store = nullptr; }
 
+  /* Every member must be overwritten before the new Md can be observed.  */
+  static rtx_insn *reload_preparation_point (rtx_insn *use, rtx group,
+					   rtx descriptor, unsigned int step)
+  {
+    if (flag_non_call_exceptions || !REG_P (group)
+	|| !M_REG_P (REGNO (group)) || !m_mode_p (GET_MODE (group))
+	|| !local_md_state::full_gpr_p (descriptor)
+	|| fixed_regs[REGNO (descriptor)] || global_regs[REGNO (descriptor)])
+      return nullptr;
+    unsigned int nregs = m_nregs (GET_MODE (group));
+    unsigned int first = REGNO (group) - M_REG_FIRST;
+    if (step != nregs || first % nregs || first + nregs > M_REG_NUM)
+      return nullptr;
+    unsigned HOST_WIDE_INT seen = 0;
+    unsigned HOST_WIDE_INT full = (HOST_WIDE_INT_1U << nregs) - 1;
+    unsigned int count = 0;
+    for (rtx_insn *p = PREV_INSN (use); p; p = PREV_INSN (p))
+      {
+	if (LABEL_P (p) || BARRIER_P (p)
+	    || (NOTE_P (p) && NOTE_KIND (p) == NOTE_INSN_BASIC_BLOCK))
+	  return nullptr;
+	if (DEBUG_INSN_P (p) && reg_overlap_mentioned_p (group, PATTERN (p)))
+	  return nullptr;
+	if (!NONDEBUG_INSN_P (p))
+	  continue;
+	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
+	    || recog_memoized (p) < 0 || modified_in_p (descriptor, p))
+	  return nullptr;
+	rtx pat = PATTERN (p);
+	if (md_raw_transfer_p (pat) && REG_P (SET_DEST (pat))
+	    && private_slot_p (SET_SRC (pat))
+	    && MEM_ADDR_SPACE (SET_SRC (pat)) == ADDR_SPACE_GENERIC)
+	  {
+	    unsigned int member = REGNO (SET_DEST (pat)) - REGNO (group);
+	    if (member < nregs)
+	      seen |= HOST_WIDE_INT_1U << member;
+	    if (seen == full)
+	      return p;
+	    continue;
+	  }
+	if (private_scalar_reload_p (p)
+	    && MEM_ADDR_SPACE (SET_SRC (pat)) == ADDR_SPACE_GENERIC)
+	  continue;
+	if (GET_CODE (pat) != SET
+	    || !local_md_state::full_gpr_p (SET_DEST (pat))
+	    || fixed_regs[REGNO (SET_DEST (pat))]
+	    || global_regs[REGNO (SET_DEST (pat))]
+	    || REGNO (SET_DEST (pat)) == HARD_FRAME_POINTER_REGNUM
+	    || !address_expr_p (SET_SRC (pat)))
+	  return nullptr;
+      }
+    return nullptr;
+  }
+
   /* Other members of a split spill may separate a save from its reload.  */
   static bool interleaved_reload_p (rtx_insn *load)
   {
@@ -15293,6 +15347,29 @@ reuse_local_md ()
 		    unsigned int prepared = prepared_p ? 0
 		      : state.prepared_inputs (regs, descriptors, UINTVAL (steps),
 					       scalar, old_dest);
+		    rtx_insn *reload_before[3] = {};
+		    if (!prepared_p)
+		      for (unsigned int i = old_dest ? 0 : 1;
+			   i < (scalar ? 2U : 3U); ++i)
+			{
+			  if (prepared & (1U << i))
+			    continue;
+			  bool overlap = false;
+			  for (unsigned int j = old_dest ? 0 : 1;
+			       j < (scalar ? 2U : 3U); ++j)
+			    if (j != i && reg_overlap_mentioned_p (regs[i], regs[j]))
+			      overlap = true;
+			  if (overlap)
+			    continue;
+			  reload_before[i] = local_raw_spill::reload_preparation_point
+			    (insn, regs[i], descriptors[i],
+			     datatype_step (UINTVAL (steps), i));
+			  if (reload_before[i])
+			    {
+			      prepared |= 1U << i;
+			      state.invalidate (regs[i]);
+			    }
+			}
 		    if (!prepared_p && prepared)
 		      {
 			bool changed = false;
@@ -15340,6 +15417,20 @@ reuse_local_md ()
 			  changed = validate_change (insn, mask, GEN_INT (prepared), false);
 			if (changed)
 			  {
+			    for (unsigned int i = 0; i != 3; ++i)
+			      if (reload_before[i])
+				{
+				  rtx_insn *setup = emit_insn_before
+				    (gen_ztt_typed_msettyp_p0
+				     (GET_MODE (regs[i]), Pmode, regs[i], descriptors[i]),
+				     reload_before[i]);
+				  df_insn_rescan (setup);
+				  descriptor_cleanup = true;
+				  if (dump_file)
+				    fprintf (dump_file,
+					     "Prepare Md before private reload %d for insn %d\n",
+					     INSN_UID (reload_before[i]), INSN_UID (insn));
+				}
 			    df_insn_rescan (insn);
 			    cleanup = true;
 			    if (dump_file)
@@ -17557,6 +17648,103 @@ run_md_reuse_selftests ()
 	flag_strict_aliasing = strict;
 	riscv_ztt_profile_string = profile;
       }
+  for (unsigned int test = 0; test != 34; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      const char *profile = riscv_ztt_profile_string;
+      riscv_ztt_profile_string = "gcc-runtime-u8-m32-a16";
+      int saved_reload = reload_completed, non_call = flag_non_call_exceptions;
+      reload_completed = 1;
+      flag_non_call_exceptions = test == 27;
+      unsigned int nregs = test == 32 ? 1 : test == 33 ? 32 : 8;
+      rtx group = gen_rtx_REG (matrix_mode (nregs), M_REG_FIRST);
+      rtx a = gen_rtx_REG (Pmode, 10), d = gen_rtx_REG (Pmode, 11);
+      rtx b = gen_rtx_REG (Pmode, 12), descriptor = d;
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, a);
+      set_mem_attrs_for_spill (slot);
+      switch (test)
+	{
+	case 4: MEM_VOLATILE_P (slot) = 1; break;
+	case 5: MEM_NOTRAP_P (slot) = 0; break;
+	case 6: set_mem_expr (slot, NULL_TREE); break;
+	case 7: clear_mem_size (slot); break;
+	case 8: clear_mem_offset (slot); break;
+	case 9: set_mem_size (slot, GET_MODE_SIZE (ZTTMR1mode) - 1); break;
+	case 28: group = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST + 1); break;
+	case 29: group = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST + 28); break;
+	case 30: descriptor = const0_rtx; break;
+	}
+      rtx_insn *first = nullptr;
+      for (unsigned int i = 0; i < nregs; ++i)
+	{
+	  unsigned int member = test == 1 ? nregs - 1 - i : i;
+	  if (test == 10 && i == nregs - 1)
+	    member = 0;
+	  rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + member);
+	  rtx_insn *load = emit_insn (gen_rtx_SET (value, slot));
+	  if (!first) first = load;
+	  if (test == 2)
+	    {
+	      load = emit_insn (gen_rtx_SET (value, slot));
+	      if (!i) first = load;
+	    }
+	  if (test == 3)
+	    {
+	      emit_insn (gen_rtx_SET
+		(gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 16), slot));
+	      emit_insn (gen_rtx_SET (b, gen_rtx_PLUS (Pmode, b, const1_rtx)));
+	    }
+	}
+      switch (test)
+	{
+	case 11: emit_insn (gen_rtx_SET (d, const0_rtx)); break;
+	case 12: emit_insn (gen_rtx_SET (slot, gen_rtx_REG (ZTTMR1mode, M_REG_FIRST))); break;
+	case 13: emit_insn (gen_rtx_ASM_INPUT (VOIDmode, "")); break;
+	case 14: emit_label (gen_label_rtx ()); break;
+	case 15: emit_barrier (); break;
+	case 16:
+	  emit_call_insn (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, a), const0_rtx));
+	  break;
+	case 17:
+	  RTX_FRAME_RELATED_P (emit_insn (gen_rtx_SET (b, const0_rtx))) = 1;
+	  break;
+	case 18: emit_insn (gen_rtx_SET (hard_frame_pointer_rtx, a)); break;
+	case 19: emit_insn (gen_rtx_SET (b, gen_rtx_MEM (Pmode, a))); break;
+	case 20:
+	  emit_insn (gen_rtx_SET (b, gen_rtx_UNSPEC_VOLATILE
+	    (Pmode, gen_rtvec (1, group), UNSPECV_ZTT)));
+	  break;
+	case 21:
+	  emit_debug_insn (gen_rtx_VAR_LOCATION
+	    (GET_MODE (group), get_spill_slot_decl (false), group,
+	     VAR_INIT_STATUS_INITIALIZED));
+	  break;
+	case 22: case 23:
+	  for (unsigned int i = 0; i != (test == 22 ? 56U : 57U); ++i)
+	    emit_insn (gen_rtx_SET (b, GEN_INT (i)));
+	  break;
+	case 24: case 25: case 26:
+	  {
+	    rtx read = gen_rtx_MEM (Pmode, a);
+	    set_mem_attrs_for_spill (read);
+	    if (test == 25) MEM_NOTRAP_P (read) = 0;
+	    emit_insn (gen_rtx_SET (test == 26 ? d : b, read));
+	    break;
+	  }
+	}
+      rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+      rtx_insn *point = local_raw_spill::reload_preparation_point
+	(use, group, descriptor, test == 31 ? 4 : nregs);
+      bool expected = TARGET_ZTT && (test <= 3 || test == 22
+				     || test == 24 || test >= 32);
+      char context[64];
+      snprintf (context, sizeof context, "private reload preparation %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected ? first : nullptr, point);
+      reload_completed = saved_reload;
+      flag_non_call_exceptions = non_call;
+      riscv_ztt_profile_string = profile;
+    }
   for (unsigned int steps : { 6U, 7U, 11U, 15U })
     for (unsigned int test = 0; test != 8; ++test)
       {
