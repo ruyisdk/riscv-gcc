@@ -15607,10 +15607,23 @@ reuse_local_md ()
 		      unsigned int count = m_nregs (GET_MODE (group));
 		      gcc_assert (count == acc_full_m_nregs (mode));
 		      unsigned int mask = 0;
+		      rtx_insn *reload_before[ACC_REG_NUM] = {};
 		      for (unsigned int i = 0; i < count / step; ++i)
 			if (state.matches (REGNO (group) + i * step,
 					   matrix_mode (step), descriptor))
 			  mask |= 1U << i;
+			else
+			  {
+			    rtx packet = gen_rtx_REG
+			      (matrix_mode (step), REGNO (group) + i * step);
+			    reload_before[i] = local_raw_spill::reload_preparation_point
+			      (insn, packet, descriptor, step);
+			    if (reload_before[i])
+			      {
+				mask |= 1U << i;
+				state.invalidate (packet);
+			      }
+			  }
 		      if (mask)
 			{
 			  bool changed;
@@ -15625,6 +15638,23 @@ reuse_local_md ()
 			    changed = validate_change
 			      (insn, &XVECEXP (src, 0, 3), GEN_INT (mask), false);
 			  gcc_assert (changed);
+			  if (changed)
+			    for (unsigned int i = 0; i < count / step; ++i)
+			      if (reload_before[i])
+				{
+				  rtx packet = gen_rtx_REG
+				    (matrix_mode (step), REGNO (group) + i * step);
+				  rtx_insn *setup = emit_insn_before
+				    (gen_ztt_typed_msettyp_p0
+				     (GET_MODE (packet), Pmode, packet, descriptor),
+				     reload_before[i]);
+				  df_insn_rescan (setup);
+				  descriptor_cleanup = true;
+				  if (dump_file)
+				    fprintf (dump_file,
+					     "Prepare Md before ACC reload %d for insn %d: packet %u\n",
+					     INSN_UID (reload_before[i]), INSN_UID (insn), i);
+				}
 			  df_insn_rescan (insn);
 			  cleanup = true;
 			  if (dump_file)
