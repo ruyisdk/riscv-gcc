@@ -16216,6 +16216,163 @@ load_path_md_p (rtx_insn *load, rtx group, rtx value,
     }
 }
 
+/* Late stack rebasing can expose repeated scalar spill loads.  */
+static rtx
+scalar_spill_load (rtx_insn *insn)
+{
+  if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+      || recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET)
+    return nullptr;
+  rtx set = PATTERN (insn), reg = SET_DEST (set), mem = SET_SRC (set);
+  if (!local_md_state::full_gpr_p (reg) || fixed_regs[REGNO (reg)]
+      || global_regs[REGNO (reg)] || REGNO (reg) == HARD_FRAME_POINTER_REGNUM
+      || !MEM_P (mem) || GET_MODE (mem) != Pmode || MEM_VOLATILE_P (mem)
+      || !MEM_NOTRAP_P (mem) || !MEM_EXPR (mem)
+      || MEM_EXPR (mem) != get_spill_slot_decl (false)
+      || !MEM_OFFSET_KNOWN_P (mem) || !MEM_SIZE_KNOWN_P (mem)
+      || !known_eq (MEM_SIZE (mem), GET_MODE_SIZE (Pmode)))
+    return nullptr;
+  rtx addr = XEXP (mem, 0);
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
+    addr = XEXP (addr, 0);
+  return rtx_equal_p (addr, stack_pointer_rtx) ? set : nullptr;
+}
+
+static bool
+same_scalar_spill_p (rtx a, rtx b)
+{
+  return rtx_equal_p (a, b) && known_eq (MEM_OFFSET (a), MEM_OFFSET (b))
+    && MEM_ADDR_SPACE (a) == MEM_ADDR_SPACE (b);
+}
+
+/* Every entry must reach the same load before a register or memory kill.
+   Visiting a backedge does not by itself establish availability.  */
+static bool
+scalar_spill_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
+{
+  if (flag_non_call_exceptions || cfun->calls_setjmp)
+    return false;
+  auto_vec<basic_block, 32> blocks;
+  basic_block bb = BLOCK_FOR_INSN (load);
+  rtx_insn *stop = load;
+  unsigned int next = 0;
+  bool established = false;
+  for (;;)
+    {
+      bool found = false;
+      rtx_insn *end = PREV_INSN (BB_HEAD (bb));
+      for (rtx_insn *insn = stop ? PREV_INSN (stop) : BB_END (bb);
+	   insn != end; insn = PREV_INSN (insn))
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (!budget)
+	    return false;
+	  --budget;
+	  rtx set = scalar_spill_load (insn);
+	  if (set && rtx_equal_p (SET_DEST (set), reg)
+	      && same_scalar_spill_p (SET_SRC (set), mem))
+	    {
+	      established = found = true;
+	      break;
+	    }
+	  if (JUMP_P (insn) && insn == BB_END (bb)
+	      && md_preserving_branch_p (insn))
+	    continue;
+	  if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	      || recog_memoized (insn) < 0 || side_effects_p (PATTERN (insn))
+	      || !md_scalar_insn_p (PATTERN (insn))
+	      || reg_set_p (reg, insn) || reg_set_p (stack_pointer_rtx, insn))
+	    return false;
+	  struct write_info { rtx mem; bool conflict; } writes = { mem, false };
+	  note_stores (insn, [] (rtx dest, const_rtx, void *data) {
+	    auto *writes = static_cast<write_info *> (data);
+	    if (MEM_P (dest)
+		&& alias_sets_conflict_p (MEM_ALIAS_SET (dest),
+					 MEM_ALIAS_SET (writes->mem)))
+	      writes->conflict = true;
+	  }, &writes);
+	  if (writes.conflict)
+	    return false;
+	}
+      if (!found)
+	{
+	  if (EDGE_COUNT (bb->preds) == 0)
+	    return false;
+	  edge incoming;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (incoming, ei, bb->preds)
+	    {
+	      basic_block pred = incoming->src;
+	      if (pred->index < NUM_FIXED_BLOCKS
+		  || (incoming->flags & (EDGE_COMPLEX | EDGE_FAKE
+					 | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING)))
+		return false;
+	      if (!blocks.contains (pred))
+		{
+		  if (blocks.length () == 32)
+		    return false;
+		  blocks.quick_push (pred);
+		}
+	    }
+	}
+      if (next == blocks.length ())
+	return established;
+      bb = blocks[next++];
+      stop = nullptr;
+    }
+}
+
+static bool
+reuse_scalar_spill_compare ()
+{
+  if (!runtime_profile_p ())
+    return false;
+  bool changed = false;
+  unsigned int budget = 2048;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      rtx_insn *jump = BB_END (bb);
+      if (!JUMP_P (jump) || !md_preserving_branch_p (jump))
+	continue;
+      rtx_insn *load = prev_nonnote_nondebug_insn_bb (jump);
+      rtx set = load ? scalar_spill_load (load) : nullptr;
+      if (!set || BLOCK_FOR_INSN (load) != bb
+	  || !reg_referenced_p (SET_DEST (set), PATTERN (jump)))
+	continue;
+      unsigned int distance = 0;
+      for (rtx_insn *prev = PREV_INSN (load);
+	   prev && distance < 32 && budget; prev = PREV_INSN (prev))
+	{
+	  if (!NONDEBUG_INSN_P (prev))
+	    continue;
+	  ++distance;
+	  --budget;
+	  rtx source = scalar_spill_load (prev);
+	  if (!source || rtx_equal_p (SET_DEST (source), SET_DEST (set))
+	      || !same_scalar_spill_p (SET_SRC (source), SET_SRC (set))
+	      || !scalar_spill_path_p (load, SET_DEST (source), SET_SRC (set), budget))
+	    continue;
+	  int length = get_attr_length (jump);
+	  validate_replace_rtx_group (SET_DEST (set), SET_DEST (source), jump);
+	  if (!verify_changes (0) || get_attr_length (jump) > length)
+	    {
+	      cancel_changes (0);
+	      continue;
+	    }
+	  confirm_change_group ();
+	  df_insn_rescan (jump);
+	  changed = true;
+	  if (dump_file)
+	    fprintf (dump_file, "Reuse scalar spill in comparison at insn %d\n",
+		     INSN_UID (jump));
+	  break;
+	}
+    }
+  return changed;
+}
+
 /* Block duplication can expose byte zero stores after GPR propagation.  */
 static bool
 fold_scalar_zero_store (rtx_insn *insn, local_md_state &state)
@@ -17169,6 +17326,8 @@ reuse_local_md ()
   /* Dropping private operands exposes dead address and stride calculations.  */
   if (riscv_ztt_rebase_stack_addresses ())
     cleanup = descriptor_cleanup = true;
+  if (explicit_state && reuse_scalar_spill_compare ())
+    cleanup = descriptor_cleanup = true;
   if (cleanup)
     run_fast_dce ();
   if (riscv_ztt_remove_unused_workspace ())
@@ -17214,6 +17373,125 @@ reuse_local_md ()
 }
 
 #if CHECKING_P
+static void
+run_scalar_spill_path_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  for (unsigned int test = 0; test != 30; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      int reload = reload_completed, non_call = flag_non_call_exceptions;
+      int fixed = fixed_regs[25], global = global_regs[25];
+      int strict_aliasing = flag_strict_aliasing;
+      const char *profile = riscv_ztt_profile_string;
+      riscv_ztt_profile_string = "gcc-runtime-u32-m16-a4";
+      reload_completed = 1;
+      flag_strict_aliasing = test != 29;
+      basic_block entry = BASIC_BLOCK_FOR_FN (cfun, 2);
+      rtx_note *note = emit_note (NOTE_INSN_BASIC_BLOCK);
+      NOTE_BASIC_BLOCK (note) = entry;
+      BB_HEAD (entry) = BB_END (entry) = note;
+      basic_block left = create_empty_bb (entry);
+      basic_block right = create_empty_bb (left);
+      basic_block join = create_empty_bb (right);
+      redirect_edge_succ (single_succ_edge (entry), left);
+      make_edge (entry, right, 0);
+      make_edge (left, join, 0);
+      edge second = make_edge (right, join, 0);
+      make_edge (join, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      auto append = [] (basic_block block, rtx pat) {
+	rtx_insn *insn = emit_insn_after (pat, BB_END (block));
+	set_block_for_insn (insn, block);
+	return BB_END (block) = insn;
+      };
+      rtx reg = gen_rtx_REG (Pmode, test == 26 ? HARD_FRAME_POINTER_REGNUM : 25);
+      rtx tmp = gen_rtx_REG (Pmode, 11), pointer = gen_rtx_REG (Pmode, 10);
+      rtx mem = gen_rtx_MEM (Pmode, plus_constant (Pmode, stack_pointer_rtx, 64));
+      set_mem_attrs_for_spill (mem);
+      rtx source = copy_rtx (mem);
+      if (test == 21) XEXP (source, 0) = plus_constant (Pmode, stack_pointer_rtx, 72);
+      if (test == 22) MEM_VOLATILE_P (source) = 1;
+      if (test == 25) set_mem_offset (source, 8);
+      if (test == 27) global_regs[25] = 1;
+      if (test == 28) fixed_regs[25] = 1;
+      if (test != 1 && test != 14 && test != 16 && test != 17)
+	append (entry, gen_rtx_SET (reg, source));
+      if (test == 16 || test == 17)
+	append (left, gen_rtx_SET (reg, copy_rtx (source)));
+      if (test == 17)
+	append (right, gen_rtx_SET (reg, copy_rtx (source)));
+      if (test == 2) append (right, gen_rtx_SET (reg, const0_rtx));
+      if (test == 3)
+	append (right, gen_rtx_SET (stack_pointer_rtx,
+				 plus_constant (Pmode, stack_pointer_rtx, 16)));
+
+      if ((test >= 4 && test <= 6) || test == 29)
+	{
+	  rtx dest = test == 4 ? copy_rtx (mem) : gen_rtx_MEM (Pmode, pointer);
+	  if (test == 6 || test == 29) set_mem_alias_set (dest, new_alias_set ());
+	  append (right, gen_rtx_SET (dest, const0_rtx));
+	}
+      if (test == 7)
+	append (right, gen_rtx_ASM_INPUT_loc (VOIDmode, "# boundary", UNKNOWN_LOCATION));
+      if (test == 8)
+	{
+	  rtx_insn *call = emit_call_insn_after
+	    (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (right));
+	  set_block_for_insn (call, right);
+	  BB_END (right) = call;
+	}
+      if (test == 9) second->flags |= EDGE_EH;
+      if (test == 10) second->flags |= EDGE_IRREDUCIBLE_LOOP;
+      if (test == 11) flag_non_call_exceptions = 1;
+      if (test == 12) cfun->calls_setjmp = true;
+      if (test >= 13 && test <= 15) make_edge (join, left, EDGE_DFS_BACK);
+      if (test == 19 || test == 20)
+	{
+	  basic_block prev = right;
+	  for (unsigned int i = 0; i != (test == 19 ? 33U : 4U); ++i)
+	    {
+	      basic_block more = create_empty_bb (prev);
+	      redirect_edge_succ (single_succ_edge (prev), more);
+	      make_edge (more, join, 0);
+	      prev = more;
+	    }
+	}
+      if (test == 23)
+	append (right, gen_rtx_SET (gen_rtx_REG (QImode, REGNO (reg)), const0_rtx));
+      if (test == 24)
+	RTX_FRAME_RELATED_P (append (right, gen_rtx_SET (pointer, const0_rtx))) = 1;
+      rtx_insn *load = append (join, gen_rtx_SET (tmp, copy_rtx (mem)));
+      if (test == 15) append (join, gen_rtx_SET (reg, const0_rtx));
+      unsigned int budget = test == 18 ? 0 : 2048;
+      bool expected = test == 0 || test == 6 || test == 13 || test == 17 || test == 20;
+      char context[64];
+      snprintf (context, sizeof context, "scalar spill path case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected, scalar_spill_path_p (load, reg, mem, budget));
+      if (test == 0 || test == 6 || test == 13 || test == 17)
+	{
+	  rtx_insn *jump = emit_jump_insn_after
+	    (gen_rtx_SET (pc_rtx, gen_rtx_IF_THEN_ELSE
+	      (VOIDmode, gen_rtx_NE (VOIDmode, tmp, pointer),
+	       gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()), pc_rtx)), BB_END (join));
+	  set_block_for_insn (jump, join);
+	  BB_END (join) = jump;
+	  ASSERT_TRUE_AT (loc, reuse_scalar_spill_compare ());
+	  ASSERT_TRUE_AT (loc, reg_referenced_p (reg, PATTERN (jump)));
+	  ASSERT_FALSE_AT (loc, reg_referenced_p (tmp, PATTERN (jump)));
+	  ASSERT_FALSE_AT (loc, load->deleted ());
+	}
+      reload_completed = reload;
+      flag_non_call_exceptions = non_call;
+      fixed_regs[25] = fixed;
+      global_regs[25] = global;
+      flag_strict_aliasing = strict_aliasing;
+      riscv_ztt_profile_string = profile;
+    }
+}
+
 static void
 run_load_path_selftests ()
 {
@@ -17474,6 +17752,7 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  run_scalar_spill_path_selftests ();
   run_load_path_selftests ();
   run_loop_spill_selftests ();
   {
