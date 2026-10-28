@@ -14355,13 +14355,17 @@ public:
 	    || !tail_insn_p (insn, read))
 	  break;
 	rtx pat = PATTERN (insn);
+	bool scalar = GET_CODE (pat) == SET
+	  && local_md_state::full_gpr_p (SET_SRC (pat))
+	  && GET_MODE (SET_DEST (pat)) == Pmode;
 	if (NONJUMP_INSN_P (insn) && !RTX_FRAME_RELATED_P (insn)
-	    && md_raw_transfer_p (pat) && private_slot_p (SET_DEST (pat))
+	    && (md_raw_transfer_p (pat) || scalar)
+	    && private_slot_p (SET_DEST (pat))
 	    && MEM_ALIAS_SET (SET_DEST (pat)) == MEM_ALIAS_SET (canonical))
 	  {
 	    if (dump_file)
-	      fprintf (dump_file, "Drop dead private spill at insn %d (unread tail)\n",
-		       INSN_UID (insn));
+	      fprintf (dump_file, "Drop dead %sprivate spill at insn %d (unread tail)\n",
+		       scalar ? "scalar " : "", INSN_UID (insn));
 	    delete_insn (insn);
 	    changed = true;
 	  }
@@ -17038,8 +17042,11 @@ run_md_reuse_selftests ()
       riscv_ztt_profile_string = saved_profile;
       flag_strict_aliasing = strict_aliasing;
     }
-  for (unsigned int test = 0; test != 26; ++test)
+  for (unsigned int variant = 0; variant != 64; ++variant)
     {
+      unsigned int test = variant % 32;
+      bool scalar = variant >= 32;
+      machine_mode mode = scalar ? Pmode : ZTTMR1mode;
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
       basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
       make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
@@ -17049,11 +17056,11 @@ run_md_reuse_selftests ()
       int strict_aliasing = flag_strict_aliasing;
       flag_strict_aliasing = test != 25;
       rtx addr = gen_rtx_REG (Pmode, 10), tmp = gen_rtx_REG (Pmode, 11);
-      rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
-      rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+      rtx m = gen_rtx_REG (mode, scalar ? 12 : M_REG_FIRST);
+      rtx slot = gen_rtx_MEM (mode, addr);
       set_mem_attrs_for_spill (slot);
       rtx other = copy_rtx (slot);
-      set_mem_offset (other, GET_MODE_SIZE (ZTTMR1mode));
+      set_mem_offset (other, GET_MODE_SIZE (mode));
       auto append = [&] (rtx pattern) {
 	rtx_insn *p = emit_insn_after (pattern, BB_END (bb));
 	BB_END (bb) = p;
@@ -17062,6 +17069,19 @@ run_md_reuse_selftests ()
       if (test == 12) MEM_NOTRAP_P (slot) = 0;
       if (test == 13) MEM_VOLATILE_P (slot) = 1;
       if (test == 14) set_mem_alias_set (slot, 0);
+      if (test == 26) set_mem_expr (slot, nullptr);
+      if (test == 27) clear_mem_offset (slot);
+      if (test == 28) clear_mem_size (slot);
+      if (test == 29) set_mem_size (slot, GET_MODE_SIZE (mode) + 1);
+      if (test == 30)
+	{
+	  alias_set_type alias = new_alias_set ();
+	  record_alias_subset (MEM_ALIAS_SET (slot), alias);
+	  set_mem_alias_set (slot, alias);
+	}
+      if (test == 31)
+	set_mem_expr (slot, build_decl (UNKNOWN_LOCATION, VAR_DECL,
+				       nullptr, integer_type_node));
       rtx_insn *store = append (gen_rtx_SET (slot, m)), *second = nullptr;
       if (test == 15) RTX_FRAME_RELATED_P (store) = 1;
       if (test == 3 || test == 4 || test == 24)
@@ -17075,7 +17095,7 @@ run_md_reuse_selftests ()
 	}
       if (test == 8)
 	BB_END (bb) = emit_debug_insn_after
-	  (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+	  (gen_rtx_VAR_LOCATION (mode, get_spill_slot_decl (false),
 				slot, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
       if (test == 9)
 	BB_END (bb) = emit_call_insn_after
@@ -17097,10 +17117,12 @@ run_md_reuse_selftests ()
       if (test != 22)
 	BB_END (bb) = emit_jump_insn_after
 	  (gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)), BB_END (bb));
-      bool expected = TARGET_ZTT && typed_profile_p () && riscv_ztt_explicit_state_p ()
+
+      bool expected = (scalar || (TARGET_ZTT && typed_profile_p ()
+				 && riscv_ztt_explicit_state_p ()))
 	&& (test == 0 || test == 1 || test == 6 || test == 23 || test == 24);
       char context[64];
-      snprintf (context, sizeof context, "unread private tail case %u", test);
+      snprintf (context, sizeof context, "unread private tail case %u", variant);
       selftest::location loc (__FILE__, __LINE__, context);
       ASSERT_EQ_AT (loc, expected, local_raw_spill::remove_dead_tail (bb));
       ASSERT_EQ (expected && test != 24, store->deleted ());
