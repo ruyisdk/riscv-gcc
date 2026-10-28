@@ -9560,6 +9560,35 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
   return false;
 }
 
+/* Incoming scalar arguments are above the fixed CFA, outside the scalable
+   workspace.  Their loads and debug locations survive allocation removal.  */
+static bool
+riscv_ztt_incoming_arg_load_p (rtx pat)
+{
+  rtx src;
+  if (GET_CODE (pat) == VAR_LOCATION)
+    src = PAT_VAR_LOCATION_LOC (pat);
+  else if (GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
+	   && GP_REG_P (REGNO (SET_DEST (pat)))
+	   && !reg_overlap_mentioned_p (stack_pointer_rtx, SET_DEST (pat))
+	   && !reg_overlap_mentioned_p (hard_frame_pointer_rtx, SET_DEST (pat)))
+    src = SET_SRC (pat);
+  else
+    return false;
+  if (!src)
+    return false;
+  if (GET_CODE (src) == SIGN_EXTEND || GET_CODE (src) == ZERO_EXTEND)
+    src = XEXP (src, 0);
+  if (!MEM_P (src) || !MEM_EXPR (src)
+      || TREE_CODE (MEM_EXPR (src)) != PARM_DECL)
+    return false;
+  rtx addr = XEXP (src, 0);
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1))
+      && INTVAL (XEXP (addr, 1)) >= 0)
+    addr = XEXP (addr, 0);
+  return rtx_equal_p (addr, hard_frame_pointer_rtx);
+}
+
 #if CHECKING_P
 void
 selftest::riscv_ztt_workspace_selftests ()
@@ -9628,6 +9657,50 @@ selftest::riscv_ztt_workspace_selftests ()
   HOST_WIDE_INT factor;
   ASSERT_FALSE (riscv_ztt_workspace_factor
 		(scale, get_last_insn (), 80, budget, factor));
+
+  tree parm = build_decl (UNKNOWN_LOCATION, PARM_DECL, NULL_TREE,
+			 integer_type_node);
+  auto load = [&] (rtx address) {
+    rtx mem = gen_rtx_MEM (Pmode, address);
+    set_mem_expr (mem, parm);
+    return gen_rtx_SET (a, mem);
+  };
+  rtx incoming = load (hard_frame_pointer_rtx);
+  ASSERT_TRUE (riscv_ztt_incoming_arg_load_p (incoming));
+  ASSERT_TRUE (riscv_ztt_incoming_arg_load_p
+	       (load (plus_constant (Pmode, hard_frame_pointer_rtx, 16))));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(load (plus_constant (Pmode, hard_frame_pointer_rtx, -16))));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p (load (stack_pointer_rtx)));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p (load (a)));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(load (gen_rtx_PLUS (Pmode, hard_frame_pointer_rtx, b))));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(gen_rtx_SET (stack_pointer_rtx, SET_SRC (incoming))));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(gen_rtx_SET (hard_frame_pointer_rtx, SET_SRC (incoming))));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(gen_rtx_SET (SET_SRC (incoming), a)));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(gen_rtx_SET (a, hard_frame_pointer_rtx)));
+  rtx narrow = gen_rtx_MEM (QImode, hard_frame_pointer_rtx);
+  set_mem_expr (narrow, parm);
+  ASSERT_TRUE (riscv_ztt_incoming_arg_load_p
+	       (gen_rtx_SET (a, gen_rtx_SIGN_EXTEND (Pmode, narrow))));
+  ASSERT_TRUE (riscv_ztt_incoming_arg_load_p
+	       (gen_rtx_SET (a, gen_rtx_ZERO_EXTEND (Pmode, narrow))));
+  ASSERT_TRUE (riscv_ztt_incoming_arg_load_p
+	       (gen_rtx_VAR_LOCATION (Pmode, parm,
+		gen_rtx_SIGN_EXTEND (Pmode, narrow), VAR_INIT_STATUS_INITIALIZED)));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(gen_rtx_VAR_LOCATION (Pmode, parm,
+		 SET_SRC (load (plus_constant (Pmode, hard_frame_pointer_rtx, -16))),
+		 VAR_INIT_STATUS_INITIALIZED)));
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
+		(gen_rtx_VAR_LOCATION (Pmode, parm, NULL_RTX,
+				       VAR_INIT_STATUS_UNKNOWN)));
+  set_mem_expr (SET_SRC (incoming), NULL_TREE);
+  ASSERT_FALSE (riscv_ztt_incoming_arg_load_p (incoming));
   end_sequence ();
 }
 #endif
@@ -9671,8 +9744,9 @@ riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release)
 	      else if (INSN_P (insn) && current == allocated)
 		{
 		  rtx pat = PATTERN (insn);
-		  if (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
-		      && XINT (SET_SRC (pat), 1) == UNSPEC_TIE)
+		  if (riscv_ztt_incoming_arg_load_p (pat)
+		      || (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
+			  && XINT (SET_SRC (pat), 1) == UNSPEC_TIE))
 		    continue;
 		  if (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
 		      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat))
@@ -9734,6 +9808,7 @@ riscv_ztt_remove_unused_workspace ()
 	  || GET_CODE (pat) == ASM_INPUT)
 	return false;
       if (!prologue_epilogue_contains (insn)
+	  && !riscv_ztt_incoming_arg_load_p (pat)
 	  && (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
 	      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat)
 	      || reg_overlap_mentioned_p (frame_pointer_rtx, pat)
@@ -9781,8 +9856,9 @@ riscv_ztt_remove_unused_workspace ()
 	if (INSN_P (insn))
 	  {
 	    rtx pat = PATTERN (insn);
-	    if (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
-		&& XINT (SET_SRC (pat), 1) == UNSPEC_TIE)
+	    if (riscv_ztt_incoming_arg_load_p (pat)
+		|| (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
+		    && XINT (SET_SRC (pat), 1) == UNSPEC_TIE))
 	      continue;
 	    if (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
 		|| reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat))
