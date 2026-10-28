@@ -2890,7 +2890,7 @@
 
 (define_insn "*movsf_softfloat"
   [(set (match_operand:SF 0 "nonimmediate_operand" "= r,r,m")
-	(match_operand:SF 1 "move_operand"         " Gr,m,r"))]
+	(match_operand:SF 1 "move_operand"         " Gr,m,rG"))]
   "!TARGET_HARD_FLOAT
    && (register_operand (operands[0], SFmode)
        || reg_or_0_operand (operands[1], SFmode))"
