@@ -905,8 +905,11 @@ they leave both address expressions unchanged.  User loads and stores
 remain boundaries; scalar reloads are neither removed nor substituted.
 Calls, asm, state setters, unknown memory, frame changes and control-flow
 boundaries stop the search.  This fallback retains the private stores.
-After reload cleanup, the last 32 instructions of a return block are
-checked for unread private stores.  Known disjoint spill-slot ranges do
+After reload cleanup, the last 32 instructions of each block are checked
+for unread private stores. The per-slot proof follows at most four blocks
+per path and 32 instructions in total, requiring every path to return.
+Cross-block cleanup runs after local overwrite cleanup; backedges and
+exceptional edges stop it. Known disjoint spill-slot ranges do
 not keep another member alive; unknown ranges and overlapping reads do.
 The existing alias, debug and exceptional-path checks still apply.
 An initial reverse scan shares a no-private-read proof across at most

@@ -15198,8 +15198,46 @@ public:
 	  : REG_P (dest));
   }
 
-  /* A private spill is dead if the remaining return tail cannot read it.  */
-  bool remove_dead_store ()
+  /* Bound both branch depth and total work; no path may revisit a block.  */
+  bool unread_return_p (basic_block bb, rtx_insn *first,
+			auto_vec<basic_block, 4> &path, unsigned int &count)
+  {
+    if (bb == EXIT_BLOCK_PTR_FOR_FN (cfun) || path.length () == 4
+	|| path.contains (bb) || !EDGE_COUNT (bb->succs)
+	|| EDGE_COUNT (bb->succs) > 2)
+      return false;
+    edge e;
+    edge_iterator ei;
+    FOR_EACH_EDGE (e, ei, bb->succs)
+      if (!md_normal_edge_p (e))
+	return false;
+    for (rtx_insn *p = first; p && p != NEXT_INSN (BB_END (bb));
+	 p = NEXT_INSN (p))
+      {
+	if (!INSN_P (p))
+	  continue;
+	if (!DEBUG_INSN_P (p) && ++count > 32)
+	  return false;
+	if (p == BB_END (bb) && returnjump_p (p)
+	    && recog_memoized (p) >= 0 && !contains_mem_rtx_p (PATTERN (p)))
+	  return single_succ_p (bb)
+	    && single_succ (bb) == EXIT_BLOCK_PTR_FOR_FN (cfun);
+	if (p == BB_END (bb) && md_preserving_branch_p (p))
+	  continue;
+	if (!tail_insn_p (p, [&] (rtx x) { return spill_read_p (x); }))
+	  return false;
+      }
+    path.safe_push (bb);
+    FOR_EACH_EDGE (e, ei, bb->succs)
+      if (e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun)
+	  || !unread_return_p (e->dest, BB_HEAD (e->dest), path, count))
+	return false;
+    path.pop ();
+    return true;
+  }
+
+  /* A private spill is dead if every bounded return path cannot read it.  */
+  bool remove_dead_store (bool across_blocks = false)
   {
     if (!store || cfun->stdarg || cfun->calls_setjmp || cfun->has_nonlocal_label
 	|| crtl->calls_eh_return || flag_non_call_exceptions)
@@ -15209,32 +15247,20 @@ public:
 	|| MEM_ALIAS_SET (mem) != MEM_ALIAS_SET (canonical))
       return false;
     basic_block bb = BLOCK_FOR_INSN (store);
-    if (!bb || !single_succ_p (bb)
-	|| single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun)
-	|| !md_normal_edge_p (single_succ_edge (bb)))
+    if (!bb || (!across_blocks
+		&& (!single_succ_p (bb)
+		    || single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun))))
       return false;
+    auto_vec<basic_block, 4> path;
     unsigned int count = 0;
-    for (rtx_insn *p = NEXT_INSN (store); p && p != NEXT_INSN (BB_END (bb));
-	 p = NEXT_INSN (p))
-      {
-	if (!INSN_P (p))
-	  continue;
-	if (!DEBUG_INSN_P (p) && ++count > 32)
-	  return false;
-	if (p == BB_END (bb) && returnjump_p (p)
-	    && recog_memoized (p) >= 0 && !contains_mem_rtx_p (PATTERN (p)))
-	  {
-	    if (dump_file)
-	      fprintf (dump_file, "Drop dead private spill at insn %d\n",
-		       INSN_UID (store));
-	    delete_insn (store);
-	    clear ();
-	    return true;
-	  }
-	if (!tail_insn_p (p, [&] (rtx x) { return spill_read_p (x); }))
-	  return false;
-      }
-    return false;
+    if (!unread_return_p (bb, NEXT_INSN (store), path, count))
+      return false;
+    if (dump_file)
+      fprintf (dump_file, "Drop dead private spill at insn %d\n",
+	       INSN_UID (store));
+    delete_insn (store);
+    clear ();
+    return true;
   }
 
   /* Share one suffix proof when no private slot is read at all.  */
@@ -15352,13 +15378,15 @@ public:
     return changed;
   }
 
-  /* Revisit split members after all reloads in the return tail are cleaned.  */
-  static bool remove_dead_tail (basic_block bb)
+  /* Revisit split members after reloads in the return paths are cleaned.  */
+  static bool remove_dead_tail (basic_block bb, bool across_blocks = false)
   {
-    if (!single_succ_p (bb)
-	|| single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun))
+    bool return_block = single_succ_p (bb)
+      && single_succ (bb) == EXIT_BLOCK_PTR_FOR_FN (cfun);
+    /* Keep the local and cross-block candidate scans disjoint.  */
+    if (return_block == across_blocks)
       return false;
-    bool changed = remove_unread_tail (bb);
+    bool changed = return_block && remove_unread_tail (bb);
     unsigned int count = 0;
     rtx_insn *insn, *prev;
     FOR_BB_INSNS_REVERSE_SAFE (bb, insn, prev)
@@ -15373,7 +15401,7 @@ public:
 	  continue;
 	local_raw_spill spill;
 	spill.redundant_reload_p (PATTERN (insn), insn);
-	changed |= spill.remove_dead_store ();
+	changed |= spill.remove_dead_store (across_blocks);
       }
     return changed;
   }
@@ -15754,6 +15782,8 @@ reuse_cleaned_descriptors (bool &spill_cleanup)
       if (explicit_state && local_raw_spill::remove_dead_tail (bb))
 	changed = spill_cleanup = true;
       if (explicit_state && local_raw_spill::remove_overwritten_stores (bb))
+	changed = spill_cleanup = true;
+      if (explicit_state && local_raw_spill::remove_dead_tail (bb, true))
 	changed = spill_cleanup = true;
     }
   return changed;
@@ -18608,6 +18638,91 @@ run_md_reuse_selftests ()
 		 || ((test == 36 || test == 38)
 		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 spill.remove_dead_store ());
+      flag_non_call_exceptions = non_call;
+      flag_strict_aliasing = strict_aliasing;
+    }
+  for (unsigned int test = 0; test != 27; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+      int strict_aliasing = flag_strict_aliasing;
+      flag_strict_aliasing = test != 26;
+      basic_block blocks[5];
+      for (auto &bb : blocks)
+	bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+      auto append = [&] (unsigned int i, rtx pat) {
+	return BB_END (blocks[i]) = emit_insn_after (pat, BB_END (blocks[i]));
+      };
+      auto jump = [&] (unsigned int i, rtx pat) {
+	return BB_END (blocks[i]) = emit_jump_insn_after (pat, BB_END (blocks[i]));
+      };
+      rtx addr = gen_rtx_REG (Pmode, 10), value = gen_rtx_REG (Pmode, 11);
+      rtx mem = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (mem);
+      rtx save = gen_rtx_SET (mem, gen_rtx_REG (ZTTMR1mode, M_REG_FIRST));
+      local_raw_spill spill;
+      ASSERT_FALSE (spill.redundant_reload_p (save, append (0, save)));
+      bool chain = test == 1 || test == 2;
+      unsigned int end = test == 2 ? 4 : 3;
+      edge first = make_edge (blocks[0], blocks[1], 0);
+      if (chain)
+	for (unsigned int i = 1; i < end; ++i)
+	  make_edge (blocks[i], blocks[i + 1], EDGE_FALLTHRU);
+      else
+	{
+	  make_edge (blocks[0], blocks[2], EDGE_FALLTHRU);
+	  make_edge (blocks[1], blocks[3], 0);
+	  make_edge (blocks[2], blocks[3], EDGE_FALLTHRU);
+	  jump (0, gen_rtx_SET (pc_rtx, gen_rtx_IF_THEN_ELSE (VOIDmode,
+	    gen_rtx_NE (VOIDmode, value, const0_rtx),
+	    gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()), pc_rtx)));
+	}
+      if (test == 3)
+	make_edge (blocks[2], blocks[0], 0);
+      if (test == 24)
+	make_edge (blocks[0], blocks[4], 0);
+      if (test == 25)
+	make_edge (blocks[2], EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      if (test >= 11 && test <= 16)
+	{
+	  int flags[] = { EDGE_EH, EDGE_ABNORMAL, EDGE_FAKE, EDGE_DFS_BACK,
+			  EDGE_IRREDUCIBLE_LOOP, EDGE_CROSSING };
+	  first->flags |= flags[test - 11];
+	}
+      rtx read = gen_rtx_MEM (Pmode, addr);
+      if (test == 4) set_mem_attrs_for_spill (read);
+      if (test == 6 || test == 26) set_mem_alias_set (read, new_alias_set ());
+      if (test == 7) MEM_VOLATILE_P (read) = 1;
+      if ((test >= 4 && test <= 7) || test == 26)
+	append (2, gen_rtx_SET (value, read));
+      if (test == 8)
+	BB_END (blocks[2]) = emit_call_insn_after
+	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, addr), const0_rtx),
+	   BB_END (blocks[2]));
+      if (test == 9) append (2, gen_rtx_ASM_INPUT (VOIDmode, ""));
+      if (test == 10)
+	append (2, gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, value),
+					 UNSPECV_ZTT));
+      if (test == 17)
+	for (unsigned int i = 0; i < 32; ++i)
+	  append (2, gen_rtx_SET (value, GEN_INT (i)));
+      int non_call = flag_non_call_exceptions;
+      if (test == 18) flag_non_call_exceptions = 1;
+      if (test == 19) cfun->calls_setjmp = true;
+      if (test == 20) cfun->has_nonlocal_label = true;
+      if (test == 21) cfun->stdarg = true;
+      if (test == 22)
+	BB_END (blocks[2]) = emit_debug_insn_after
+	  (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false), mem,
+				VAR_INIT_STATUS_INITIALIZED), BB_END (blocks[2]));
+      if (test == 23) append (2, gen_rtx_SET (read, value));
+      make_edge (blocks[end], EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      jump (end, gen_simple_return_internal
+	(gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)));
+      char context[64];
+      snprintf (context, sizeof context, "private spill return paths %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, test == 0 || test == 1 || test == 6 || test == 23,
+		    spill.remove_dead_store (true));
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;
     }
