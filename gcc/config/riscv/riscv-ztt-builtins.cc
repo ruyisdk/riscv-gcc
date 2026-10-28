@@ -8812,6 +8812,48 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
 }
 
+/* Same-type integer abs and extremum folds are idempotent.  Retain the
+   first operation and its status effects, including saturation of INT_MIN.  */
+static tree
+repeated_integer_unary_value (unsigned int code, gimple_stmt_iterator *gsi,
+			      gcall *stmt)
+{
+  conversion_description operation;
+  if (gimple_call_num_args (stmt) != 1
+      || !decode_conversion_builtin (code, operation))
+    return NULL_TREE;
+  const auto d = builtin_description_for (operation.canonical);
+  if (operation.source != d.type || !type_nregs (d.type))
+    return NULL_TREE;
+  switch (d.expansion)
+    {
+    case EXPAND_MABS_EW:
+    case EXPAND_MREDUCEMAX_COL:
+    case EXPAND_MREDUCEMAX_ROW:
+    case EXPAND_MREDUCEMIN_COL:
+    case EXPAND_MREDUCEMIN_ROW:
+    case EXPAND_MPREFIXMAX_COL:
+    case EXPAND_MPREFIXMAX_ROW:
+      break;
+    default:
+      return NULL_TREE;
+    }
+  tree result = gimple_call_arg (stmt, 0), value = result;
+  if (type_for_tree (TREE_TYPE (gimple_call_lhs (stmt))) != d.type)
+    return NULL_TREE;
+  gimple *producers[5];
+  unsigned int count = 0;
+  if (!strip_structure_copies (value, d.type, producers, count, false, true))
+    return NULL_TREE;
+  gimple *producer = SSA_NAME_DEF_STMT (value);
+  conversion_description source;
+  if (!decode_conversion_builtin (structure_builtin_code (producer, 1), source)
+      || source.canonical != operation.canonical || source.source != d.type)
+    return NULL_TREE;
+  producers[count++] = producer;
+  return local_structure_producers_p (gsi, producers, count) ? result : NULL_TREE;
+}
+
 /* ID coordinates are nonnegative.  Preserve them through conversions whose
    destination covers that range, retaining calls and constructor checks.  */
 static bool
@@ -9088,6 +9130,8 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
     return nullptr;
   tree lhs = gimple_call_lhs (stmt);
   tree value = binary_identity_value (code, gsi, stmt);
+  if (!value)
+    value = repeated_integer_unary_value (code, gsi, stmt);
   if (!value && code >= ZTT_BUILTIN_MAX)
     value = identity_indexed_value (code, gsi, stmt);
   else if (!value)
