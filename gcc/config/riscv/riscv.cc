@@ -9782,6 +9782,9 @@ riscv_ztt_workspace_debug_p (rtx pat, HOST_WIDE_INT fixed_size,
   return found;
 }
 
+static void riscv_ztt_remove_unread_scalar_slots
+  (HOST_WIDE_INT, HOST_WIDE_INT, HOST_WIDE_INT);
+
 #if CHECKING_P
 static void riscv_ztt_stack_selftests (basic_block);
 static void riscv_ztt_workspace_paths_selftests (basic_block);
@@ -10337,13 +10340,144 @@ riscv_ztt_workspace_exits_selftests ()
     }
 }
 
+static void
+riscv_ztt_unread_scalar_selftests ()
+{
+  using namespace selftest;
+  for (unsigned int test = 0; test != 26; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      int reload = reload_completed;
+      reload_completed = 1;
+      basic_block root = BASIC_BLOCK_FOR_FN (cfun, 2);
+      rtx_note *note = emit_note (NOTE_INSN_BASIC_BLOCK);
+      NOTE_BASIC_BLOCK (note) = root;
+      BB_HEAD (root) = BB_END (root) = note;
+      basic_block next = create_empty_bb (root);
+      redirect_edge_succ (single_succ_edge (root), next);
+      make_edge (next, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      auto append = [] (basic_block bb, rtx pat) {
+	rtx_insn *insn = GET_CODE (pat) == VAR_LOCATION
+	  ? emit_debug_insn_after (pat, BB_END (bb))
+	  : emit_insn_after (pat, BB_END (bb));
+	set_block_for_insn (insn, bb);
+	return BB_END (bb) = insn;
+      };
+      auto slot = [] (machine_mode mode, HOST_WIDE_INT offset) {
+	rtx mem = gen_rtx_MEM (mode, plus_constant (Pmode, stack_pointer_rtx, offset));
+	set_mem_attrs_for_spill (mem);
+	return mem;
+      };
+      rtx reg = gen_rtx_REG (Pmode, 5);
+      rtx mem = slot (test == 16 ? QImode : Pmode,
+		      test == 22 ? 64 - UNITS_PER_WORD : test == 25 ? 0 : 16);
+      if (test == 14) MEM_VOLATILE_P (mem) = 1;
+      if (test == 15) set_mem_expr (mem, NULL_TREE);
+      if (test == 6) append (root, gen_rtx_SET (reg, copy_rtx (mem)));
+      rtx_insn *store = append (root, gen_rtx_SET (mem, test == 1 ? reg : const0_rtx));
+      if (test == 13) RTX_FRAME_RELATED_P (store) = 1;
+      rtx_insn *other = nullptr;
+      if (test == 18 || test == 21 || test == 24)
+	other = append (next, gen_rtx_SET (slot (Pmode, test == 21 ? 32 : 16), reg));
+      if (test == 2 || test == 5 || test == 7 || test == 8
+	  || test == 21 || test == 24)
+	append (test >= 7 ? next : root, gen_rtx_SET
+	  (reg, slot (Pmode, test == 5 ? 15 : test == 21 ? 32 : 16)));
+      if (test == 3 || test == 4 || test == 17 || test == 22)
+	append (next, gen_rtx_SET (reg, gen_rtx_ZERO_EXTEND
+	  (Pmode, slot (QImode, test == 3 ? 16 + UNITS_PER_WORD - 1
+			 : test == 4 ? 16 + UNITS_PER_WORD : test == 22 ? 63 : 16))));
+      if (test == 8) make_edge (next, root, EDGE_DFS_BACK);
+      if ((test >= 9 && test <= 12) || test == 23)
+	{
+	  rtx value = slot (test == 11 ? QImode : Pmode, test == 12 ? 32 : 16);
+	  if (test == 10)
+	    XEXP (value, 0) = gen_rtx_PLUS
+	      (Pmode, hard_frame_pointer_rtx, gen_int_mode (poly_int64 (-208, 0, -16), Pmode));
+	  if (test == 23) XEXP (value, 0) = reg;
+	  tree var = build_decl (UNKNOWN_LOCATION, VAR_DECL, NULL_TREE, long_integer_type_node);
+	  append (next, gen_rtx_VAR_LOCATION (Pmode, var, value, VAR_INIT_STATUS_INITIALIZED));
+	}
+      riscv_ztt_remove_unread_scalar_slots
+	(test == 19 ? 0 : test == 20 ? HOST_WIDE_INT_UC (0x100000000) : 64, 208, 16);
+      bool removed = test == 0 || test == 1 || test == 4 || test == 12
+	|| test == 16 || test == 18 || test == 21 || test == 25;
+      char context[64];
+      snprintf (context, sizeof context, "unread scalar slot case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, removed, store->deleted ());
+      if (other) ASSERT_EQ_AT (loc, test == 18, other->deleted ());
+      reload_completed = reload;
+    }
+}
+
 void
 selftest::riscv_ztt_workspace_selftests ()
 {
   riscv_ztt_workspace_single_selftests ();
   riscv_ztt_workspace_exits_selftests ();
+  riscv_ztt_unread_scalar_selftests ();
 }
 #endif
+
+/* The workspace proof excludes escaped stack addresses and untracked slots.  */
+static void
+riscv_ztt_remove_unread_scalar_slots (HOST_WIDE_INT fixed_size,
+				     HOST_WIDE_INT fixed_frame,
+				     HOST_WIDE_INT factor)
+{
+  if (fixed_size < 0 || (unsigned HOST_WIDE_INT) fixed_size > UINT_MAX)
+    return;
+  auto_bitmap reads;
+  auto_vec<rtx_insn *, 16> stores;
+  for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    {
+      if (!INSN_P (insn))
+	continue;
+      rtx pat = PATTERN (insn);
+      if (DEBUG_INSN_P (insn))
+	{
+	  subrtx_iterator::array_type array;
+	  FOR_EACH_SUBRTX (iter, array, pat, ALL)
+	    if (MEM_P (*iter) && MEM_EXPR (*iter) == get_spill_slot_decl (false))
+	      {
+		HOST_WIDE_INT offset;
+		if (!riscv_ztt_workspace_debug_offset
+		    (const_cast<rtx> (*iter), fixed_size, fixed_frame, factor, offset))
+		  return;
+		bitmap_set_range (reads, offset + fixed_frame,
+				  GET_MODE_SIZE (GET_MODE (*iter)).to_constant ());
+	      }
+	  continue;
+	}
+      if (!riscv_ztt_workspace_spill_p (pat, fixed_size))
+	continue;
+      rtx mem = *riscv_ztt_stack_mem (pat);
+      HOST_WIDE_INT offset = rtx_equal_p (XEXP (mem, 0), stack_pointer_rtx)
+	? 0 : INTVAL (XEXP (XEXP (mem, 0), 1));
+      if (MEM_P (SET_DEST (pat)) && !RTX_FRAME_RELATED_P (insn)
+	  && recog_memoized (insn) >= 0 && !side_effects_p (pat))
+	stores.safe_push (insn);
+      else
+	bitmap_set_range (reads, offset, GET_MODE_SIZE (GET_MODE (mem)).to_constant ());
+    }
+  for (rtx_insn *store : stores)
+    {
+      rtx mem = SET_DEST (PATTERN (store));
+      HOST_WIDE_INT offset = rtx_equal_p (XEXP (mem, 0), stack_pointer_rtx)
+	? 0 : INTVAL (XEXP (XEXP (mem, 0), 1));
+      unsigned int bytes = GET_MODE_SIZE (GET_MODE (mem)).to_constant ();
+      bool used = false;
+      for (unsigned int i = 0; i != bytes; ++i)
+	used |= bitmap_bit_p (reads, offset + i);
+      if (used)
+	continue;
+      if (dump_file)
+	fprintf (dump_file, "Drop unread scalar workspace store at insn %d\n",
+		 INSN_UID (store));
+      delete_insn (store);
+    }
+}
 
 /* Remove an unused scalable area, retaining scalar spills that fit the fixed
    local area.  Keep the fixed CFA, register saves and N checks.  */
@@ -10456,6 +10590,8 @@ riscv_ztt_remove_unused_workspace ()
       if (!insn)
 	return false;
     }
+  if (scalar_spills)
+    riscv_ztt_remove_unread_scalar_slots (fixed_size, fixed_frame, locals.coeffs[2]);
   if (scalar_spills)
     for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
       if (DEBUG_INSN_P (insn))
