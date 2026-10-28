@@ -16216,9 +16216,9 @@ load_path_md_p (rtx_insn *load, rtx group, rtx value,
     }
 }
 
-/* Late stack rebasing can expose repeated scalar spill loads.  */
+/* Stack loads can remain after hard-register propagation.  */
 static rtx
-scalar_spill_load (rtx_insn *insn)
+scalar_stack_load (rtx_insn *insn)
 {
   if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
       || recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET)
@@ -16228,27 +16228,32 @@ scalar_spill_load (rtx_insn *insn)
       || global_regs[REGNO (reg)] || REGNO (reg) == HARD_FRAME_POINTER_REGNUM
       || !MEM_P (mem) || GET_MODE (mem) != Pmode || MEM_VOLATILE_P (mem)
       || !MEM_NOTRAP_P (mem) || !MEM_EXPR (mem)
-      || MEM_EXPR (mem) != get_spill_slot_decl (false)
       || !MEM_OFFSET_KNOWN_P (mem) || !MEM_SIZE_KNOWN_P (mem)
       || !known_eq (MEM_SIZE (mem), GET_MODE_SIZE (Pmode)))
+    return nullptr;
+  tree expr = MEM_EXPR (mem);
+  if (expr != get_spill_slot_decl (false)
+      && (TREE_CODE (expr) != PARM_DECL || TREE_ADDRESSABLE (expr)))
     return nullptr;
   rtx addr = XEXP (mem, 0);
   if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
     addr = XEXP (addr, 0);
-  return rtx_equal_p (addr, stack_pointer_rtx) ? set : nullptr;
+  return rtx_equal_p (addr, stack_pointer_rtx)
+    || rtx_equal_p (addr, hard_frame_pointer_rtx) ? set : nullptr;
 }
 
 static bool
-same_scalar_spill_p (rtx a, rtx b)
+same_scalar_stack_slot_p (rtx a, rtx b)
 {
   return rtx_equal_p (a, b) && known_eq (MEM_OFFSET (a), MEM_OFFSET (b))
+    && MEM_EXPR (a) == MEM_EXPR (b) && MEM_ALIAS_SET (a) == MEM_ALIAS_SET (b)
     && MEM_ADDR_SPACE (a) == MEM_ADDR_SPACE (b);
 }
 
 /* Every entry must reach the same load before a register or memory kill.
    Visiting a backedge does not by itself establish availability.  */
 static bool
-scalar_spill_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
+scalar_stack_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
 {
   if (flag_non_call_exceptions || cfun->calls_setjmp)
     return false;
@@ -16269,9 +16274,9 @@ scalar_spill_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
 	  if (!budget)
 	    return false;
 	  --budget;
-	  rtx set = scalar_spill_load (insn);
+	  rtx set = scalar_stack_load (insn);
 	  if (set && rtx_equal_p (SET_DEST (set), reg)
-	      && same_scalar_spill_p (SET_SRC (set), mem))
+	      && same_scalar_stack_slot_p (SET_SRC (set), mem))
 	    {
 	      established = found = true;
 	      break;
@@ -16282,7 +16287,8 @@ scalar_spill_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
 	  if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
 	      || recog_memoized (insn) < 0 || side_effects_p (PATTERN (insn))
 	      || !md_scalar_insn_p (PATTERN (insn))
-	      || reg_set_p (reg, insn) || reg_set_p (stack_pointer_rtx, insn))
+	      || reg_set_p (reg, insn) || reg_set_p (stack_pointer_rtx, insn)
+	      || reg_set_p (hard_frame_pointer_rtx, insn))
 	    return false;
 	  struct write_info { rtx mem; bool conflict; } writes = { mem, false };
 	  note_stores (insn, [] (rtx dest, const_rtx, void *data) {
@@ -16324,7 +16330,53 @@ scalar_spill_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
 }
 
 static bool
-reuse_scalar_spill_compare ()
+reuse_scalar_stack_operand (rtx_insn *insn, unsigned int &budget)
+{
+  if (!NONDEBUG_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+      || recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET
+      || side_effects_p (PATTERN (insn)) || !md_scalar_insn_p (PATTERN (insn)))
+    return false;
+  basic_block bb = BLOCK_FOR_INSN (insn);
+  if (JUMP_P (insn)
+      && (insn != BB_END (bb) || !md_preserving_branch_p (insn)))
+    return false;
+  rtx_insn *load = prev_nonnote_nondebug_insn_bb (insn);
+  rtx set = load ? scalar_stack_load (load) : nullptr;
+  if (!set || BLOCK_FOR_INSN (load) != bb
+      || !reg_referenced_p (SET_DEST (set), PATTERN (insn)))
+    return false;
+  unsigned int distance = 0;
+  for (rtx_insn *prev = PREV_INSN (load);
+       prev && distance < 32 && budget; prev = PREV_INSN (prev))
+    {
+      if (!NONDEBUG_INSN_P (prev))
+	continue;
+      ++distance;
+      --budget;
+      rtx source = scalar_stack_load (prev);
+      if (!source || rtx_equal_p (SET_DEST (source), SET_DEST (set))
+	  || !same_scalar_stack_slot_p (SET_SRC (source), SET_SRC (set))
+	  || !scalar_stack_path_p (load, SET_DEST (source), SET_SRC (set), budget))
+	continue;
+      int length = get_attr_length (insn);
+      validate_replace_src_group (SET_DEST (set), SET_DEST (source), insn);
+      if (!verify_changes (0) || get_attr_length (insn) > length)
+	{
+	  cancel_changes (0);
+	  continue;
+	}
+      confirm_change_group ();
+      remove_reg_equal_equiv_notes (insn);
+      df_insn_rescan (insn);
+      if (dump_file)
+	fprintf (dump_file, "Reuse scalar stack value at insn %d\n", INSN_UID (insn));
+      return true;
+    }
+  return false;
+}
+
+static bool
+reuse_scalar_stack_operands ()
 {
   if (!runtime_profile_p ())
     return false;
@@ -16333,41 +16385,12 @@ reuse_scalar_spill_compare ()
   basic_block bb;
   FOR_EACH_BB_FN (bb, cfun)
     {
-      rtx_insn *jump = BB_END (bb);
-      if (!JUMP_P (jump) || !md_preserving_branch_p (jump))
-	continue;
-      rtx_insn *load = prev_nonnote_nondebug_insn_bb (jump);
-      rtx set = load ? scalar_spill_load (load) : nullptr;
-      if (!set || BLOCK_FOR_INSN (load) != bb
-	  || !reg_referenced_p (SET_DEST (set), PATTERN (jump)))
-	continue;
-      unsigned int distance = 0;
-      for (rtx_insn *prev = PREV_INSN (load);
-	   prev && distance < 32 && budget; prev = PREV_INSN (prev))
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
 	{
-	  if (!NONDEBUG_INSN_P (prev))
-	    continue;
-	  ++distance;
-	  --budget;
-	  rtx source = scalar_spill_load (prev);
-	  if (!source || rtx_equal_p (SET_DEST (source), SET_DEST (set))
-	      || !same_scalar_spill_p (SET_SRC (source), SET_SRC (set))
-	      || !scalar_spill_path_p (load, SET_DEST (source), SET_SRC (set), budget))
-	    continue;
-	  int length = get_attr_length (jump);
-	  validate_replace_rtx_group (SET_DEST (set), SET_DEST (source), jump);
-	  if (!verify_changes (0) || get_attr_length (jump) > length)
-	    {
-	      cancel_changes (0);
-	      continue;
-	    }
-	  confirm_change_group ();
-	  df_insn_rescan (jump);
-	  changed = true;
-	  if (dump_file)
-	    fprintf (dump_file, "Reuse scalar spill in comparison at insn %d\n",
-		     INSN_UID (jump));
-	  break;
+	  if (!budget)
+	    return changed;
+	  changed |= reuse_scalar_stack_operand (insn, budget);
 	}
     }
   return changed;
@@ -17326,7 +17349,7 @@ reuse_local_md ()
   /* Dropping private operands exposes dead address and stride calculations.  */
   if (riscv_ztt_rebase_stack_addresses ())
     cleanup = descriptor_cleanup = true;
-  if (explicit_state && reuse_scalar_spill_compare ())
+  if (reuse_scalar_stack_operands ())
     cleanup = descriptor_cleanup = true;
   if (cleanup)
     run_fast_dce ();
@@ -17379,7 +17402,7 @@ run_scalar_spill_path_selftests ()
   using namespace selftest;
   if (!TARGET_ZTT)
     return;
-  for (unsigned int test = 0; test != 30; ++test)
+  for (unsigned int test = 0; test != 39; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       int reload = reload_completed, non_call = flag_non_call_exceptions;
@@ -17410,7 +17433,20 @@ run_scalar_spill_path_selftests ()
       rtx tmp = gen_rtx_REG (Pmode, 11), pointer = gen_rtx_REG (Pmode, 10);
       rtx mem = gen_rtx_MEM (Pmode, plus_constant (Pmode, stack_pointer_rtx, 64));
       set_mem_attrs_for_spill (mem);
+      if (test >= 30)
+	{
+	  tree arg = build_decl (UNKNOWN_LOCATION, test == 32 ? VAR_DECL : PARM_DECL,
+				get_identifier ("stack_arg"), ptr_type_node);
+	  TREE_ADDRESSABLE (arg) = test == 31;
+	  set_mem_expr (mem, arg);
+	  set_mem_offset (mem, 0);
+	  if (test == 33 || test == 34)
+	    XEXP (mem, 0) = plus_constant (Pmode, hard_frame_pointer_rtx, 16);
+	}
       rtx source = copy_rtx (mem);
+      if (test == 35)
+	set_mem_expr (source, build_decl (UNKNOWN_LOCATION, PARM_DECL,
+					get_identifier ("other_arg"), ptr_type_node));
       if (test == 21) XEXP (source, 0) = plus_constant (Pmode, stack_pointer_rtx, 72);
       if (test == 22) MEM_VOLATILE_P (source) = 1;
       if (test == 25) set_mem_offset (source, 8);
@@ -17426,6 +17462,9 @@ run_scalar_spill_path_selftests ()
       if (test == 3)
 	append (right, gen_rtx_SET (stack_pointer_rtx,
 				 plus_constant (Pmode, stack_pointer_rtx, 16)));
+      if (test == 34)
+	append (right, gen_rtx_SET (hard_frame_pointer_rtx,
+				 plus_constant (Pmode, hard_frame_pointer_rtx, 16)));
 
       if ((test >= 4 && test <= 6) || test == 29)
 	{
@@ -17465,11 +17504,12 @@ run_scalar_spill_path_selftests ()
       rtx_insn *load = append (join, gen_rtx_SET (tmp, copy_rtx (mem)));
       if (test == 15) append (join, gen_rtx_SET (reg, const0_rtx));
       unsigned int budget = test == 18 ? 0 : 2048;
-      bool expected = test == 0 || test == 6 || test == 13 || test == 17 || test == 20;
+      bool expected = test == 0 || test == 6 || test == 13 || test == 17
+	|| test == 20 || test == 30 || test == 33 || test >= 36;
       char context[64];
       snprintf (context, sizeof context, "scalar spill path case %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
-      ASSERT_EQ_AT (loc, expected, scalar_spill_path_p (load, reg, mem, budget));
+      ASSERT_EQ_AT (loc, expected, scalar_stack_path_p (load, reg, mem, budget));
       if (test == 0 || test == 6 || test == 13 || test == 17)
 	{
 	  rtx_insn *jump = emit_jump_insn_after
@@ -17478,9 +17518,23 @@ run_scalar_spill_path_selftests ()
 	       gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()), pc_rtx)), BB_END (join));
 	  set_block_for_insn (jump, join);
 	  BB_END (join) = jump;
-	  ASSERT_TRUE_AT (loc, reuse_scalar_spill_compare ());
+	  ASSERT_TRUE_AT (loc, reuse_scalar_stack_operands ());
 	  ASSERT_TRUE_AT (loc, reg_referenced_p (reg, PATTERN (jump)));
 	  ASSERT_FALSE_AT (loc, reg_referenced_p (tmp, PATTERN (jump)));
+	  ASSERT_FALSE_AT (loc, load->deleted ());
+	}
+      if (test >= 36)
+	{
+	  rtx dest = test == 36 ? tmp : gen_rtx_MEM (Pmode, pointer);
+	  if (test == 38) MEM_VOLATILE_P (dest) = 1;
+	  rtx src = test == 36 ? gen_rtx_AND (Pmode, tmp, GEN_INT (15)) : tmp;
+	  rtx_insn *use = append (join, gen_rtx_SET (dest, src));
+	  if (test == 36) add_reg_note (use, REG_EQUAL, copy_rtx (src));
+	  ASSERT_EQ_AT (loc, test != 38, reuse_scalar_stack_operands ());
+	  ASSERT_TRUE_AT (loc, rtx_equal_p (dest, SET_DEST (PATTERN (use))));
+	  ASSERT_EQ_AT (loc, test != 38, reg_referenced_p (reg, PATTERN (use)));
+	  ASSERT_EQ_AT (loc, test == 38, reg_referenced_p (tmp, PATTERN (use)));
+	  ASSERT_FALSE_AT (loc, find_reg_equal_equiv_note (use));
 	  ASSERT_FALSE_AT (loc, load->deleted ());
 	}
       reload_completed = reload;
