@@ -449,9 +449,10 @@ producers satisfy the same local proof.  Both original range checks remain.
 Column reductions are invariant under row selection, and row reductions under
 column selection.  Gathers and index-zero broadcasts reuse their complete
 results while retaining the reduction, conversions and status effects.
-This proof can cross one elementwise conversion or abs between unpacked basic
-Squares.  The unary operation and its status effects remain; calls and memory
-effects still bound the local proof.
+This proof can cross one elementwise conversion, abs or floating unary
+operation between unpacked basic Squares.  Rounding, exp/log, trigonometric,
+reciprocal and square-root operations retain their computations and status
+effects; calls and memory effects still bound the local proof.
 The same bound covers one same-type elementwise binary operation whose two
 inputs are invariant along that axis.  Generic carrier calls revalidate their
 explicit datatype metadata; equal physical modes alone do not establish this

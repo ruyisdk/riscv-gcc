@@ -8899,7 +8899,9 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
       builtin_description d;
       conversion_description operation;
       if (describe_structure_unary (call, type, d, operation)
-	  && (d.expansion == EXPAND_MCONV_EW || d.expansion == EXPAND_MABS_EW)
+	  && (d.expansion == EXPAND_MCONV_EW || d.expansion == EXPAND_MABS_EW
+	      || (d.expansion >= EXPAND_MFRINTM_EW
+		  && d.expansion <= EXPAND_MSQRT_EW))
 	  && operation.source != TYPE_MAX
 	  && !types[operation.source].accumulator
 	  && types[operation.source].rows == 1
