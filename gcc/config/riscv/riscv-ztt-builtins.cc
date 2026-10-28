@@ -12208,8 +12208,9 @@ public:
 	    || GET_MODE (reg) == SImode))
       {
 	/* A lowpart use does not establish the register's high bits.  */
-	rtx value = descriptor_value (gen_rtx_REG (Pmode, REGNO (reg)));
-	if (CONST_INT_P (value))
+	rtx value = REGNO (reg) == GP_REG_FIRST
+	  ? const0_rtx : constants[REGNO (reg) - GP_REG_FIRST];
+	if (value)
 	  return gen_int_mode (INTVAL (value), GET_MODE (reg));
       }
     return descriptor_value (reg);
@@ -16369,6 +16370,35 @@ run_md_reuse_selftests ()
     }
   ASSERT_EQ (state.constant_value (a), NULL_RTX);
   ASSERT_FALSE (state.matches (group, a));
+
+  for (machine_mode mode : { QImode, HImode, SImode })
+    for (unsigned int regno = GP_REG_FIRST;
+	 regno < GP_REG_FIRST + GP_REG_NUM; ++regno)
+      {
+	local_md_state query;
+	rtx full = gen_rtx_REG (Pmode, regno);
+	rtx narrow = gen_rtx_REG (mode, regno);
+	auto compare = [&] () {
+	  rtx expected = query.descriptor_value (full);
+	  expected = CONST_INT_P (expected)
+	    ? gen_int_mode (INTVAL (expected), mode)
+	    : query.descriptor_value (narrow);
+	  ASSERT_RTX_EQ (query.broadcast_value (narrow), expected);
+	};
+	compare ();
+	for (HOST_WIDE_INT value : { HOST_WIDE_INT_C (0), HOST_WIDE_INT_C (-1),
+				    HOST_WIDE_INT_C (0x180010080) })
+	  {
+	    query.record_constant (full, gen_int_mode (value, Pmode));
+	    compare ();
+	    query.invalidate (narrow);
+	    compare ();
+	  }
+      }
+  for (rtx operand : { const0_rtx, constm1_rtx,
+		       gen_rtx_REG (SFmode, FP_REG_FIRST),
+		       gen_rtx_SUBREG (QImode, a, 0) })
+    ASSERT_EQ (state.broadcast_value (operand), state.descriptor_value (operand));
 
   rtx use_b = gen_rtx_USE (VOIDmode, b);
   state.record_constant (a, dtype);

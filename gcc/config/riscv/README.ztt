@@ -473,6 +473,8 @@ Descriptor cleanup after DCE uses the same boundaries; private raw spill
 tracking remains confined to each block.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
+Narrow broadcast queries read the GPR constant cache directly and truncate
+known values to the operand mode without constructing a Pmode REG.
 Constant evaluation handles register and integer leaves directly, retaining
 XLEN normalization and the general memory/side-effect checks for expressions.
 Md invalidation skips unrelated register banks. A conservative flag records
