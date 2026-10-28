@@ -801,6 +801,8 @@ load.  Fixed/global registers and instruction clobbers are excluded.  Multiple
 descriptor substitutions in one consumer are validated together, including
 full scalar TC values; control operands are unchanged.  Dead materialization
 and register notes are updated after substitution.
+A use bitmap limits lookup to witnessed descriptors in register order.
+Redefinitions, invalidation and joins clear the corresponding witnesses.
 Typed stores with a retained descriptor also establish a constant-use
 witness after their explicit clobbers are invalidated.  Following stores
 and calculations can reuse the surviving GPR without repeating its setup.

@@ -13520,7 +13520,7 @@ class local_md_state
   unsigned int identities[32] = {};
   unsigned int next_identity = 0;
   unsigned int definition[32] = {};
-  bool descriptor_used[32] = {};
+  unsigned int descriptor_used = 0;
   unsigned int next_definition = 0;
   rtx scalar_type = nullptr;
   /* Some facts may depend on a physical GPR instead of a value identity.  */
@@ -13540,7 +13540,7 @@ public:
     memset (constants, 0, sizeof (constants));
     memset (identities, 0, sizeof (identities));
     next_identity = 0;
-    memset (descriptor_used, 0, sizeof (descriptor_used));
+    descriptor_used = 0;
     next_definition = 0;
     scalar_type = nullptr;
     register_descriptors = false;
@@ -13558,7 +13558,7 @@ public:
 	{
 	  constants[i] = NULL_RTX;
 	  identities[i] = 0;
-	  descriptor_used[i] = false;
+	  descriptor_used &= ~(1U << i);
 	}
   }
 
@@ -13583,7 +13583,7 @@ public:
 	constants[i] = nullptr;
     memset (identities, 0, sizeof (identities));
     memset (definition, 0, sizeof (definition));
-    memset (descriptor_used, 0, sizeof (descriptor_used));
+    descriptor_used = 0;
     next_identity = next_definition = 0;
     if (scalar_type && (!other.scalar_type
 		       || !rtx_equal_p (scalar_type, other.scalar_type)))
@@ -13683,19 +13683,20 @@ public:
     constants[REGNO (reg) - GP_REG_FIRST] = value;
     identities[REGNO (reg) - GP_REG_FIRST] = 0;
     definition[REGNO (reg) - GP_REG_FIRST] = ++next_definition;
-    descriptor_used[REGNO (reg) - GP_REG_FIRST] = false;
+    descriptor_used &= ~(1U << (REGNO (reg) - GP_REG_FIRST));
   }
 
   void note_descriptor_use (rtx reg)
   {
     if (full_gpr_p (reg) && CONST_INT_P (descriptor_value (reg)))
-      descriptor_used[REGNO (reg) - GP_REG_FIRST] = true;
+      descriptor_used |= 1U << (REGNO (reg) - GP_REG_FIRST);
   }
 
   bool redundant_descriptor_p (rtx reg, rtx value) const
   {
     return full_gpr_p (reg) && !fixed_regs[REGNO (reg)]
-      && !global_regs[REGNO (reg)] && descriptor_used[REGNO (reg) - GP_REG_FIRST]
+      && !global_regs[REGNO (reg)]
+      && (descriptor_used & (1U << (REGNO (reg) - GP_REG_FIRST)))
       && value && CONST_INT_P (value)
       && rtx_equal_p (descriptor_value (reg), value);
   }
@@ -13711,20 +13712,20 @@ public:
     rtx best = reg;
     unsigned int oldest = definition[REGNO (reg) - GP_REG_FIRST];
     /* Prefer the earliest value, not a newer copy that DCE could remove.  */
-    for (unsigned int r = GP_REG_FIRST; r < GP_REG_FIRST + GP_REG_NUM; ++r)
-      if (!fixed_regs[r] && !global_regs[r]
-	  && constants[r - GP_REG_FIRST]
-	  && descriptor_used[r - GP_REG_FIRST]
-	  && definition[r - GP_REG_FIRST] < oldest
-	  && rtx_equal_p (value, constants[r - GP_REG_FIRST]))
-	{
-	  rtx candidate = gen_rtx_REG (Pmode, r);
-	  if (!reg_set_p (candidate, insn))
-	    {
-	      best = candidate;
-	      oldest = definition[r - GP_REG_FIRST];
-	    }
-	}
+    for (unsigned int mask = descriptor_used; mask; mask &= mask - 1)
+      {
+	unsigned int i = ctz_hwi (mask), r = GP_REG_FIRST + i;
+	if (!fixed_regs[r] && !global_regs[r] && constants[i]
+	    && definition[i] < oldest && rtx_equal_p (value, constants[i]))
+	  {
+	    rtx candidate = gen_rtx_REG (Pmode, r);
+	    if (!reg_set_p (candidate, insn))
+	      {
+		best = candidate;
+		oldest = definition[i];
+	      }
+	  }
+      }
     return best;
   }
 
@@ -13763,7 +13764,7 @@ public:
 	  {
 	    constants[i] = NULL_RTX;
 	    identities[i] = 0;
-	    descriptor_used[i] = false;
+	    descriptor_used &= ~(1U << i);
 	  }
       }
   }
@@ -16388,6 +16389,31 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx query = gen_rtx_REG (Pmode, 10), value = GEN_INT (32);
+    rtx use = gen_rtx_USE (VOIDmode, query);
+    for (unsigned int r = GP_REG_FIRST; r < GP_REG_FIRST + GP_REG_NUM; ++r)
+      if (r != REGNO (query) && !fixed_regs[r] && !global_regs[r])
+	{
+	  local_md_state state;
+	  rtx candidate = gen_rtx_REG (Pmode, r);
+	  state.record_constant (candidate, value);
+	  state.note_descriptor_use (candidate);
+	  state.record_constant (query, value);
+	  ASSERT_RTX_EQ (state.descriptor_register (query, use), candidate);
+	  state.clear_ame ();
+	  ASSERT_RTX_EQ (state.descriptor_register (query, use), candidate);
+	  local_md_state joined = state;
+	  joined.intersect_constants (state);
+	  ASSERT_EQ (joined.descriptor_register (query, use), query);
+	  state.invalidate (gen_rtx_REG (QImode, r));
+	  ASSERT_EQ (state.descriptor_register (query, use), query);
+	  ASSERT_FALSE (state.redundant_descriptor_p (candidate, value));
+	  state.clear ();
+	  ASSERT_EQ (state.descriptor_register (query, use), query);
+	}
+  }
   {
     const int ops[] = {
       UNSPEC_SHA_256_SIG0, UNSPEC_SHA_256_SIG1,
