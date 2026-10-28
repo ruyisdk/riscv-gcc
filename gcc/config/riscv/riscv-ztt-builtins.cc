@@ -12697,8 +12697,9 @@ live_old_copy_sites (bitmap sites)
 		}
 	      if (needed > active_profile ()->mregs)
 		bitmap_clear_bit (sites, INSN_UID (insn));
-	      /* Scalar controls compete with live-group descriptors for GPRs.  */
-	      if (scalar && needed > isolated)
+	      /* Data Scalars also need an amestype descriptor.  */
+	      if (scalar && UINTVAL (XVECEXP (src, 0, 2)) != 4
+		  && needed > isolated)
 		bitmap_clear_bit (sites, INSN_UID (insn));
 	    }
 	  df_simulate_one_insn_backwards (bb, insn, live);

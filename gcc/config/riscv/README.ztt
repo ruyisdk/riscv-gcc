@@ -1012,9 +1012,10 @@ DF liveness scan admits only sites whose live M groups fit the profile;
 live ACC values and fixed M registers prevent this choice.  The separate
 copy has an independent destination and can reuse known source Md.  Calls,
 bank pressure and ordinary untyped moves retain their existing paths.
-Scalar forms also require no live M values beyond their inputs and result
+Data Scalar forms also require no live M values beyond their inputs and result
 to limit descriptor pressure on GPRs, counting each input's actual group
-width.  A scalar exponent operation uses
+width.  Signed-long exponents need no amestype descriptor and use the
+complete bank-capacity bound without that extra restriction.  They use
 the copied old value as its tied destination when available; otherwise
 identical wide inputs retain their shared reload path.
 The old value and dying matrix inputs count toward simultaneous bank
