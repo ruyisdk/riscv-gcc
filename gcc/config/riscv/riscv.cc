@@ -9793,7 +9793,7 @@ riscv_ztt_remove_unused_workspace ()
       || cfun->machine->varargs_size || crtl->args.pretend_args_size
       || known_ne (crtl->outgoing_args_size, 0) || frame.vmask
       || frame.total_size.coeffs[1] || locals.coeffs[1]
-      || locals.coeffs[2] <= 0 || locals.coeffs[0] != locals.coeffs[2]
+      || locals.coeffs[2] <= 0 || locals.coeffs[0] < locals.coeffs[2]
       || frame.total_size.coeffs[2] != locals.coeffs[2])
     return false;
 
