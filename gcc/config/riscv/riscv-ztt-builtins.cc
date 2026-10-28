@@ -11917,16 +11917,20 @@ shared_old_copy_sites (bitmap sites)
 			 && XINT (src, 1) == UNSPEC_ZTT_TERNARY_X)
 	    || (GET_CODE (src) == UNSPEC_VOLATILE
 		&& XINT (src, 1) == UNSPECV_ZTT_TERNARY_X_FLAGS);
-	  if ((scalar || (GET_CODE (src) == UNSPEC
-		&& (XINT (src, 1) == UNSPEC_ZTT_SCATTER
-		    || XINT (src, 1) == UNSPEC_ZTT_TERNARY))
+	  bool matrix = (GET_CODE (src) == UNSPEC
+			 && XINT (src, 1) == UNSPEC_ZTT_TERNARY)
+	    || (GET_CODE (src) == UNSPEC_VOLATILE
+		&& XINT (src, 1) == UNSPECV_ZTT_TERNARY_FLAGS);
+	  if ((scalar || matrix || (GET_CODE (src) == UNSPEC
+		&& XINT (src, 1) == UNSPEC_ZTT_SCATTER)
 	       || (GET_CODE (src) == UNSPEC_VOLATILE
-		   && (XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS
-		       || XINT (src, 1) == UNSPECV_ZTT_TERNARY_FLAGS)))
+		   && XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS))
 	      && REG_P (SET_DEST (set))
-	      && (scalar
+	      && (scalar || matrix
 		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1)))
-	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
+	      && (rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
+		  || (matrix
+		      && rtx_equal_p (XVECEXP (src, 0, 1), XVECEXP (src, 0, 5))))
 	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	    bitmap_set_bit (sites, INSN_UID (insn));
 	}
@@ -11958,13 +11962,25 @@ shared_old_copy_sites (bitmap sites)
 		  if (reg && m_mode_p (GET_MODE (reg)))
 		    needed += m_nregs (GET_MODE (reg));
 		}
-	      if (needed > active_profile ()->mregs)
-		bitmap_clear_bit (sites, INSN_UID (insn));
 	      rtx src = SET_SRC (single_set (insn));
 	      bool scalar = (GET_CODE (src) == UNSPEC
 			     && XINT (src, 1) == UNSPEC_ZTT_TERNARY_X)
 		|| (GET_CODE (src) == UNSPEC_VOLATILE
 		    && XINT (src, 1) == UNSPECV_ZTT_TERNARY_X_FLAGS);
+	      /* Inputs coexist with the result even when its pseudo is reused.  */
+	      if (!scalar)
+		for (unsigned int i = 0; i < 2; ++i)
+		  {
+		    rtx input = XVECEXP (src, 0, i);
+		    if (!REG_P (input) || REGNO (input) < FIRST_PSEUDO_REGISTER)
+		      { needed = active_profile ()->mregs + 1; break; }
+		    if ((REGNO (input) == REGNO (dest)
+			 || !bitmap_bit_p (live, REGNO (input)))
+			&& (i == 0 || !rtx_equal_p (input, XVECEXP (src, 0, 0))))
+		      needed += m_nregs (GET_MODE (input));
+		  }
+	      if (needed > active_profile ()->mregs)
+		bitmap_clear_bit (sites, INSN_UID (insn));
 	      /* Scalar controls compete with live-group descriptors for GPRs.  */
 	      if (scalar && needed > 2 * m_nregs (GET_MODE (dest)))
 		bitmap_clear_bit (sites, INSN_UID (insn));
@@ -12390,11 +12406,14 @@ lower_explicit_state ()
 		&& m_nregs (mode) == groups[0]
 		&& mode == GET_MODE (XVECEXP (src, 0, 0))
 		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
-		&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0))
+		&& (rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0))
+		    || (code == UNSPEC_ZTT_TERNARY
+			&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1))))
 		&& (scalar
 		    || (mode == GET_MODE (XVECEXP (src, 0, 1))
 			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
-			&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1))))
+			&& (code == UNSPEC_ZTT_TERNARY
+			    || rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1)))))
 		&& !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	      {
 		copied_old = gen_reg_rtx (mode);

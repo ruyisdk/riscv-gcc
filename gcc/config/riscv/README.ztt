@@ -852,3 +852,5 @@ copy has an independent destination and can reuse known source Md.  Calls,
 bank pressure and ordinary untyped moves retain their existing paths.
 Scalar forms also require no additional live M values to limit descriptor
 pressure on GPRs.  Scalar exponent operations retain their existing path.
+Matrix ternaries can copy an old destination shared with either input.
+Dying matrix inputs count toward simultaneous bank capacity as well.
