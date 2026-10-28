@@ -992,11 +992,26 @@ struct stored_builtin_description
 static_assert (PROTO_MAX <= USHRT_MAX && EXPAND_MAX <= USHRT_MAX
 	       && TYPE_MAX <= USHRT_MAX);
 
+/* Scalar names share the operation spelling; types supply both suffixes.  */
+static constexpr const char *
+stored_builtin_name (expansion_index expansion, const char *name)
+{
+  switch (expansion)
+    {
+    case EXPAND_MBCAST_M_X: return "mbcast_m_x";
+#define ZTT_WIDE_SCALAR_OP(OP, NAME, KIND) case EXPAND_##OP: return #NAME;
+#include "riscv-ztt-operations.def"
+#undef ZTT_WIDE_SCALAR_OP
+    default: return name;
+    }
+}
+
 static constexpr stored_builtin_description stored_builtin_descriptions[] =
 {
 #define ZTT_EXPONENT_FAMILY(OP, SPELLING, PROTO)
 #define ZTT_INTRINSIC(ID, NAME, PROTO, EXPAND, TYPE) \
-  { NAME, PROTO_##PROTO, EXPAND_##EXPAND, TYPE_##TYPE },
+  { stored_builtin_name (EXPAND_##EXPAND, NAME), \
+    PROTO_##PROTO, EXPAND_##EXPAND, TYPE_##TYPE },
 #include "riscv-ztt-intrinsics.def"
 #undef ZTT_INTRINSIC
 #undef ZTT_EXPONENT_FAMILY
@@ -2885,8 +2900,18 @@ integer_scalar_name (char *name, size_t size, const char *operation,
 }
 
 static const char *
-canonical_builtin_name (const builtin_description &d, char (&name)[160])
+canonical_builtin_name (const builtin_description &d, char (&name)[160],
+			scalar_name_cache *cache = nullptr)
 {
+  bool broadcast = broadcast_prototype_p (d.prototype);
+  if (broadcast || scalar_prototype_p (d.prototype, false)
+      || scalar_prototype_p (d.prototype, true))
+    {
+      type_index tc = broadcast ? broadcast_source_type (d.prototype)
+	: scalar_source_type (d.prototype);
+      integer_scalar_name (name, sizeof (name), d.name, d.type, tc, false, cache);
+      return name;
+    }
   if (!exponent_p (d.expansion))
     return d.name;
   const char *dtype = scalar_datatype_name (types[d.type].descriptor, false);
@@ -4150,6 +4175,25 @@ run_wide_signature_selftests ()
   ASSERT_EQ (after.type, TYPE_I128_RNU_1X1);
   ASSERT_EQ (after.expansion, EXPAND_MLS_RM);
   char name[160];
+  scalar_name_cache names;
+  auto check_scalar_name = [&] (unsigned int code, const char *expected) {
+    auto d = builtin_description_for (code);
+    ASSERT_FALSE (startswith (d.name, "__riscv_ztt_"));
+    ASSERT_STREQ (canonical_builtin_name (d, name), expected);
+    ASSERT_STREQ (canonical_builtin_name (d, name, &names), expected);
+    ASSERT_STREQ (canonical_builtin_name (d, name, &names), expected);
+  };
+#define ZTT_WIDE_SCALAR_OP(OP, NAME, KIND) \
+  check_scalar_name (ZTT_BUILTIN_##OP##_I8_RNU_1X1_I8_RNU, \
+		     "__riscv_ztt_" #NAME "_i8_rnu_1x1_i8_rnu"); \
+  check_scalar_name (ZTT_BUILTIN_##OP##_U128_ROD_32X1_U128_ROD, \
+		     "__riscv_ztt_" #NAME "_u128_rod_32x1_u128_rod");
+#include "riscv-ztt-operations.def"
+#undef ZTT_WIDE_SCALAR_OP
+  check_scalar_name (ZTT_BUILTIN_MBCAST_M_X_I8_RNU_1X1_I8_RNU,
+		     "__riscv_ztt_mbcast_m_x_i8_rnu_1x1_i8_rnu");
+  check_scalar_name (ZTT_BUILTIN_MBCAST_M_X_U128_ROD_32X1_U128_ROD,
+		     "__riscv_ztt_mbcast_m_x_u128_rod_32x1_u128_rod");
   ASSERT_STREQ (canonical_builtin_name
 		 (builtin_description_for (exponent_first), name),
 		 "__riscv_ztt_mldexp_ew_x_i4_rnu_1x1");
@@ -6121,6 +6165,7 @@ register_functions ()
     = ggc_cleared_alloc<nominal_registration_cache> ();
   register_nominal_scalars ();
   const profile_info &profile = *active_profile ();
+  scalar_name_cache names;
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const builtin_description &d = builtin_description_for (i);
@@ -6130,7 +6175,7 @@ register_functions ()
 	continue;
       unsigned int code = (i << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       char name[160];
-      const char *canonical_name = canonical_builtin_name (d, name);
+      const char *canonical_name = canonical_builtin_name (d, name, &names);
       tree decl = simulate_builtin_function_decl
 	(input_location, canonical_name, registration_function_type (prototype, type),
 	 code, NULL, function_attributes ());
@@ -6144,7 +6189,6 @@ register_functions ()
   if (profile.n == 0)
     {
       auto_vec<scalar_registration_group> integer_candidates, floating_candidates;
-      scalar_name_cache names;
       collect_scalar_registration_groups (integer_candidates, false);
       collect_scalar_registration_groups (floating_candidates, true);
       type_index scalar_types[numeric_scalar_dtype_count];

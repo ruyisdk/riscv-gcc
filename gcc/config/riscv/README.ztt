@@ -172,6 +172,9 @@ The static builtin catalog stores prototype, expansion and type ordinals
 as unsigned shorts, with compile-time range checks.  Lookup restores the
 original enum types and builtin identities.  Code-limit scans use the stored
 records directly; exponent families do not belong to either anchor domain.
+Integer Scalar and broadcast entries store shared operation names.  Their
+canonical names use the existing destination/source type builders and local
+prefix cache after profile checks; public names and code order are unchanged.
 
 Structural folding
 ------------------
