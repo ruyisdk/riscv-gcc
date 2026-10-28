@@ -3785,6 +3785,7 @@ static void run_large_matrix_signature_selftests ();
 static void run_acc_shared_source_selftests ();
 static void run_md_reuse_selftests ();
 static void run_lto_registration_selftests ();
+static void run_default_alias_selftests ();
 
 static type_index
 linear_matrix_type (unsigned int descriptor, unsigned int rows,
@@ -4404,6 +4405,7 @@ run_wide_signature_selftests ()
   run_type_nregs_selftests ();
   run_scalar_datatype_name_selftests ();
   run_scalar_full_name_selftests ();
+  run_default_alias_selftests ();
   run_scalar_registration_group_selftests ();
   run_lto_registration_selftests ();
   run_acc_shared_source_selftests ();
@@ -6302,21 +6304,24 @@ mixed_builtin_decl (unsigned int code, bool initialize_p)
    descriptor and prototype, rather than the spelling alone, decide RM.  */
 static bool
 default_builtin_alias (const builtin_description &d, const char *canonical_name,
-		       char (&name)[160])
+		       char (&name)[160], scalar_name_cache *cache = nullptr)
 {
   unsigned int desc = types[d.type].descriptor;
   if (!startswith (canonical_name, "__riscv_ztt_")
       || !default_scalar_rm_p (desc))
     return false;
-  if (broadcast_prototype_p (d.prototype)
-      && !default_scalar_rm_p
-	    (types[broadcast_source_type (d.prototype)].descriptor))
-    return false;
-  if ((scalar_prototype_p (d.prototype, false)
+  type_index tc = broadcast_prototype_p (d.prototype)
+    ? broadcast_source_type (d.prototype)
+    : (scalar_prototype_p (d.prototype, false)
        || scalar_prototype_p (d.prototype, true))
-      && !default_scalar_rm_p
-	    (types[scalar_source_type (d.prototype)].descriptor))
+    ? scalar_source_type (d.prototype) : TYPE_MAX;
+  if (tc != TYPE_MAX && !default_scalar_rm_p (types[tc].descriptor))
     return false;
+  if (tc != TYPE_MAX)
+    {
+      integer_scalar_name (name, sizeof (name), d.name, d.type, tc, true, cache);
+      return true;
+    }
 
   /* The original small, nonsaturating integer stores use the overloaded
      store spelling.  Do not add new typed short names for those entries.  */
@@ -6341,6 +6346,35 @@ default_builtin_alias (const builtin_description &d, const char *canonical_name,
   *out = '\0';
   return changed;
 }
+
+#if CHECKING_P
+static void
+run_default_alias_selftests ()
+{
+  using namespace selftest;
+  scalar_name_cache cache;
+  for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
+    {
+      const auto d = builtin_description_for (i);
+      char canonical[160], cached[160], uncached[160], expected[160];
+      const char *name = canonical_builtin_name (d, canonical, &cache);
+      bool present = default_builtin_alias (d, name, cached, &cache);
+      ASSERT_EQ (present, default_builtin_alias (d, name, uncached));
+      if (!present)
+	continue;
+      char *out = expected;
+      for (const char *in = name; *in;)
+	if ((strncmp (in, "_rnu", 4) == 0 || strncmp (in, "_rne", 4) == 0)
+	    && (in[4] == '_' || in[4] == '\0'))
+	  in += 4;
+	else
+	  *out++ = *in++;
+      *out = '\0';
+      ASSERT_STREQ (expected, cached);
+      ASSERT_STREQ (expected, uncached);
+    }
+}
+#endif
 
 /* LTO validates streamed declarations against the original registration
    profile; it does not need to materialize the public catalog.  */
@@ -6448,7 +6482,7 @@ register_functions ()
 	 code, NULL, function_attributes ());
       builtin_decls.put (i, decl);
       char alias[160];
-      if (default_builtin_alias (d, canonical_name, alias))
+      if (default_builtin_alias (d, canonical_name, alias, &names))
 	simulate_builtin_function_decl (input_location, alias,
 					TREE_TYPE (decl), code,
 					NULL, function_attributes ());
