@@ -99,6 +99,7 @@ cached argument lists when adding M parameters.  The registration cache
 roots those tails until their function types retain them.
 Ordinary M-only binary and ternary signatures similarly prepend one
 parameter to the cached unary or binary argument list.
+Cache misses build those prefixes in arity order without recursive lookup.
 
 Scalar resolution indexes exact main-variant type identities on first use.
 The GC/PCH-visible reverse index grows only through the catalog prefix

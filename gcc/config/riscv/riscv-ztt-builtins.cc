@@ -2528,13 +2528,22 @@ registration_function_type (prototype_index prototype, type_index type)
     {
       if (key == PROTO_M_M_M || key == PROTO_M_SCATTER)
 	{
-	  prototype_index shorter = key == PROTO_M_M_M
-	    ? PROTO_M_M : PROTO_M_M_M;
-	  tree tail = registration_function_type (shorter, type);
 	  tree m = ztt_m_type_nodes[type];
-	  /* Prepend one M parameter to the immutable shorter signature.  */
-	  tree args = tree_cons (NULL_TREE, m, TYPE_ARG_TYPES (tail));
-	  result = ::build_function_type (m, args);
+	  tree args = void_list_node;
+	  for (prototype_index prefix : { PROTO_M_M, PROTO_M_M_M,
+					  PROTO_M_SCATTER })
+	    {
+	      auto &block = registration_function_types[prefix];
+	      if (!block)
+		vec_safe_grow_cleared (block, TYPE_MAX, true);
+	      tree &signature = (*block)[type];
+	      if (!signature)
+		signature = ::build_function_type
+		  (m, tree_cons (NULL_TREE, m, args));
+	      args = TYPE_ARG_TYPES (signature);
+	      if (prefix == key)
+		break;
+	    }
 	}
       else
 	result = build_function_type (prototype, type);
