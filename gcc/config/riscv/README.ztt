@@ -106,6 +106,9 @@ Matmul signatures reuse these M argument tails and prepend the old ACC;
 different input layouts share the right-hand M tail only.
 Explicit Scalar registration reuses the current operation/type name prefixes
 in a local two-spelling cache while iterating over Scalar source types.
+Unavailable destinations skip their complete TC group in the compact Scalar
+catalog.  Available entries retain their original order and signature checks;
+stored non-Scalar entries, including overloaded stores, keep individual gates.
 
 Scalar resolution indexes exact main-variant type identities on first use.
 The GC/PCH-visible reverse index grows only through the catalog prefix

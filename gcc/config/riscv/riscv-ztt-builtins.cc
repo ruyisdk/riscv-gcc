@@ -1070,6 +1070,30 @@ static_assert (narrow_scalar_ranges[3].first + narrow_scalar_ranges[3].count
 	       <= wide_scalar_first);
 static_assert (wide_scalar_first + wide_scalar_count <= exponent_first);
 
+/* Compact Scalar groups share one destination across their TC entries.  */
+static unsigned int
+scalar_destination_end (unsigned int code)
+{
+  if (code >= wide_scalar_first)
+    {
+      if (code >= wide_scalar_first + wide_scalar_count)
+	return code + 1;
+      unsigned int offset = (code - wide_scalar_first)
+	% wide_scalar_per_operation;
+      unsigned int left = offset < wide_scalar_narrow_part
+	? 16 - offset % 16 : 40 - (offset - wide_scalar_narrow_part) % 40;
+      return code + left;
+    }
+  for (const auto &range : narrow_scalar_ranges)
+    {
+      if (code < range.first)
+	break;
+      if (code < range.first + range.count)
+	return code + 24 - (code - range.first) % 24;
+    }
+  return code + 1;
+}
+
 static constexpr unsigned int
 stored_builtin_code (unsigned int index)
 {
@@ -3932,7 +3956,8 @@ run_decoder_anchor_selftests ()
 
   auto_vec<unsigned int> wide, unary;
   unsigned int matmul_limit = 0, elementwise_limit = 0;
-  unsigned int stored_index = 0;
+  unsigned int stored_index = 0, scalar_end = 0;
+  type_index scalar_type = TYPE_MAX;
   wide.safe_grow_cleared (WIDE_MAX * wide_shape_count * wide_dtype_count);
   unary.safe_grow_cleared
     (integer_unary_operations * wide_shape_count * integer_dtype_count);
@@ -3940,6 +3965,15 @@ run_decoder_anchor_selftests ()
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const auto d = builtin_description_for (i);
+      unsigned int end = scalar_destination_end (i);
+      ASSERT_TRUE (end > i && end <= ZTT_BUILTIN_MAX);
+      if (i == scalar_end)
+	{
+	  scalar_end = end;
+	  scalar_type = d.type;
+	}
+      ASSERT_EQ (end, scalar_end);
+      ASSERT_EQ (d.type, scalar_type);
       bool narrow = false;
       for (const auto &range : narrow_scalar_ranges)
 	narrow |= i >= range.first && i < range.first + range.count;
@@ -6354,7 +6388,11 @@ register_functions ()
       type_index type;
       prototype_index prototype;
       if (!registration_signature (i, d, profile, type, prototype))
-	continue;
+	{
+	  if (!ztt_m_type_nodes[d.type])
+	    i = scalar_destination_end (i) - 1;
+	  continue;
+	}
       unsigned int code = (i << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       char name[160];
       const char *canonical_name = canonical_builtin_name (d, name, &names);
