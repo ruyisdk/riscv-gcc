@@ -435,8 +435,9 @@ Optimized runtime gathers offer independent and matching destinations for
 a dying complete data input distinct from the index.  Bank-limited groups
 retain their tied early-clobber alternative.  In leaf functions, a dying
 index with the same complete type as live data permits either source to
-supply the destination without forcing a tie.  Calls and shared data/index
-values retain their existing allocation choices.
+supply the destination without forcing a tie.  A dying identical data/index
+value also permits complete destination overlap when both descriptors and
+packet steps match.  Live shared inputs retain their allocation choices.
 Fixed-exponent accumulation can also reuse a dying input shared with the
 old destination on optimized runtime profiles.  The complete mode and Md
 must match; distinct inputs are not unified.

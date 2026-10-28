@@ -12394,6 +12394,13 @@ lower_explicit_state ()
 		bool dead_data = optimize && runtime_profile_p ()
 		  && !rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
 		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
+		bool shared_dead = code == UNSPEC_ZTT_GATHER
+		  && optimize && runtime_profile_p ()
+		  && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
+		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0))
+		  && mode == GET_MODE (XVECEXP (src, 0, 1))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4))
+		  && groups[0] == groups[2];
 		bool dead_index = code == UNSPEC_ZTT_GATHER
 		  && leaf_index_reuse && !dead_data && !bank_reuse
 		  && !rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
@@ -12405,11 +12412,11 @@ lower_explicit_state ()
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
 		  && groups[0] == groups[1];
 		bool reuse = code == UNSPEC_ZTT_GATHER
-		  && (bank_reuse || dead_data || dead_index)
+		  && (bank_reuse || dead_data || dead_index || shared_dead)
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
 		  && groups[0] == groups[1];
-		bool reuse_both = reuse && (bank_reuse || dead_index)
+		bool reuse_both = reuse && (bank_reuse || dead_index || shared_dead)
 		  && mode == GET_MODE (XVECEXP (src, 0, 1))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4))
 		  && groups[0] == groups[2];
