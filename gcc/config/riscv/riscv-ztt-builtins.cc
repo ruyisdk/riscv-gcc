@@ -8198,6 +8198,28 @@ structure_zero_p (tree value, type_index type, gimple **producers,
   return true;
 }
 
+static bool
+uniform_structure_producer_p (gimple *producer, type_index type)
+{
+  if (!is_gimple_call (producer))
+    return false;
+  unsigned int nargs = gimple_call_num_args (producer);
+  unsigned int code = structure_builtin_code (producer, nargs);
+  if (nargs == 0 && code < ZTT_BUILTIN_MAX)
+    {
+      const auto d = builtin_description_for (code);
+      return d.type == type && d.expansion == EXPAND_MZERO_2D_M;
+    }
+  if (nargs == 1 && nominal_raw_broadcast_p (code))
+    {
+      unsigned int dst = (code - nominal_broadcast_base)
+	/ numeric_scalar_dtype_count;
+      tree arg = gimple_call_arg (producer, 0);
+      return dst == type && check_nominal_call (code, 1, &arg);
+    }
+  return false;
+}
+
 /* Retain the common producer as a local ownership witness.  */
 static bool
 same_structure_value_p (tree left, tree right, type_index type,
@@ -8531,6 +8553,31 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
   gimple *producers[16];
   unsigned int count = 0;
   tree result = data;
+  /* Gather masks each index, so every element of a uniform input survives.
+     Keep the index live through an independent complete store.  */
+  if (!scatter && d.type == operation.data && type_nregs (d.type)
+      && types[d.type].rows == 1 && types[d.type].columns == 1
+      && (types[d.type].descriptor & 0xff) >= active_profile ()->uds
+      && type_nregs (operation.count)
+      && types[operation.count].rows == 1
+      && types[operation.count].columns == 1
+      && (types[operation.count].descriptor & 0xff) >= active_profile ()->uds)
+    {
+      tree value = data, saved = index;
+      if (strip_structure_view (value, d.type, producers, count)
+	  && strip_structure_copies (value, d.type, producers, count, true)
+	  && uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type)
+	  && (stored_binary_input_p (index, gsi)
+	      || (strip_structure_view (saved, operation.count, producers, count)
+		  && saved != index && stored_binary_input_p (saved, gsi))))
+	{
+	  producers[count++] = SSA_NAME_DEF_STMT (value);
+	  if (local_structure_producers_p (gsi, producers, count))
+	    return useless_type_conversion_p (lhs_type, TREE_TYPE (data)) ? data
+	      : build1 (VIEW_CONVERT_EXPR, lhs_type, data);
+	}
+      count = 0;
+    }
   if (scatter_add)
     {
       if (!structure_zero_p (gimple_call_arg (stmt, 0), d.type,
@@ -8604,30 +8651,11 @@ repeated_broadcast_value (const builtin_description &d,
   tree control = gimple_call_arg (stmt, 1);
   if (TREE_CODE (control) == INTEGER_CST
       && wi::extract_uhwi (wi::to_wide (control), 0, 32) == 0
-      && is_gimple_call (producer))
+      && uniform_structure_producer_p (producer, d.type))
     {
-      unsigned int nargs = gimple_call_num_args (producer);
-      unsigned int code = structure_builtin_code (producer, nargs);
-      bool uniform = false;
-      if (nargs == 0 && code < ZTT_BUILTIN_MAX)
-	{
-	  const auto source = builtin_description_for (code);
-	  uniform = source.type == d.type
-	    && source.expansion == EXPAND_MZERO_2D_M;
-	}
-      else if (nargs == 1 && nominal_raw_broadcast_p (code))
-	{
-	  unsigned int dst = (code - nominal_broadcast_base)
-	    / numeric_scalar_dtype_count;
-	  tree arg = gimple_call_arg (producer, 0);
-	  uniform = dst == d.type && check_nominal_call (code, 1, &arg);
-	}
-      if (uniform)
-	{
-	  producers[count++] = producer;
-	  return local_structure_producers_p (gsi, producers, count)
-	    ? result : NULL_TREE;
-	}
+      producers[count++] = producer;
+      return local_structure_producers_p (gsi, producers, count)
+	? result : NULL_TREE;
     }
   unsigned int code = structure_builtin_code (producer);
   if (code >= ZTT_BUILTIN_MAX)
@@ -13936,6 +13964,7 @@ reuse_local_md ()
 		case UNSPECV_ZTT_SETTYP_P0:
 		case UNSPECV_ZTT_STATE_ZERO:
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
+		  state.note_descriptor_use (descriptor);
 		  break;
 		case UNSPECV_ZTT_STATE_ROWCOL:
 		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:

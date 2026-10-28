@@ -364,6 +364,13 @@ Index-zero row/column broadcasts also reuse same-type zero and nominal
 scalar-broadcast results within that window.  The original constructor and
 scalar conversion remain; nonzero and dynamic indices retain their checks.
 
+Gathers from these uniform values reuse the input when an independent local
+store keeps the complete index value live.  Both operands must be non-packed
+basic Squares.  Gather indices wrap by masking, so arbitrary integer index
+bits are valid.  Original constructors, conversions and user loads remain.
+Zero constructors record their consumed descriptor GPR so later loads can
+reuse it without rebuilding the same constant; the clearing setter remains.
+
 The bounded copy search also recognizes zero-offset row/column shifts of
 complete basic Squares, using their existing full-value copy semantics.
 Such shifts may serve as terminal ownership witnesses.  Repeated broadcasts
