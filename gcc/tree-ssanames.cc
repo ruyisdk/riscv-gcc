@@ -428,10 +428,23 @@ set_range_info (tree name, const vrange &r)
   if (POINTER_TYPE_P (type))
     {
       struct ptr_info_def *pi = get_ptr_info (name);
+      bool changed = false;
       // If R is nonnull and pi is not, set nonnull.
-      if (!r.contains_zero_p () && (!pi || pi->pt.null))
-	set_ptr_nonnull (name);
-      else
+      if (!r.contains_zero_p () && pi->pt.null)
+	{
+	  set_ptr_nonnull (name);
+	  changed = true;
+	}
+      irange_bitmask bm = as_a <prange> (r).get_bitmask ();
+      unsigned bits = MIN (wi::ctz (bm.mask ()), HOST_BITS_PER_INT - 1);
+      unsigned align = 1U << bits;
+      if (align > 1 && align > pi->align)
+	{
+	  set_ptr_info_alignment (pi, align,
+				  bm.value ().to_uhwi () & (align - 1));
+	  changed = true;
+	}
+      if (!changed)
 	return false;
     }
   else

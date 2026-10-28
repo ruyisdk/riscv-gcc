@@ -200,13 +200,42 @@ check_for_binary_op_overflow (range_query *query,
   return true;
 }
 
+/* Unsigned wraparound preserves the low bits below a multiple-of-two step.  */
+
+static void
+range_from_loop_low_bits (vrange &r, tree type, tree init, tree step,
+			 gimple *stmt, range_query *query)
+{
+  if (!INTEGRAL_TYPE_P (type) || !TYPE_UNSIGNED (type)
+      || !is_gimple_val (init) || !is_gimple_val (step)
+      || !useless_type_conversion_p (type, TREE_TYPE (init))
+      || !useless_type_conversion_p (type, TREE_TYPE (step)))
+    return;
+
+  int_range_max rinit, rstep;
+  if (!query->range_of_expr (rinit, init, stmt)
+      || !query->range_of_expr (rstep, step, stmt)
+      || rinit.undefined_p () || rstep.undefined_p ())
+    return;
+
+  irange_bitmask step_bits = rstep.get_bitmask ();
+  unsigned bits = wi::ctz (step_bits.value () | step_bits.mask ());
+  if (!bits)
+    return;
+  irange_bitmask init_bits = rinit.get_bitmask ();
+  wide_int low = wi::mask (bits, false, TYPE_PRECISION (type));
+  as_a <irange> (r).update_bitmask
+    (irange_bitmask (init_bits.value () & low, init_bits.mask () | ~low));
+}
+
 /* Set INIT, STEP, and DIRECTION to the corresponding values of NAME
    within LOOP, and return TRUE.  Otherwise return FALSE, and set R to
    the conservative range of NAME within the loop.  */
 
 static bool
 get_scev_info (vrange &r, tree name, gimple *stmt, class loop *l,
-	       tree &init, tree &step, enum ev_direction &dir)
+	       tree &init, tree &step, enum ev_direction &dir,
+	       range_query *query)
 {
   tree ev = analyze_scalar_evolution (l, name);
   tree chrec = instantiate_parameters (l, ev);
@@ -238,6 +267,8 @@ get_scev_info (vrange &r, tree name, gimple *stmt, class loop *l,
 				get_chrec_loop (chrec), true))
     {
       r.set_varying (type);
+      if (evolution_function_is_affine_in_loop (chrec, l->num))
+	range_from_loop_low_bits (r, type, init, step, stmt, query);
       return false;
     }
   return true;
@@ -301,7 +332,7 @@ range_of_var_in_loop (vrange &v, tree name, class loop *l, gimple *stmt,
 {
   tree init, step;
   enum ev_direction dir;
-  if (!get_scev_info (v, name, stmt, l, init, step, dir))
+  if (!get_scev_info (v, name, stmt, l, init, step, dir, query))
     return true;
 
   // Calculate ranges for the values from SCEV.
