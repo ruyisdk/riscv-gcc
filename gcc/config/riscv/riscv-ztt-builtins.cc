@@ -12908,6 +12908,21 @@ md_preserving_cache_p (int code)
     }
 }
 
+/* Carry-less multiplication writes only its result GPR.  */
+static bool
+md_preserving_clmul_p (int code)
+{
+  switch (code)
+    {
+    case CODE_FOR_riscv_clmul_si: case CODE_FOR_riscv_clmul_di:
+    case CODE_FOR_riscv_clmulh_si: case CODE_FOR_riscv_clmulh_di:
+    case CODE_FOR_riscv_clmulr_si: case CODE_FOR_riscv_clmulr_di:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Only the result GPR changes; the volatile CSR observation remains.  */
 static bool
 md_read_csr_p (int code)
@@ -13670,6 +13685,7 @@ reuse_cleaned_descriptors ()
 	  if (md_preserving_fence_p (code))
 	    continue;
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
+	      || md_preserving_clmul_p (code)
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -13926,6 +13942,7 @@ reuse_local_md ()
 	      continue;
 	    }
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
+	      || md_preserving_clmul_p (code)
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -14571,6 +14588,37 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    const insn_code codes[] = {
+      CODE_FOR_riscv_clmul_si, CODE_FOR_riscv_clmul_di,
+      CODE_FOR_riscv_clmulh_si, CODE_FOR_riscv_clmulh_di,
+      CODE_FOR_riscv_clmulr_si, CODE_FOR_riscv_clmulr_di
+    };
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx descriptor = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (unsigned int i = 0; i < ARRAY_SIZE (codes); ++i)
+      {
+	ASSERT_TRUE (md_preserving_clmul_p (codes[i]));
+	machine_mode mode = i % 2 ? DImode : SImode;
+	for (unsigned int dest : { 10U, 11U })
+	  {
+	    rtx_insn *insn = emit_insn
+	      (GEN_FCN (codes[i]) (gen_rtx_REG (mode, dest),
+				  gen_rtx_REG (mode, 12),
+				  gen_rtx_REG (mode, 13)));
+	    local_md_state state;
+	    state.remember (matrix, descriptor);
+	    note_stores (insn, invalidate_md_store, &state);
+	    ASSERT_EQ (dest != 10, state.matches (matrix, descriptor));
+	    ASSERT_FALSE (md_scalar_insn_p (PATTERN (insn)));
+	  }
+      }
+    for (int code : { -1, (int) CODE_FOR_nothing,
+		     (int) CODE_FOR_riscv_ztt_release,
+		     (int) CODE_FOR_riscv_ztt_none })
+      ASSERT_FALSE (md_preserving_clmul_p (code));
+  }
   {
     const insn_code codes[] = {
       CODE_FOR_riscv_clean_si, CODE_FOR_riscv_clean_di,

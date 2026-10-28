@@ -592,6 +592,9 @@ Recognized CPU atomic loads, stores and read-modify-write patterns preserve
 Md and amestype as well. Their GPR results and scratch clobbers invalidate
 descriptor facts; memory effects still stop private spill tracking. Atomic
 instructions, fences and memory orders remain unchanged.
+Scalar clmul, clmulh and clmulr preserve Md and amestype while invalidating
+their result GPR facts. Their calculations remain unchanged, including
+when emitted by CRC expansion; private spill tracking still stops.
 Recognized standard RVV integer, floating, configuration and memory
 instructions also preserve Md and amestype. These patterns use GPRs, vector
 registers and VL/VTYPE/VXRM; floating classes may also use FPRs and FRM.
