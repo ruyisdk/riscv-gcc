@@ -288,8 +288,9 @@ Its GIMPLE ownership witnesses remain; ordinary RTL DCE may remove the
 unused zero value.  Loaded zeros, floating addition and arbitrary indices
 do not qualify.
 
-Same-datatype integer addition, OR and XOR reuse the other complete value
-when either operand is an explicit zero.  MSUB computes B-A, so its first
+Same-datatype integer addition, OR, XOR and unsigned max reuse the other
+complete value when either operand is an explicit zero.  MSUB computes B-A,
+so its first
 operand must be zero.  AND-NOT computes A & ~B and accepts only a zero
 second operand.  The bounded zero proof applies to grouped M values.  Mixed
 datatypes, floating arithmetic and intervening state boundaries do not

@@ -8284,6 +8284,8 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
       || !type_nregs (d.type)
       || floating_descriptor_p (types[d.type].descriptor))
     return NULL_TREE;
+  commutative |= d.expansion == EXPAND_MMAX_EW
+    && !(types[d.type].descriptor & (1U << 30));
   tree lhs_type = TREE_TYPE (gimple_call_lhs (stmt));
   for (unsigned int i = 0; i < 2; ++i)
     {
