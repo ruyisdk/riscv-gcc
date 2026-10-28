@@ -116,7 +116,8 @@ LTO validates public codes on demand with the registration-time profile,
 using the same signature eligibility rules as header registration.  Streamed
 declarations need no full public-catalog scan or placeholder table.
 Header registration passes each decoded catalog entry to the signature
-check, avoiding a second metadata lookup for the same code.
+check, avoiding a second metadata lookup for the same code.  The catalog
+loop binds its profile once instead of repeating the option-name lookup.
 
 Public Scalar declaration blocks omit leading TC slots owned by older
 declaration domains.  The storage offset does not change public code radices,

@@ -6010,12 +6010,13 @@ register_functions ()
   nominal_registration_types
     = ggc_cleared_alloc<nominal_registration_cache> ();
   register_nominal_scalars ();
+  const profile_info &profile = *active_profile ();
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const builtin_description &d = builtin_description_for (i);
       type_index type;
       prototype_index prototype;
-      if (!registration_signature (i, d, *active_profile (), type, prototype))
+      if (!registration_signature (i, d, profile, type, prototype))
 	continue;
       unsigned int code = (i << RISCV_BUILTIN_SHIFT) | RISCV_BUILTIN_ZTT;
       char name[160];
@@ -6030,7 +6031,7 @@ register_functions ()
 					TREE_TYPE (decl), code,
 					NULL, function_attributes ());
     }
-  if (runtime_profile_p ())
+  if (profile.n == 0)
     {
       auto_vec<scalar_registration_group> integer_candidates, floating_candidates;
       collect_scalar_registration_groups (integer_candidates, false);
