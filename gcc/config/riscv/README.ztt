@@ -844,13 +844,15 @@ as other consumers.
 
 Leaf matrix ternaries, scalar ternaries and scatters can copy a
 live old destination with mmov.m.m after establishing matching complete Md.
-The operands must have the same non-packed basic-Square type.  A backward
+Each operand must be a complete non-packed basic Square; the copy keeps
+the old destination's mode and datatype even when input types differ.  A backward
 DF liveness scan admits only sites whose live M groups fit the profile;
 live ACC values and fixed M registers prevent this choice.  The separate
 copy has an independent destination and can reuse known source Md.  Calls,
 bank pressure and ordinary untyped moves retain their existing paths.
 Scalar forms also require no live M values beyond their inputs and result
-to limit descriptor pressure on GPRs.  A scalar exponent operation uses
+to limit descriptor pressure on GPRs, counting each input's actual group
+width.  A scalar exponent operation uses
 the copied old value as its tied destination when available; otherwise
 identical wide inputs retain their shared reload path.
 The old value and dying matrix inputs count toward simultaneous bank

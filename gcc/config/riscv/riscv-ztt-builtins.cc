@@ -11965,6 +11965,7 @@ live_old_copy_sites (bitmap sites)
 	      /* Inputs coexist with the result even when its pseudo is reused.  */
 	      rtx inputs[] = { XVECEXP (src, 0, 0), XVECEXP (src, 0, 5),
 			       XVECEXP (src, 0, 1) };
+	      unsigned int isolated = m_nregs (GET_MODE (dest));
 	      for (unsigned int i = 0; i < (scalar ? 2U : 3U); ++i)
 		{
 		  rtx input = inputs[i];
@@ -11973,19 +11974,20 @@ live_old_copy_sites (bitmap sites)
 		  bool duplicate = false;
 		  for (unsigned int j = 0; j < i; ++j)
 		    duplicate |= rtx_equal_p (input, inputs[j]);
-		  if (!duplicate && (REGNO (input) == REGNO (dest)
-			     || !bitmap_bit_p (live, REGNO (input))))
-		    needed += m_nregs (GET_MODE (input));
+		  if (!duplicate)
+		    {
+		      unsigned int count = m_nregs (GET_MODE (input));
+		      isolated += count;
+		      if (REGNO (input) == REGNO (dest)
+			  || !bitmap_bit_p (live, REGNO (input)))
+			needed += count;
+		    }
 		}
 	      if (needed > active_profile ()->mregs)
 		bitmap_clear_bit (sites, INSN_UID (insn));
 	      /* Scalar controls compete with live-group descriptors for GPRs.  */
-	      if (scalar)
-		{
-		  unsigned int groups = rtx_equal_p (inputs[0], inputs[1]) ? 2 : 3;
-		  if (needed > groups * m_nregs (GET_MODE (dest)))
-		    bitmap_clear_bit (sites, INSN_UID (insn));
-		}
+	      if (scalar && needed > isolated)
+		bitmap_clear_bit (sites, INSN_UID (insn));
 	    }
 	  df_simulate_one_insn_backwards (bb, insn, live);
 	}
@@ -12405,17 +12407,19 @@ lower_explicit_state ()
 		&& !ternary_bank_reuse && !scatter_bank_reuse
 		&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
 		&& m_nregs (mode) == groups[0]
-		&& mode == GET_MODE (XVECEXP (src, 0, 0))
-		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+		&& mode == GET_MODE (XVECEXP (src, 0, 5))
+		&& (UINTVAL (XVECEXP (src, 0, 3)) & 0xff) >= active_profile ()->uds
+		&& m_nregs (GET_MODE (XVECEXP (src, 0, 0))) == groups[1]
 		&& (scalar
-		    || (mode == GET_MODE (XVECEXP (src, 0, 1))
-			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))))
+		    || ((UINTVAL (XVECEXP (src, 0, 4)) & 0xff) >= active_profile ()->uds
+			&& m_nregs (GET_MODE (XVECEXP (src, 0, 1))) == groups[2]))
 		&& !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	      {
 		copied_old = gen_reg_rtx (mode);
 		emit_insn (gen_ztt_state_copy
 		  (mode, Pmode, copied_old, XVECEXP (src, 0, 5), descriptor,
-		   copy_rtx (scratch), stride ? stride : const0_rtx));
+		   adjust_address_nv (copy_rtx (scratch), mode, 0),
+		   stride ? stride : const0_rtx));
 	      }
 	    if (code == UNSPEC_ZTT_TERNARY_X)
 	      {
