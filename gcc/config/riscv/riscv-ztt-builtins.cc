@@ -9020,9 +9020,22 @@ repeated_unary_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 				      false, true))
 	return NULL_TREE;
       gimple *constructor = SSA_NAME_DEF_STMT (value);
-      if (uniform_structure_producer_p (constructor, d.type)
-	  && (gimple_call_num_args (constructor) == 0
-	      || (!floating && d.expansion != EXPAND_MABS_EW)))
+
+      bool invariant;
+      if (!floating && d.expansion != EXPAND_MABS_EW)
+	{
+	  expansion_index axis
+	    = (d.expansion == EXPAND_MREDUCEMAX_COL
+	       || d.expansion == EXPAND_MREDUCEMIN_COL
+	       || d.expansion == EXPAND_MPREFIXMAX_COL)
+	    ? EXPAND_MROWBCAST_EW_X : EXPAND_MCOLBCAST_EW_X;
+	  invariant = axis_invariant_structure_producer_p
+	    (constructor, d.type, axis, producers, count);
+	}
+      else
+	invariant = uniform_structure_producer_p (constructor, d.type)
+	  && gimple_call_num_args (constructor) == 0;
+      if (invariant)
 	{
 	  producers[count++] = constructor;
 	  return local_structure_producers_p (gsi, producers, count)
