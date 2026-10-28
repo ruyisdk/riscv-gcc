@@ -13776,7 +13776,8 @@ public:
       && rtx_equal_p (descriptor_value (reg), value);
   }
 
-  rtx descriptor_register (rtx reg, const_rtx insn) const
+  rtx constant_register (rtx reg, const_rtx insn,
+			 unsigned int candidates) const
   {
     if (!full_gpr_p (reg) || fixed_regs[REGNO (reg)]
 	|| global_regs[REGNO (reg)] || reg_set_p (reg, insn))
@@ -13787,7 +13788,7 @@ public:
     rtx best = reg;
     unsigned int oldest = definition[REGNO (reg) - GP_REG_FIRST];
     /* Prefer the earliest value, not a newer copy that DCE could remove.  */
-    for (unsigned int mask = descriptor_used; mask; mask &= mask - 1)
+    for (unsigned int mask = candidates; mask; mask &= mask - 1)
       {
 	unsigned int i = ctz_hwi (mask), r = GP_REG_FIRST + i;
 	if (!fixed_regs[r] && !global_regs[r] && constants[i]
@@ -13802,6 +13803,11 @@ public:
 	  }
       }
     return best;
+  }
+
+  rtx descriptor_register (rtx reg, const_rtx insn) const
+  {
+    return constant_register (reg, insn, descriptor_used);
   }
 
   void invalidate (rtx reg)
@@ -15819,6 +15825,44 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
   return true;
 }
 
+/* Reuse an earlier LUI value in a non-in-place add.  */
+static bool
+reuse_constant_add_base (rtx_insn *insn, local_md_state &state)
+{
+  rtx pattern = PATTERN (insn);
+  if (GET_CODE (pattern) != SET || RTX_FRAME_RELATED_P (insn)
+      || !local_md_state::full_gpr_p (SET_DEST (pattern))
+      || fixed_regs[REGNO (SET_DEST (pattern))]
+      || global_regs[REGNO (SET_DEST (pattern))])
+    return false;
+  rtx src = SET_SRC (pattern);
+  if (GET_CODE (src) != PLUS || GET_MODE (src) != Pmode
+      || !local_md_state::full_gpr_p (XEXP (src, 0))
+      || !CONST_INT_P (XEXP (src, 1))
+      || !SMALL_OPERAND (INTVAL (XEXP (src, 1))))
+    return false;
+  rtx base = XEXP (src, 0), value = state.descriptor_value (base);
+  if (!CONST_INT_P (value) || value == const0_rtx
+      || !LUI_OPERAND (INTVAL (value)))
+    return false;
+  rtx replacement = state.constant_register (base, insn, ~0U);
+  if (replacement == base)
+    return false;
+  int length = get_attr_length (insn);
+  if (!validate_change (insn, &XEXP (src, 0), replacement, true)
+      || get_attr_length (insn) > length)
+    {
+      cancel_changes (0);
+      return false;
+    }
+  if (!apply_change_group ())
+    return false;
+  df_insn_rescan (insn);
+  if (dump_file)
+    fprintf (dump_file, "Reuse constant base at insn %d\n", INSN_UID (insn));
+  return true;
+}
+
 /* DCE can remove workspace calculations that killed descriptor GPRs.  */
 static bool
 reuse_cleaned_descriptors (bool &spill_cleanup)
@@ -15969,6 +16013,7 @@ reuse_cleaned_descriptors (bool &spill_cleanup)
 	    }
 	  if (md_scalar_insn_p (pattern))
 	    {
+	      changed |= reuse_constant_add_base (insn, state);
 	      rtx dest = SET_DEST (pattern);
 	      rtx value = local_md_state::full_gpr_p (dest)
 		? state.constant_value (src) : NULL_RTX;
@@ -18146,9 +18191,52 @@ run_loop_spill_selftests ()
 }
 
 static void
+run_constant_base_selftests ()
+{
+  using namespace selftest;
+  for (unsigned int test = 0; test != 23; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      local_md_state state;
+      rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+      rtx dest = gen_rtx_REG (Pmode, 12);
+      rtx value = GEN_INT (0x40000000);
+      if (test == 14) value = GEN_INT (32);
+      if (test == 20) value = gen_int_mode (-4096, Pmode);
+      if (test == 21) value = const0_rtx;
+      if (test == 22) value = GEN_INT (0x40000001);
+      state.record_constant (a, value);
+      state.record_constant (b, value);
+      if (test == 2) state.record_constant (a, GEN_INT (0x50000000));
+      if (test == 3) state.clear ();
+      if (test == 4) state.invalidate (gen_rtx_REG (QImode, 10));
+      if (test == 5) state.record_constant (a, value);
+      if (test == 19) state.invalidate (b);
+      if (test == 12) dest = b;
+      if (test == 13) dest = a;
+      if (test == 17) dest = gen_rtx_REG (HImode, 12);
+      if (test == 18) b = gen_rtx_REG (HImode, 11);
+      rtx src = gen_rtx_fmt_ee (test == 16 ? MINUS : PLUS, Pmode,
+			       b, GEN_INT (test == 15 ? 2048 : 8));
+      rtx_insn *insn = emit_insn (gen_rtx_SET (dest, src));
+      if (test == 1) RTX_FRAME_RELATED_P (insn) = 1;
+      unsigned int regno = test < 8 ? 10 : test < 10 ? 11 : 12;
+      auto fixed = fixed_regs[regno], global = global_regs[regno];
+      if (test == 6 || test == 8 || test == 10) fixed_regs[regno] = 1;
+      if (test == 7 || test == 9 || test == 11) global_regs[regno] = 1;
+      bool expected = test == 0 || test == 20;
+      ASSERT_EQ (reuse_constant_add_base (insn, state), expected);
+      ASSERT_RTX_EQ (XEXP (src, 0), expected ? a : b);
+      fixed_regs[regno] = fixed;
+      global_regs[regno] = global;
+    }
+}
+
+static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  run_constant_base_selftests ();
   run_scalar_zero_path_selftests ();
   run_scalar_spill_path_selftests ();
   run_scalar_spill_disjoint_selftests ();
