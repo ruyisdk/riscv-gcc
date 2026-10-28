@@ -13536,7 +13536,6 @@ class local_md_state
 public:
   void clear ()
   {
-    memset (facts, 0, sizeof (facts));
     memset (constants, 0, sizeof (constants));
     memset (identities, 0, sizeof (identities));
     next_identity = 0;
@@ -13549,7 +13548,6 @@ public:
 
   void clear_ame ()
   {
-    memset (facts, 0, sizeof (facts));
     scalar_type = nullptr;
     register_descriptors = false;
     occupied = 0;
@@ -13771,7 +13769,7 @@ public:
 
   bool matches (unsigned int regno, machine_mode mode, rtx descriptor) const
   {
-    if (!M_REG_P (regno))
+    if (!M_REG_P (regno) || !(occupied & (1U << (regno - M_REG_FIRST))))
       return false;
     const auto &f = facts[regno - M_REG_FIRST];
     return f.group && REGNO (f.group) == regno && GET_MODE (f.group) == mode
@@ -19082,6 +19080,26 @@ run_md_reuse_selftests ()
       for (unsigned int i = 0; i < M_REG_NUM; i += width)
 	full.remember (gen_rtx_REG (matrix_mode (width), M_REG_FIRST + i),
 		       descriptor);
+      for (bool ame_only : { false, true })
+	{
+	  local_md_state empty = full;
+	  if (ame_only) empty.clear_ame ();
+	  else empty.clear ();
+	  local_md_state copy = empty, joined = full;
+	  joined.intersect_constants (copy);
+	  for (unsigned int i = 0; i < M_REG_NUM; i += width)
+	    {
+	      rtx group = gen_rtx_REG (matrix_mode (width), M_REG_FIRST + i);
+	      ASSERT_FALSE (empty.matches (group, GEN_INT (32)));
+	      ASSERT_FALSE (copy.matches (group, GEN_INT (32)));
+	      ASSERT_FALSE (joined.matches (group, GEN_INT (32)));
+	    }
+	  copy.remember (gen_rtx_REG (ZTTMR1mode, M_REG_LAST), descriptor);
+	  ASSERT_TRUE (copy.matches (M_REG_LAST, ZTTMR1mode, descriptor));
+	  ASSERT_FALSE (copy.matches (M_REG_FIRST, matrix_mode (width), descriptor));
+	  copy.intersect_constants (empty);
+	  ASSERT_FALSE (copy.matches (M_REG_LAST, ZTTMR1mode, descriptor));
+	}
       for (unsigned int member = 0; member < M_REG_NUM; ++member)
 	{
 	  local_md_state one = full;

@@ -629,6 +629,9 @@ allocated M group, mode and Md.  Output and instruction length use the same
 predicate; before allocation, length assumes both sources need preparation.
 Private MEM and scratch operands remain in RTL.
 
+Md fact resets clear the occupancy bitmap; lookups reject unoccupied slots
+before reading their old contents. GPR constant and identity resets are unchanged.
+
 Common input preparation can set Md before a complete group's private raw
 reloads instead of saving and reloading that group again at the consumer.
 A 64-instruction same-block scan requires every member to be overwritten,
