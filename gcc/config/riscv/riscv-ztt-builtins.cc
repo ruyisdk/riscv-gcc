@@ -13648,6 +13648,17 @@ public:
     return true;
   }
 
+  bool same_input_preparation_p (rtx *groups, rtx *descriptors,
+				 unsigned int steps, unsigned int i,
+				 unsigned int j) const
+  {
+    unsigned int step = datatype_step (steps, i);
+    return rtx_equal_p (groups[i], groups[j])
+      && step && step == datatype_step (steps, j)
+      && rtx_equal_p (descriptor_value (descriptors[i]),
+		      descriptor_value (descriptors[j]));
+  }
+
   unsigned int prepared_inputs (rtx *groups, rtx *descriptors,
 				unsigned int steps, bool scalar, bool old_dest) const
   {
@@ -13661,10 +13672,7 @@ public:
 	for (unsigned int j = first; j < i; ++j)
 	  if (!(prepared & (1U << j))
 	      && reg_overlap_mentioned_p (groups[i], groups[j]))
-	    ready = rtx_equal_p (groups[i], groups[j])
-	      && step && step == datatype_step (steps, j)
-	      && rtx_equal_p (descriptor_value (descriptors[i]),
-			      descriptor_value (descriptors[j]));
+	    ready = same_input_preparation_p (groups, descriptors, steps, i, j);
 	if (ready)
 	  prepared |= 1U << i;
       }
@@ -15674,7 +15682,9 @@ reuse_local_md ()
 			  bool overlap = false;
 			  for (unsigned int j = old_dest ? 0 : 1;
 			       j < (scalar ? 2U : 3U); ++j)
-			    if (j != i && reg_overlap_mentioned_p (regs[i], regs[j]))
+			    if (j != i && reg_overlap_mentioned_p (regs[i], regs[j])
+				&& !state.same_input_preparation_p
+				     (regs, descriptors, UINTVAL (steps), i, j))
 			      overlap = true;
 			  if (overlap)
 			    continue;
@@ -18837,6 +18847,12 @@ run_md_reuse_selftests ()
       rtx descriptors[] = { desc, desc, desc };
       unsigned int steps = pack_datatype_steps (count, count, count);
       state.clear ();
+      ASSERT_TRUE (state.same_input_preparation_p
+	(groups, descriptors, steps, 0, 1));
+      ASSERT_FALSE (state.same_input_preparation_p
+	(groups, descriptors, steps, 0, 2));
+      ASSERT_FALSE (state.same_input_preparation_p
+	(groups, descriptors, pack_datatype_steps (count, count / 2), 0, 1));
       ASSERT_EQ (state.prepared_inputs
 	(groups, descriptors, steps, true, true), 2U);
       ASSERT_EQ (state.prepared_inputs
@@ -18848,6 +18864,8 @@ run_md_reuse_selftests ()
 	(groups, descriptors, steps, true, true), 3U);
       state.clear ();
       descriptors[1] = gen_rtx_REG (SImode, 11);
+      ASSERT_FALSE (state.same_input_preparation_p
+	(groups, descriptors, steps, 0, 1));
       ASSERT_EQ (state.prepared_inputs
 	(groups, descriptors, steps, true, true), 0U);
       descriptors[1] = desc;
@@ -18866,6 +18884,8 @@ run_md_reuse_selftests ()
 	(groups, descriptors, steps, false, false), 4U);
       groups[1] = part;
       unsigned int partial_steps = pack_datatype_steps (count, count / 2, count);
+      ASSERT_FALSE (state.same_input_preparation_p
+	(groups, descriptors, partial_steps, 0, 1));
       ASSERT_EQ (state.prepared_inputs
 	(groups, descriptors, partial_steps, false, true), 0U);
       state.remember (whole, desc);
