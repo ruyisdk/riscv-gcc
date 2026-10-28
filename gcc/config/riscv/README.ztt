@@ -945,6 +945,10 @@ resolves to a loop-invariant SP expression. The bounded loop scan uses
 base-alias analysis, including reads on later iterations; all exit paths
 must pass the existing unread-return proof. Calls, asm and unknown effects
 stop the scan. Each wide-group member requires its own address proof.
+The reserved runtime scale register may participate when it is nonglobal
+and unwritten throughout the loop. Other fixed registers remain excluded.
+Offsets containing only this internal scale retain their private stack
+base; reads must still be proven independent of stack-based memory.
 Dead fixed-size locals do not prevent removal of an unused scalable
 workspace.  The matched scalable adjustment pair is removed only after
 the existing reference checks; fixed adjustments and CFA remain intact.

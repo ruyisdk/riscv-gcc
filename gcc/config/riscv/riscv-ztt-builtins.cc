@@ -15313,7 +15313,8 @@ public:
 		  unsigned int regno = REGNO (*iter);
 		  invariant &= !TEST_HARD_REG_BIT (writes, regno)
 		    && !global_regs[regno]
-		    && (regno == STACK_POINTER_REGNUM || !fixed_regs[regno]);
+		    && (regno == STACK_POINTER_REGNUM || !fixed_regs[regno]
+			|| (regno == RISCV_ZTT_SCALE_REGNUM && runtime_profile_p ()));
 		}
 	    if (invariant)
 	      return address;
@@ -15420,12 +15421,30 @@ public:
 		aliases = true;
 	      }
 	    rtx mem = replace_equiv_address_nv (SET_DEST (PATTERN (store)), address);
+	    bool scaled_stack = runtime_profile_p () && GET_CODE (address) == PLUS;
+	    if (scaled_stack)
+	      {
+		rtx offset = XEXP (address, rtx_equal_p
+				  (XEXP (address, 0), stack_pointer_rtx) ? 1 : 0);
+		subrtx_iterator::array_type array;
+		FOR_EACH_SUBRTX (iter, array, offset, NONCONST)
+		  if (REG_P (*iter) && REGNO (*iter) != RISCV_ZTT_SCALE_REGNUM)
+		    scaled_stack = false;
+	      }
 	    auto read = [&] (rtx x) {
 	      subrtx_iterator::array_type array;
 	      FOR_EACH_SUBRTX (iter, array, x, NONCONST)
 		if (MEM_P (*iter)
 		    && (MEM_VOLATILE_P (*iter) || may_alias_p (mem, *iter)))
-		  return true;
+		  {
+		    /* Internal scale offsets retain the private stack base.  */
+		    if (!MEM_VOLATILE_P (*iter) && scaled_stack
+			&& MEM_ADDR_SPACE (*iter) == ADDR_SPACE_GENERIC
+			&& MEM_ALIAS_SET (*iter) != ALIAS_SET_MEMORY_BARRIER
+			&& !may_be_sp_based_p (XEXP (*iter, 0)))
+		      continue;
+		    return true;
+		  }
 	      return false;
 	    };
 	    valid = true;
@@ -17021,12 +17040,15 @@ run_loop_spill_selftests ()
   using namespace selftest;
   if (!TARGET_ZTT)
     return;
-  for (unsigned int test = 0; test != 28; ++test)
+  for (unsigned int test = 0; test != 39; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       const char *profile = riscv_ztt_profile_string;
       int reload = reload_completed, non_call = flag_non_call_exceptions;
       int strict_aliasing = flag_strict_aliasing;
+      int fixed_scale = fixed_regs[RISCV_ZTT_SCALE_REGNUM];
+      int global_scale = global_regs[RISCV_ZTT_SCALE_REGNUM];
+      int fixed_offset = fixed_regs[14];
       riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
       reload_completed = 1;
       riscv_ztt_note_call_boundary ();
@@ -17045,23 +17067,42 @@ run_loop_spill_selftests ()
       };
       rtx addr = gen_rtx_REG (Pmode, 5), pointer = gen_rtx_REG (Pmode, 10);
       rtx tmp = gen_rtx_REG (Pmode, 11), offset = gen_rtx_REG (Pmode, 14);
+      if (test >= 28)
+	{
+	  fixed_regs[RISCV_ZTT_SCALE_REGNUM] = 1;
+	  if (test == 31)
+	    fixed_regs[14] = 1;
+	  else if (test != 37)
+	    offset = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
+	  if (test == 30) global_regs[RISCV_ZTT_SCALE_REGNUM] = 1;
+	}
       rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
       rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
       set_mem_attrs_for_spill (slot);
       rtx address = test == 16 ? pointer
 	: test == 17 || test == 18 ? gen_rtx_PLUS (Pmode, stack_pointer_rtx, offset)
 	: stack_pointer_rtx;
+      if (test >= 28)
+	{
+	  rtx stride = gen_rtx_REG (Pmode, 16);
+	  append (bb, gen_rtx_SET
+		  (stride, gen_rtx_ASHIFT (Pmode, offset, GEN_INT (4))));
+	  address = gen_rtx_PLUS (Pmode, stack_pointer_rtx, stride);
+	}
       append (bb, gen_rtx_SET (addr, address));
-      rtx input = gen_rtx_MEM (ZTTMR1mode, test == 23 ? stack_pointer_rtx : pointer);
+      rtx input = gen_rtx_MEM
+	(ZTTMR1mode, test == 23 || test == 34 ? stack_pointer_rtx
+	 : test == 38 ? gen_rtx_REG (Pmode, 18) : pointer);
       if (test == 4) MEM_VOLATILE_P (input) = 1;
-      if (test == 3 || test == 4 || test == 23 || test == 24)
+      if (test == 36) set_mem_alias_set (input, ALIAS_SET_MEMORY_BARRIER);
+      if (test == 3 || test == 4 || test == 23 || test == 24 || test >= 34)
 	append (bb, gen_ztt_state_load (ZTTMR1mode, Pmode, m, input, const0_rtx));
-      if (test == 1) append (bb, gen_rtx_SET (m, copy_rtx (slot)));
+      if (test == 1 || test == 32) append (bb, gen_rtx_SET (m, copy_rtx (slot)));
       if (test == 14) set_mem_alias_set (slot, 0);
       if (test == 15) set_mem_expr (slot, nullptr);
       rtx_insn *store = append (bb, gen_rtx_SET (slot, m));
       if (test == 13) RTX_FRAME_RELATED_P (store) = 1;
-      if (test == 2) append (bb, gen_rtx_SET (m, copy_rtx (slot)));
+      if (test == 2 || test == 33) append (bb, gen_rtx_SET (m, copy_rtx (slot)));
       if (test == 5)
 	BB_END (bb) = emit_call_insn_after
 	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (bb));
@@ -17069,7 +17110,7 @@ run_loop_spill_selftests ()
       if (test == 7)
 	append (bb, gen_rtx_SET (stack_pointer_rtx,
 				 plus_constant (Pmode, stack_pointer_rtx, 16)));
-      if (test == 18)
+      if (test == 18 || test == 29)
 	append (bb, gen_rtx_SET (offset, plus_constant (Pmode, offset, 16)));
       if (test == 19)
 	append (bb, gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, m), UNSPECV_ZTT));
@@ -17083,7 +17124,7 @@ run_loop_spill_selftests ()
       if (test == 9)
 	BB_END (out) = emit_call_insn_after
 	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (out));
-      if (test >= 25)
+      if (test >= 25 && test <= 27)
 	{
 	  flag_strict_aliasing = test != 27;
 	  append (out, gen_rtx_SET (stack_pointer_rtx,
@@ -17103,7 +17144,7 @@ run_loop_spill_selftests ()
       if (test == 21) make_edge (out, out, 0);
       if (test == 22) cfun->calls_setjmp = true;
       bool expected = test == 0 || test == 3 || test == 17 || test == 24
-	|| test == 25;
+	|| test == 25 || test == 28 || test == 35;
       if (test == 0)
 	{
 	  ASSERT_TRUE (md_preserving_branch_p (BB_END (bb)));
@@ -17123,6 +17164,18 @@ run_loop_spill_selftests ()
 		       (out, BB_HEAD (out), path, count));
 	}
       char context[64];
+      if (test == 28)
+	{
+	  HARD_REG_SET writes;
+	  CLEAR_HARD_REG_SET (writes);
+	  SET_HARD_REG_BIT (writes, 5);
+	  SET_HARD_REG_BIT (writes, 16);
+	  ASSERT_TRUE (local_raw_spill::loop_spill_address (store, writes));
+	  const char *runtime = riscv_ztt_profile_string;
+	  riscv_ztt_profile_string = nullptr;
+	  ASSERT_FALSE (local_raw_spill::loop_spill_address (store, writes));
+	  riscv_ztt_profile_string = runtime;
+	}
       snprintf (context, sizeof context, "loop private spill case %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
       ASSERT_EQ_AT (loc, expected, local_raw_spill::remove_unread_loop_stores ());
@@ -17131,6 +17184,9 @@ run_loop_spill_selftests ()
       reload_completed = reload;
       flag_non_call_exceptions = non_call;
       flag_strict_aliasing = strict_aliasing;
+      fixed_regs[RISCV_ZTT_SCALE_REGNUM] = fixed_scale;
+      global_regs[RISCV_ZTT_SCALE_REGNUM] = global_scale;
+      fixed_regs[14] = fixed_offset;
       riscv_ztt_profile_string = profile;
     }
 }
