@@ -13554,7 +13554,10 @@ md_acc_transfer_p (rtx pattern)
     }
   rtx use = XVECEXP (pattern, 0, 5);
   return GET_CODE (use) == USE
-    && rtx_equal_p (XEXP (use, 0), gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM));
+    && (rtx_equal_p (XEXP (use, 0),
+		    gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM))
+	|| (XEXP (use, 0) == const0_rtx
+	    && REG_P (SET_DEST (set)) && REG_P (SET_SRC (set))));
 }
 
 static bool
@@ -14187,22 +14190,10 @@ public:
   /* Prepared register operations have no private preservation transfers.  */
   static bool prepared_matrix_p (rtx pat)
   {
-    if (GET_CODE (pat) == PARALLEL && XVECLEN (pat, 0) == 6)
+    if (md_acc_transfer_p (pat))
       {
 	rtx set = XVECEXP (pat, 0, 0);
-	if (GET_CODE (set) != SET || !REG_P (SET_DEST (set))
-	    || !REG_P (SET_SRC (set))
-	    || !acc_mode_p (GET_MODE (SET_DEST (set)))
-	    || GET_MODE (SET_DEST (set)) != GET_MODE (SET_SRC (set)))
-	  return false;
-	for (unsigned int i = 1; i != 6; ++i)
-	  {
-	    rtx x = XVECEXP (pat, 0, i);
-	    if (GET_CODE (x) != (i == 5 ? USE : CLOBBER)
-		|| (!REG_P (XEXP (x, 0)) && GET_CODE (XEXP (x, 0)) != SCRATCH))
-	      return false;
-	  }
-	return true;
+	return REG_P (SET_DEST (set)) && REG_P (SET_SRC (set));
       }
     if (GET_CODE (pat) != SET || !REG_P (SET_DEST (pat))
 	|| GET_CODE (SET_SRC (pat)) != UNSPEC_VOLATILE
@@ -14897,6 +14888,18 @@ reuse_local_md ()
 	  int code = recog_memoized (insn);
 	  if (explicit_state && code >= 0 && md_acc_transfer_p (PATTERN (insn)))
 	    {
+	      rtx pattern = PATTERN (insn), set = XVECEXP (pattern, 0, 0);
+	      rtx *scale = &XEXP (XVECEXP (pattern, 0, 5), 0);
+	      if (!RTX_FRAME_RELATED_P (insn) && REG_P (SET_DEST (set))
+		  && REG_P (SET_SRC (set)) && *scale != const0_rtx
+		  && validate_change (insn, scale, const0_rtx, false))
+		{
+		  df_insn_rescan (insn);
+		  cleanup = descriptor_cleanup = true;
+		  if (dump_file)
+		    fprintf (dump_file, "Drop ACC copy scale at insn %d\n",
+			     INSN_UID (insn));
+		}
 	      note_stores (insn, invalidate_md_store, &state);
 	      continue;
 	    }
@@ -16345,7 +16348,46 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (state.matches (group, GEN_INT (32)));
       }
   }
-  for (unsigned int test = 0; test != 13; ++test)
+  if (TARGET_ZTT)
+    for (machine_mode mode : { ZTTAR1mode, ZTTAR4mode, ZTTAR1X2mode,
+			       ZTTAP2X4mode })
+      for (unsigned int test = 0; test != 11; ++test)
+	{
+	  rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+	  const char *profile = riscv_ztt_profile_string;
+	  int saved_reload = reload_completed;
+	  riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	  reload_completed = test >= 2;
+	  rtx a = gen_rtx_REG (mode, ACC_REG_FIRST);
+	  rtx b = gen_rtx_REG (mode, ACC_REG_FIRST + 8);
+	  rtx addr = gen_rtx_REG (Pmode, 10);
+	  rtx mem = gen_rtx_MEM (mode, addr);
+	  rtx scratch = gen_rtx_REG (matrix_mode (acc_m_nregs (mode)),
+				     M_REG_FIRST);
+	  rtx scale = test == 0 || test == 7 || test == 8 || test == 10
+	    ? gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM)
+	    : test == 5 ? addr : test == 6 ? const1_rtx : const0_rtx;
+	  if (test == 3 || test == 7) b = mem;
+	  if (test == 4 || test == 8) a = mem;
+	  if (test == 9 || test == 10)
+	    {
+	      riscv_ztt_note_acc_reload ();
+	      scratch = gen_rtx_MEM (GET_MODE (scratch), addr);
+	    }
+	  rtx pattern = gen_rtx_PARALLEL
+	    (VOIDmode, gen_rtvec (6, gen_rtx_SET (a, b),
+	      gen_rtx_CLOBBER (VOIDmode, scratch),
+	      gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 11)),
+	      gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 12)),
+	      gen_rtx_CLOBBER (VOIDmode, gen_rtx_REG (Pmode, 13)),
+	      gen_rtx_USE (VOIDmode, scale)));
+	  ASSERT_TRUE (acc_mode_supported_p (mode));
+	  ASSERT_EQ (test == 0 || test == 2 || test == 7 || test == 8 || test == 10,
+		     recog_memoized (emit_insn (pattern)) >= 0);
+	  reload_completed = saved_reload;
+	  riscv_ztt_profile_string = profile;
+	}
+  for (unsigned int test = 0; test != 18; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       rtx a = gen_rtx_REG (ZTTAR2mode, ACC_REG_FIRST);
@@ -16379,10 +16421,16 @@ run_md_reuse_selftests ()
 	case 10: RTVEC_ELT (parts, 1) = gen_rtx_USE (VOIDmode, scratch); break;
 	case 11: XEXP (RTVEC_ELT (parts, 2), 0) = gen_rtx_REG (QImode, 10); break;
 	case 12: RTVEC_ELT (parts, 5) = gen_rtx_CLOBBER (VOIDmode, addr); break;
+	case 13: case 14: case 15: case 16: case 17:
+	  XEXP (RTVEC_ELT (parts, 5), 0) = test == 16 ? const1_rtx : const0_rtx;
+	  if (test == 14) SET_SRC (RTVEC_ELT (parts, 0)) = mem;
+	  if (test == 15) SET_DEST (RTVEC_ELT (parts, 0)) = mem;
+	  if (test == 17) XEXP (RTVEC_ELT (parts, 1), 0) = mem;
+	  break;
 	}
       rtx pattern = gen_rtx_PARALLEL (VOIDmode, parts);
-      ASSERT_EQ (test < 3, md_acc_transfer_p (pattern));
-      if (test < 3)
+      ASSERT_EQ (test < 3 || test == 13, md_acc_transfer_p (pattern));
+      if (test < 3 || test == 13)
 	{
 	  local_md_state state;
 	  state.record_constant (addr, GEN_INT (32));

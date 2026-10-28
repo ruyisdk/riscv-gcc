@@ -7,6 +7,7 @@
 /* { dg-final { scan-rtl-dump-times "Drop dead private spill" 296 "ztt_md_reuse" { target rv64 } } } */
 /* { dg-final { scan-rtl-dump-times "Remove unused AME workspace" 19 "ztt_md_reuse" } } */
 /* { dg-final { scan-rtl-dump-times "Drop dead scalar private spill" 3 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump "Drop ACC copy scale" "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {\tsub\tsp,sp,} 5 } } */
 /* { dg-final { scan-assembler-times {\tmmulacc\.2d\t} 6 } } */
 /* { dg-final { scan-assembler-times {\tmmulaccneg\.2d\t} 2 } } */

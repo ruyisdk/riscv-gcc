@@ -727,6 +727,8 @@ Ordinary ACC register moves and spill transfers preserve Md and descriptor
 facts outside their explicit M/GPR clobbers in both scans. The transfer,
 actual Ad handling and full payload remain unchanged. Borrowed-bank moves
 retain the state boundary because their internal M writes are not clobbers.
+After allocation, ordinary ACC register copies drop their unused scale
+operand. Memory transfers and borrowed-bank moves retain the dependency.
 The scan also removes a singleton raw reload of the unchanged register
 from its most recent private spill.  Both accesses must be nonvolatile,
 nontrapping spill-slot MEMs with equal addresses and known full sizes

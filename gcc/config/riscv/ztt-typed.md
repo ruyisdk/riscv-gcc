@@ -1829,8 +1829,11 @@
    (clobber (match_scratch:P 3 "=&r,&r,&r"))
    (clobber (match_scratch:P 4 "=X,&r,&r"))
    (clobber (match_scratch:P 5 "<ztt_acc_stride_c>"))
-   (use (reg:P S11_REGNUM))]
-  "TARGET_ZTT && riscv_ztt::acc_mode_supported_p (<ZTT_A:MODE>mode)"
+   (use (match_operand:P 6 "reg_or_0_operand" "rJ,r,r"))]
+  "TARGET_ZTT && riscv_ztt::acc_mode_supported_p (<ZTT_A:MODE>mode)
+   && (operands[6] == const0_rtx
+       ? reload_completed && REG_P (operands[0]) && REG_P (operands[1])
+       : REGNO (operands[6]) == S11_REGNUM)"
 {
   return riscv_ztt::output_acc_move (operands);
 }
