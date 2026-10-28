@@ -362,6 +362,9 @@ retain their arithmetic.
 Integer multiplication by an exact same-datatype broadcast of one reuses
 the other complete value.  The bounded local proof retains the broadcast
 and copy witnesses; floating, mixed-type and negate-multiply calls remain.
+The same proof handles AND with a full all-one mask and unsigned min with
+the maximum value.  All-one broadcasts must fit XLEN; a wider Scalar is
+zero-extended and cannot supply the high mask bits.
 
 Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently
