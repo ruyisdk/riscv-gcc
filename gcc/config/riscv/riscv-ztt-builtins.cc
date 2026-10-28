@@ -2354,7 +2354,7 @@ m_utility_source_type (prototype_index prototype, type_index type)
   return matrix_type_index (t.descriptor, rows, columns);
 }
 
-/* M-only argument prefixes are shared with matmul signatures.  */
+/* Share immutable M argument tails across registration signatures.  */
 static tree
 registration_matrix_type (prototype_index key, type_index type)
 {
@@ -2431,11 +2431,14 @@ build_function_type (prototype_index prototype, type_index type)
       return build_function_type_list (ztt_m_type_node, const_element_ptr,
 				       size_type_node, NULL_TREE);
     case PROTO_VOID_PTR_STRIDE_M:
-      return build_function_type_list (void_type_node, element_ptr,
-				       size_type_node, ztt_m_type_node, NULL_TREE);
     case PROTO_VOID_PTR_M:
-      return build_function_type_list (void_type_node, element_ptr,
-				       ztt_m_type_node, NULL_TREE);
+      {
+	tree args = TYPE_ARG_TYPES (registration_matrix_type (PROTO_M_M, type));
+	if (prototype == PROTO_VOID_PTR_STRIDE_M)
+	  args = tree_cons (NULL_TREE, size_type_node, args);
+	return ::build_function_type
+	  (void_type_node, tree_cons (NULL_TREE, element_ptr, args));
+      }
     case PROTO_M_M_M:
     case PROTO_M_SHIFT_M:
     case PROTO_M_BINARY_M:
@@ -2468,21 +2471,28 @@ build_function_type (prototype_index prototype, type_index type)
       return build_function_type_list (ztt_m_type_node, ztt_m_type_node,
 				       NULL_TREE);
     case PROTO_M_CONCAT:
+      return ::build_function_type
+	(ztt_m_type_node, TYPE_ARG_TYPES (registration_matrix_type
+	  (PROTO_M_M_M, m_utility_source_type (prototype, type))));
     case PROTO_M_EXTRACT:
     case PROTO_M_EXTRACT_COLUMN:
       {
 	tree src = ztt_m_type_nodes[m_utility_source_type (prototype, type)];
 	return build_function_type_list
-	  (ztt_m_type_node, src,
-	   prototype == PROTO_M_CONCAT ? src : size_type_node, NULL_TREE);
+	  (ztt_m_type_node, src, size_type_node, NULL_TREE);
       }
     case PROTO_A_M:
     case PROTO_A_M_COLUMN:
-      return build_function_type_list
-	(ztt_m_type_node,
-	 acc_matrix_type (type, prototype == PROTO_A_M_COLUMN ? types[type].columns : 1,
-			 prototype == PROTO_A_M_COLUMN ? 1 : types[type].columns),
-	 NULL_TREE);
+      {
+	type_index src = matrix_type_index
+	  (types[type].descriptor,
+	   prototype == PROTO_A_M_COLUMN ? types[type].columns : 1,
+	   prototype == PROTO_A_M_COLUMN ? 1 : types[type].columns);
+	gcc_assert (src != TYPE_MAX);
+	return ::build_function_type
+	  (ztt_m_type_node,
+	   TYPE_ARG_TYPES (registration_matrix_type (PROTO_M_M, src)));
+      }
     case PROTO_M_A:
     case PROTO_M_A_COLUMN:
       return build_function_type_list

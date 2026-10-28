@@ -100,6 +100,8 @@ roots those tails until their function types retain them.
 Ordinary M-only binary and ternary signatures similarly prepend one
 parameter to the cached unary or binary argument list.
 Cache misses build those prefixes in arity order without recursive lookup.
+Store, concat and M-to-ACC signatures also share the cached M argument tails,
+retaining their pointer, stride, shape and return types.
 Matmul signatures reuse these M argument tails and prepend the old ACC;
 different input layouts share the right-hand M tail only.
 Explicit Scalar registration reuses the current operation/type name prefixes
