@@ -14041,6 +14041,19 @@ public:
     return true;
   }
 
+  unsigned int prepared_packets (rtx group, rtx descriptor,
+				 unsigned int step) const
+  {
+    gcc_assert (REG_P (group) && M_REG_P (REGNO (group)));
+    unsigned int count = m_nregs (GET_MODE (group));
+    gcc_assert (step && count && count % step == 0);
+    unsigned int prepared = 0;
+    for (unsigned int i = 0; i < count; i += step)
+      if (matches (REGNO (group) + i, matrix_mode (step), descriptor))
+	prepared |= 1U << (i / step);
+    return prepared;
+  }
+
   bool same_input_preparation_p (rtx *groups, rtx *descriptors,
 				 unsigned int steps, unsigned int i,
 				 unsigned int j) const
@@ -15138,6 +15151,7 @@ public:
     rtx_insn *point = nullptr;
     rtx_insn *definition = nullptr;
     unsigned int packet_step = 0;
+    unsigned int packet_mask = ~0U;
 
     explicit operator bool () const { return point != nullptr; }
 
@@ -15161,6 +15175,8 @@ public:
       gcc_assert (packet_step && nregs % packet_step == 0);
       for (unsigned int i = 0; i < nregs; i += packet_step)
 	{
+	  if (!(packet_mask & (1U << (i / packet_step))))
+	    continue;
 	  rtx packet = packet_step == nregs ? group
 	    : gen_rtx_REG (matrix_mode (packet_step), REGNO (group) + i);
 	  rtx_insn *setup = emit_insn_before
@@ -15171,10 +15187,10 @@ public:
     }
   };
 
-  /* Every member must be overwritten before the new Md can be observed.  */
+  /* Every changed packet must be overwritten before its Md can be observed.  */
   static reload_preparation
   reload_preparation_point (rtx_insn *use, rtx group, rtx descriptor,
-			    unsigned int step)
+			    unsigned int step, unsigned int prepared = 0)
   {
     if (flag_non_call_exceptions || !REG_P (group)
 	|| !M_REG_P (REGNO (group)) || !m_mode_p (GET_MODE (group))
@@ -15186,7 +15202,14 @@ public:
     if (!pow2p_hwi (step) || step > nregs
 	|| first % nregs || first + nregs > M_REG_NUM)
       return {};
+    unsigned int packets = (HOST_WIDE_INT_1U << (nregs / step)) - 1;
+    if ((prepared & ~packets) || prepared == packets)
+      return {};
     unsigned HOST_WIDE_INT seen = 0;
+    for (unsigned int i = 0; i < nregs; i += step)
+      if (prepared & (1U << (i / step)))
+	seen |= ((HOST_WIDE_INT_1U << step) - 1) << i;
+    unsigned HOST_WIDE_INT unchanged = seen;
     unsigned HOST_WIDE_INT full = (HOST_WIDE_INT_1U << nregs) - 1;
     unsigned int count = 0;
     rtx_insn *definition = nullptr;
@@ -15196,10 +15219,18 @@ public:
 	if (LABEL_P (p) || BARRIER_P (p)
 	    || (NOTE_P (p) && NOTE_KIND (p) == NOTE_INSN_BASIC_BLOCK))
 	  return {};
-	if (DEBUG_INSN_P (p)
-	    && (reg_overlap_mentioned_p (group, PATTERN (p))
-		|| (definition && reg_overlap_mentioned_p (descriptor, PATTERN (p)))))
-	  return {};
+	if (DEBUG_INSN_P (p))
+	  {
+	    if (definition && reg_overlap_mentioned_p (descriptor, PATTERN (p)))
+	      return {};
+	    /* Reloaded payloads are unchanged; earlier debug uses need old values.  */
+	    for (unsigned HOST_WIDE_INT mask = seen & ~unchanged;
+		 mask; mask &= mask - 1)
+	      if (reg_overlap_mentioned_p
+		  (gen_rtx_REG (matrix_mode (1), REGNO (group) + ctz_hwi (mask)),
+		   PATTERN (p)))
+		return {};
+	  }
 	if (!NONDEBUG_INSN_P (p))
 	  continue;
 	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
@@ -15235,7 +15266,7 @@ public:
 	    if (member < nregs)
 	      seen |= HOST_WIDE_INT_1U << member;
 	    if (seen == full)
-	      return { p, definition, step };
+	      return { p, definition, step, ~prepared };
 	    continue;
 	  }
 	if (private_scalar_transfer_p (p)
@@ -17102,12 +17133,15 @@ reuse_local_md ()
 		    rtx steps = XVECEXP (src, 0, prepared_p ? 3 : 4);
 		    group = XVECEXP (src, 0, 0);
 		    descriptor = XVECEXP (src, 0, 2);
-		    bool ready = !prepared_p && state.matches_packets
-		      (group, descriptor, datatype_step (UINTVAL (steps), 1));
+		    unsigned int step = datatype_step (UINTVAL (steps), 1);
+		    unsigned int packets = !prepared_p
+		      ? state.prepared_packets (group, descriptor, step) : 0;
+		    bool ready = !prepared_p && packets
+		      == (HOST_WIDE_INT_1U << (m_nregs (GET_MODE (group)) / step)) - 1;
 		    local_raw_spill::reload_preparation reload_before;
 		    if (!prepared_p && !ready)
 		      reload_before = local_raw_spill::reload_preparation_point
-			(insn, group, descriptor, datatype_step (UINTVAL (steps), 1));
+			(insn, group, descriptor, step, packets);
 		    if (!prepared_p && (ready || reload_before))
 		      {
 			bool convert = XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT
@@ -18530,6 +18564,115 @@ run_constant_base_selftests ()
 }
 
 static void
+run_partial_reload_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  const char *profile = riscv_ztt_profile_string;
+  riscv_ztt_profile_string = "gcc-runtime-u8-m32-a16";
+  int saved_reload = reload_completed, non_call = flag_non_call_exceptions;
+  reload_completed = 1;
+  flag_non_call_exceptions = 0;
+  for (unsigned int step : { 1U, 2U, 8U })
+    for (unsigned int prepared = 0; prepared != 16; ++prepared)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+	rtx group = gen_rtx_REG (matrix_mode (4 * step), M_REG_FIRST);
+	rtx descriptor = gen_rtx_REG (Pmode, 10), address = gen_rtx_REG (Pmode, 11);
+	rtx slot = gen_rtx_MEM (matrix_mode (1), address);
+	set_mem_attrs_for_spill (slot);
+	local_md_state state;
+	state.record_constant (descriptor, GEN_INT (8 * step));
+	rtx_insn *first = nullptr;
+	for (unsigned int i = 0; i != 4; ++i)
+	  if (prepared & (1U << i))
+	    state.remember (gen_rtx_REG (matrix_mode (step), M_REG_FIRST + i * step),
+			    descriptor);
+	  else
+	    for (unsigned int j = 0; j != step; ++j)
+	      {
+		rtx reg = gen_rtx_REG (matrix_mode (1), M_REG_FIRST + i * step + j);
+		rtx_insn *load = emit_insn (gen_rtx_SET (reg, slot));
+		if (!first)
+		  first = load;
+	      }
+	ASSERT_EQ (state.prepared_packets (group, descriptor, step), prepared);
+	rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+	auto plan = local_raw_spill::reload_preparation_point
+	  (use, group, descriptor, step, prepared);
+	ASSERT_EQ (plan.point, first);
+	if (plan)
+	  {
+	    ASSERT_EQ (plan.packet_step, step);
+	    ASSERT_EQ (plan.packet_mask & 15U, prepared ^ 15U);
+	  }
+      }
+  for (unsigned int test = 0; test != 8; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx group = gen_rtx_REG (matrix_mode (4), M_REG_FIRST);
+      rtx d = gen_rtx_REG (Pmode, 10), a = gen_rtx_REG (Pmode, 11);
+      rtx slot = gen_rtx_MEM (matrix_mode (1), a);
+      set_mem_attrs_for_spill (slot);
+      if (test == 1) MEM_NOTRAP_P (slot) = 0;
+      if (test == 2) set_mem_expr (slot, NULL_TREE);
+      if (test != 0)
+	emit_insn (gen_rtx_SET (gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 2), slot));
+      emit_insn (gen_rtx_SET (gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 3), slot));
+      if (test == 3)
+	emit_insn (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      if (test == 4)
+	emit_call_insn (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, a), const0_rtx));
+      if (test == 5)
+	emit_label (gen_label_rtx ());
+      flag_non_call_exceptions = test == 6;
+      rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+      ASSERT_FALSE (bool (local_raw_spill::reload_preparation_point
+	(use, group, d, 1, test == 7 ? 19 : 3)));
+    }
+  flag_non_call_exceptions = 0;
+  for (unsigned int prepared : { 0U, 3U })
+    for (unsigned int test = 0; test != 5; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+	rtx group = gen_rtx_REG (matrix_mode (4), M_REG_FIRST);
+	rtx d = gen_rtx_REG (Pmode, 10), a = gen_rtx_REG (Pmode, 11);
+	rtx slot = gen_rtx_MEM (matrix_mode (1), a);
+	set_mem_attrs_for_spill (slot);
+	auto debug = [&] (rtx value) {
+	  emit_debug_insn (gen_rtx_VAR_LOCATION
+	    (GET_MODE (value), get_spill_slot_decl (false), value,
+	     VAR_INIT_STATUS_INITIALIZED));
+	};
+	rtx_insn *first = nullptr;
+	for (unsigned int i = 0; i != 4; ++i)
+	  {
+	    if (!(prepared & (1U << i)))
+	      {
+		rtx member = gen_rtx_REG (matrix_mode (1), M_REG_FIRST + i);
+		rtx_insn *load = emit_insn (gen_rtx_SET (member, slot));
+		if (!first)
+		  first = load;
+	      }
+	    if (i == 2 && test != 4)
+	      debug (test == 2 ? group
+		     : gen_rtx_REG (matrix_mode (1), M_REG_FIRST
+				    + (test == 0 ? 2 : test == 1 ? 3 : 0)));
+	  }
+	if (test == 4)
+	  debug (group);
+	rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+	auto plan = local_raw_spill::reload_preparation_point
+	  (use, group, d, 1, prepared);
+	ASSERT_EQ (plan.point, test == 1 || test == 2 ? nullptr : first);
+      }
+  reload_completed = saved_reload;
+  flag_non_call_exceptions = non_call;
+  riscv_ztt_profile_string = profile;
+}
+
+static void
 run_reload_copy_selftests ()
 {
   using namespace selftest;
@@ -18619,6 +18762,7 @@ run_md_reuse_selftests ()
 {
   using namespace selftest;
   run_call_constant_selftests ();
+  run_partial_reload_selftests ();
   run_reload_copy_selftests ();
   run_constant_base_selftests ();
   run_scalar_zero_path_selftests ();
@@ -21396,7 +21540,7 @@ run_md_reuse_selftests ()
       auto plan = local_raw_spill::reload_preparation_point
 	(use, group, descriptor, step);
       rtx_insn *point = plan.point;
-      bool expected = TARGET_ZTT && (test <= 3 || test == 11 || test == 22
+      bool expected = TARGET_ZTT && (test <= 3 || test == 11 || test == 21 || test == 22
 				     || test == 24 || test == 31 || test == 32
 				     || test == 33 || test == 37 || test == 38
 				     || test == 39 || test == 48);
