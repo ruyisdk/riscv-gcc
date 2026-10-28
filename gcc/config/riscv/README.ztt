@@ -396,6 +396,9 @@ still require zero low control bits, and gathers retain the index store.
 Same-axis gathers also reuse row/column broadcast results.  The original
 broadcast keeps its dynamic control, argument side effects and range check;
 integer and floating element bits pass through unchanged.
+An adjacent pair of same-type orthogonal broadcasts is uniform on both
+axes.  Gathers and index-zero broadcasts reuse that result when both
+producers satisfy the same local proof.  Both original range checks remain.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.
 Integer scatter-add with an exact zero contribution likewise reuses its old

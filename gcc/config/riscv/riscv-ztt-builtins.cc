@@ -8476,7 +8476,8 @@ uniform_structure_producer_p (gimple *producer, type_index type)
 
 static bool
 axis_invariant_structure_producer_p (gimple *producer, type_index type,
-				    expansion_index expansion)
+				    expansion_index expansion,
+				    gimple **producers, unsigned int &count)
 {
   if (uniform_structure_producer_p (producer, type))
     return true;
@@ -8488,19 +8489,45 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
   const auto d = builtin_description_for (code);
   if (d.type != type)
     return false;
+  expansion_index axis, other;
   switch (expansion)
     {
     case EXPAND_MROWBCAST_EW_X:
     case EXPAND_MROWGATHER_EW:
-      return d.expansion == EXPAND_MCOLID_EW
-	|| d.expansion == EXPAND_MROWBCAST_EW_X;
+      if (d.expansion == EXPAND_MCOLID_EW)
+	return true;
+      axis = EXPAND_MROWBCAST_EW_X;
+      other = EXPAND_MCOLBCAST_EW_X;
+      break;
     case EXPAND_MCOLBCAST_EW_X:
     case EXPAND_MCOLGATHER_EW:
-      return d.expansion == EXPAND_MROWID_EW
-	|| d.expansion == EXPAND_MCOLBCAST_EW_X;
+      if (d.expansion == EXPAND_MROWID_EW)
+	return true;
+      axis = EXPAND_MCOLBCAST_EW_X;
+      other = EXPAND_MROWBCAST_EW_X;
+      break;
     default:
       return false;
     }
+  if (d.expansion == axis)
+    return true;
+  if (d.expansion != other)
+    return false;
+  /* Orthogonal broadcasts select one element for every result position.  */
+  tree value = gimple_call_arg (producer, 0);
+  if (TREE_CODE (value) != SSA_NAME
+      || type_for_tree (TREE_TYPE (value)) != type)
+    return false;
+  gimple *inner = SSA_NAME_DEF_STMT (value);
+  code = structure_builtin_code (inner);
+  if (code >= ZTT_BUILTIN_MAX)
+    return false;
+  const auto source = builtin_description_for (code);
+  if (source.type != type || source.prototype != d.prototype
+      || source.expansion != axis)
+    return false;
+  producers[count++] = inner;
+  return true;
 }
 
 /* Retain the common producer as a local ownership witness.  */
@@ -8859,7 +8886,8 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
 	    && (scatter
 		? uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type)
 		: axis_invariant_structure_producer_p
-		    (SSA_NAME_DEF_STMT (value), d.type, d.expansion));
+		    (SSA_NAME_DEF_STMT (value), d.type, d.expansion,
+		     producers, count));
 	  if (reusable)
 	    {
 	      producers[count++] = SSA_NAME_DEF_STMT (value);
@@ -8952,7 +8980,7 @@ repeated_broadcast_value (const builtin_description &d,
       || type_for_tree (TREE_TYPE (value)) != d.type)
     return NULL_TREE;
   tree result = value;
-  gimple *producers[5];
+  gimple *producers[6];
   unsigned int count = 0;
   if (!strip_structure_copies (value, d.type, producers, count, true))
     return NULL_TREE;
@@ -8960,7 +8988,8 @@ repeated_broadcast_value (const builtin_description &d,
   tree control = gimple_call_arg (stmt, 1);
   if (TREE_CODE (control) == INTEGER_CST
       && wi::extract_uhwi (wi::to_wide (control), 0, 32) == 0
-      && axis_invariant_structure_producer_p (producer, d.type, d.expansion))
+      && axis_invariant_structure_producer_p (producer, d.type, d.expansion,
+					     producers, count))
     {
       producers[count++] = producer;
       return local_structure_producers_p (gsi, producers, count)
