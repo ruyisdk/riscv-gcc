@@ -375,6 +375,9 @@ proof retains the first operation and its status effects, including floating
 NaN canonicalization and NV.  Floating carrier views preserve exact datatype
 and rounding-mode identity.  Different axes, datatype conversions and state
 boundaries do not match.
+Same-axis min/max reductions and prefix-max also reuse a preceding sum or
+extremum reduction.  Its replicated result is retained independently in
+each logical square; the first reduction and its status effects remain.
 
 Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently

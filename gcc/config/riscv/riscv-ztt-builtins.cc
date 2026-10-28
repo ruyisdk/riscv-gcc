@@ -8579,14 +8579,20 @@ reduced_axis_producer_p (gimple *producer, type_index type,
     case EXPAND_MREDUCEMAX_COL:
     case EXPAND_MREDUCEMIN_COL:
       if (expansion != EXPAND_MROWBCAST_EW_X
-	  && expansion != EXPAND_MROWGATHER_EW)
+	  && expansion != EXPAND_MROWGATHER_EW
+	  && expansion != EXPAND_MPREFIXMAX_COL
+	  && expansion != EXPAND_MREDUCEMAX_COL
+	  && expansion != EXPAND_MREDUCEMIN_COL)
 	return false;
       break;
     case EXPAND_MREDUCEADD_ROW:
     case EXPAND_MREDUCEMAX_ROW:
     case EXPAND_MREDUCEMIN_ROW:
       if (expansion != EXPAND_MCOLBCAST_EW_X
-	  && expansion != EXPAND_MCOLGATHER_EW)
+	  && expansion != EXPAND_MCOLGATHER_EW
+	  && expansion != EXPAND_MPREFIXMAX_ROW
+	  && expansion != EXPAND_MREDUCEMAX_ROW
+	  && expansion != EXPAND_MREDUCEMIN_ROW)
 	return false;
       break;
     default:
@@ -8958,8 +8964,9 @@ repeated_unary_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
     return NULL_TREE;
   gimple *producers[7];
   unsigned int count = 0;
-  if (!floating || structure_builtin_code (SSA_NAME_DEF_STMT (value), nargs)
-		   != code)
+  if (!floating
+      || !floating_unary_code_p
+	    (structure_builtin_code (SSA_NAME_DEF_STMT (value), nargs)))
     {
       if (!strip_structure_view (value, d.type, producers, count)
 	  || !strip_structure_copies (value, d.type, producers, count,
@@ -8969,6 +8976,12 @@ repeated_unary_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 	return NULL_TREE;
     }
   gimple *producer = SSA_NAME_DEF_STMT (value);
+  if (reduced_axis_producer_p (producer, d.type, d.expansion, producers, count))
+    {
+      producers[count++] = producer;
+      return local_structure_producers_p (gsi, producers, count)
+	? result : NULL_TREE;
+    }
   unsigned int source_code = structure_builtin_code (producer, nargs);
   if (floating)
     {
