@@ -1011,11 +1011,11 @@ Proven debug slot locations are adjusted to their new fixed FP offsets,
 including slots in compound expressions.  The complete expression must
 contain no other affected stack references before any slot is relocated.
 Unknown stack locations or equivalence notes retain the allocation.
-Scalar parameter loads at fixed nonnegative CFA offsets do not use this
-workspace and remain in place, including sign/zero-extended loads and their
+Scalar parameter accesses at fixed nonnegative CFA offsets do not use this
+workspace and remain in place, including GPR/zero stores, extended loads and their
 debug locations.  Compound debug expressions can also keep these parameter
 loads if they contain no other stack or frame references.  Other frame
-references, writes and escaping addresses retain the allocation.
+references, local-object writes and escaping addresses retain the allocation.
 Frame-size recognition follows same-block full-width definitions for
 bounded additions, shifts and positive constant products.
 Cross-block cleanup requires matching allocation state at joins and balanced

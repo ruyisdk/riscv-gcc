@@ -9614,6 +9614,25 @@ riscv_ztt_incoming_arg_load_p (rtx pat)
   return false;
 }
 
+/* Parameter home stores keep their fixed CFA address and original value.  */
+static bool
+riscv_ztt_incoming_arg_access_p (rtx pat)
+{
+  if (riscv_ztt_incoming_arg_load_p (pat))
+    return true;
+  if (GET_CODE (pat) != SET || !MEM_P (SET_DEST (pat)))
+    return false;
+  rtx dest = SET_DEST (pat), src = SET_SRC (pat);
+  return SCALAR_INT_MODE_P (GET_MODE (dest))
+    && known_le (GET_MODE_SIZE (GET_MODE (dest)), UNITS_PER_WORD)
+    && MEM_ADDR_SPACE (dest) == ADDR_SPACE_GENERIC
+    && riscv_ztt_incoming_arg_p (dest, hard_frame_pointer_rtx)
+    && (src == const0_rtx
+	|| (REG_P (src) && GP_REG_P (REGNO (src))
+	    && !reg_overlap_mentioned_p (stack_pointer_rtx, src)
+	    && !reg_overlap_mentioned_p (hard_frame_pointer_rtx, src)));
+}
+
 static bool
 riscv_ztt_workspace_notes_p (rtx notes)
 {
@@ -9842,6 +9861,45 @@ riscv_ztt_workspace_single_selftests ()
 		(gen_rtx_SET (hard_frame_pointer_rtx, SET_SRC (incoming))));
   ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
 		(gen_rtx_SET (SET_SRC (incoming), a)));
+  for (unsigned int test = 0; test != 19; ++test)
+    {
+      rtx mem = copy_rtx (SET_SRC (incoming)), value = a;
+      XEXP (mem, 0) = plus_constant (Pmode, hard_frame_pointer_rtx, 16);
+      switch (test)
+	{
+	case 1: XEXP (mem, 0) = hard_frame_pointer_rtx; break;
+	case 2: value = const0_rtx; break;
+	case 3: MEM_VOLATILE_P (mem) = 1; break;
+	case 4:
+	  mem = gen_rtx_MEM (QImode, XEXP (mem, 0));
+	  set_mem_expr (mem, parm);
+	  value = gen_rtx_REG (QImode, REGNO (a));
+	  break;
+	case 5: XEXP (mem, 0) = plus_constant (Pmode, hard_frame_pointer_rtx, -1); break;
+	case 6: XEXP (mem, 0) = stack_pointer_rtx; break;
+	case 7: XEXP (mem, 0) = arg_pointer_rtx; break;
+	case 8:
+	  set_mem_expr (mem, build_decl
+	    (UNKNOWN_LOCATION, VAR_DECL, NULL_TREE, integer_type_node));
+	  break;
+	case 9: set_mem_expr (mem, NULL_TREE); break;
+	case 10: XEXP (mem, 0) = gen_rtx_PLUS (Pmode, hard_frame_pointer_rtx, b); break;
+	case 11: value = stack_pointer_rtx; break;
+	case 12: value = hard_frame_pointer_rtx; break;
+	case 13: value = frame_pointer_rtx; break;
+	case 14: value = gen_rtx_REG (Pmode, FP_REG_FIRST); break;
+	case 15:
+	  mem = gen_rtx_MEM (TImode, XEXP (mem, 0));
+	  set_mem_expr (mem, parm);
+	  break;
+	case 16: set_mem_addr_space (mem, 1); break;
+	case 17: value = copy_rtx (mem); break;
+	case 18: value = GEN_INT (42); break;
+	}
+      rtx store = gen_rtx_SET (mem, value), saved = copy_rtx (store);
+      ASSERT_EQ (riscv_ztt_incoming_arg_access_p (store), test < 5);
+      ASSERT_RTX_EQ (store, saved);
+    }
   ASSERT_FALSE (riscv_ztt_incoming_arg_load_p
 		(gen_rtx_SET (a, hard_frame_pointer_rtx)));
   rtx narrow = gen_rtx_MEM (QImode, hard_frame_pointer_rtx);
@@ -10004,7 +10062,7 @@ riscv_ztt_workspace_paths_p (rtx_insn *allocate,
 		    }
 		  if (current != allocated)
 		    continue;
-		  if (riscv_ztt_incoming_arg_load_p (pat)
+		  if (riscv_ztt_incoming_arg_access_p (pat)
 		      || (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
 			  && XINT (SET_SRC (pat), 1) == UNSPEC_TIE))
 		    continue;
@@ -10119,7 +10177,11 @@ riscv_ztt_workspace_paths_selftests (basic_block bb)
   rtx compound = copy_rtx (location);
   PAT_VAR_LOCATION_LOC (compound)
     = gen_rtx_PLUS (Pmode, PAT_VAR_LOCATION_LOC (compound), a);
-  for (unsigned int test = 0; test != 10; ++test)
+  tree parm = build_decl (UNKNOWN_LOCATION, PARM_DECL, NULL_TREE, long_integer_type_node);
+  rtx home = gen_rtx_MEM (Pmode, plus_constant (Pmode, hard_frame_pointer_rtx, 16));
+  set_mem_expr (home, parm);
+  rtx write_home = gen_rtx_SET (home, a);
+  for (unsigned int test = 0; test != 13; ++test)
     {
       start_sequence ();
       auto append = [bb] (rtx pat) {
@@ -10131,6 +10193,7 @@ riscv_ztt_workspace_paths_selftests (basic_block bb)
       if (test == 1) append (gen_rtx_SET (a, slot));
       if (test == 4) append (copy_rtx (location));
       if (test == 7) append (copy_rtx (compound));
+      if (test == 11) append (copy_rtx (write_home));
       rtx_insn *allocate = append (gen_rtx_SET
 	(sp, gen_rtx_MINUS (Pmode, sp, a)));
       append (gen_rtx_SET (slot, a));
@@ -10138,17 +10201,19 @@ riscv_ztt_workspace_paths_selftests (basic_block bb)
       if (test == 3) append (gen_rtx_SET (a, sp));
       if (test == 5) append (copy_rtx (location));
       if (test == 8) append (copy_rtx (compound));
+      if (test == 10) append (copy_rtx (write_home));
       rtx_insn *release = append (gen_rtx_SET
 	(sp, gen_rtx_PLUS (Pmode, sp, a)));
       if (test == 2) append (gen_rtx_SET (a, slot));
       if (test == 6) append (copy_rtx (location));
       if (test == 9) append (copy_rtx (compound));
+      if (test == 12) append (copy_rtx (write_home));
       BB_HEAD (bb) = get_insns ();
       BB_END (bb) = get_last_insn ();
       auto_vec<rtx_insn *, 1> releases;
       releases.quick_push (release);
       ASSERT_EQ (riscv_ztt_workspace_paths_p (allocate, releases, 64, 208, 16),
-		 test == 0 || test == 5 || test == 8);
+		 test == 0 || test == 5 || test == 8 || test >= 10);
       BB_HEAD (bb) = head;
       BB_END (bb) = end;
       end_sequence ();
@@ -10311,7 +10376,7 @@ riscv_ztt_remove_unused_workspace ()
 	  || GET_CODE (pat) == ASM_INPUT)
 	return false;
       if (!prologue_epilogue_contains (insn)
-	  && !riscv_ztt_incoming_arg_load_p (pat)
+	  && !riscv_ztt_incoming_arg_access_p (pat)
 	  && !spill
 	  && (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
 	      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat)
@@ -10363,7 +10428,7 @@ riscv_ztt_remove_unused_workspace ()
 	if (INSN_P (insn))
 	  {
 	    rtx pat = PATTERN (insn);
-	    if (riscv_ztt_incoming_arg_load_p (pat)
+	    if (riscv_ztt_incoming_arg_access_p (pat)
 		|| (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
 		    && XINT (SET_SRC (pat), 1) == UNSPEC_TIE))
 	      continue;
