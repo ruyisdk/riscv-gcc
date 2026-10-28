@@ -12670,6 +12670,8 @@ live_old_copy_sites (bitmap sites)
 	       || (GET_CODE (src) == UNSPEC_VOLATILE
 		   && XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS))
 	      && REG_P (SET_DEST (set))
+	      /* A read/write destination replaces the old value without REG_DEAD.  */
+	      && !rtx_equal_p (SET_DEST (set), XVECEXP (src, 0, 5))
 	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	    bitmap_set_bit (sites, INSN_UID (insn));
 	}

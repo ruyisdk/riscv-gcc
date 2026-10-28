@@ -1071,3 +1071,5 @@ the copied old value as its tied destination when available; otherwise
 identical wide inputs retain their shared reload path.
 The old value and dying matrix inputs count toward simultaneous bank
 capacity as well, with equal inputs counted once.
+An old destination already identical to the complete result register needs
+no separate copy, even when the read/write update has no REG_DEAD note.
