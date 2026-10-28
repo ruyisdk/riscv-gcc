@@ -8537,12 +8537,73 @@ structure_integer_constant (tree value, type_index type, gimple **producers,
   return arg;
 }
 
+/* A reduction broadcasts its result along the reduced axis.  Keep the fold
+   and its conversions, rounding and status effects as the producer.  */
+static bool
+reduced_axis_producer_p (gimple *producer, type_index type,
+			expansion_index expansion, gimple **producers,
+			unsigned int &count)
+{
+  gimple *call = producer;
+  if (is_gimple_assign (call)
+      && gimple_assign_rhs_code (call) == VIEW_CONVERT_EXPR
+      && !gimple_vuse (call) && !gimple_has_side_effects (call))
+    {
+      tree value = TREE_OPERAND (gimple_assign_rhs1 (call), 0);
+      if (TREE_CODE (value) != SSA_NAME
+	  || type_for_tree (TREE_TYPE (gimple_assign_lhs (call))) != type
+	  || TYPE_MODE (TREE_TYPE (value)) != type_mode (type))
+	return false;
+      call = SSA_NAME_DEF_STMT (value);
+    }
+  builtin_description d;
+  conversion_description operation;
+  unsigned int code = structure_builtin_code (call, 1);
+  if (decode_conversion_builtin (code, operation))
+    d = builtin_description_for (operation.canonical);
+  else
+    {
+      code = structure_builtin_code (call, 3);
+      if (!floating_unary_code_p (code))
+	return false;
+      tree args[] = { gimple_call_arg (call, 0), gimple_call_arg (call, 1),
+		      gimple_call_arg (call, 2) };
+      if (!describe_floating_unary (code, 3, args, d, operation))
+	return false;
+    }
+  if (d.type != type)
+    return false;
+  switch (d.expansion)
+    {
+    case EXPAND_MREDUCEADD_COL:
+    case EXPAND_MREDUCEMAX_COL:
+    case EXPAND_MREDUCEMIN_COL:
+      if (expansion != EXPAND_MROWBCAST_EW_X
+	  && expansion != EXPAND_MROWGATHER_EW)
+	return false;
+      break;
+    case EXPAND_MREDUCEADD_ROW:
+    case EXPAND_MREDUCEMAX_ROW:
+    case EXPAND_MREDUCEMIN_ROW:
+      if (expansion != EXPAND_MCOLBCAST_EW_X
+	  && expansion != EXPAND_MCOLGATHER_EW)
+	return false;
+      break;
+    default:
+      return false;
+    }
+  if (call != producer)
+    producers[count++] = call;
+  return true;
+}
+
 static bool
 axis_invariant_structure_producer_p (gimple *producer, type_index type,
 				    expansion_index expansion,
 				    gimple **producers, unsigned int &count)
 {
-  if (uniform_structure_producer_p (producer, type))
+  if (uniform_structure_producer_p (producer, type)
+      || reduced_axis_producer_p (producer, type, expansion, producers, count))
     return true;
   unsigned int code = structure_builtin_code (producer, 0);
   if (code >= ZTT_BUILTIN_MAX)
@@ -9042,14 +9103,18 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
       if (!reusable && !scatter_add)
 	{
 	  count = 0;
-	  reusable = strip_structure_view (value, d.type, producers, count)
-	    && strip_structure_copies (value, d.type, producers, count,
-				       true, scatter)
-	    && (scatter
-		? uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type)
-		: axis_invariant_structure_producer_p
-		    (SSA_NAME_DEF_STMT (value), d.type, d.expansion,
-		     producers, count));
+	  reusable = !scatter && carrier
+	    && reduced_axis_producer_p (SSA_NAME_DEF_STMT (value), d.type,
+					d.expansion, producers, count);
+	  if (!reusable)
+	    reusable = strip_structure_view (value, d.type, producers, count)
+	      && strip_structure_copies (value, d.type, producers, count,
+					 true, scatter)
+	      && (scatter
+		  ? uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type)
+		  : axis_invariant_structure_producer_p
+		      (SSA_NAME_DEF_STMT (value), d.type, d.expansion,
+		       producers, count));
 	  if (reusable)
 	    {
 	      producers[count++] = SSA_NAME_DEF_STMT (value);

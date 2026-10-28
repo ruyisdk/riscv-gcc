@@ -416,6 +416,10 @@ integer and floating element bits pass through unchanged.
 An adjacent pair of same-type orthogonal broadcasts is uniform on both
 axes.  Gathers and index-zero broadcasts reuse that result when both
 producers satisfy the same local proof.  Both original range checks remain.
+Column reductions are invariant under row selection, and row reductions under
+column selection.  Gathers and index-zero broadcasts reuse their complete
+results while retaining the reduction, conversions and status effects.
+Floating carrier calls are checked against their exact destination metadata.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.
 Integer scatter-add with an exact zero contribution likewise reuses its old
