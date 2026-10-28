@@ -378,6 +378,10 @@ boundaries do not match.
 Same-axis min/max reductions and prefix-max also reuse a preceding sum or
 extremum reduction.  Its replicated result is retained independently in
 each logical square; the first reduction and its status effects remain.
+Extrema also reuse uniform integer broadcasts.  Typed zero constructors
+are fixed points of abs and extrema for integer and floating types; dynamic
+floating broadcasts retain their NaN processing.  Constructors and argument
+side effects remain in the local proof.
 
 Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently

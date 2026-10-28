@@ -8970,9 +8970,19 @@ repeated_unary_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
     {
       if (!strip_structure_view (value, d.type, producers, count)
 	  || !strip_structure_copies (value, d.type, producers, count,
-				      false, true)
-	  || (floating && !strip_structure_view (value, carrier, producers,
-						count)))
+				      false, true))
+	return NULL_TREE;
+      gimple *constructor = SSA_NAME_DEF_STMT (value);
+      if (uniform_structure_producer_p (constructor, d.type)
+	  && (gimple_call_num_args (constructor) == 0
+	      || (!floating && d.expansion != EXPAND_MABS_EW)))
+	{
+	  producers[count++] = constructor;
+	  return local_structure_producers_p (gsi, producers, count)
+	    ? result : NULL_TREE;
+	}
+      if (floating
+	  && !strip_structure_view (value, carrier, producers, count))
 	return NULL_TREE;
     }
   gimple *producer = SSA_NAME_DEF_STMT (value);
