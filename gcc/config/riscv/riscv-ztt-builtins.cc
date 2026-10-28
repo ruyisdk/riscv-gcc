@@ -3786,6 +3786,7 @@ static void run_acc_shared_source_selftests ();
 static void run_md_reuse_selftests ();
 static void run_lto_registration_selftests ();
 static void run_default_alias_selftests ();
+static void run_nominal_registration_selftests ();
 
 static type_index
 linear_matrix_type (unsigned int descriptor, unsigned int rows,
@@ -4407,6 +4408,7 @@ run_wide_signature_selftests ()
   run_scalar_full_name_selftests ();
   run_default_alias_selftests ();
   run_scalar_registration_group_selftests ();
+  run_nominal_registration_selftests ();
   run_lto_registration_selftests ();
   run_acc_shared_source_selftests ();
   run_md_reuse_selftests ();
@@ -6839,6 +6841,51 @@ nominal_result_p (unsigned int op, type_index dst)
 }
 
 static void
+collect_nominal_registration_types (vec<type_index> &candidates)
+{
+  for (unsigned int i = 0; i < TYPE_MAX; ++i)
+    if (!types[i].accumulator && ztt_m_type_nodes[i])
+      candidates.safe_push (static_cast<type_index> (i));
+}
+
+#if CHECKING_P
+static void
+run_nominal_registration_selftests ()
+{
+  using namespace selftest;
+  tree saved_types[TYPE_MAX];
+  memcpy (saved_types, ztt_m_type_nodes, sizeof (saved_types));
+  for (const auto &profile : profiles)
+    {
+      for (unsigned int i = 0; i < TYPE_MAX; ++i)
+	ztt_m_type_nodes[i]
+	  = type_nregs_for_profile (static_cast<type_index> (i), profile)
+	    ? integer_zero_node : NULL_TREE;
+      auto_vec<type_index> candidates;
+      collect_nominal_registration_types (candidates);
+      for (unsigned int op = 0; op <= floating_scalar_operations; ++op)
+	{
+	  unsigned int next = 0;
+	  for (unsigned int i = 0; i < TYPE_MAX; ++i)
+	    {
+	      type_index type = static_cast<type_index> (i);
+	      bool present = next < candidates.length ()
+		&& candidates[next] == type;
+	      ASSERT_EQ (present, !types[i].accumulator
+			 && ztt_m_type_nodes[i] != NULL_TREE);
+	      if (present)
+		++next;
+	      else
+		ASSERT_FALSE (nominal_result_p (op, type));
+	    }
+	  ASSERT_EQ (next, candidates.length ());
+	}
+    }
+  memcpy (ztt_m_type_nodes, saved_types, sizeof (saved_types));
+}
+#endif
+
+static void
 register_nominal_scalars ()
 {
   for (unsigned int n = 0; n < numeric_scalar_dtype_count; ++n)
@@ -6867,10 +6914,14 @@ register_nominal_scalars ()
      constructors.  Do not expand its matrix-operation availability.  */
   if (!runtime_profile_p ())
     return;
-  for (unsigned int n = 0; n < 2 * TYPE_MAX; ++n)
-    nominal_builtin_decl (nominal_operation_base + n, true);
-  for (unsigned int n = 0; n < nominal_extended_count; ++n)
-    nominal_builtin_decl (nominal_extended_base + n, true);
+  auto_vec<type_index> candidates;
+  collect_nominal_registration_types (candidates);
+  for (unsigned int n = 0; n < 2 * TYPE_MAX; n += TYPE_MAX)
+    for (type_index type : candidates)
+      nominal_builtin_decl (nominal_operation_base + n + type, true);
+  for (unsigned int n = 0; n < nominal_extended_count; n += TYPE_MAX)
+    for (type_index type : candidates)
+      nominal_builtin_decl (nominal_extended_base + n + type, true);
 }
 
 static tree
