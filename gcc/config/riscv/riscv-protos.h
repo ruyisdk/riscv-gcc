@@ -990,6 +990,8 @@ const char *output_structural_state (rtx *, bool = false);
 unsigned int conversion_length (rtx *, bool = false);
 const char *output_rowcol_state (rtx *, bool = false);
 unsigned int rowcol_length (rtx *, bool = false);
+const char *output_copy_state (rtx *, bool = false);
+unsigned int copy_state_length (rtx *, bool = false);
 void init_builtins ();
 void handle_pragma_ztt ();
 tree builtin_decl (unsigned int, bool);

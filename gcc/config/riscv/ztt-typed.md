@@ -1414,6 +1414,38 @@
    (set (attr "length")
         (symbol_ref "riscv_ztt::conversion_length (operands, true)"))])
 
+;; Copy a complete basic Square with a known datatype.
+(define_insn "@ztt_state_copy_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=&Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "Wmr")
+           (match_operand:P 2 "register_operand" "r")
+           (match_operand:P 4 "reg_or_0_operand" "rJ")]
+          UNSPECV_ZTT_STATE_COPY))
+   (clobber (match_operand:ZTT_M 3 "memory_operand" "=A"))
+   (clobber (match_scratch:P 5 "=&r"))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p ()"
+{
+  return riscv_ztt::output_copy_state (operands);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::copy_state_length (operands)"))])
+
+(define_insn "@ztt_state_copy_prepared_<ZTT_M:mode>_<P:mode>"
+  [(set (match_operand:ZTT_M 0 "register_operand" "=&Wmr")
+        (unspec_volatile:ZTT_M
+          [(match_operand:ZTT_M 1 "register_operand" "Wmr")
+           (match_operand:P 2 "reg_or_0_operand" "rJ")]
+          UNSPECV_ZTT_STATE_COPY))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p () && reload_completed"
+{
+  return riscv_ztt::output_copy_state (operands, true);
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "riscv_ztt::copy_state_length (operands, true)"))])
+
 ;; Broadcast selectors may
 ;; trap even if the result is unused.  The late pass adds source preservation.
 (define_insn "@ztt_typed_rowcol_<ZTT_M:mode>"

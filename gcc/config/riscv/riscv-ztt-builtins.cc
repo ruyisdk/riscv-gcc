@@ -11339,8 +11339,8 @@ rowcol_dest_setup_p (rtx *operands)
 
 /* One owned basic Square,
    including wide M groups.  Preserve the source across destructive Md setup.  */
-const char *
-output_rowcol_state (rtx *operands, bool prepared)
+static void
+prepare_rowcol_state (rtx *operands, bool prepared)
 {
   if (!prepared)
     {
@@ -11361,6 +11361,12 @@ output_rowcol_state (rtx *operands, bool prepared)
     }
   if (rowcol_dest_setup_p (operands))
     output_asm_insn ("msettyp\t%0,%3", operands);
+}
+
+const char *
+output_rowcol_state (rtx *operands, bool prepared)
+{
+  prepare_rowcol_state (operands, prepared);
   static const char * const mnemonics[] = {
     "mcolbcast.ew.x\t%0,%z2,%1", "mrowbcast.ew.x\t%0,%z2,%1",
     "mcolshift.ew.x\t%0,%z2,%1", "mrowshift.ew.x\t%0,%z2,%1"
@@ -11377,6 +11383,25 @@ rowcol_length (rtx *operands, bool prepared)
   unsigned int nregs = m_nregs (GET_MODE (operands[0]));
   return 4 * (1 + rowcol_dest_setup_p (operands)
 	      + (prepared ? 0 : (nregs == 1 ? 3 : 4 * nregs + 1)));
+}
+
+const char *
+output_copy_state (rtx *operands, bool prepared)
+{
+  rtx args[] = { operands[0], operands[1], const0_rtx, operands[2],
+		prepared ? NULL_RTX : operands[3],
+		prepared ? NULL_RTX : operands[4], const0_rtx,
+		prepared ? NULL_RTX : operands[5] };
+  prepare_rowcol_state (args, prepared);
+  output_asm_insn ("mmov.m.m\t%0,%1", operands);
+  return "";
+}
+
+unsigned int
+copy_state_length (rtx *operands, bool prepared)
+{
+  rtx args[] = { operands[0], operands[1], const0_rtx, operands[2] };
+  return rowcol_length (args, prepared);
 }
 
 /* The enclosing mode owns
@@ -11878,6 +11903,62 @@ acc_mmul_length (rtx *operands, bool mixed_p)
   return 4 * length;
 }
 
+/* A separate copy is profitable only while the complete live M bank fits.
+   Calls retain their existing spill/coalescing policy.  */
+static void
+scatter_copy_sites (bitmap sites)
+{
+  for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+    if (NONDEBUG_INSN_P (insn))
+      if (rtx set = single_set (insn))
+	{
+	  rtx src = SET_SRC (set);
+	  if (((GET_CODE (src) == UNSPEC
+		&& XINT (src, 1) == UNSPEC_ZTT_SCATTER)
+	       || (GET_CODE (src) == UNSPEC_VOLATILE
+		   && XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS))
+	      && REG_P (SET_DEST (set))
+	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
+	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
+	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
+	    bitmap_set_bit (sites, INSN_UID (insn));
+	}
+  if (bitmap_empty_p (sites))
+    return;
+  df_analyze ();
+  auto_bitmap live;
+  basic_block bb;
+  FOR_EACH_BB_FN (bb, cfun)
+    {
+      bitmap_copy (live, df_get_live_out (bb));
+      df_simulate_initialize_backwards (bb, live);
+      rtx_insn *insn;
+      FOR_BB_INSNS_REVERSE (bb, insn)
+	{
+	  if (bitmap_bit_p (sites, INSN_UID (insn)))
+	    {
+	      rtx dest = SET_DEST (single_set (insn));
+	      unsigned int needed = bitmap_bit_p (live, REGNO (dest))
+		? 0 : m_nregs (GET_MODE (dest));
+	      unsigned int regno;
+	      bitmap_iterator bi;
+	      EXECUTE_IF_SET_IN_BITMAP (live, 0, regno, bi)
+		{
+		  rtx reg = regno_reg_rtx[regno];
+		  if ((regno >= M_REG_FIRST && regno <= M_REG_LAST)
+		      || (reg && acc_mode_p (GET_MODE (reg))))
+		    { needed = active_profile ()->mregs + 1; break; }
+		  if (reg && m_mode_p (GET_MODE (reg)))
+		    needed += m_nregs (GET_MODE (reg));
+		}
+	      if (needed > active_profile ()->mregs)
+		bitmap_clear_bit (sites, INSN_UID (insn));
+	    }
+	  df_simulate_one_insn_backwards (bb, insn, live);
+	}
+    }
+}
+
 /* In a mixed-RM or non-i8 function, a reload may leave arbitrary Md on a register.
    Keep each setup/preserve/operation sequence indivisible until output.
    The private slot has the real M size and is reused by these sequences.  */
@@ -11886,6 +11967,9 @@ lower_explicit_state ()
 {
   bool matrix_state = riscv_ztt_explicit_state_p ();
   bool leaf_index_reuse = optimize && runtime_profile_p () && leaf_function_p ();
+  auto_bitmap copy_sites;
+  if (leaf_index_reuse)
+    scatter_copy_sites (copy_sites);
   rtx state_slots[6] = {};
   for (rtx_insn *insn = get_insns (); insn; )
     {
@@ -12454,13 +12538,34 @@ lower_explicit_state ()
 		rtx count_descriptor = reuse_both ? descriptor
 		  : force_reg (Pmode, XVECEXP (src, 0, 4));
 		if (code == UNSPEC_ZTT_SCATTER)
-		  emit_insn (gen_ztt_state_scatter
+		  {
+		    rtx old = XVECEXP (src, 0, 5);
+		    if (bitmap_bit_p (copy_sites, INSN_UID (insn))
+			&& !scatter_bank_reuse
+			&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
+			&& m_nregs (mode) == groups[0]
+			&& mode == GET_MODE (XVECEXP (src, 0, 0))
+			&& mode == GET_MODE (XVECEXP (src, 0, 1))
+			&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
+			&& rtx_equal_p (old, XVECEXP (src, 0, 0))
+			&& rtx_equal_p (old, XVECEXP (src, 0, 1))
+			&& !find_reg_note (insn, REG_DEAD, old))
+		      {
+			rtx copy = gen_reg_rtx (mode);
+			emit_insn (gen_ztt_state_copy
+			  (mode, Pmode, copy, old, descriptor, copy_rtx (scratch),
+			   stride ? stride : const0_rtx));
+			old = copy;
+		      }
+		    emit_insn (gen_ztt_state_scatter
 			     (mode, Pmode, dest, XVECEXP (src, 0, 0),
 			      XVECEXP (src, 0, 1), descriptor, data_descriptor,
 			      count_descriptor, scratch, stride ? stride : const0_rtx,
 			      XVECEXP (src, 0, 2), GEN_INT (steps),
-			      gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
+			      gen_rtx_SCRATCH (Pmode), old,
 			      const0_rtx));
+		  }
 		else
 		  emit_insn (gen_ztt_state_gather
 			     (reuse_both ? UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH
@@ -13885,6 +13990,7 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
       break;
     case UNSPECV_ZTT_ACC_TO_M:
     case UNSPECV_ZTT_ACC_FROM_M:
+    case UNSPECV_ZTT_STATE_COPY:
       mask = 2;
       break;
     case UNSPECV_ZTT_STATE_STORE:
@@ -14101,6 +14207,7 @@ reuse_cleaned_descriptors ()
 		case UNSPECV_ZTT_STATE_CONVERT_PREPARED:
 		case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
 		case UNSPECV_ZTT_STATE_ROWCOL:
+		case UNSPECV_ZTT_STATE_COPY:
 		case UNSPECV_ZTT_STATE_ADD:
 		case UNSPECV_ZTT_STATE_SUB:
 		case UNSPECV_ZTT_STATE_MIN:
@@ -14397,6 +14504,25 @@ reuse_local_md ()
 		  group = SET_DEST (set); descriptor = XVECEXP (src, 0, 0);
 		  state.note_descriptor_use (descriptor);
 		  break;
+		case UNSPECV_ZTT_STATE_COPY:
+		  group = XVECEXP (src, 0, 0);
+		  descriptor = XVECEXP (src, 0, 1);
+		  if (XVECLEN (src, 0) == 3 && state.matches (group, descriptor))
+		    {
+		      rtx setup = state.matches (SET_DEST (set), descriptor)
+			? const0_rtx : descriptor;
+		      rtx prepared = gen_ztt_state_copy_prepared
+			(GET_MODE (group), Pmode, SET_DEST (set), group, setup);
+		      bool changed = validate_change
+			(insn, &PATTERN (insn), prepared, false);
+		      gcc_assert (changed);
+		      df_insn_rescan (insn);
+		      cleanup = true;
+		    }
+		  note_stores (insn, invalidate_md_store, &state);
+		  state.remember (group, descriptor);
+		  state.remember (SET_DEST (set), descriptor);
+		  continue;
 		case UNSPECV_ZTT_STATE_ROWCOL:
 		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
 		  if (shorten_rowcol_control (insn, XVECEXP (src, 0, 1), state))
@@ -16659,6 +16785,11 @@ run_md_reuse_selftests ()
       ASSERT_EQ (rowcol_length (rowcol, true), 8U);
       ASSERT_EQ (rowcol_length (rowcol),
 		  4U * (3U + (count == 1 ? 2U : 4U * count)));
+      rtx copy[] = { rowcol[0], rowcol[1], rowcol[3] };
+      ASSERT_EQ (copy_state_length (copy), rowcol_length (rowcol));
+      ASSERT_EQ (copy_state_length (copy, true), 8U);
+      copy[2] = const0_rtx;
+      ASSERT_EQ (copy_state_length (copy, true), 4U);
       rowcol[3] = const0_rtx;
       ASSERT_EQ (rowcol_length (rowcol, true), 4U);
       rowcol[3] = gen_rtx_REG (Pmode, 10);
