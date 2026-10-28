@@ -336,6 +336,41 @@ uncprop_dom_walker::after_dom_children (basic_block bb ATTRIBUTE_UNUSED)
     remove_equivalence (value);
 }
 
+/* Whether substituting EQUIV for VALUE introduces an outside loop input.  */
+
+static bool
+introduces_loop_live_range_p (edge e, tree value, tree equiv)
+{
+  if (TREE_CODE (value) != INTEGER_CST
+      || (!integer_zerop (value) && !integer_onep (value))
+      || TYPE_PRECISION (TREE_TYPE (value)) > BITS_PER_WORD
+      || !dominated_by_p (CDI_DOMINATORS, e->src, e->dest))
+    return false;
+
+  basic_block def_bb = gimple_bb (SSA_NAME_DEF_STMT (equiv));
+  if (def_bb && dominated_by_p (CDI_DOMINATORS, def_bb, e->dest))
+    return false;
+
+  /* Keep cheap latch constants rather than keeping an outside value alive.  */
+  imm_use_iterator iter;
+  use_operand_p use;
+  unsigned int budget = 32;
+  FOR_EACH_IMM_USE_FAST (use, iter, equiv)
+    {
+      gimple *stmt = USE_STMT (use);
+      if (is_gimple_debug (stmt))
+	continue;
+      if (!budget--)
+	return false;
+      basic_block bb = gimple_bb (stmt);
+      if (bb && dominated_by_p (CDI_DOMINATORS, bb, e->dest))
+	return false;
+    }
+  if (dump_file && (dump_flags & TDF_DETAILS))
+    fprintf (dump_file, "Retaining cheap loop latch constant.\n");
+  return true;
+}
+
 /* Unpropagate values from PHI nodes in successor blocks of BB.  */
 
 static void
@@ -391,7 +426,8 @@ uncprop_into_successor_phis (basic_block bb)
 		{
 		  tree equiv = (*equivalences)[j];
 
-		  if (gimple_can_coalesce_p (equiv, res))
+		  if (gimple_can_coalesce_p (equiv, res)
+		      && !introduces_loop_live_range_p (e, arg, equiv))
 		    {
 		      SET_PHI_ARG_DEF (phi, e->dest_idx, equiv);
 		      break;
