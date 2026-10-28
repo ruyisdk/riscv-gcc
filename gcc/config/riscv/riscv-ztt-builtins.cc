@@ -14079,9 +14079,9 @@ md_preserving_bitperm_p (int code)
     }
 }
 
-/* Recognized scalar hash instructions write only their result GPR.  */
+/* Recognized scalar crypto instructions write only their result GPR.  */
 static bool
-md_preserving_hash_p (rtx pattern)
+md_preserving_crypto_p (rtx pattern)
 {
   if (GET_CODE (pattern) != SET || !REG_P (SET_DEST (pattern))
       || !GP_REG_P (REGNO (SET_DEST (pattern))))
@@ -14091,10 +14091,7 @@ md_preserving_hash_p (rtx pattern)
     src = XEXP (src, 0);
   if (GET_CODE (src) != UNSPEC)
     return false;
-  for (int i = 0; i < XVECLEN (src, 0); ++i)
-    if (!REG_P (XVECEXP (src, 0, i))
-	|| !GP_REG_P (REGNO (XVECEXP (src, 0, i))))
-      return false;
+  unsigned int immediate = 0;
   switch (XINT (src, 1))
     {
     case UNSPEC_SHA_256_SIG0: case UNSPEC_SHA_256_SIG1:
@@ -14105,10 +14102,32 @@ md_preserving_hash_p (rtx pattern)
     case UNSPEC_SHA_512_SIG1H: case UNSPEC_SHA_512_SIG1L:
     case UNSPEC_SHA_512_SUM0R: case UNSPEC_SHA_512_SUM1R:
     case UNSPEC_SM3_P0: case UNSPEC_SM3_P1:
-      return true;
+    case UNSPEC_AES_DS: case UNSPEC_AES_DSM:
+    case UNSPEC_AES_ES: case UNSPEC_AES_ESM:
+    case UNSPEC_AES_IM: case UNSPEC_AES_KS2:
+      break;
+    case UNSPEC_AES_DSI: case UNSPEC_AES_DSMI:
+    case UNSPEC_AES_ESI: case UNSPEC_AES_ESMI:
+    case UNSPEC_SM4_ED: case UNSPEC_SM4_KS:
+      immediate = 3;
+      break;
+    case UNSPEC_AES_KS1I:
+      immediate = 10;
+      break;
     default:
       return false;
     }
+  for (int i = 0; i < XVECLEN (src, 0); ++i)
+    {
+      rtx arg = XVECEXP (src, 0, i);
+      if (REG_P (arg) && GP_REG_P (REGNO (arg)))
+	continue;
+      if (immediate && i == XVECLEN (src, 0) - 1
+	  && CONST_INT_P (arg) && UINTVAL (arg) <= immediate)
+	continue;
+      return false;
+    }
+  return true;
 }
 
 /* Only the result GPR changes; the volatile CSR observation remains.  */
@@ -14754,7 +14773,7 @@ public:
 	|| md_preserving_fence_p (code) || md_read_csr_p (code))
       return true;
     if ((md_preserving_fp_p (code, pat) || md_preserving_clmul_p (code)
-	 || md_preserving_hash_p (pat) || md_preserving_bitperm_p (code))
+	 || md_preserving_crypto_p (pat) || md_preserving_bitperm_p (code))
 	&& !contains_mem_rtx_p (pat))
       return true;
     if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -15151,7 +15170,7 @@ reuse_cleaned_descriptors (bool &spill_cleanup)
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_clmul_p (code)
 	      || md_preserving_bitperm_p (code)
-	      || (code >= 0 && md_preserving_hash_p (PATTERN (insn)))
+	      || (code >= 0 && md_preserving_crypto_p (PATTERN (insn)))
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -15423,7 +15442,7 @@ reuse_local_md ()
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_clmul_p (code)
 	      || md_preserving_bitperm_p (code)
-	      || (code >= 0 && md_preserving_hash_p (PATTERN (insn)))
+	      || (code >= 0 && md_preserving_crypto_p (PATTERN (insn)))
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -16331,7 +16350,7 @@ run_md_reuse_selftests ()
 	  if (i < 6 && TARGET_64BIT)
 	    src = gen_rtx_SIGN_EXTEND (DImode, src);
 	  rtx pat = gen_rtx_SET (gen_rtx_REG (GET_MODE (src), dest), src);
-	  ASSERT_TRUE (md_preserving_hash_p (pat));
+	  ASSERT_TRUE (md_preserving_crypto_p (pat));
 	  ASSERT_FALSE (md_scalar_insn_p (pat));
 	  local_md_state state;
 	  state.remember (matrix, descriptor);
@@ -16339,19 +16358,74 @@ run_md_reuse_selftests ()
 	  ASSERT_EQ (dest != 10, state.matches (matrix, descriptor));
 	  rtx bad = copy_rtx (pat);
 	  SET_DEST (bad) = matrix;
-	  ASSERT_FALSE (md_preserving_hash_p (bad));
+	  ASSERT_FALSE (md_preserving_crypto_p (bad));
 	  bad = copy_rtx (pat);
 	  rtx inner = SET_SRC (bad);
 	  if (GET_CODE (inner) == SIGN_EXTEND)
 	    inner = XEXP (inner, 0);
 	  XINT (inner, 1) = UNSPEC_CLMUL;
-	  ASSERT_FALSE (md_preserving_hash_p (bad));
+	  ASSERT_FALSE (md_preserving_crypto_p (bad));
 	  XINT (inner, 1) = ops[i];
 	  XVECEXP (inner, 0, 0) = gen_rtx_MEM (mode, descriptor);
-	  ASSERT_FALSE (md_preserving_hash_p (bad));
+	  ASSERT_FALSE (md_preserving_crypto_p (bad));
 	}
-    ASSERT_FALSE (md_preserving_hash_p (gen_rtx_ASM_INPUT (VOIDmode, "")));
-    ASSERT_FALSE (md_preserving_hash_p (gen_rtx_SET (descriptor, const0_rtx)));
+    ASSERT_FALSE (md_preserving_crypto_p (gen_rtx_ASM_INPUT (VOIDmode, "")));
+    ASSERT_FALSE (md_preserving_crypto_p (gen_rtx_SET (descriptor, const0_rtx)));
+  }
+  {
+    const struct { int code; unsigned int inputs, immediate; bool wide; } ops[] = {
+      { UNSPEC_AES_DSI, 2, 3, false }, { UNSPEC_AES_DSMI, 2, 3, false },
+      { UNSPEC_AES_ESI, 2, 3, false }, { UNSPEC_AES_ESMI, 2, 3, false },
+      { UNSPEC_AES_DS, 2, 0, true }, { UNSPEC_AES_DSM, 2, 0, true },
+      { UNSPEC_AES_ES, 2, 0, true }, { UNSPEC_AES_ESM, 2, 0, true },
+      { UNSPEC_AES_IM, 1, 0, true }, { UNSPEC_AES_KS1I, 1, 10, true },
+      { UNSPEC_AES_KS2, 2, 0, true },
+      { UNSPEC_SM4_ED, 2, 3, false }, { UNSPEC_SM4_KS, 2, 3, false }
+    };
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx descriptor = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (auto op : ops)
+      for (unsigned int dest : { 10U, 11U })
+	{
+	  machine_mode mode = op.wide ? DImode : SImode;
+	  rtvec args = rtvec_alloc (op.inputs + !!op.immediate);
+	  for (unsigned int i = 0; i < op.inputs; ++i)
+	    RTVEC_ELT (args, i) = gen_rtx_REG (mode, 12 + i);
+	  if (op.immediate)
+	    RTVEC_ELT (args, op.inputs) = GEN_INT (op.immediate);
+	  rtx src = gen_rtx_UNSPEC (mode, args, op.code);
+	  if (TARGET_64BIT && !op.wide)
+	    src = gen_rtx_SIGN_EXTEND (DImode, src);
+	  rtx pat = gen_rtx_SET (gen_rtx_REG (GET_MODE (src), dest), src);
+	  ASSERT_TRUE (md_preserving_crypto_p (pat));
+	  ASSERT_FALSE (md_scalar_insn_p (pat));
+	  local_md_state state;
+	  state.remember (matrix, descriptor);
+	  note_stores (emit_insn (pat), invalidate_md_store, &state);
+	  ASSERT_EQ (dest != 10, state.matches (matrix, descriptor));
+	  rtx bad = copy_rtx (pat);
+	  SET_DEST (bad) = matrix;
+	  ASSERT_FALSE (md_preserving_crypto_p (bad));
+	  bad = copy_rtx (pat);
+	  rtx inner = SET_SRC (bad);
+	  if (GET_CODE (inner) == SIGN_EXTEND)
+	    inner = XEXP (inner, 0);
+	  XVECEXP (inner, 0, 0) = gen_rtx_MEM (mode, descriptor);
+	  ASSERT_FALSE (md_preserving_crypto_p (bad));
+	  XVECEXP (inner, 0, 0) = matrix;
+	  ASSERT_FALSE (md_preserving_crypto_p (bad));
+	  XVECEXP (inner, 0, 0) = gen_rtx_REG (mode, 12);
+	  if (op.immediate)
+	    {
+	      XVECEXP (inner, 0, op.inputs) = GEN_INT (op.immediate + 1);
+	      ASSERT_FALSE (md_preserving_crypto_p (bad));
+	      XVECEXP (inner, 0, op.inputs) = constm1_rtx;
+	      ASSERT_FALSE (md_preserving_crypto_p (bad));
+	      XVECEXP (inner, 0, op.inputs) = const0_rtx;
+	      ASSERT_TRUE (md_preserving_crypto_p (bad));
+	    }
+	}
   }
   {
     const insn_code codes[] = {

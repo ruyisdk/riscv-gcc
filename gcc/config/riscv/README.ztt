@@ -749,9 +749,9 @@ their result GPR facts. Their calculations remain unchanged, including
 when emitted by CRC expansion; live spill forwarding still stops.
 Scalar brev8, zip/unzip and xperm4/8 also preserve Md and amestype;
 their result GPR facts are invalidated. Private spill rules are unchanged.
-Recognized scalar SHA256, SHA512 and SM3 operations also preserve these
-facts. Only their result GPR changes; unknown UNSPECs and live spill
-forwarding keep their existing boundaries.
+Recognized scalar SHA256, SHA512, SM3, AES and SM4 operations also preserve
+these facts. Cipher controls retain their immediate bounds. Only the result
+GPR changes; unknown UNSPECs and live spill forwarding keep their boundaries.
 Recognized standard RVV integer, floating, configuration and memory
 instructions also preserve Md and amestype. These patterns use GPRs, vector
 registers and VL/VTYPE/VXRM; floating classes may also use FPRs and FRM.
@@ -859,7 +859,7 @@ An initial reverse scan shares a no-private-read proof across at most
 Any possible private read ends that fast path; the 32-instruction
 per-slot check still handles disjoint reads. Calls, asm, unknown effects,
 exceptional paths and frame-related stores retain their existing guards.
-Known register-only clmul and SHA/SM3 instructions do not read private
+Known register-only clmul and scalar crypto instructions do not read private
 slots and may appear in this return-tail scan. Their operations remain.
 Recognized brev8, CPU zip/unzip and xperm4/8 also permit this scan.
 Recognized prepared M computations without memory operands also permit
