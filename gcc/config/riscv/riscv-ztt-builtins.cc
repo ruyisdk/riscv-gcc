@@ -13579,6 +13579,8 @@ class local_md_state : private local_md_scalars
   }
 
 public:
+  bool empty_p () const { return !occupied; }
+
   /* Unoccupied fact slots are not part of a path's state.  */
   void copy_from (const local_md_state &other)
   {
@@ -14061,6 +14063,114 @@ md_preserving_branch_p (rtx_insn *insn)
     && recog_memoized (insn) >= 0 && md_scalar_insn_p (PATTERN (insn));
 }
 
+static void
+record_scalar_md (rtx_insn *insn, local_md_state &state)
+{
+  rtx pattern = PATTERN (insn);
+  rtx value = GET_CODE (pattern) == SET
+    && local_md_state::full_gpr_p (SET_DEST (pattern))
+    ? state.constant_value (SET_SRC (pattern)) : NULL_RTX;
+  unsigned int identity = state.copied_identity (pattern);
+  note_stores (insn, invalidate_md_store, &state);
+  if (value)
+    state.record_constant (SET_DEST (pattern), value);
+  else if (identity)
+    state.record_copy (SET_DEST (pattern), identity);
+}
+
+static void
+record_binary_md (rtx_insn *insn, rtx lhs, rtx rhs, rtx dest,
+		  rtx descriptor, local_md_state &state)
+{
+  note_stores (insn, invalidate_md_store, &state);
+  state.remember (lhs, descriptor);
+  state.remember (rhs, descriptor);
+  state.remember (dest, descriptor);
+}
+
+/* Compute a backedge state without assuming any loop-entry facts.  */
+static bool
+md_loop_exit (basic_block bb, local_md_state &state)
+{
+  state.clear ();
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    {
+      if (!NONDEBUG_INSN_P (insn))
+	continue;
+      if (JUMP_P (insn) && insn == BB_END (bb)
+	  && md_preserving_branch_p (insn))
+	continue;
+      if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	  || recog_memoized (insn) < 0)
+	return false;
+      if (md_scalar_insn_p (PATTERN (insn)))
+	{
+	  record_scalar_md (insn, state);
+	  continue;
+	}
+      rtx set = single_set (insn);
+      rtx src = set ? SET_SRC (set) : NULL_RTX;
+      if (!src || GET_CODE (src) != UNSPEC_VOLATILE)
+	return false;
+      rtx group = SET_DEST (set), descriptor;
+      switch (XINT (src, 1))
+	{
+	case UNSPECV_ZTT_STATE_LOAD:
+	  descriptor = XVECEXP (src, 0, 1);
+	  break;
+	case UNSPECV_ZTT_STATE_MEMORY_LOAD:
+	  descriptor = XVECEXP (src, 0, 3);
+	  break;
+	case UNSPECV_ZTT_SETTYP_P0:
+	case UNSPECV_ZTT_STATE_ZERO:
+	  descriptor = XVECEXP (src, 0, 0);
+	  break;
+	case UNSPECV_ZTT_STATE_STORE:
+	  if (XVECLEN (src, 0) != 2 && XVECLEN (src, 0) != 3)
+	    return false;
+	  group = XVECEXP (src, 0, 0);
+	  descriptor = XVECEXP (src, 0, 1);
+	  break;
+	case UNSPECV_ZTT_STATE_MEMORY_STORE:
+	  if (XVECLEN (src, 0) != 4)
+	    return false;
+	  group = XVECEXP (src, 0, 0);
+	  descriptor = XVECEXP (src, 0, 2);
+	  break;
+	case UNSPECV_ZTT_STATE_ADD:
+	case UNSPECV_ZTT_STATE_SUB:
+	case UNSPECV_ZTT_STATE_MIN:
+	case UNSPECV_ZTT_STATE_MAX:
+	case UNSPECV_ZTT_STATE_AND:
+	case UNSPECV_ZTT_STATE_ANDNOT:
+	case UNSPECV_ZTT_STATE_OR:
+	case UNSPECV_ZTT_STATE_ORNOT:
+	case UNSPECV_ZTT_STATE_XOR:
+	  if (XVECLEN (src, 0) != 4 && XVECLEN (src, 0) != 5)
+	    return false;
+	  descriptor = XVECEXP (src, 0, 2);
+	  if (!local_md_state::full_gpr_p (descriptor))
+	    return false;
+	  for (unsigned int i = 0; i < 2; ++i)
+	    if ((UINTVAL (XVECEXP (src, 0, XVECLEN (src, 0) - 1)) & (1U << i))
+		&& !state.matches (XVECEXP (src, 0, i), descriptor))
+	      return false;
+	  record_binary_md (insn, XVECEXP (src, 0, 0), XVECEXP (src, 0, 1),
+			    group, descriptor, state);
+	  continue;
+	default:
+	  return false;
+	}
+      /* Prepared zero markers do not establish a descriptor.  */
+      if (!local_md_state::full_gpr_p (descriptor))
+	return false;
+      note_stores (insn, invalidate_md_store, &state);
+      state.remember (group, descriptor);
+    }
+  return true;
+}
+
 /* Retain two pending edges, including the far side of a local join.  */
 class local_md_path
 {
@@ -14078,6 +14188,27 @@ public:
 	if (!(a->flags & EDGE_FALLTHRU))
 	  std::swap (a, b);
 	if ((a->flags & EDGE_FALLTHRU) && a->src == bb->prev_bb
+	    && md_normal_edge_p (a) && b->src == bb
+	    && !(b->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_IRREDUCIBLE_LOOP
+			    | EDGE_CROSSING | EDGE_FALLTHRU))
+	    && EDGE_COUNT (bb->succs) == 2
+	    && md_normal_edge_p (EDGE_SUCC (bb, 0) == b
+				? EDGE_SUCC (bb, 1) : EDGE_SUCC (bb, 0))
+	    && !state.empty_p ()
+	    && riscv_ztt_explicit_state_p ()
+	    && md_preserving_branch_p (BB_END (bb)))
+	  {
+	    local_md_state backedge;
+	    if (md_loop_exit (bb, backedge))
+	      {
+		state.intersect_constants (backedge);
+		joined = true;
+		if (dump_file)
+		  fprintf (dump_file, "Intersect Md on self loop block %d\n",
+			   bb->index);
+	      }
+	  }
+	if (!joined && (a->flags & EDGE_FALLTHRU) && a->src == bb->prev_bb
 	    && !(b->flags & EDGE_FALLTHRU)
 	    && md_normal_edge_p (a) && md_normal_edge_p (b))
 	  for (unsigned int i = 0; i < ARRAY_SIZE (pending); ++i)
@@ -16157,10 +16288,8 @@ reuse_local_md ()
 				   "Reuse Md for binary at insn %d: sources %u\n",
 				   INSN_UID (insn), mask);
 		      }
-		    note_stores (insn, invalidate_md_store, &state);
-		    state.remember (lhs, descriptor);
-		    state.remember (rhs, descriptor);
-		    state.remember (SET_DEST (set), descriptor);
+		    record_binary_md (insn, lhs, rhs, SET_DEST (set),
+				      descriptor, state);
 		    continue;
 		  }
 		case UNSPECV_ZTT_ACC_TO_M:
@@ -16426,18 +16555,7 @@ reuse_local_md ()
 		}
 	    }
 	  if (md_scalar_insn_p (PATTERN (insn)))
-	    {
-	      /* Evaluate the SET before invalidating its inputs.  */
-	      rtx value = GET_CODE (PATTERN (insn)) == SET
-		&& local_md_state::full_gpr_p (SET_DEST (set))
-		? state.constant_value (SET_SRC (set)) : NULL_RTX;
-	      unsigned int identity = state.copied_identity (PATTERN (insn));
-	      note_stores (insn, invalidate_md_store, &state);
-	      if (value)
-		state.record_constant (SET_DEST (set), value);
-	      else if (identity)
-		state.record_copy (SET_DEST (set), identity);
-	    }
+	    record_scalar_md (insn, state);
 	  else
 	    state.clear ();
 	}
@@ -17363,6 +17481,59 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (state.matches (group, GEN_INT (32)));
       }
   }
+  if (TARGET_ZTT)
+    for (unsigned int test = 0; test != 9; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	int saved_reload = reload_completed;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	reload_completed = 1;
+	riscv_ztt_note_call_boundary ();
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *insn = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = insn;
+	  return insn;
+	};
+	rtx descriptor = gen_rtx_REG (Pmode, 10);
+	rtx a = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 8);
+	rtx b = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 9);
+	rtx slot = gen_rtx_MEM (ZTTMR1mode, gen_rtx_REG (Pmode, 11));
+	if (test != 2)
+	  append (gen_rtx_SET (descriptor, GEN_INT (test == 1 ? 64 : 32)));
+	if (test != 7)
+	  append (gen_ztt_typed_msettyp_p0 (ZTTMR1mode, Pmode, a, descriptor));
+	if (test == 6)
+	  append (gen_ztt_state_prepared (UNSPECV_ZTT_STATE_ADD, ZTTMR1mode,
+					Pmode, b, a, b, descriptor));
+	else
+	  append (gen_ztt_state (UNSPECV_ZTT_STATE_ADD, ZTTMR1mode, Pmode,
+				 b, a, b, descriptor, slot,
+				 test >= 7 ? const1_rtx : const0_rtx));
+	if (test == 3)
+	  append (gen_rtx_SET (descriptor, GEN_INT (64)));
+	if (test == 4)
+	  append (gen_ztt_typed_msettyp_p0 (ZTTMR2mode, Pmode,
+		    gen_rtx_REG (ZTTMR2mode, M_REG_FIRST + 8), descriptor));
+	if (test == 5)
+	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
+	local_md_state state, entry;
+	bool valid = md_loop_exit (bb, state);
+	ASSERT_EQ (test != 5 && test != 6 && test != 7, valid);
+	entry.record_constant (descriptor, GEN_INT (32));
+	entry.remember (a, descriptor);
+	if (valid)
+	  {
+	    entry.intersect_constants (state);
+	    ASSERT_EQ (test == 0 || test == 3 || test == 8,
+		       entry.matches (a, GEN_INT (32)));
+	    if (test == 3)
+	      ASSERT_RTX_EQ (descriptor, entry.descriptor_value (descriptor));
+	  }
+	reload_completed = saved_reload;
+	riscv_ztt_profile_string = profile;
+      }
   if (TARGET_ZTT)
     for (machine_mode mode : { ZTTAR1mode, ZTTAR4mode, ZTTAR1X2mode,
 			       ZTTAP2X4mode })
