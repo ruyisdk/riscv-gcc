@@ -599,6 +599,9 @@ remain unchanged.
 M-to-ACC transfers apply the complete-reload proof to each source packet,
 including tuple and packed groups. Destination Ad setup and the transfers
 remain; unproven packets keep their original preservation sequence.
+Matmul applies the same proof independently to both complete source groups.
+An identical shared input is prepared once. Partial overlap and conflicting
+descriptors retain the original path; the old ACC and multiply are unchanged.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and

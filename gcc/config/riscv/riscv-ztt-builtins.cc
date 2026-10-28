@@ -15713,13 +15713,33 @@ reuse_local_md ()
 		      break;
 		    unsigned int mask = state.matches (lhs, ld)
 		      | (state.matches (rhs, rd) << 1);
+		    rtx groups[] = { lhs, rhs }, descriptors[] = { ld, rd };
+		    rtx_insn *reload_before[2] = {};
+		    for (unsigned int i = 0; i < 2; ++i)
+		      if (!(mask & (1U << i)))
+			{
+			  if (i && reload_before[0] && rtx_equal_p (lhs, rhs))
+			    {
+			      mask |= 2;
+			      continue;
+			    }
+			  reload_before[i] = local_raw_spill::reload_preparation_point
+			    (insn, groups[i], descriptors[i],
+			     m_nregs (GET_MODE (groups[i])));
+			  if (reload_before[i])
+			    {
+			      mask |= 1U << i;
+			      state.invalidate (groups[i]);
+			    }
+			}
 		    rtx *where = &XVECEXP (src, 0, mixed ? 7 : 6);
+		    bool changed = false;
 		    if (mask == 3)
 		      {
 			rtx prepared = gen_ztt_acc_mmul_prepared
 			  (GET_MODE (SET_DEST (set)), SET_DEST (set),
 			   XVECEXP (src, 0, 0), lhs, rhs, XVECEXP (src, 0, 4));
-			bool changed = validate_change
+			changed = validate_change
 			  (insn, &PATTERN (insn), prepared, false);
 			gcc_assert (changed);
 			df_insn_rescan (insn);
@@ -15727,7 +15747,7 @@ reuse_local_md ()
 		      }
 		    else if (mask)
 		      {
-			bool changed = validate_change (insn, where, GEN_INT (mask), false);
+			changed = validate_change (insn, where, GEN_INT (mask), false);
 			gcc_assert (changed);
 			if (mixed)
 			  {
@@ -15742,6 +15762,21 @@ reuse_local_md ()
 				       INSN_UID (insn));
 			  }
 		      }
+		    if (changed)
+		      for (unsigned int i = 0; i < 2; ++i)
+			if (reload_before[i])
+			  {
+			    rtx_insn *setup = emit_insn_before
+			      (gen_ztt_typed_msettyp_p0
+			       (GET_MODE (groups[i]), Pmode, groups[i], descriptors[i]),
+			       reload_before[i]);
+			    df_insn_rescan (setup);
+			    descriptor_cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file,
+				       "Prepare Md before matmul reload %d for insn %d: source %u\n",
+				       INSN_UID (reload_before[i]), INSN_UID (insn), i);
+			  }
 		    if (mask && dump_file)
 		      fprintf (dump_file, "Reuse Md at insn %d: sources %u\n",
 			       INSN_UID (insn), mask);
