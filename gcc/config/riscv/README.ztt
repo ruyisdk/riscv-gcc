@@ -376,6 +376,10 @@ Integer scatter-add with an exact zero contribution likewise reuses its old
 destination for arbitrary masked indices kept live by a complete local store.
 Both operands remain non-packed basic Squares; floating additions and a zero
 old destination alone do not satisfy this rule.
+Integer scatter-max also reuses its old destination for an unsigned zero
+contribution, or when old/data are copies of the same uniform constructor.
+The independent index store and bounded local proof remain required.  An
+arbitrary nonuniform self-input does not imply an identity under scatter.
 
 The bounded copy search also recognizes zero-offset row/column shifts of
 complete basic Squares, using their existing full-value copy semantics.

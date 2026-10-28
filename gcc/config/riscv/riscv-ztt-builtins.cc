@@ -8571,10 +8571,9 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
   gimple *producers[16];
   unsigned int count = 0;
   tree result = data;
-  /* Masked indices preserve uniform gathers and integer zero contributions.
+  /* Masked indices preserve uniform and integer-zero identities.
      Keep the index live through an independent complete store.  */
-  if ((!scatter || scatter_add) && d.type == operation.data
-      && type_nregs (d.type)
+  if (d.type == operation.data && type_nregs (d.type)
       && types[d.type].rows == 1 && types[d.type].columns == 1
       && (types[d.type].descriptor & 0xff) >= active_profile ()->uds
       && type_nregs (operation.count)
@@ -8583,21 +8582,37 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
       && (types[operation.count].descriptor & 0xff) >= active_profile ()->uds)
     {
       tree value = data, saved = index;
-      bool reusable = scatter_add
-	? structure_zero_p (value, d.type, producers, count)
-	: (strip_structure_view (value, d.type, producers, count)
-	   && strip_structure_copies (value, d.type, producers, count, true)
-	   && uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type));
+      bool reusable = scatter
+	&& (scatter_add || !(types[d.type].descriptor & (1U << 30)))
+	&& structure_zero_p (value, d.type, producers, count);
+      if (!reusable && !scatter_add)
+	{
+	  count = 0;
+	  reusable = strip_structure_view (value, d.type, producers, count)
+	    && strip_structure_copies (value, d.type, producers, count,
+				       true, scatter)
+	    && uniform_structure_producer_p (SSA_NAME_DEF_STMT (value), d.type);
+	  if (reusable)
+	    {
+	      producers[count++] = SSA_NAME_DEF_STMT (value);
+	      if (scatter)
+		{
+		  tree old = gimple_call_arg (stmt, 0);
+		  reusable = strip_structure_view (old, d.type, producers, count)
+		    && strip_structure_copies (old, d.type, producers, count,
+					       false, true)
+		    && old == value;
+		}
+	    }
+	}
       if (reusable
 	  && (stored_binary_input_p (index, gsi)
 	      || (strip_structure_view (saved, operation.count, producers, count)
 		  && saved != index && stored_binary_input_p (saved, gsi))))
 	{
-	  if (!scatter_add)
-	    producers[count++] = SSA_NAME_DEF_STMT (value);
 	  if (local_structure_producers_p (gsi, producers, count))
 	    {
-	      result = scatter_add ? gimple_call_arg (stmt, 0) : data;
+	      result = scatter ? gimple_call_arg (stmt, 0) : data;
 	      return useless_type_conversion_p (lhs_type, TREE_TYPE (result))
 		? result : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
 	    }
