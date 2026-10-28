@@ -3813,6 +3813,32 @@
 				    (const_int 12)
 				    (const_int 16))))])
 
+(define_insn_and_split "*branch_on_high_bits<X:mode>"
+  [(set (pc)
+	(if_then_else
+	    (match_operator 0 "comparison_operator"
+		[(match_operand:X 2 "register_operand" "r")
+		 (match_operand 3 "const_int_operand")])
+	    (label_ref (match_operand 1))
+	    (pc)))
+   (clobber (match_scratch:X 4 "=&r"))]
+  "(GET_CODE (operands[0]) == GTU || GET_CODE (operands[0]) == LEU)
+   && exact_log2 (UINTVAL (operands[3]) + 1) > 0
+   && exact_log2 (UINTVAL (operands[3]) + 1) < BITS_PER_WORD
+   && riscv_const_insns (operands[3], false) > 1"
+  "#"
+  "&& reload_completed"
+  [(set (match_dup 4) (lshiftrt:X (match_dup 2) (match_dup 3)))
+   (set (pc)
+	(if_then_else (match_op_dup 0 [(match_dup 4) (const_int 0)])
+		      (label_ref (match_dup 1)) (pc)))]
+{
+  operands[3] = GEN_INT (exact_log2 (UINTVAL (operands[3]) + 1));
+  rtx_code code = GET_CODE (operands[0]) == GTU ? NE : EQ;
+  operands[0] = gen_rtx_fmt_ee (code, <MODE>mode, operands[4], const0_rtx);
+}
+  [(set_attr "type" "branch")])
+
 (define_insn_and_split "*branch_on_low_bit<X:mode>"
   [(set (pc)
 	(if_then_else
