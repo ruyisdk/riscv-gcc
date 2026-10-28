@@ -107,6 +107,9 @@ Store, concat and M-to-ACC signatures also share the cached M argument tails,
 retaining their pointer, stride, shape and return types.
 Matmul signatures reuse these M argument tails and prepend the old ACC;
 different input layouts share the right-hand M tail only.
+Lazy internal matrix, Scalar, unary, exponent and matmul declarations share
+GC-rooted unsigned metadata tails.  Each signature prepends its value
+arguments without modifying the shared suffix.
 Explicit Scalar registration reuses the current operation/type name prefixes
 in a local two-spelling cache while iterating over Scalar source types.
 Unavailable destinations skip their complete TC group in the compact Scalar

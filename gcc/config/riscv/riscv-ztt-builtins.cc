@@ -2837,6 +2837,28 @@ function_attributes ()
   return builtin_function_attributes;
 }
 
+/* Lazy internal declarations share immutable unsigned metadata tails.  */
+static GTY (()) tree metadata_argument_tails[3];
+
+static tree
+metadata_function_type (tree result, const tree *values,
+			unsigned int nvalues, unsigned int metadata)
+{
+  gcc_assert (nvalues >= 1 && nvalues <= 3
+	      && metadata >= 2 && metadata <= 3);
+  tree args = void_list_node;
+  for (unsigned int i = 0; i < metadata; ++i)
+    {
+      if (!metadata_argument_tails[i])
+	metadata_argument_tails[i]
+	  = tree_cons (NULL_TREE, unsigned_type_node, args);
+      args = metadata_argument_tails[i];
+    }
+  while (nvalues)
+    args = tree_cons (NULL_TREE, values[--nvalues], args);
+  return ::build_function_type (result, args);
+}
+
 static int
 matmul_variant (expansion_index expansion)
 {
@@ -4367,6 +4389,41 @@ run_scalar_full_name_selftests ()
 }
 
 static void
+run_metadata_signature_selftests ()
+{
+  using namespace selftest;
+  tree values[] = { integer_type_node, long_integer_type_node, size_type_node };
+  for (unsigned int metadata = 2; metadata <= 3; ++metadata)
+    for (unsigned int n = 1; n <= 3; ++n)
+      {
+	tree actual = metadata_function_type (integer_type_node, values, n,
+					      metadata);
+	tree expected[6];
+	for (unsigned int i = 0; i < n + metadata; ++i)
+	  expected[i] = i < n ? values[i] : unsigned_type_node;
+	ASSERT_EQ (actual, build_function_type_array (integer_type_node,
+						    n + metadata, expected));
+	ASSERT_EQ (actual, metadata_function_type (integer_type_node, values, n,
+						 metadata));
+	tree args = TYPE_ARG_TYPES (actual);
+	for (unsigned int i = 0; i < n + metadata; ++i)
+	  {
+	    ASSERT_EQ (TREE_VALUE (args), expected[i]);
+	    ASSERT_EQ (TREE_PURPOSE (args), NULL_TREE);
+	    args = TREE_CHAIN (args);
+	  }
+	ASSERT_EQ (args, void_list_node);
+      }
+  for (unsigned int i = 0; i < 3; ++i)
+    {
+      ASSERT_EQ (TREE_VALUE (metadata_argument_tails[i]), unsigned_type_node);
+      ASSERT_EQ (TREE_PURPOSE (metadata_argument_tails[i]), NULL_TREE);
+      ASSERT_EQ (TREE_CHAIN (metadata_argument_tails[i]),
+		 i ? metadata_argument_tails[i - 1] : void_list_node);
+    }
+}
+
+static void
 run_decl_table_selftests ()
 {
   using namespace selftest;
@@ -4422,6 +4479,7 @@ run_wide_signature_selftests ()
     }
   ASSERT_EQ (other.get (conversion_code_base), integer_zero_node);
   run_decl_table_selftests ();
+  run_metadata_signature_selftests ();
   run_matrix_type_index_selftests ();
   run_store_lookup_selftests ();
   run_redirect_lookup_selftests ();
@@ -5188,11 +5246,9 @@ integer_matrix_builtin_decl (unsigned int code)
   tree rhs = s.rhs == 6 ? size_type_node
     : ztt_m_type_nodes[integer_matrix_carrier (s.rhs)];
   gcc_assert (dst && lhs && rhs);
-  tree ftype = integer_matrix_old_p (s.operation)
-    ? build_function_type_list (dst, dst, lhs, rhs, unsigned_type_node,
-				unsigned_type_node, unsigned_type_node, NULL_TREE)
-    : build_function_type_list (dst, lhs, rhs, unsigned_type_node,
-				unsigned_type_node, unsigned_type_node, NULL_TREE);
+  tree values[] = { dst, lhs, rhs };
+  unsigned int first = !integer_matrix_old_p (s.operation);
+  tree ftype = metadata_function_type (dst, values + first, 3 - first, 3);
   char name[64];
   snprintf (name, sizeof (name), "__builtin_riscv_ztt_%s_matrix_%u",
 	    matrix_domain_name (domain), code);
@@ -5421,11 +5477,9 @@ exponent_builtin_decl (unsigned int code)
     {
       tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
       tree src = ztt_m_type_nodes[integer_matrix_carrier (s.source)];
-      tree ftype = s.op
-	? build_function_type_list (dst, dst, src, long_integer_type_node,
-				    unsigned_type_node, unsigned_type_node, NULL_TREE)
-	: build_function_type_list (dst, src, long_integer_type_node,
-				    unsigned_type_node, unsigned_type_node, NULL_TREE);
+      tree values[] = { dst, src, long_integer_type_node };
+      unsigned int first = !s.op;
+      tree ftype = metadata_function_type (dst, values + first, 3 - first, 2);
       char name[64];
       snprintf (name, sizeof (name), "__builtin_riscv_ztt_exponent_%u", code);
       decl = add_builtin_function_ext_scope
@@ -5618,8 +5672,7 @@ floating_unary_builtin_decl (unsigned int code)
     {
       tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
       tree src = ztt_m_type_nodes[integer_matrix_carrier (s.source)];
-      tree ftype = build_function_type_list
-	(dst, src, unsigned_type_node, unsigned_type_node, NULL_TREE);
+      tree ftype = metadata_function_type (dst, &src, 1, 2);
       char name[64];
       snprintf (name, sizeof (name), "__builtin_riscv_ztt_floating_unary_%u", code);
       decl = add_builtin_function_ext_scope
@@ -5805,11 +5858,9 @@ integer_scalar_builtin_decl (unsigned int code)
   tree dst = ztt_m_type_nodes[integer_matrix_carrier (s.dst)];
   tree src = ztt_m_type_nodes[integer_matrix_carrier (s.source)];
   tree carrier = scalar_carrier_type (integer_matrix_type (s.carrier * 4, 1, false));
-  tree ftype = integer_scalar_old_p (s.op)
-    ? build_function_type_list (dst, dst, src, carrier, unsigned_type_node,
-				unsigned_type_node, unsigned_type_node, NULL_TREE)
-    : build_function_type_list (dst, src, carrier, unsigned_type_node,
-				unsigned_type_node, unsigned_type_node, NULL_TREE);
+  tree values[] = { dst, src, carrier };
+  unsigned int first = !integer_scalar_old_p (s.op);
+  tree ftype = metadata_function_type (dst, values + first, 3 - first, 3);
   char name[64];
   snprintf (name, sizeof (name), "__builtin_riscv_ztt_%s_scalar_%u",
 	    s.floating ? "floating" : "integer", code);
@@ -5990,8 +6041,8 @@ integer_matmul_builtin_decl (unsigned int code)
   tree lhs = ztt_m_type_nodes[integer_matrix_carrier (s.lhs)];
   tree rhs = ztt_m_type_nodes[integer_matrix_carrier (s.rhs)];
   gcc_assert (dst && lhs && rhs);
-  tree ftype = build_function_type_list
-    (dst, dst, lhs, rhs, unsigned_type_node, unsigned_type_node, NULL_TREE);
+  tree values[] = { dst, lhs, rhs };
+  tree ftype = metadata_function_type (dst, values, 3, 2);
   char name[64];
   snprintf (name, sizeof (name), "__builtin_riscv_ztt_%s_matmul_%u",
 	    s.floating ? "floating" : "integer", code);
