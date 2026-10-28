@@ -2135,6 +2135,56 @@ simplify_builtin_memchr (gimple_stmt_iterator *gsi_p, gcall *stmt)
   return true;
 }
 
+/* Forward a complete scalar constant store to an immediately dependent copy.  */
+static bool
+simplify_builtin_memcpy_constant (gcall *stmt)
+{
+  if (gimple_call_num_args (stmt) != 3 || BITS_PER_UNIT != 8 || CHAR_BIT != 8)
+    return false;
+  tree src = gimple_call_arg (stmt, 1);
+  tree len = gimple_call_arg (stmt, 2);
+  tree vuse = gimple_vuse (stmt);
+  if (!vuse || TREE_CODE (vuse) != SSA_NAME
+      || TREE_CODE (src) != ADDR_EXPR || !tree_fits_uhwi_p (len))
+    return false;
+  unsigned HOST_WIDE_INT size = tree_to_uhwi (len);
+  if (!size || size > UNITS_PER_WORD)
+    return false;
+  tree var = TREE_OPERAND (src, 0);
+  if (!VAR_P (var) || is_global_var (var))
+    return false;
+  gimple *def = SSA_NAME_DEF_STMT (vuse);
+  if (!gimple_assign_single_p (def) || gimple_has_volatile_ops (def)
+      || gimple_assign_lhs (def) != var)
+    return false;
+  tree value = gimple_assign_rhs1 (def);
+  tree type = TREE_TYPE (value);
+  if (TREE_CODE (value) != INTEGER_CST || !INTEGRAL_TYPE_P (type)
+      || TYPE_PRECISION (type) != size * BITS_PER_UNIT
+      || !TYPE_SIZE_UNIT (type) || !tree_fits_uhwi_p (TYPE_SIZE_UNIT (type))
+      || tree_to_uhwi (TYPE_SIZE_UNIT (type)) != size)
+    return false;
+  auto_vec<unsigned char, 16> bytes;
+  bytes.safe_grow (size + 1);
+  if (native_encode_expr (value, bytes.address (), size) != (int) size)
+    return false;
+  bytes[size] = 0;
+  auto read = [] (void *data, void *, HOST_WIDE_INT offset, fixed_size_mode mode) {
+    return c_readstr (static_cast<const char *> (data) + offset, mode, false);
+  };
+  rtl_profile_for_bb (gimple_bb (stmt));
+  unsigned int align = get_pointer_alignment (gimple_call_arg (stmt, 0));
+  if (!can_store_by_pieces (size, read, bytes.address (), align, false))
+    return false;
+  tree literal
+    = build_string_literal (size,
+			    reinterpret_cast<const char *> (bytes.address ()));
+  gimple_call_set_arg (stmt, 1, literal);
+  update_stmt (stmt);
+  statistics_counter_event (cfun, "scalar constant copy propagation", 1);
+  return true;
+}
+
 /* *GSI_P is a GIMPLE_CALL to a builtin function.
    Optimize
    memcpy (p, "abcd", 4); // STMT1
@@ -2524,6 +2574,8 @@ simplify_builtin_call (gimple_stmt_iterator *gsi_p, tree callee2, bool full_walk
       return simplify_builtin_memcmp (gsi_p, as_a<gcall*>(stmt2));
     case BUILT_IN_MEMCHR:
       return simplify_builtin_memchr (gsi_p, as_a<gcall*>(stmt2));
+    case BUILT_IN_MEMCPY:
+      return simplify_builtin_memcpy_constant (as_a<gcall *>(stmt2));
 
     case BUILT_IN_MEMSET:
       if (gimple_call_num_args (stmt2) == 3)
