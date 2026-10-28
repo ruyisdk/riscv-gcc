@@ -1906,6 +1906,7 @@ struct GTY (()) nominal_registration_cache
 {
   vec<tree, va_gc> *blocks[riscv_ztt::TYPE_MAX];
   tree scalar_args[numeric_scalar_dtype_count + 1];
+  tree control_args[3];
 };
 static GTY (()) nominal_registration_cache *nominal_registration_types;
 
@@ -2610,6 +2611,19 @@ registration_matrix_type (prototype_index key, type_index type)
   return result;
 }
 
+/* Keep signed offsets and exponents distinct from unsigned indices.  */
+static tree
+registration_control_args (tree control)
+{
+  unsigned int key = control == size_type_node ? 0
+    : control == integer_type_node ? 1 : 2;
+  gcc_assert (key != 2 || control == long_integer_type_node);
+  tree &args = nominal_registration_types->control_args[key];
+  if (!args)
+    args = tree_cons (NULL_TREE, control, void_list_node);
+  return args;
+}
+
 static tree
 build_function_type (prototype_index prototype, type_index type)
 {
@@ -2654,8 +2668,9 @@ build_function_type (prototype_index prototype, type_index type)
       return build_function_type_list (ztt_m_type_node, const_element_ptr,
 				       NULL_TREE);
     case PROTO_M_CONST_PTR_STRIDE:
-      return build_function_type_list (ztt_m_type_node, const_element_ptr,
-				       size_type_node, NULL_TREE);
+      return ::build_function_type
+	(ztt_m_type_node, tree_cons (NULL_TREE, const_element_ptr,
+				    registration_control_args (size_type_node)));
     case PROTO_VOID_PTR_STRIDE_M:
     case PROTO_VOID_PTR_M:
       {
@@ -2678,18 +2693,19 @@ build_function_type (prototype_index prototype, type_index type)
 				       NULL_TREE);
     case PROTO_M_SHIFT_X:
     case PROTO_M_ROWCOL_INDEX:
-      return build_function_type_list (ztt_m_type_node, ztt_m_type_node,
-				       size_type_node, NULL_TREE);
     case PROTO_M_ROWCOL_OFFSET:
-      return build_function_type_list (ztt_m_type_node, ztt_m_type_node,
-				       integer_type_node, NULL_TREE);
     case PROTO_M_EXPONENT_X:
-      return build_function_type_list (ztt_m_type_node, ztt_m_type_node,
-				       long_integer_type_node, NULL_TREE);
     case PROTO_M_EXPONENT_ACC_X:
-      return build_function_type_list (ztt_m_type_node, ztt_m_type_node,
-				       ztt_m_type_node, long_integer_type_node,
-				       NULL_TREE);
+      {
+	tree control = prototype == PROTO_M_ROWCOL_OFFSET ? integer_type_node
+	  : prototype == PROTO_M_EXPONENT_X || prototype == PROTO_M_EXPONENT_ACC_X
+	  ? long_integer_type_node : size_type_node;
+	tree args = tree_cons (NULL_TREE, ztt_m_type_node,
+			       registration_control_args (control));
+	if (prototype == PROTO_M_EXPONENT_ACC_X)
+	  args = tree_cons (NULL_TREE, ztt_m_type_node, args);
+	return ::build_function_type (ztt_m_type_node, args);
+      }
     case PROTO_M_M:
     case PROTO_M_CONVERT:
     case PROTO_M_STRUCTURAL:
@@ -2704,8 +2720,9 @@ build_function_type (prototype_index prototype, type_index type)
     case PROTO_M_EXTRACT_COLUMN:
       {
 	tree src = ztt_m_type_nodes[m_utility_source_type (prototype, type)];
-	return build_function_type_list
-	  (ztt_m_type_node, src, size_type_node, NULL_TREE);
+	return ::build_function_type
+	  (ztt_m_type_node, tree_cons (NULL_TREE, src,
+				      registration_control_args (size_type_node)));
       }
     case PROTO_A_M:
     case PROTO_A_M_COLUMN:

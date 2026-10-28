@@ -97,6 +97,9 @@ end at registration; later lazy declarations do not retain these caches.
 Nominal signatures share immutable Scalar argument tails and reuse shorter
 cached argument lists when adding M parameters.  The registration cache
 roots those tails until their function types retain them.
+Index, stride, offset and exponent signatures share three control tails
+in the same temporary cache.  The size_t, int and long parameter types
+remain distinct, including on RV32 where int and long have equal widths.
 Ordinary M-only binary and ternary signatures similarly prepend one
 parameter to the cached unary or binary argument list.
 Cache misses build those prefixes in arity order without recursive lookup.
