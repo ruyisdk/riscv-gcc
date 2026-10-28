@@ -140,6 +140,7 @@
   UNSPEC_ZTT_TERNARY_X
   ;; Ztt zip/unzip operates on one 1x2 value.
   UNSPEC_ZTT_ZIP_VALUE
+  UNSPEC_ZTT_DESCRIPTOR
 ])
 
 (define_c_enum "unspecv" [

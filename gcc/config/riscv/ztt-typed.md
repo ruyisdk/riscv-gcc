@@ -16,6 +16,24 @@
                             ZTTMR8 ZTTMR16 ZTTMR32])
 (define_mode_iterator ZTT_M1 [ZTTM1 ZTTMR1])
 (define_mode_iterator ZTT_G [ZTTM2 ZTTMR2 ZTTM4 ZTTMR4 ZTTMR8 ZTTMR16 ZTTMR32])
+
+;; Keep multi-insn descriptor constants rematerializable through allocation.
+(define_insn_and_split "@ztt_descriptor_<mode>"
+  [(set (match_operand:P 0 "register_operand" "=r")
+        (unspec:P [(match_operand 1 "const_int_operand" "n")]
+                  UNSPEC_ZTT_DESCRIPTOR))]
+  "TARGET_ZTT && riscv_ztt::typed_profile_p ()"
+  "#"
+  "&& reload_completed"
+  [(const_int 0)]
+{
+  riscv_move_integer (operands[0], operands[0], INTVAL (operands[1]));
+  DONE;
+}
+  [(set_attr "type" "multi")
+   (set (attr "length")
+        (symbol_ref "4 * riscv_const_insns (operands[1], false)"))])
+
 (define_mode_attr ztt_store_length [(ZTTM2 "40") (ZTTMR2 "40")
                                    (ZTTM4 "72") (ZTTMR4 "72")
                                    (ZTTMR8 "136") (ZTTMR16 "264")
