@@ -9674,7 +9674,7 @@ riscv_ztt_workspace_notes_p (rtx notes)
   return true;
 }
 
-static rtx *riscv_ztt_stack_mem (rtx);
+static rtx *riscv_ztt_stack_mem (rtx, bool = false);
 
 static bool
 riscv_ztt_private_scalar_spill_p (rtx mem)
@@ -10696,14 +10696,23 @@ riscv_ztt_stack_address (riscv_ztt_stack_value value, riscv_ztt_stack_value sp)
     ? plus_constant (Pmode, stack_pointer_rtx, offset) : NULL_RTX;
 }
 
-/* Return the MEM operand of an ordinary GPR load or store.  */
+/* Return the MEM operand of a GPR access, or an explicitly allowed raw M move.  */
 static rtx *
-riscv_ztt_stack_mem (rtx set)
+riscv_ztt_stack_mem (rtx set, bool raw_m)
 {
   if (GET_CODE (set) != SET)
     return nullptr;
   rtx *loc;
   rtx dest = SET_DEST (set), src = SET_SRC (set);
+  if (raw_m)
+    {
+      rtx value = MEM_P (dest) ? src : dest;
+      loc = MEM_P (dest) ? &SET_DEST (set) : &SET_SRC (set);
+      if (REG_P (value) && M_REG_P (REGNO (value))
+	  && GET_MODE (value) == ZTTMR1mode
+	  && MEM_P (*loc) && GET_MODE (*loc) == ZTTMR1mode)
+	return loc;
+    }
   if (REG_P (dest) && GP_REG_P (REGNO (dest)))
     {
       loc = &SET_SRC (set);
@@ -10769,7 +10778,7 @@ riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
 		fprintf (dump_file, "Rebase AME stack address at insn %d\n",
 			 INSN_UID (insn));
 	    }
-	  rtx *mem = riscv_ztt_stack_mem (set);
+	  rtx *mem = riscv_ztt_stack_mem (set, true);
 	  if (mem)
 	    {
 	      auto address = riscv_ztt_stack_expr (XEXP (*mem, 0), regs);
@@ -10936,6 +10945,22 @@ riscv_ztt_stack_selftests (basic_block bb)
   ASSERT_EQ (riscv_ztt_stack_mem (gen_rtx_SET (a, b)), nullptr);
   ASSERT_EQ (riscv_ztt_stack_mem
 	     (gen_rtx_SET (a, gen_rtx_MEM (BLKmode, sp))), nullptr);
+
+  rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+  rtx raw_mem = gen_rtx_MEM (ZTTMR1mode, a);
+  rtx raw_load = gen_rtx_SET (matrix, raw_mem);
+  rtx raw_store = gen_rtx_SET (raw_mem, matrix);
+  ASSERT_EQ (riscv_ztt_stack_mem (raw_load), nullptr);
+  ASSERT_EQ (riscv_ztt_stack_mem (raw_store), nullptr);
+  ASSERT_EQ (riscv_ztt_stack_mem (raw_load, true), &SET_SRC (raw_load));
+  ASSERT_EQ (riscv_ztt_stack_mem (raw_store, true), &SET_DEST (raw_store));
+  ASSERT_EQ (riscv_ztt_stack_mem (gen_rtx_SET (matrix, matrix), true), nullptr);
+  ASSERT_EQ (riscv_ztt_stack_mem (gen_rtx_SET (raw_mem, raw_mem), true), nullptr);
+  ASSERT_EQ (riscv_ztt_stack_mem
+	     (gen_rtx_SET (matrix, gen_rtx_MEM (BLKmode, a)), true), nullptr);
+  ASSERT_EQ (riscv_ztt_stack_mem
+	     (gen_rtx_SET (gen_rtx_REG (ZTTMR2mode, M_REG_FIRST),
+			   gen_rtx_MEM (ZTTMR2mode, a)), true), nullptr);
 
   rtx_insn *head = BB_HEAD (bb), *end = BB_END (bb);
   auto append = [bb] (rtx pat) {
