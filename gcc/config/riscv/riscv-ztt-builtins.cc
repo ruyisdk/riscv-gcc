@@ -2624,6 +2624,8 @@ registration_control_args (tree control)
   return args;
 }
 
+static tree registration_function_type (prototype_index, type_index);
+
 static tree
 build_function_type (prototype_index prototype, type_index type)
 {
@@ -2695,16 +2697,20 @@ build_function_type (prototype_index prototype, type_index type)
     case PROTO_M_ROWCOL_INDEX:
     case PROTO_M_ROWCOL_OFFSET:
     case PROTO_M_EXPONENT_X:
-    case PROTO_M_EXPONENT_ACC_X:
       {
 	tree control = prototype == PROTO_M_ROWCOL_OFFSET ? integer_type_node
-	  : prototype == PROTO_M_EXPONENT_X || prototype == PROTO_M_EXPONENT_ACC_X
+	  : prototype == PROTO_M_EXPONENT_X
 	  ? long_integer_type_node : size_type_node;
 	tree args = tree_cons (NULL_TREE, ztt_m_type_node,
 			       registration_control_args (control));
-	if (prototype == PROTO_M_EXPONENT_ACC_X)
-	  args = tree_cons (NULL_TREE, ztt_m_type_node, args);
 	return ::build_function_type (ztt_m_type_node, args);
+      }
+    case PROTO_M_EXPONENT_ACC_X:
+      {
+	tree args = TYPE_ARG_TYPES
+	  (registration_function_type (PROTO_M_EXPONENT_X, type));
+	return ::build_function_type
+	  (ztt_m_type_node, tree_cons (NULL_TREE, ztt_m_type_node, args));
       }
     case PROTO_M_M:
     case PROTO_M_CONVERT:
@@ -2737,11 +2743,13 @@ build_function_type (prototype_index prototype, type_index type)
 	   TYPE_ARG_TYPES (registration_matrix_type (PROTO_M_M, src)));
       }
     case PROTO_M_A:
-    case PROTO_M_A_COLUMN:
       return build_function_type_list
-	(acc_matrix_type (type, prototype == PROTO_M_A_COLUMN ? types[type].columns : 1,
-			 prototype == PROTO_M_A_COLUMN ? 1 : types[type].columns),
+	(acc_matrix_type (type, 1, types[type].columns),
 	 ztt_m_type_node, NULL_TREE);
+    case PROTO_M_A_COLUMN:
+      return ::build_function_type
+	(acc_matrix_type (type, types[type].columns, 1),
+	 TYPE_ARG_TYPES (registration_function_type (PROTO_M_A, type)));
     case PROTO_A_A_M_M:
     case PROTO_A_A_M_M_Q2_RC:
     case PROTO_A_A_M_M_Q2_RR:

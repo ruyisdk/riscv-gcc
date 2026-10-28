@@ -102,6 +102,9 @@ in the same temporary cache.  The size_t, int and long parameter types
 remain distinct, including on RV32 where int and long have equal widths.
 Ordinary M-only binary and ternary signatures similarly prepend one
 parameter to the cached unary or binary argument list.
+Exponent accumulation reuses the ordinary exponent parameter tail.
+Column ACC-to-M transfers reuse the row transfer's ACC parameter list,
+while retaining their distinct result shape.
 Cache misses build those prefixes in arity order without recursive lookup.
 Store, concat and M-to-ACC signatures also share the cached M argument tails,
 retaining their pointer, stride, shape and return types.
