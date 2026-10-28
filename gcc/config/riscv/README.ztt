@@ -589,6 +589,9 @@ stores, frame changes and non-call exceptions retain the original preparation.
 Row-major, column-major and strided stores use the same proof for their
 single source packet. The user store retains its original memory operands
 and position; only its private preservation sequence is replaced.
+Conversions and structural unary operations also use this proof for a
+single complete source packet. Destination setup still follows the unary
+overlap and datatype rules; multi-packet sources retain their preparation.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and

@@ -15273,13 +15273,19 @@ reuse_local_md ()
 		    rtx steps = XVECEXP (src, 0, prepared_p ? 3 : 4);
 		    group = XVECEXP (src, 0, 0);
 		    descriptor = XVECEXP (src, 0, 2);
-		    if (!prepared_p
-			&& state.matches_packets
-			     (group, descriptor, datatype_step (UINTVAL (steps), 1)))
+		    bool ready = !prepared_p && state.matches_packets
+		      (group, descriptor, datatype_step (UINTVAL (steps), 1));
+		    rtx_insn *reload_before = nullptr;
+		    if (!prepared_p && !ready)
+		      reload_before = local_raw_spill::reload_preparation_point
+			(insn, group, descriptor, datatype_step (UINTVAL (steps), 1));
+		    if (!prepared_p && (ready || reload_before))
 		      {
 			bool convert = XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT
 			  || XINT (src, 1) == UNSPECV_ZTT_STATE_CONVERT_REUSE;
 			rtx setup = XVECEXP (src, 0, 1);
+			if (reload_before)
+			  state.invalidate (group);
 			if (state.matches_packets
 			    (SET_DEST (set), setup, datatype_step (UINTVAL (steps), 0)))
 			  setup = const0_rtx;
@@ -15291,6 +15297,18 @@ reuse_local_md ()
 			   convert ? const0_rtx : XVECEXP (src, 0, 5));
 			if (validate_change (insn, &PATTERN (insn), prepared, false))
 			  {
+			    if (reload_before)
+			      {
+				rtx_insn *setup = emit_insn_before
+				  (gen_ztt_typed_msettyp_p0
+				   (GET_MODE (group), Pmode, group, descriptor), reload_before);
+				df_insn_rescan (setup);
+				descriptor_cleanup = true;
+				if (dump_file)
+				  fprintf (dump_file,
+					   "Prepare Md before unary reload %d for insn %d\n",
+					   INSN_UID (reload_before), INSN_UID (insn));
+			      }
 			    df_insn_rescan (insn);
 			    cleanup = true;
 			    if (dump_file)
