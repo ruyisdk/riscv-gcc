@@ -10808,6 +10808,10 @@ riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
 	memset (regs, 0, sizeof regs);
       else
 	{
+	  if (CALL_P (insn))
+	    for (unsigned int i = 0; i < 32; ++i)
+	      if (insn_callee_abi (insn).clobbers_reg_p (Pmode, GP_REG_FIRST + i))
+		regs[i] = {};
 	  note_stores (insn, riscv_ztt_stack_clobber, regs);
 	  if (full_set)
 	    regs[REGNO (SET_DEST (set)) - GP_REG_FIRST] = value;
@@ -11001,6 +11005,35 @@ riscv_ztt_stack_selftests (basic_block bb)
   ASSERT_FALSE (finish (expected, regs).known);
   ASSERT_FALSE (regs[5].known);
 
+  for (unsigned int test = 0; test < 8; ++test)
+    {
+      memset (regs, 0, sizeof regs);
+      rtx saved = gen_rtx_REG (Pmode, GP_REG_FIRST + 9);
+      start_sequence ();
+      append (gen_rtx_SET (a, size));
+      append (gen_rtx_SET (saved, size));
+      rtx target = test == 1 ? a
+	: gen_rtx_SYMBOL_REF (Pmode, "ztt_stack_call");
+      rtx call = gen_rtx_CALL (test == 7 ? Pmode : VOIDmode,
+			      gen_rtx_MEM (QImode, target), const0_rtx);
+      rtx_insn *insn = emit_call_insn
+	(test == 7 ? gen_rtx_SET (saved, call) : call);
+      set_block_for_insn (insn, bb);
+      if (test >= 2 && test <= 6)
+	{
+	  rtx clobber = test == 2 ? saved : test == 3
+	    ? gen_rtx_REG (QImode, REGNO (saved))
+	    : test == 4 ? fp : test == 5 ? scale : sp;
+	  CALL_INSN_FUNCTION_USAGE (insn)
+	    = gen_rtx_EXPR_LIST (VOIDmode,
+				gen_rtx_CLOBBER (VOIDmode, clobber), nullptr);
+	}
+      auto result = finish (expected, regs);
+      ASSERT_EQ (result.known, test < 4 || test == 7);
+      ASSERT_FALSE (regs[REGNO (a)].known);
+      ASSERT_EQ (regs[REGNO (saved)].known, test < 2 || test == 6);
+    }
+
   basic_block_def pred = {}, other = {}, dest = {};
   edge_def e = {}, extra = {};
   e.src = &pred;
@@ -11117,7 +11150,7 @@ bool
 riscv_ztt_rebase_stack_addresses ()
 {
   if (!riscv_ztt::runtime_profile_p () || !riscv_ztt_explicit_state_p ()
-      || !frame_pointer_needed || !crtl->is_leaf || cfun->calls_alloca
+      || !frame_pointer_needed || cfun->calls_alloca
       || cfun->calls_setjmp || cfun->has_nonlocal_label || crtl->calls_eh_return
       || crtl->stack_realign_needed || flag_non_call_exceptions
       || flag_stack_clash_protection || flag_stack_check || flag_stack_protect
