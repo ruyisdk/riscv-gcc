@@ -10783,12 +10783,18 @@ expand_broadcast (type_index dst_type, type_index source_type, tree exp)
 }
 
 static rtx
-force_acc_join_descriptor (rtx value, tree source)
+force_acc_descriptor (rtx value, tree source)
 {
   gcc_assert (CONST_INT_P (value));
   /* Local transfers can share the high part with other descriptors.  */
-  if (!optimize || !runtime_profile_p () || TREE_CODE (source) != SSA_NAME
-      || gimple_code (SSA_NAME_DEF_STMT (source)) != GIMPLE_PHI)
+  if (!optimize || !runtime_profile_p () || TREE_CODE (source) != SSA_NAME)
+    return force_reg (Pmode, value);
+  gimple *definition = SSA_NAME_DEF_STMT (source);
+  gimple *consumer = currently_expanding_gimple_stmt;
+  basic_block bb = consumer ? gimple_bb (consumer) : nullptr;
+  if (gimple_code (definition) != GIMPLE_PHI
+      && (!bb || bb == gimple_bb (definition) || !single_pred_p (bb)
+	  || single_pred (bb) != gimple_bb (definition)))
     return force_reg (Pmode, value);
   value = gen_int_mode (INTVAL (value), Pmode);
   if (riscv_const_insns (value, false) < 2)
@@ -11118,8 +11124,8 @@ expand_builtin (unsigned int code, tree exp, rtx target)
 	  target = result_register (m_mode, target);
 	  emit_insn (gen_ztt_acc_to_m
 		     (mode, Pmode, target, matrix_register (mode, exp, 0),
-		      force_acc_join_descriptor (descriptor,
-					 CALL_EXPR_ARG (exp, 0)), const0_rtx));
+		      force_acc_descriptor (descriptor, CALL_EXPR_ARG (exp, 0)),
+		      const0_rtx));
 	  return target;
 	case EXPAND_A_MMUL:
 	case EXPAND_A_MMULNEG:

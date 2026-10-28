@@ -815,6 +815,9 @@ full scalar TC values; control operands are unchanged.  Dead materialization
 and register notes are updated after substitution.
 A use bitmap limits lookup to witnessed descriptors in register order.
 Redefinitions, invalidation and joins clear the corresponding witnesses.
+ACC-to-M descriptors keep multi-insn constants intact through allocation
+when the ACC input is a PHI or comes from the sole immediate predecessor.
+Local transfers retain ordinary constant construction to share high parts.
 Typed stores with a retained descriptor also establish a constant-use
 witness after their explicit clobbers are invalidated.  Following stores
 and calculations can reuse the surviving GPR without repeating its setup.
