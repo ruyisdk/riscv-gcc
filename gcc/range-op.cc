@@ -4187,9 +4187,11 @@ operator_bitwise_or::op1_range (irange &r, tree type,
     {
       unsigned prec = TYPE_PRECISION (type);
       r.set (type, wi::zero (prec), wi::max_value (prec, SIGNED));
-      return true;
     }
-  r.set_varying (type);
+  else
+    r.set_varying (type);
+  // A known zero in the result must be zero in both operands.
+  r.set_nonzero_bits (lhs.get_nonzero_bits ());
   return true;
 }
 
@@ -5471,6 +5473,32 @@ range_op_bitwise_and_tests ()
 }
 
 static void
+range_op_bitwise_or_tests ()
+{
+  const unsigned masks[] = { 0x0f, 0xf0, 0x55, 0xaa, 0xff };
+  for (tree type : { signed_char_type_node, unsigned_char_type_node })
+    for (unsigned mask : masks)
+      for (unsigned value : { 0U, mask })
+	{
+	  unsigned prec = TYPE_PRECISION (type);
+	  int_range<2> lhs (type), other (type), op1, op2;
+	  lhs.update_bitmask (irange_bitmask (wi::uhwi (value, prec),
+				     wi::bit_not (wi::uhwi (mask, prec))));
+	  ASSERT_TRUE (op_bitwise_or.op1_range (op1, type, lhs, other));
+	  ASSERT_TRUE (op_bitwise_or.op2_range (op2, type, lhs, other));
+	  ASSERT_TRUE (op1 == op2);
+	  ASSERT_TRUE (op1.get_nonzero_bits () == lhs.get_nonzero_bits ());
+	  for (unsigned a = 0; a < 256; ++a)
+	    for (unsigned b = 0; b < 256; ++b)
+	      if (lhs.contains_p (wi::uhwi (a | b, prec)))
+		{
+		  ASSERT_TRUE (op1.contains_p (wi::uhwi (a, prec)));
+		  ASSERT_TRUE (op2.contains_p (wi::uhwi (b, prec)));
+		}
+	}
+}
+
+static void
 range_relational_tests ()
 {
   int_range<2> lhs (unsigned_char_type_node);
@@ -5500,6 +5528,7 @@ range_op_tests ()
   range_op_rshift_tests ();
   range_op_lshift_tests ();
   range_op_bitwise_and_tests ();
+  range_op_bitwise_or_tests ();
   range_op_cast_tests ();
   range_relational_tests ();
 
