@@ -771,6 +771,9 @@ Cross-block pairs require matching
 allocation state at joins and balanced normal exits.  Fixed
 frames, N checks and CFA rules remain; calls, asm, real stack storage,
 probing, alloca and RVV save areas exclude this cleanup.
+When the following descriptor scan removes private spills or reloads,
+DCE and the same workspace proof run once more. Descriptor-only changes
+do not trigger another workspace scan; the pass does not iterate.
 For mixed matmul, a prepared side's unused descriptor is replaced with zero
 after allocation.  The mask prevents its use; the other side retains its
 descriptor and full save/set/reload sequence.  DCE can then remove the dead

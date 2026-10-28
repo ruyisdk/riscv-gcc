@@ -14112,7 +14112,7 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
 
 /* DCE can remove workspace calculations that killed descriptor GPRs.  */
 static bool
-reuse_cleaned_descriptors ()
+reuse_cleaned_descriptors (bool &spill_cleanup)
 {
   bool changed = false;
   const bool explicit_state = riscv_ztt_explicit_state_p ();
@@ -14141,7 +14141,7 @@ reuse_cleaned_descriptors ()
 		  delete_insn (insn);
 		  if (direct)
 		    spill.remove_dead_store ();
-		  changed = true;
+		  changed = spill_cleanup = true;
 		  continue;
 		}
 	    }
@@ -14280,8 +14280,8 @@ reuse_cleaned_descriptors ()
 	    state.clear ();
 	}
       path.leave (bb, state);
-      if (explicit_state)
-	changed |= local_raw_spill::remove_dead_tail (bb);
+      if (explicit_state && local_raw_spill::remove_dead_tail (bb))
+	changed = spill_cleanup = true;
     }
   return changed;
 }
@@ -15065,10 +15065,14 @@ reuse_local_md ()
     }
   if (cleanup)
     {
-      if (reuse_cleaned_descriptors ())
+      bool spill_cleanup = false;
+      if (reuse_cleaned_descriptors (spill_cleanup))
 	{
 	  descriptor_cleanup = true;
 	  run_fast_dce ();
+	  /* Late spill removal can leave the scalable allocation unused.  */
+	  if (spill_cleanup && riscv_ztt_remove_unused_workspace ())
+	    run_fast_dce ();
 	  if (dump_file)
 	    fprintf (dump_file, "Reuse descriptors after workspace cleanup\n");
 	}
