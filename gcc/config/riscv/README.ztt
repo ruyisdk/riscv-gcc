@@ -479,6 +479,9 @@ forms and intervening memory accesses do not satisfy this proof.
 Signed-long exponent controls preserve the same axis in mldexp and mldexpacc.
 The latter requires both the old value and M source to have the invariant
 layout; exponent evaluation, arithmetic and status effects remain unchanged.
+Matrix ldexp/rdexp and their accumulate forms also preserve an invariant
+axis when data, exponent, result and any old destination share one integer
+type.  Every M input must satisfy the same single-layer layout proof.
 Floating carrier calls are checked against their exact destination metadata.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.

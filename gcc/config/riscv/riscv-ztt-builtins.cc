@@ -8810,7 +8810,8 @@ describe_structure_elementwise (gimple *&call, type_index type,
   values = nargs > 3 ? nargs - 3 : nargs;
   elementwise_description operation;
   unsigned int code = structure_builtin_code (call, nargs);
-  if (integer_matrix_code_p (code) || floating_matrix_code_p (code))
+  if (integer_matrix_code_p (code) || floating_matrix_code_p (code)
+      || matrix_math_code_p (code))
     {
 
       tree args[6];
@@ -9001,6 +9002,10 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    case EXPAND_MMULACCNEG_EW:
 	    case EXPAND_MMULADD_EW:
 	    case EXPAND_MMULSUB_EW:
+	    case EXPAND_MLDEXP_EW:
+	    case EXPAND_MRDEXP_EW:
+	    case EXPAND_MLDEXPACC_EW:
+	    case EXPAND_MRDEXPACC_EW:
 	      {
 		unsigned int end = count, side;
 		for (side = 0; side < values; ++side)
