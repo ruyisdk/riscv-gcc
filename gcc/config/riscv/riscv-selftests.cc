@@ -712,6 +712,24 @@ run_ztt_runtime_n_bound_selftests ()
 	  }
   ASSERT_EQ (riscv_ztt::runtime_n_max_log2
 	     (32, poly_int64 (HOST_WIDE_INT_1U << 31)), 0U);
+
+  /* Only zero and powers of two can pass the first term of the guard.  */
+  for (unsigned int xlen : { 32U, 64U })
+    {
+      unsigned HOST_WIDE_INT mask = HOST_WIDE_INT_M1U >> (64 - xlen);
+      for (unsigned int exponent = 2; exponent < xlen - 1; ++exponent)
+	for (unsigned int bit = 0; bit < xlen; ++bit)
+	  for (int delta = -2; delta <= 2; ++delta)
+	    {
+	      unsigned HOST_WIDE_INT n
+		= ((HOST_WIDE_INT_1U << bit) + delta) & mask;
+	      unsigned HOST_WIDE_INT bad
+		= (n & (n - 1)) | (((n - 4) & mask) >> exponent);
+	      bool valid = n >= 4 && pow2p_hwi (n)
+		&& n <= (HOST_WIDE_INT_1U << exponent);
+	      ASSERT_EQ (bad == 0, valid);
+	    }
+    }
 }
 
 /* Compare formation with

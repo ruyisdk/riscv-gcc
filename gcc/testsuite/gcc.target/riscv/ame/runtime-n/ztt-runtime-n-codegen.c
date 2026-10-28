@@ -28,8 +28,8 @@ runtime_add (const signed char *input, const signed char *other,
 /* This function has no AME spill slot: the unused N*N/16 cache may be
    eliminated, but validation of N must remain.  The ztt-multin pressure
    tests check the cache computation when it is actually consumed.  */
-/* { dg-final { scan-assembler {srli\s+[a-z][0-9]+,s11,2} } } */
-/* { dg-final { scan-assembler {sltiu\s+[a-z][0-9]+,[a-z][0-9]+,1} } } */
+/* { dg-final { scan-assembler {addi\s+[a-z][0-9]+,s11,-4} } } */
+/* { dg-final { scan-assembler-not {sltiu\s} } } */
 /* { dg-final { scan-assembler "ebreak" } } */
 /* { dg-final { scan-assembler-not "vlenb" } } */
 /* { dg-final { scan-assembler-not "16384" } } */

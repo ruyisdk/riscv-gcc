@@ -626,6 +626,9 @@ their index instructions remain.  At optimization levels above zero, the
 runtime-N entry bound replaces a call-site representability check when it
 already proves that N-1 fits.  Narrower indices retain the local check;
 unused volatile constructions still require entry validation.
+The entry guard retains the power-of-two test and combines its lower and
+upper bounds as an unsigned (N - 4) >> max_log2 test. Validation remains
+before size multiplication and dynamic allocation.
 
 ACC matmul shares source preparation when both operands are the same
 allocated M group, mode and Md.  Output and instruction length use the same

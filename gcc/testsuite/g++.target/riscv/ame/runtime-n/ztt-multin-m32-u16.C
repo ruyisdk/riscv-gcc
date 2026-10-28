@@ -5,7 +5,7 @@
 #define TEST_WIDTH 16
 #include "../../../../gcc.target/riscv/ame/runtime-n/ztt-multin-body.h"
 /* { dg-final { scan-assembler {csrr\s+s11,amenlen} } } */
-/* { dg-final { scan-assembler {srli\s+[a-z][0-9]+,s11,2} } } */
+/* { dg-final { scan-assembler {addi\s+[a-z][0-9]+,s11,-4} } } */
 /* { dg-final { scan-assembler {addi\s+t0,s11,-1} } } */
 /* { dg-final { scan-assembler {and\s+[a-z][0-9]+,[a-z][0-9]+,s11} } } */
 /* { dg-final { scan-assembler {mul\s+s11,s11,s11} } } */

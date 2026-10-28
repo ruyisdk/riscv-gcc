@@ -12058,10 +12058,9 @@ riscv_ztt_initialize_runtime_size ()
 			: gen_riscv_ztt_read_amenlen_si (scale));
   riscv_expand_op (PLUS, Pmode, temp, scale, constm1_rtx);
   riscv_expand_op (AND, Pmode, temp, temp, scale);
-  riscv_expand_op (LSHIFTRT, Pmode, temp2, scale, GEN_INT (2));
-  riscv_expand_op (LTU, Pmode, temp2, temp2, const1_rtx);
-  riscv_expand_op (IOR, Pmode, temp, temp, temp2);
-  riscv_expand_op (LSHIFTRT, Pmode, temp2, scale, GEN_INT (max_log2 + 1));
+  /* For powers of two, this unsigned range test covers both N bounds.  */
+  riscv_expand_op (PLUS, Pmode, temp2, scale, GEN_INT (-4));
+  riscv_expand_op (LSHIFTRT, Pmode, temp2, temp2, GEN_INT (max_log2));
   riscv_expand_op (IOR, Pmode, temp, temp, temp2);
   riscv_expand_conditional_branch (valid, EQ, temp, const0_rtx);
   JUMP_LABEL (get_last_insn ()) = valid;
