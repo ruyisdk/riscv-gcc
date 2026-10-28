@@ -187,6 +187,27 @@ phi_group::calculate_using_modifier (range_query *q)
 	}
     }
 
+  /* Addition or subtraction of a multiple of 2^K preserves the low K
+     bits, including across unsigned wraparound.  */
+  if (TYPE_UNSIGNED (m_vr.type ()) && is_a<gassign *> (m_modifier))
+    {
+      tree_code code = gimple_assign_rhs_code (m_modifier);
+      if (code == PLUS_EXPR || (code == MINUS_EXPR && m_modifier_op == 1))
+	{
+	  tree step = gimple_op (m_modifier, m_modifier_op == 1 ? 2 : 1);
+	  if (TREE_CODE (step) == INTEGER_CST)
+	    {
+	      unsigned prec = TYPE_PRECISION (m_vr.type ());
+	      wide_int low = wi::mask (wi::ctz (wi::to_wide (step)), false, prec);
+	      irange_bitmask init = m_vr.get_bitmask ();
+	      m_vr.set_varying (m_vr.type ());
+	      m_vr.update_bitmask
+		(irange_bitmask (init.value () & low, init.mask () | ~low));
+	      return !m_vr.varying_p ();
+	    }
+	}
+    }
+
   // Never converged, so bail for now. we could examine the pattern
   // from m_initial to m_vr as an extension  Especially if we had a way
   // to project the actual number of iterations (SCEV?)
@@ -410,19 +431,60 @@ phi_analyzer::process_phi (gphi *phi, range_query &query)
 	      // Already a member of this potential group.
 	      if (bitmap_bit_p (m_current, v))
 		continue;
+	      gimple *arg_stmt = SSA_NAME_DEF_STMT (arg);
+	      bool known_init = false;
+	      /* An enclosing PHI with known low bits can initialize the group.  */
+	      if (arg_stmt && is_a<gphi *> (arg_stmt)
+		  && TYPE_UNSIGNED (TREE_TYPE (arg))
+		  && gimple_bb (arg_stmt) != gimple_bb (phi)
+		  && dom_info_available_p (CDI_DOMINATORS)
+		  && dominated_by_p (CDI_DOMINATORS, gimple_bb (phi),
+				     gimple_bb (arg_stmt)))
+		{
+		  int_range_max initial;
+		  known_init = query.range_on_edge
+		    (initial, gimple_phi_arg_edge (phi_stmt, x), arg)
+		    && !initial.undefined_p ()
+		    && wi::ctz (initial.get_bitmask ().mask ()) > 0;
+		}
 	      // Part of a different group ends cycle possibility.
-	      if (group (arg) || bitmap_bit_p (m_simple, v))
+	      if (!known_init && (group (arg) || bitmap_bit_p (m_simple, v)))
 		{
 		  cycle_p = false;
 		  break;
 		}
 	      // Check if its a PHI to examine.
-	      gimple *arg_stmt = SSA_NAME_DEF_STMT (arg);
-	      if (arg_stmt && is_a<gphi *> (arg_stmt))
+	      if (!known_init && arg_stmt && is_a<gphi *> (arg_stmt))
 		{
 		  phi_count++;
 		  m_work.safe_push (arg);
 		  continue;
+		}
+	      /* A modifier may reach several PHIs on different edges.  */
+	      bool duplicate = false;
+	      for (unsigned i = 0; i < m_num_extern; ++i)
+		if (arg == m_external[i]
+		    && phi_group::is_modifier_p (arg_stmt, m_current))
+		  duplicate = true;
+	      if (duplicate)
+		continue;
+	      /* Threading can separate the modifier's input from its output
+		 with additional PHIs.  Follow small unsigned additive groups.  */
+	      if (arg_stmt && is_a<gassign *> (arg_stmt)
+		  && TYPE_UNSIGNED (TREE_TYPE (arg))
+		  && (gimple_assign_rhs_code (arg_stmt) == PLUS_EXPR
+		      || gimple_assign_rhs_code (arg_stmt) == MINUS_EXPR)
+		  && TREE_CODE (gimple_assign_rhs2 (arg_stmt)) == INTEGER_CST)
+		{
+		  tree input = gimple_assign_rhs1 (arg_stmt);
+		  if (TREE_CODE (input) == SSA_NAME
+		      && is_a<gphi *> (SSA_NAME_DEF_STMT (input))
+		      && !bitmap_bit_p (m_current, SSA_NAME_VERSION (input))
+		      && phi_count < 8)
+		    {
+		      ++phi_count;
+		      m_work.safe_push (input);
+		    }
 		}
 	      // More than 2 outside names is too complicated.
 	      if (m_num_extern >= 2)
@@ -476,6 +538,10 @@ phi_analyzer::process_phi (gphi *phi, range_query &query)
 	      mod = SSA_NAME_DEF_STMT (name);
 	      continue;
 	    }
+	  /* An edge-specific initial range must not describe a group member.  */
+	  if (TREE_CODE (name) == SSA_NAME
+	      && bitmap_bit_p (m_current, SSA_NAME_VERSION (name)))
+	    valid = false;
 	  // Can't have 2 initializers either.
 	  if (init_idx != -1)
 	    valid = false;
