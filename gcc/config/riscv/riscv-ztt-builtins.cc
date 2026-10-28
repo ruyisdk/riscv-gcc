@@ -16396,9 +16396,57 @@ reuse_scalar_stack_operands ()
   return changed;
 }
 
+/* A predecessor can follow its zero-store successor in the RTL layout.  */
+static bool
+scalar_zero_path_p (rtx_insn *store, rtx reg, unsigned int &budget)
+{
+  basic_block bb = BLOCK_FOR_INSN (store);
+  rtx_insn *stop = store;
+  unsigned int distance = 0;
+  for (unsigned int blocks = 0; blocks != 4; ++blocks)
+    {
+      rtx_insn *end = PREV_INSN (BB_HEAD (bb));
+      for (rtx_insn *insn = stop ? PREV_INSN (stop) : BB_END (bb);
+	   insn != end; insn = PREV_INSN (insn))
+	{
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (!budget || distance++ == 32)
+	    return false;
+	  --budget;
+	  if (JUMP_P (insn) && insn == BB_END (bb)
+	      && md_preserving_branch_p (insn))
+	    continue;
+	  if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	      || recog_memoized (insn) < 0 || side_effects_p (PATTERN (insn))
+	      || !md_scalar_insn_p (PATTERN (insn)))
+	    return false;
+	  if (reg_set_p (reg, insn))
+	    {
+	      rtx set = PATTERN (insn);
+	      return GET_CODE (set) == SET
+		&& local_md_state::full_gpr_p (SET_DEST (set))
+		&& REGNO (SET_DEST (set)) == REGNO (reg)
+		&& SET_SRC (set) == const0_rtx;
+	    }
+	}
+      if (!single_pred_p (bb))
+	return false;
+      edge incoming = single_pred_edge (bb);
+      if (incoming->src->index < NUM_FIXED_BLOCKS
+	  || (incoming->flags & (EDGE_COMPLEX | EDGE_FAKE
+				 | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING)))
+	return false;
+      bb = incoming->src;
+      stop = nullptr;
+    }
+  return false;
+}
+
 /* Block duplication can expose byte zero stores after GPR propagation.  */
 static bool
-fold_scalar_zero_store (rtx_insn *insn, local_md_state &state)
+fold_scalar_zero_store (rtx_insn *insn, local_md_state &state,
+			unsigned int &budget)
 {
   rtx pat = PATTERN (insn);
   if (GET_CODE (pat) != SET || RTX_FRAME_RELATED_P (insn)
@@ -16408,8 +16456,10 @@ fold_scalar_zero_store (rtx_insn *insn, local_md_state &state)
   if (!MEM_P (dest) || !REG_P (src) || !GP_REG_P (REGNO (src))
       || fixed_regs[REGNO (src)] || global_regs[REGNO (src)]
       || GET_MODE (src) != QImode
-      || GET_MODE (dest) != GET_MODE (src)
-      || state.broadcast_value (src) != const0_rtx)
+      || GET_MODE (dest) != GET_MODE (src))
+    return false;
+  bool path = state.broadcast_value (src) != const0_rtx;
+  if (path && !scalar_zero_path_p (insn, src, budget))
     return false;
   int length = get_attr_length (insn);
   validate_change (insn, &SET_SRC (pat), const0_rtx, true);
@@ -16421,7 +16471,8 @@ fold_scalar_zero_store (rtx_insn *insn, local_md_state &state)
   confirm_change_group ();
   df_insn_rescan (insn);
   if (dump_file)
-    fprintf (dump_file, "Use x0 for scalar store at insn %d\n", INSN_UID (insn));
+    fprintf (dump_file, "Use x0 for scalar store at insn %d%s\n", INSN_UID (insn),
+	     path ? " across predecessor" : "");
   return true;
 }
 
@@ -16431,6 +16482,7 @@ reuse_local_md ()
 {
   bool cleanup = false;
   bool descriptor_cleanup = false;
+  unsigned int scalar_zero_budget = 2048;
   const bool explicit_state = riscv_ztt_explicit_state_p ();
   if (dump_file)
     fprintf (dump_file, "Explicit Md state: %d\n", explicit_state);
@@ -17296,7 +17348,7 @@ reuse_local_md ()
 	    }
 	  if (md_scalar_insn_p (PATTERN (insn)))
 	    {
-	      cleanup |= fold_scalar_zero_store (insn, state);
+	      cleanup |= fold_scalar_zero_store (insn, state, scalar_zero_budget);
 	      record_scalar_md (insn, state);
 	    }
 	  else
@@ -17396,6 +17448,109 @@ reuse_local_md ()
 }
 
 #if CHECKING_P
+static void
+run_scalar_zero_path_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  for (unsigned int test = 0; test != 22; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      int reload = reload_completed;
+      int fixed = fixed_regs[25], global = global_regs[25];
+      reload_completed = 1;
+      basic_block entry = BASIC_BLOCK_FOR_FN (cfun, 2);
+      rtx_note *note = emit_note (NOTE_INSN_BASIC_BLOCK);
+      NOTE_BASIC_BLOCK (note) = entry;
+      BB_HEAD (entry) = BB_END (entry) = note;
+      basic_block dest = create_empty_bb (entry);
+      basic_block source = create_empty_bb (dest);
+      redirect_edge_succ (single_succ_edge (entry), source);
+      edge incoming = make_edge (source, dest, 0);
+      make_edge (dest, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      auto append = [] (basic_block block, rtx pat) {
+	rtx_insn *insn = emit_insn_after (pat, BB_END (block));
+	set_block_for_insn (insn, block);
+	return BB_END (block) = insn;
+      };
+      rtx reg = gen_rtx_REG (Pmode, 25);
+      rtx byte = gen_rtx_REG (QImode, 25);
+      rtx pointer = gen_rtx_REG (Pmode, 10);
+      if (test != 2 && test != 15)
+	append (source, gen_rtx_SET (reg, test == 1 ? const1_rtx : const0_rtx));
+      if (test == 3) append (dest, gen_rtx_SET (reg, const1_rtx));
+      if (test == 4) append (source, gen_rtx_SET (byte, const0_rtx));
+      if (test == 5)
+	{
+	  rtx_insn *call = emit_call_insn_after
+	    (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx),
+	     BB_END (source));
+	  set_block_for_insn (call, source);
+	  BB_END (source) = call;
+	}
+      if (test == 6)
+	append (source, gen_rtx_ASM_INPUT_loc (VOIDmode, "# boundary", UNKNOWN_LOCATION));
+      if (test == 7) incoming->flags |= EDGE_EH;
+      if (test == 8) make_edge (entry, dest, 0);
+      if (test == 9)
+	RTX_FRAME_RELATED_P (append (source, gen_rtx_SET (pointer, const0_rtx))) = 1;
+      if (test == 11 || test == 21)
+	for (unsigned int i = 0; i != (test == 11 ? 32U : 31U); ++i)
+	  append (source, gen_rtx_SET (pointer, plus_constant (Pmode, pointer, 1)));
+      if (test == 12)
+	{
+	  basic_block prev = source;
+	  for (unsigned int i = 0; i != 3; ++i)
+	    {
+	      basic_block more = create_empty_bb (prev);
+	      redirect_edge_succ (single_succ_edge (prev), more);
+	      make_edge (more, dest, 0);
+	      prev = more;
+	    }
+	}
+      if (test == 13)
+	append (source, gen_rtx_SET (gen_rtx_MEM (QImode, pointer), const0_rtx));
+      if (test == 14 || test == 19)
+	{
+	  rtx target = gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ());
+	  if (test == 14)
+	    target = gen_rtx_IF_THEN_ELSE
+	      (VOIDmode, gen_rtx_NE (VOIDmode, pointer, const0_rtx), target, pc_rtx);
+	  rtx_insn *jump = emit_jump_insn_after (gen_rtx_SET (pc_rtx, target), BB_END (source));
+	  set_block_for_insn (jump, source);
+	  BB_END (source) = jump;
+	}
+      if (test == 15)
+	{
+	  remove_edge (single_succ_edge (entry));
+	  make_edge (dest, source, EDGE_DFS_BACK);
+	}
+      if (test == 17) fixed_regs[25] = 1;
+      if (test == 18) global_regs[25] = 1;
+      if (test == 20) append (source, gen_rtx_USE (VOIDmode, reg));
+      rtx mem = gen_rtx_MEM (QImode, pointer);
+      if (test == 16) MEM_VOLATILE_P (mem) = 1;
+      rtx_insn *store = append (dest, gen_rtx_SET (mem, byte));
+      unsigned int budget = test == 10 ? 0 : 2048;
+      bool expected = test == 0 || test == 13 || test == 14
+	|| (test >= 16 && test <= 19) || test == 21;
+      char context[64];
+      snprintf (context, sizeof context, "scalar zero path case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected, scalar_zero_path_p (store, byte, budget));
+      local_md_state state;
+      budget = test == 10 ? 0 : 2048;
+      bool folded = expected && (test < 16 || test > 18);
+      ASSERT_EQ_AT (loc, folded, fold_scalar_zero_store (store, state, budget));
+      ASSERT_TRUE_AT (loc, rtx_equal_p (mem, SET_DEST (PATTERN (store))));
+      ASSERT_EQ_AT (loc, folded, SET_SRC (PATTERN (store)) == const0_rtx);
+      reload_completed = reload;
+      fixed_regs[25] = fixed;
+      global_regs[25] = global;
+    }
+}
+
 static void
 run_scalar_spill_path_selftests ()
 {
@@ -17806,6 +17961,7 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  run_scalar_zero_path_selftests ();
   run_scalar_spill_path_selftests ();
   run_load_path_selftests ();
   run_loop_spill_selftests ();
