@@ -981,6 +981,55 @@ static_assert (ZTT_BUILTIN_MLDEXPACC_EW_X_F64_RNO_32X1
 static_assert (ZTT_BUILTIN_MLS_RM_I128_RNU_1X1
 	       == exponent_first + exponent_count);
 
+struct wide_scalar_family
+{
+  const char *name;
+  prototype_index narrow;
+  prototype_index wide;
+  expansion_index expansion;
+};
+
+static constexpr wide_scalar_family wide_scalar_families[] =
+{
+#define ZTT_WIDE_SCALAR_OP(OP, NAME, KIND) \
+  { #NAME, PROTO_M_##KIND##_I8_RNU, PROTO_M_##KIND##_I64_RNU, EXPAND_##OP },
+#include "riscv-ztt-operations.def"
+#undef ZTT_WIDE_SCALAR_OP
+  { "mbcast_m_x", PROTO_M_BCAST_I8_RNU, PROTO_M_BCAST_I64_RNU,
+    EXPAND_MBCAST_M_X }
+};
+
+/* Narrow destinations have only wide TC entries here.  Wide destinations
+   have all 40 TC variants.  Both reuse the nonsaturating exponent type axis.  */
+static constexpr unsigned int wide_scalar_first
+  = ZTT_BUILTIN_MADD_EW_X_I8_RNU_1X1_I64_RNU;
+static constexpr unsigned int wide_scalar_type_first = 2 * 4 * 11;
+static constexpr unsigned int wide_scalar_narrow_types = 6 * 4 * 11;
+static constexpr unsigned int wide_scalar_narrow_part
+  = wide_scalar_narrow_types * 16;
+static constexpr unsigned int wide_scalar_per_operation
+  = wide_scalar_narrow_part + 4 * 4 * 11 * 40;
+static constexpr unsigned int wide_scalar_count
+  = ARRAY_SIZE (wide_scalar_families) * wide_scalar_per_operation;
+static_assert (wide_scalar_first == 160428 && wide_scalar_count == 236544);
+static_assert (ZTT_BUILTIN_MSUB_EW_X_I8_RNU_1X1_I64_RNU
+	       == wide_scalar_first + wide_scalar_per_operation);
+static_assert (ZTT_BUILTIN_MBCAST_M_X_U128_ROD_32X1_U128_ROD
+	       == wide_scalar_first + wide_scalar_count - 1);
+static_assert (exponent_types[wide_scalar_type_first] == TYPE_I8_RNU_1X1);
+static_assert (exponent_types[wide_scalar_type_first + wide_scalar_narrow_types]
+	       == TYPE_I64_RNU_1X1);
+static_assert (exponent_types[wide_scalar_type_first + 10 * 4 * 11 - 1]
+	       == TYPE_U128_ROD_32X1);
+
+static constexpr unsigned int
+stored_builtin_code (unsigned int index)
+{
+  unsigned int code
+    = index < wide_scalar_first ? index : index + wide_scalar_count;
+  return code < exponent_first ? code : code + exponent_count;
+}
+
 /* Keep the large static catalog compact without changing enum identities.  */
 struct stored_builtin_description
 {
@@ -1009,14 +1058,17 @@ stored_builtin_name (expansion_index expansion, const char *name)
 static constexpr stored_builtin_description stored_builtin_descriptions[] =
 {
 #define ZTT_EXPONENT_FAMILY(OP, SPELLING, PROTO)
+#define ZTT_WSC_FAMILY(OP, NAME, KIND)
 #define ZTT_INTRINSIC(ID, NAME, PROTO, EXPAND, TYPE) \
   { stored_builtin_name (EXPAND_##EXPAND, NAME), \
     PROTO_##PROTO, EXPAND_##EXPAND, TYPE_##TYPE },
 #include "riscv-ztt-intrinsics.def"
 #undef ZTT_INTRINSIC
+#undef ZTT_WSC_FAMILY
 #undef ZTT_EXPONENT_FAMILY
 };
 static_assert (ARRAY_SIZE (stored_builtin_descriptions) + exponent_count
+	       + wide_scalar_count
 	       == ZTT_BUILTIN_MAX);
 
 /* Map stable builtin codes to stored metadata or compact family entries.
@@ -1024,6 +1076,27 @@ static_assert (ARRAY_SIZE (stored_builtin_descriptions) + exponent_count
 static constexpr builtin_description
 builtin_description_for (unsigned int code)
 {
+  if (code >= wide_scalar_first && code < wide_scalar_first + wide_scalar_count)
+    {
+      unsigned int offset = code - wide_scalar_first;
+      const auto &f = wide_scalar_families[offset / wide_scalar_per_operation];
+      offset %= wide_scalar_per_operation;
+      unsigned int dst = 0, tc = 0;
+      if (offset < wide_scalar_narrow_part)
+	{
+	  dst = offset / 16;
+	  tc = 24 + offset % 16;
+	}
+      else
+	{
+	  offset -= wide_scalar_narrow_part;
+	  dst = wide_scalar_narrow_types + offset / 40;
+	  tc = offset % 40;
+	}
+      unsigned int prototype = tc < 24 ? f.narrow + tc : f.wide + tc - 24;
+      return { f.name, static_cast<prototype_index> (prototype), f.expansion,
+	       exponent_types[wide_scalar_type_first + dst] };
+    }
   if (code >= exponent_first && code < exponent_first + exponent_count)
     {
       unsigned int offset = code - exponent_first;
@@ -1031,8 +1104,9 @@ builtin_description_for (unsigned int code)
       d.type = exponent_types[offset % exponent_type_count];
       return d;
     }
-  const auto &d = stored_builtin_descriptions
-    [code < exponent_first ? code : code - exponent_count];
+  unsigned int index = code - (code < wide_scalar_first ? 0 : wide_scalar_count)
+    - (code < exponent_first ? 0 : exponent_count);
+  const auto &d = stored_builtin_descriptions[index];
   return { d.name, static_cast<prototype_index> (d.prototype),
 	   static_cast<expansion_index> (d.expansion),
 	   static_cast<type_index> (d.type) };
@@ -1177,7 +1251,7 @@ matmul_code_limit ()
 	    && (types[d.type].descriptor & 0xff) <= 32
 	    && !(types[d.type].descriptor
 		 & ((1U << 8) | (1U << 29))))
-	  limit = i + 1 + (i < exponent_first ? 0 : exponent_count);
+	  limit = stored_builtin_code (i) + 1;
       }
   return limit;
 }
@@ -1312,7 +1386,7 @@ elementwise_code_limit ()
       {
 	const auto &d = stored_builtin_descriptions[i];
 	if (legacy_elementwise_description_p (d.expansion, d.prototype, d.type))
-	  limit = i + 1 + (i < exponent_first ? 0 : exponent_count);
+	  limit = stored_builtin_code (i) + 1;
       }
   return limit;
 }
@@ -3776,6 +3850,7 @@ run_decoder_anchor_selftests ()
 
   auto_vec<unsigned int> wide, unary;
   unsigned int matmul_limit = 0, elementwise_limit = 0;
+  unsigned int stored_index = 0;
   wide.safe_grow_cleared (WIDE_MAX * wide_shape_count * wide_dtype_count);
   unary.safe_grow_cleared
     (integer_unary_operations * wide_shape_count * integer_dtype_count);
@@ -3783,6 +3858,16 @@ run_decoder_anchor_selftests ()
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const auto d = builtin_description_for (i);
+      if (!(i >= wide_scalar_first && i < wide_scalar_first + wide_scalar_count)
+	  && !(i >= exponent_first && i < exponent_first + exponent_count))
+	{
+	  ASSERT_EQ (stored_builtin_code (stored_index), i);
+	  const auto &stored = stored_builtin_descriptions[stored_index++];
+	  ASSERT_STREQ (d.name, stored.name);
+	  ASSERT_EQ (d.prototype, stored.prototype);
+	  ASSERT_EQ (d.expansion, stored.expansion);
+	  ASSERT_EQ (d.type, stored.type);
+	}
       int op = wide_operation (d.expansion);
       const auto &t = types[d.type];
       if ((d.expansion == EXPAND_A_MMUL
@@ -3815,6 +3900,7 @@ run_decoder_anchor_selftests ()
 	}
     }
   ASSERT_EQ (matmul_limit, matmul_anchor_limit);
+  ASSERT_EQ (stored_index, ARRAY_SIZE (stored_builtin_descriptions));
   ASSERT_EQ (elementwise_limit, elementwise_anchor_limit);
   for (unsigned int key = 0; key < wide.length (); ++key)
     {
@@ -4186,6 +4272,12 @@ run_wide_signature_selftests ()
 #define ZTT_WIDE_SCALAR_OP(OP, NAME, KIND) \
   check_scalar_name (ZTT_BUILTIN_##OP##_I8_RNU_1X1_I8_RNU, \
 		     "__riscv_ztt_" #NAME "_i8_rnu_1x1_i8_rnu"); \
+  check_scalar_name (ZTT_BUILTIN_##OP##_I8_RNU_1X1_I64_RNU, \
+		     "__riscv_ztt_" #NAME "_i8_rnu_1x1_i64_rnu"); \
+  check_scalar_name (ZTT_BUILTIN_##OP##_U32_ROD_32X1_U128_ROD, \
+		     "__riscv_ztt_" #NAME "_u32_rod_32x1_u128_rod"); \
+  check_scalar_name (ZTT_BUILTIN_##OP##_I64_RNU_1X1_I8_RNU, \
+		     "__riscv_ztt_" #NAME "_i64_rnu_1x1_i8_rnu"); \
   check_scalar_name (ZTT_BUILTIN_##OP##_U128_ROD_32X1_U128_ROD, \
 		     "__riscv_ztt_" #NAME "_u128_rod_32x1_u128_rod");
 #include "riscv-ztt-operations.def"

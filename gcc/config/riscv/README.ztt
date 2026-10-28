@@ -175,6 +175,10 @@ records directly; exponent families do not belong to either anchor domain.
 Integer Scalar and broadcast entries store shared operation names.  Their
 canonical names use the existing destination/source type builders and local
 prefix cache after profile checks; public names and code order are unchanged.
+The contiguous wide Scalar interval stores one descriptor per operation and
+decodes destination/TC ordinals using the existing type axis.  Narrow
+destinations in this interval have wide TC entries only.  Other catalog
+records retain their order, with compact indices mapped back to public codes.
 
 Structural folding
 ------------------
