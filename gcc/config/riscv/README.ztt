@@ -611,6 +611,9 @@ original permutation remain unchanged.
 Same-type integer binary operations use the same reload proof for each
 source.  Identical inputs share one setup; partial preparation retains the
 existing mask and all arithmetic and user-memory effects.
+One immediate or GPR-plus-immediate descriptor definition may move before
+the reloads when its input is unchanged and its old result is not observed.
+The move and setter insertion occur only after the consumer rewrite succeeds.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and

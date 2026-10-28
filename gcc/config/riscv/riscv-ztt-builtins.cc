@@ -14270,35 +14270,91 @@ class local_raw_spill
 public:
   void clear () { reg = mem = nullptr; store = nullptr; }
 
+  struct reload_preparation
+  {
+    rtx_insn *point = nullptr;
+    rtx_insn *definition = nullptr;
+
+    explicit operator bool () const { return point != nullptr; }
+
+    void emit (rtx group, rtx descriptor, rtx_insn *use) const
+    {
+      /* A shared definition may already have moved for another packet.  */
+      if (definition)
+	for (rtx_insn *p = point; p != use; p = NEXT_INSN (p))
+	  if (p == definition)
+	    {
+	      reorder_insns (definition, definition, PREV_INSN (point));
+	      while (rtx note = find_reg_note (definition, REG_DEAD, NULL_RTX))
+		remove_note (definition, note);
+	      df_insn_rescan (definition);
+	      if (dump_file)
+		fprintf (dump_file, "Move reload descriptor %d before insn %d\n",
+			 INSN_UID (definition), INSN_UID (point));
+	      break;
+	    }
+      rtx_insn *setup = emit_insn_before
+	(gen_ztt_typed_msettyp_p0
+	 (GET_MODE (group), Pmode, group, descriptor), point);
+      df_insn_rescan (setup);
+    }
+  };
+
   /* Every member must be overwritten before the new Md can be observed.  */
-  static rtx_insn *reload_preparation_point (rtx_insn *use, rtx group,
-					   rtx descriptor, unsigned int step)
+  static reload_preparation
+  reload_preparation_point (rtx_insn *use, rtx group, rtx descriptor,
+			    unsigned int step)
   {
     if (flag_non_call_exceptions || !REG_P (group)
 	|| !M_REG_P (REGNO (group)) || !m_mode_p (GET_MODE (group))
 	|| !local_md_state::full_gpr_p (descriptor)
 	|| fixed_regs[REGNO (descriptor)] || global_regs[REGNO (descriptor)])
-      return nullptr;
+      return {};
     unsigned int nregs = m_nregs (GET_MODE (group));
     unsigned int first = REGNO (group) - M_REG_FIRST;
     if (step != nregs || first % nregs || first + nregs > M_REG_NUM)
-      return nullptr;
+      return {};
     unsigned HOST_WIDE_INT seen = 0;
     unsigned HOST_WIDE_INT full = (HOST_WIDE_INT_1U << nregs) - 1;
     unsigned int count = 0;
+    rtx_insn *definition = nullptr;
+    rtx definition_input = nullptr;
     for (rtx_insn *p = PREV_INSN (use); p; p = PREV_INSN (p))
       {
 	if (LABEL_P (p) || BARRIER_P (p)
 	    || (NOTE_P (p) && NOTE_KIND (p) == NOTE_INSN_BASIC_BLOCK))
-	  return nullptr;
-	if (DEBUG_INSN_P (p) && reg_overlap_mentioned_p (group, PATTERN (p)))
-	  return nullptr;
+	  return {};
+	if (DEBUG_INSN_P (p)
+	    && (reg_overlap_mentioned_p (group, PATTERN (p))
+		|| (definition && reg_overlap_mentioned_p (descriptor, PATTERN (p)))))
+	  return {};
 	if (!NONDEBUG_INSN_P (p))
 	  continue;
 	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
-	    || recog_memoized (p) < 0 || modified_in_p (descriptor, p))
-	  return nullptr;
+	    || recog_memoized (p) < 0)
+	  return {};
 	rtx pat = PATTERN (p);
+	if (definition
+	    && (reg_referenced_p (descriptor, pat)
+		|| (definition_input && modified_in_p (definition_input, p))))
+	  return {};
+	if (modified_in_p (descriptor, p))
+	  {
+	    if (definition || REGNO (descriptor) == HARD_FRAME_POINTER_REGNUM
+		|| GET_CODE (pat) != SET
+		|| !rtx_equal_p (SET_DEST (pat), descriptor))
+	      return {};
+	    rtx value = SET_SRC (pat);
+	    if (GET_CODE (value) == PLUS && GET_MODE (value) == Pmode
+		&& local_md_state::full_gpr_p (XEXP (value, 0))
+		&& CONST_INT_P (XEXP (value, 1))
+		&& !reg_overlap_mentioned_p (descriptor, value))
+	      definition_input = XEXP (value, 0);
+	    else if (!CONST_INT_P (value))
+	      return {};
+	    definition = p;
+	    continue;
+	  }
 	if (md_raw_transfer_p (pat) && REG_P (SET_DEST (pat))
 	    && private_slot_p (SET_SRC (pat))
 	    && MEM_ADDR_SPACE (SET_SRC (pat)) == ADDR_SPACE_GENERIC)
@@ -14307,7 +14363,7 @@ public:
 	    if (member < nregs)
 	      seen |= HOST_WIDE_INT_1U << member;
 	    if (seen == full)
-	      return p;
+	      return { p, definition };
 	    continue;
 	  }
 	if (private_scalar_reload_p (p)
@@ -14319,9 +14375,9 @@ public:
 	    || global_regs[REGNO (SET_DEST (pat))]
 	    || REGNO (SET_DEST (pat)) == HARD_FRAME_POINTER_REGNUM
 	    || !address_expr_p (SET_SRC (pat)))
-	  return nullptr;
+	  return {};
       }
-    return nullptr;
+    return {};
   }
 
   /* Other members of a split spill may separate a save from its reload.  */
@@ -15252,7 +15308,7 @@ reuse_local_md ()
 		    descriptor = XVECEXP (src, 0, 2);
 		    bool pending = XVECLEN (src, 0) == 5;
 		    bool ready = pending && state.matches (group, descriptor);
-		    rtx_insn *reload_before = nullptr;
+		    local_raw_spill::reload_preparation reload_before;
 		    if (pending && !ready)
 		      reload_before = local_raw_spill::reload_preparation_point
 			(insn, group, descriptor, m_nregs (GET_MODE (group)));
@@ -15270,15 +15326,12 @@ reuse_local_md ()
 			gcc_assert (changed);
 			if (changed && reload_before)
 			  {
-			    rtx_insn *setup = emit_insn_before
-			      (gen_ztt_typed_msettyp_p0
-			       (GET_MODE (group), Pmode, group, descriptor), reload_before);
-			    df_insn_rescan (setup);
+			    reload_before.emit (group, descriptor, insn);
 			    descriptor_cleanup = true;
 			    if (dump_file)
 			      fprintf (dump_file,
 				       "Prepare Md before layout reload %d for insn %d\n",
-				       INSN_UID (reload_before), INSN_UID (insn));
+				       INSN_UID (reload_before.point), INSN_UID (insn));
 			  }
 			df_insn_rescan (insn);
 			cleanup = true;
@@ -15300,7 +15353,7 @@ reuse_local_md ()
 		    unsigned int step = m_nregs (GET_MODE (group)) / 2;
 		    gcc_assert (step && rtx_equal_p (group, XVECEXP (src, 0, 0)));
 		    unsigned int mask = 0;
-		    rtx_insn *reload_before[2] = {};
+		    local_raw_spill::reload_preparation reload_before[2] = {};
 		    for (unsigned int i = 0; i < 2; ++i)
 		      if (state.matches (REGNO (group) + i * step,
 					 matrix_mode (step), descriptor))
@@ -15338,16 +15391,12 @@ reuse_local_md ()
 			      {
 				rtx packet = gen_rtx_REG
 				  (matrix_mode (step), REGNO (group) + i * step);
-				rtx_insn *setup = emit_insn_before
-				  (gen_ztt_typed_msettyp_p0
-				   (GET_MODE (packet), Pmode, packet, descriptor),
-				   reload_before[i]);
-				df_insn_rescan (setup);
+				reload_before[i].emit (packet, descriptor, insn);
 				descriptor_cleanup = true;
 				if (dump_file)
 				  fprintf (dump_file,
 					   "Prepare Md before zip reload %d for insn %d: packet %u\n",
-					   INSN_UID (reload_before[i]), INSN_UID (insn), i);
+					   INSN_UID (reload_before[i].point), INSN_UID (insn), i);
 			      }
 			df_insn_rescan (insn);
 			cleanup = true;
@@ -15378,7 +15427,7 @@ reuse_local_md ()
 		    descriptor = XVECEXP (src, 0, 2);
 		    bool ready = !prepared_p && state.matches_packets
 		      (group, descriptor, datatype_step (UINTVAL (steps), 1));
-		    rtx_insn *reload_before = nullptr;
+		    local_raw_spill::reload_preparation reload_before;
 		    if (!prepared_p && !ready)
 		      reload_before = local_raw_spill::reload_preparation_point
 			(insn, group, descriptor, datatype_step (UINTVAL (steps), 1));
@@ -15402,15 +15451,12 @@ reuse_local_md ()
 			  {
 			    if (reload_before)
 			      {
-				rtx_insn *setup = emit_insn_before
-				  (gen_ztt_typed_msettyp_p0
-				   (GET_MODE (group), Pmode, group, descriptor), reload_before);
-				df_insn_rescan (setup);
+				reload_before.emit (group, descriptor, insn);
 				descriptor_cleanup = true;
 				if (dump_file)
 				  fprintf (dump_file,
 					   "Prepare Md before unary reload %d for insn %d\n",
-					   INSN_UID (reload_before), INSN_UID (insn));
+					   INSN_UID (reload_before.point), INSN_UID (insn));
 			      }
 			    df_insn_rescan (insn);
 			    cleanup = true;
@@ -15468,7 +15514,7 @@ reuse_local_md ()
 		    unsigned int prepared = prepared_p ? 0
 		      : state.prepared_inputs (regs, descriptors, UINTVAL (steps),
 					       scalar, old_dest);
-		    rtx_insn *reload_before[3] = {};
+		    local_raw_spill::reload_preparation reload_before[3] = {};
 		    if (!prepared_p)
 		      for (unsigned int i = old_dest ? 0 : 1;
 			   i < (scalar ? 2U : 3U); ++i)
@@ -15541,16 +15587,12 @@ reuse_local_md ()
 			    for (unsigned int i = 0; i != 3; ++i)
 			      if (reload_before[i])
 				{
-				  rtx_insn *setup = emit_insn_before
-				    (gen_ztt_typed_msettyp_p0
-				     (GET_MODE (regs[i]), Pmode, regs[i], descriptors[i]),
-				     reload_before[i]);
-				  df_insn_rescan (setup);
+				  reload_before[i].emit (regs[i], descriptors[i], insn);
 				  descriptor_cleanup = true;
 				  if (dump_file)
 				    fprintf (dump_file,
 					     "Prepare Md before private reload %d for insn %d\n",
-					     INSN_UID (reload_before[i]), INSN_UID (insn));
+					     INSN_UID (reload_before[i].point), INSN_UID (insn));
 				}
 			    df_insn_rescan (insn);
 			    cleanup = true;
@@ -15609,7 +15651,7 @@ reuse_local_md ()
 		    unsigned int mask = state.matches (lhs, descriptor)
 		      | (state.matches (rhs, descriptor) << 1);
 		    rtx inputs[] = { lhs, rhs };
-		    rtx_insn *reload_before[2] = {};
+		    local_raw_spill::reload_preparation reload_before[2] = {};
 		    if (XVECLEN (src, 0) > 3
 			&& (!reg_overlap_mentioned_p (lhs, rhs)
 			    || rtx_equal_p (lhs, rhs)))
@@ -15651,16 +15693,12 @@ reuse_local_md ()
 			  for (unsigned int i = 0; i < 2; ++i)
 			    if (reload_before[i])
 			      {
-				rtx_insn *setup = emit_insn_before
-				  (gen_ztt_typed_msettyp_p0
-				   (GET_MODE (inputs[i]), Pmode, inputs[i], descriptor),
-				   reload_before[i]);
-				df_insn_rescan (setup);
+				reload_before[i].emit (inputs[i], descriptor, insn);
 				descriptor_cleanup = true;
 				if (dump_file)
 				  fprintf (dump_file,
 					   "Prepare Md before binary reload %d for insn %d: source %u\n",
-					   INSN_UID (reload_before[i]), INSN_UID (insn), i);
+					   INSN_UID (reload_before[i].point), INSN_UID (insn), i);
 			      }
 			df_insn_rescan (insn);
 			cleanup = true;
@@ -15720,7 +15758,7 @@ reuse_local_md ()
 		      unsigned int count = m_nregs (GET_MODE (group));
 		      gcc_assert (count == acc_full_m_nregs (mode));
 		      unsigned int mask = 0;
-		      rtx_insn *reload_before[ACC_REG_NUM] = {};
+		      local_raw_spill::reload_preparation reload_before[ACC_REG_NUM] = {};
 		      for (unsigned int i = 0; i < count / step; ++i)
 			if (state.matches (REGNO (group) + i * step,
 					   matrix_mode (step), descriptor))
@@ -15757,16 +15795,12 @@ reuse_local_md ()
 				{
 				  rtx packet = gen_rtx_REG
 				    (matrix_mode (step), REGNO (group) + i * step);
-				  rtx_insn *setup = emit_insn_before
-				    (gen_ztt_typed_msettyp_p0
-				     (GET_MODE (packet), Pmode, packet, descriptor),
-				     reload_before[i]);
-				  df_insn_rescan (setup);
+				  reload_before[i].emit (packet, descriptor, insn);
 				  descriptor_cleanup = true;
 				  if (dump_file)
 				    fprintf (dump_file,
 					     "Prepare Md before ACC reload %d for insn %d: packet %u\n",
-					     INSN_UID (reload_before[i]), INSN_UID (insn), i);
+					     INSN_UID (reload_before[i].point), INSN_UID (insn), i);
 				}
 			  df_insn_rescan (insn);
 			  cleanup = true;
@@ -15827,7 +15861,7 @@ reuse_local_md ()
 		    unsigned int mask = state.matches (lhs, ld)
 		      | (state.matches (rhs, rd) << 1);
 		    rtx groups[] = { lhs, rhs }, descriptors[] = { ld, rd };
-		    rtx_insn *reload_before[2] = {};
+		    local_raw_spill::reload_preparation reload_before[2] = {};
 		    for (unsigned int i = 0; i < 2; ++i)
 		      if (!(mask & (1U << i)))
 			{
@@ -15879,16 +15913,12 @@ reuse_local_md ()
 		      for (unsigned int i = 0; i < 2; ++i)
 			if (reload_before[i])
 			  {
-			    rtx_insn *setup = emit_insn_before
-			      (gen_ztt_typed_msettyp_p0
-			       (GET_MODE (groups[i]), Pmode, groups[i], descriptors[i]),
-			       reload_before[i]);
-			    df_insn_rescan (setup);
+			    reload_before[i].emit (groups[i], descriptors[i], insn);
 			    descriptor_cleanup = true;
 			    if (dump_file)
 			      fprintf (dump_file,
 				       "Prepare Md before matmul reload %d for insn %d: source %u\n",
-				       INSN_UID (reload_before[i]), INSN_UID (insn), i);
+				       INSN_UID (reload_before[i].point), INSN_UID (insn), i);
 			  }
 		    if (mask && dump_file)
 		      fprintf (dump_file, "Reuse Md at insn %d: sources %u\n",
@@ -15905,7 +15935,7 @@ reuse_local_md ()
 		  bool store = XINT (src, 1) == UNSPECV_ZTT_STATE_STORE;
 		  bool memory_store
 		    = XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE;
-		  rtx_insn *reload_before = nullptr;
+		  local_raw_spill::reload_preparation reload_before;
 		  bool ready = (store || memory_store)
 		    && state.matches (group, descriptor);
 		  if ((store || memory_store) && !ready)
@@ -15924,15 +15954,12 @@ reuse_local_md ()
 		      gcc_assert (changed);
 		      if (changed && reload_before)
 			{
-			  rtx_insn *setup = emit_insn_before
-			    (gen_ztt_typed_msettyp_p0
-			     (GET_MODE (group), Pmode, group, descriptor), reload_before);
-			  df_insn_rescan (setup);
+			  reload_before.emit (group, descriptor, insn);
 			  descriptor_cleanup = true;
 			  if (dump_file)
 			    fprintf (dump_file,
 				     "Prepare Md before store reload %d for insn %d\n",
-				     INSN_UID (reload_before), INSN_UID (insn));
+				     INSN_UID (reload_before.point), INSN_UID (insn));
 			}
 		      df_insn_rescan (insn);
 		      cleanup = true;
@@ -17969,14 +17996,70 @@ run_md_reuse_selftests ()
 	  }
 	}
       rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
-      rtx_insn *point = local_raw_spill::reload_preparation_point
+      auto plan = local_raw_spill::reload_preparation_point
 	(use, group, descriptor, test == 31 ? 4 : nregs);
-      bool expected = TARGET_ZTT && (test <= 3 || test == 22
+      rtx_insn *point = plan.point;
+      bool expected = TARGET_ZTT && (test <= 3 || test == 11 || test == 22
 				     || test == 24 || test >= 32);
       char context[64];
       snprintf (context, sizeof context, "private reload preparation %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
       ASSERT_EQ_AT (loc, expected ? first : nullptr, point);
+      reload_completed = saved_reload;
+      flag_non_call_exceptions = non_call;
+      riscv_ztt_profile_string = profile;
+    }
+  for (unsigned int test = 0; test != 16; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      const char *profile = riscv_ztt_profile_string;
+      riscv_ztt_profile_string = "gcc-runtime-u8-m32-a16";
+      int saved_reload = reload_completed, non_call = flag_non_call_exceptions;
+      reload_completed = 1;
+      flag_non_call_exceptions = test == 9;
+      rtx group = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST);
+      rtx a = gen_rtx_REG (Pmode, 10), d = gen_rtx_REG (Pmode, 11);
+      rtx b = gen_rtx_REG (Pmode, 12), c = gen_rtx_REG (Pmode, 13);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, test == 4 ? d : a);
+      set_mem_attrs_for_spill (slot);
+      if (test == 14)
+	emit_insn (gen_rtx_SET (d, GEN_INT (32)));
+      rtx_insn *first = emit_insn
+	(gen_rtx_SET (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST), slot));
+      if (test == 2)
+	emit_insn (gen_rtx_SET (b, const0_rtx));
+      if (test == 3)
+	emit_insn (gen_rtx_SET (c, d));
+      if (test == 5)
+	emit_debug_insn (gen_rtx_VAR_LOCATION
+	  (Pmode, get_spill_slot_decl (false), d, VAR_INIT_STATUS_INITIALIZED));
+      if (test == 7)
+	emit_insn (gen_rtx_SET (d, const1_rtx));
+      if (test == 13)
+	emit_insn (gen_rtx_SET (c, b));
+      rtx value = test == 0 || test == 14 ? GEN_INT (32)
+	: test == 8 ? gen_rtx_MEM (Pmode, a)
+	: test == 15 ? gen_rtx_MULT (Pmode, b, GEN_INT (32))
+	: gen_rtx_PLUS (Pmode, test == 6 ? d : b, GEN_INT (32));
+      rtx dest = test == 12 ? gen_rtx_REG (HImode, REGNO (d)) : d;
+      rtx_insn *definition = test == 14 ? nullptr
+	: emit_insn (gen_rtx_SET (dest, test == 12 ? const0_rtx : value));
+      if (test == 10)
+	RTX_FRAME_RELATED_P (definition) = 1;
+      for (unsigned int i = 1; i != 8; ++i)
+	emit_insn (gen_rtx_SET
+	  (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + (test == 11 ? 0 : i)), slot));
+      rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
+      rtx_insn *next = NEXT_INSN (first);
+      auto plan = local_raw_spill::reload_preparation_point (use, group, d, 8);
+      bool expected = TARGET_ZTT
+	&& (test == 0 || test == 1 || test == 13 || test == 14);
+      char context[64];
+      snprintf (context, sizeof context, "reload descriptor motion %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected ? first : nullptr, plan.point);
+      ASSERT_EQ_AT (loc, expected ? definition : nullptr, plan.definition);
+      ASSERT_EQ_AT (loc, next, NEXT_INSN (first));
       reload_completed = saved_reload;
       flag_non_call_exceptions = non_call;
       riscv_ztt_profile_string = profile;
