@@ -247,6 +247,10 @@ M-to-ACC can retain separate complete-half sources for a single local ACC
 consumer with room left in the M bank.  The result stays whole until allocation;
 post-reload splitting uses two existing transfers at whole packet boundaries.
 
+Single packed conversions can form their contiguous source directly from
+four single-use leaves of a two-level concat.  Existing type, local-window
+and SSA partition checks still apply; live leaves retain the original groups.
+
 The GIMPLE hook can replace extraction from a single-use concatenation
 with the corresponding complete source value.  Exact types and shape
 transitions must match.  The search stays within one basic block and

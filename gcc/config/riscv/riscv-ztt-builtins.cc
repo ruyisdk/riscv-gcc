@@ -9960,7 +9960,7 @@ struct concat_operand
 
 static bool concat_operand_sources (tree, type_index, unsigned int,
 				    unsigned int, concat_operand *, bool = false,
-				    tree = NULL_TREE);
+				    tree = NULL_TREE, bool = false);
 static rtx concat_operand_part (concat_operand *, unsigned int, unsigned int,
 			       unsigned int);
 
@@ -10224,7 +10224,7 @@ nested_concat_sources (gimple *parent, type_index half,
 		       unsigned int half_insns, unsigned int step,
 		       gimple *const *outer, unsigned int count,
 		       const concat_companion &companion,
-		       concat_operand *sources)
+		       concat_operand *sources, bool single_use_parts)
 {
   if (half_insns < 2 || half_insns % 2)
     return false;
@@ -10258,6 +10258,7 @@ nested_concat_sources (gimple *parent, type_index half,
 	  tree input = gimple_call_arg (producer, j);
 	  if (TREE_CODE (input) != SSA_NAME
 	      || type_for_tree (TREE_TYPE (input)) != quarter
+	      || (single_use_parts && !has_single_use (input))
 	      || var_to_partition (SA.map, input) == NO_PARTITION)
 	    return false;
 	  rtx reg = get_rtx_for_ssa_name (input);
@@ -10304,7 +10305,7 @@ static bool
 concat_operand_sources (tree pair, type_index type,
 			unsigned int insns, unsigned int step,
 			concat_operand *sources,
-			bool shared_input, tree companion)
+			bool shared_input, tree companion, bool single_use_parts)
 {
   unsigned int half_insns = insns / 2;
   if (!optimize || !runtime_profile_p () || !half_insns
@@ -10375,7 +10376,7 @@ concat_operand_sources (tree pair, type_index type,
       && has_single_use (gimple_call_arg (producer, 1)))
     return false;
   if (nested_concat_sources (producer, half, half_insns, step,
-			     producers, count, retained, sources))
+			     producers, count, retained, sources, single_use_parts))
     return true;
   for (unsigned int i = 0; i < 2; ++i)
     sources[i].value[0]
@@ -10505,6 +10506,24 @@ expand_conversion (const builtin_description &d,
     }
   const auto &f = operation.formation;
   concat_operand sources[2];
+  if (!flag_non_call_exceptions && f.insns == 1
+      && f.step[1] > f.step[0] && f.step[1] % 4 == 0
+      && concat_operand_sources (CALL_EXPR_ARG (exp, 0), operation.source,
+				 4, f.step[1] / 4, sources, false, NULL_TREE, true)
+      && sources[0].value[1] && sources[1].value[1])
+    {
+      /* A packed conversion needs one contiguous source, not two copies
+	 of independently allocated concat halves.  */
+      source = gen_reg_rtx (modes[1]);
+      emit_clobber (source);
+      machine_mode part_mode = matrix_mode (f.step[1] / 4);
+      for (unsigned int i = 0; i < 4; ++i)
+	emit_move_insn (simplify_gen_subreg
+			(part_mode, source, modes[1], GET_MODE_SIZE (part_mode) * i),
+			sources[i / 2].value[i % 2]);
+      if (dump_file)
+	fprintf (dump_file, "Form packed conversion source directly\n");
+    }
   bool concat = concat_operand_sources (CALL_EXPR_ARG (exp, 0),
 					operation.source, f.insns, f.step[1],
 					sources);
