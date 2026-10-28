@@ -11906,7 +11906,7 @@ acc_mmul_length (rtx *operands, bool mixed_p)
 /* A separate copy is profitable only while the complete live M bank fits.
    Calls retain their existing spill/coalescing policy.  */
 static void
-shared_old_copy_sites (bitmap sites)
+live_old_copy_sites (bitmap sites)
 {
   for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
     if (NONDEBUG_INSN_P (insn))
@@ -11928,9 +11928,8 @@ shared_old_copy_sites (bitmap sites)
 	      && REG_P (SET_DEST (set))
 	      && (scalar || matrix
 		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1)))
-	      && (rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
-		  || (matrix
-		      && rtx_equal_p (XVECEXP (src, 0, 1), XVECEXP (src, 0, 5))))
+	      && (matrix
+		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5)))
 	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	    bitmap_set_bit (sites, INSN_UID (insn));
 	}
@@ -11969,16 +11968,22 @@ shared_old_copy_sites (bitmap sites)
 		    && XINT (src, 1) == UNSPECV_ZTT_TERNARY_X_FLAGS);
 	      /* Inputs coexist with the result even when its pseudo is reused.  */
 	      if (!scalar)
-		for (unsigned int i = 0; i < 2; ++i)
-		  {
-		    rtx input = XVECEXP (src, 0, i);
-		    if (!REG_P (input) || REGNO (input) < FIRST_PSEUDO_REGISTER)
-		      { needed = active_profile ()->mregs + 1; break; }
-		    if ((REGNO (input) == REGNO (dest)
-			 || !bitmap_bit_p (live, REGNO (input)))
-			&& (i == 0 || !rtx_equal_p (input, XVECEXP (src, 0, 0))))
-		      needed += m_nregs (GET_MODE (input));
-		  }
+		{
+		  rtx inputs[] = { XVECEXP (src, 0, 0), XVECEXP (src, 0, 1),
+				   XVECEXP (src, 0, 5) };
+		  for (unsigned int i = 0; i < ARRAY_SIZE (inputs); ++i)
+		    {
+		      rtx input = inputs[i];
+		      if (!REG_P (input) || REGNO (input) < FIRST_PSEUDO_REGISTER)
+			{ needed = active_profile ()->mregs + 1; break; }
+		      bool duplicate = false;
+		      for (unsigned int j = 0; j < i; ++j)
+			duplicate |= rtx_equal_p (input, inputs[j]);
+		      if (!duplicate && (REGNO (input) == REGNO (dest)
+				 || !bitmap_bit_p (live, REGNO (input))))
+			needed += m_nregs (GET_MODE (input));
+		    }
+		}
 	      if (needed > active_profile ()->mregs)
 		bitmap_clear_bit (sites, INSN_UID (insn));
 	      /* Scalar controls compete with live-group descriptors for GPRs.  */
@@ -12000,7 +12005,7 @@ lower_explicit_state ()
   bool leaf_index_reuse = optimize && runtime_profile_p () && leaf_function_p ();
   auto_bitmap copy_sites;
   if (leaf_index_reuse)
-    shared_old_copy_sites (copy_sites);
+    live_old_copy_sites (copy_sites);
   rtx state_slots[6] = {};
   for (rtx_insn *insn = get_insns (); insn; )
     {
@@ -12406,9 +12411,8 @@ lower_explicit_state ()
 		&& m_nregs (mode) == groups[0]
 		&& mode == GET_MODE (XVECEXP (src, 0, 0))
 		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
-		&& (rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0))
-		    || (code == UNSPEC_ZTT_TERNARY
-			&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1))))
+		&& (code == UNSPEC_ZTT_TERNARY
+		    || rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0)))
 		&& (scalar
 		    || (mode == GET_MODE (XVECEXP (src, 0, 1))
 			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
