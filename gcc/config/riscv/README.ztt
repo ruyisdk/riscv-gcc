@@ -623,6 +623,9 @@ instructions, fences and memory orders remain unchanged.
 Scalar clmul, clmulh and clmulr preserve Md and amestype while invalidating
 their result GPR facts. Their calculations remain unchanged, including
 when emitted by CRC expansion; private spill tracking still stops.
+Recognized scalar SHA256, SHA512 and SM3 operations also preserve these
+facts. Only their result GPR changes; unknown UNSPECs and private spill
+tracking keep their existing boundaries.
 Recognized standard RVV integer, floating, configuration and memory
 instructions also preserve Md and amestype. These patterns use GPRs, vector
 registers and VL/VTYPE/VXRM; floating classes may also use FPRs and FRM.

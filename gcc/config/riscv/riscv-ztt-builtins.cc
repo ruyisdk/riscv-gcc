@@ -13194,6 +13194,38 @@ md_preserving_clmul_p (int code)
     }
 }
 
+/* Recognized scalar hash instructions write only their result GPR.  */
+static bool
+md_preserving_hash_p (rtx pattern)
+{
+  if (GET_CODE (pattern) != SET || !REG_P (SET_DEST (pattern))
+      || !GP_REG_P (REGNO (SET_DEST (pattern))))
+    return false;
+  rtx src = SET_SRC (pattern);
+  if (GET_CODE (src) == SIGN_EXTEND)
+    src = XEXP (src, 0);
+  if (GET_CODE (src) != UNSPEC)
+    return false;
+  for (int i = 0; i < XVECLEN (src, 0); ++i)
+    if (!REG_P (XVECEXP (src, 0, i))
+	|| !GP_REG_P (REGNO (XVECEXP (src, 0, i))))
+      return false;
+  switch (XINT (src, 1))
+    {
+    case UNSPEC_SHA_256_SIG0: case UNSPEC_SHA_256_SIG1:
+    case UNSPEC_SHA_256_SUM0: case UNSPEC_SHA_256_SUM1:
+    case UNSPEC_SHA_512_SIG0: case UNSPEC_SHA_512_SIG1:
+    case UNSPEC_SHA_512_SUM0: case UNSPEC_SHA_512_SUM1:
+    case UNSPEC_SHA_512_SIG0H: case UNSPEC_SHA_512_SIG0L:
+    case UNSPEC_SHA_512_SIG1H: case UNSPEC_SHA_512_SIG1L:
+    case UNSPEC_SHA_512_SUM0R: case UNSPEC_SHA_512_SUM1R:
+    case UNSPEC_SM3_P0: case UNSPEC_SM3_P1:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Only the result GPR changes; the volatile CSR observation remains.  */
 static bool
 md_read_csr_p (int code)
@@ -13957,6 +13989,7 @@ reuse_cleaned_descriptors ()
 	    continue;
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_clmul_p (code)
+	      || (code >= 0 && md_preserving_hash_p (PATTERN (insn)))
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -14214,6 +14247,7 @@ reuse_local_md ()
 	    }
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_clmul_p (code)
+	      || (code >= 0 && md_preserving_hash_p (PATTERN (insn)))
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
 	      || (code >= 0 && TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -14859,6 +14893,53 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  {
+    const int ops[] = {
+      UNSPEC_SHA_256_SIG0, UNSPEC_SHA_256_SIG1,
+      UNSPEC_SHA_256_SUM0, UNSPEC_SHA_256_SUM1,
+      UNSPEC_SM3_P0, UNSPEC_SM3_P1,
+      UNSPEC_SHA_512_SIG0, UNSPEC_SHA_512_SIG1,
+      UNSPEC_SHA_512_SUM0, UNSPEC_SHA_512_SUM1,
+      UNSPEC_SHA_512_SIG0H, UNSPEC_SHA_512_SIG0L,
+      UNSPEC_SHA_512_SIG1H, UNSPEC_SHA_512_SIG1L,
+      UNSPEC_SHA_512_SUM0R, UNSPEC_SHA_512_SUM1R
+    };
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx descriptor = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    for (unsigned int i = 0; i < ARRAY_SIZE (ops); ++i)
+      for (unsigned int dest : { 10U, 11U })
+	{
+	  machine_mode mode = i >= 6 && i < 10 ? DImode : SImode;
+	  rtx input = gen_rtx_REG (mode, 12);
+	  rtvec args = i < 10 ? gen_rtvec (1, input)
+	    : gen_rtvec (2, input, gen_rtx_REG (mode, 13));
+	  rtx src = gen_rtx_UNSPEC (mode, args, ops[i]);
+	  if (i < 6 && TARGET_64BIT)
+	    src = gen_rtx_SIGN_EXTEND (DImode, src);
+	  rtx pat = gen_rtx_SET (gen_rtx_REG (GET_MODE (src), dest), src);
+	  ASSERT_TRUE (md_preserving_hash_p (pat));
+	  ASSERT_FALSE (md_scalar_insn_p (pat));
+	  local_md_state state;
+	  state.remember (matrix, descriptor);
+	  note_stores (emit_insn (pat), invalidate_md_store, &state);
+	  ASSERT_EQ (dest != 10, state.matches (matrix, descriptor));
+	  rtx bad = copy_rtx (pat);
+	  SET_DEST (bad) = matrix;
+	  ASSERT_FALSE (md_preserving_hash_p (bad));
+	  bad = copy_rtx (pat);
+	  rtx inner = SET_SRC (bad);
+	  if (GET_CODE (inner) == SIGN_EXTEND)
+	    inner = XEXP (inner, 0);
+	  XINT (inner, 1) = UNSPEC_CLMUL;
+	  ASSERT_FALSE (md_preserving_hash_p (bad));
+	  XINT (inner, 1) = ops[i];
+	  XVECEXP (inner, 0, 0) = gen_rtx_MEM (mode, descriptor);
+	  ASSERT_FALSE (md_preserving_hash_p (bad));
+	}
+    ASSERT_FALSE (md_preserving_hash_p (gen_rtx_ASM_INPUT (VOIDmode, "")));
+    ASSERT_FALSE (md_preserving_hash_p (gen_rtx_SET (descriptor, const0_rtx)));
+  }
   {
     const insn_code codes[] = {
       CODE_FOR_riscv_clmul_si, CODE_FOR_riscv_clmul_di,
