@@ -727,6 +727,11 @@ After reload cleanup, the last 32 instructions of a return block are
 checked for unread private stores.  Known disjoint spill-slot ranges do
 not keep another member alive; unknown ranges and overlapping reads do.
 The existing alias, debug and exceptional-path checks still apply.
+An initial reverse scan shares a no-private-read proof across at most
+128 instructions, removing stores without rescanning their suffixes.
+Any possible private read ends that fast path; the 32-instruction
+per-slot check still handles disjoint reads. Calls, asm, unknown effects,
+exceptional paths and frame-related stores retain their existing guards.
 Known register-only clmul and SHA/SM3 instructions do not read private
 slots and may appear in this return-tail scan. Their operations remain.
 Recognized prepared M computations without memory operands also permit

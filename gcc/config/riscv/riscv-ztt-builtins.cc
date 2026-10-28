@@ -13852,6 +13852,52 @@ public:
       }
   }
 
+  template<typename Read>
+  static bool tail_insn_p (rtx_insn *insn, Read read)
+  {
+    rtx pat = PATTERN (insn);
+    if (DEBUG_INSN_P (insn))
+      return !read (pat);
+    if (CALL_P (insn))
+      return false;
+    if (memory_barrier_p (pat))
+      return true;
+    if (GET_CODE (pat) == USE && REG_P (XEXP (pat, 0))
+	&& (GP_REG_P (REGNO (XEXP (pat, 0)))
+	    || FP_REG_P (REGNO (XEXP (pat, 0)))))
+      return true;
+    if (asm_noperands (pat) >= 0
+	|| GET_CODE (pat) == ASM_INPUT || recog_memoized (insn) < 0)
+      return false;
+    int code = INSN_CODE (insn);
+    if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
+	|| code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi
+	|| md_preserving_fence_p (code) || md_read_csr_p (code))
+      return true;
+    if ((md_preserving_fp_p (code, pat) || md_preserving_clmul_p (code)
+	 || md_preserving_hash_p (pat)) && !contains_mem_rtx_p (pat))
+      return true;
+    if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
+	&& md_preserving_vector_p (get_attr_type (insn), pat))
+      return !read (pat);
+    if (NONJUMP_INSN_P (insn) && prepared_matrix_p (pat))
+      return true;
+    if (!NONJUMP_INSN_P (insn) || GET_CODE (pat) != SET)
+      return false;
+    rtx src = SET_SRC (pat), dest = SET_DEST (pat);
+    bool prepared_store = MEM_P (dest) && GET_CODE (src) == UNSPEC_VOLATILE
+      && ((XINT (src, 1) == UNSPECV_ZTT_STATE_STORE && XVECLEN (src, 0) == 1)
+	  || (XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE
+	      && XVECLEN (src, 0) == 3));
+    if (!prepared_store
+	&& ((!md_raw_transfer_p (pat) && !md_scalar_insn_p (pat))
+	    || side_effects_p (pat)))
+      return false;
+    return !read (src)
+      && (MEM_P (dest) ? !MEM_VOLATILE_P (dest) && !read (XEXP (dest, 0))
+	  : REG_P (dest));
+  }
+
   /* A private spill is dead if the remaining return tail cannot read it.  */
   bool remove_dead_store ()
   {
@@ -13873,25 +13919,10 @@ public:
       {
 	if (!INSN_P (p))
 	  continue;
-	rtx pat = PATTERN (p);
-	if (DEBUG_INSN_P (p))
-	  {
-	    if (spill_read_p (pat))
-	      return false;
-	    continue;
-	  }
-	if (++count > 32 || CALL_P (p))
+	if (!DEBUG_INSN_P (p) && ++count > 32)
 	  return false;
-	if (memory_barrier_p (pat))
-	  continue;
-	if (GET_CODE (pat) == USE && REG_P (XEXP (pat, 0))
-	    && (GP_REG_P (REGNO (XEXP (pat, 0)))
-		|| FP_REG_P (REGNO (XEXP (pat, 0)))))
-	  continue;
-	if (asm_noperands (pat) >= 0
-	    || GET_CODE (pat) == ASM_INPUT || recog_memoized (p) < 0)
-	  return false;
-	if (p == BB_END (bb) && returnjump_p (p) && !contains_mem_rtx_p (pat))
+	if (p == BB_END (bb) && returnjump_p (p)
+	    && recog_memoized (p) >= 0 && !contains_mem_rtx_p (PATTERN (p)))
 	  {
 	    if (dump_file)
 	      fprintf (dump_file, "Drop dead private spill at insn %d\n",
@@ -13900,38 +13931,58 @@ public:
 	    clear ();
 	    return true;
 	  }
-	int code = INSN_CODE (p);
-	if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
-	    || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi
-	    || md_preserving_fence_p (code) || md_read_csr_p (code))
-	  continue;
-	if ((md_preserving_fp_p (code, pat) || md_preserving_clmul_p (code)
-	     || md_preserving_hash_p (pat)) && !contains_mem_rtx_p (pat))
-	  continue;
-	if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
-	    && md_preserving_vector_p (get_attr_type (p), pat)
-	    && !spill_read_p (pat))
-	  continue;
-	if (NONJUMP_INSN_P (p) && prepared_matrix_p (pat))
-	  continue;
-	if (!NONJUMP_INSN_P (p) || GET_CODE (pat) != SET)
-	  return false;
-	rtx src = SET_SRC (pat), dest = SET_DEST (pat);
-	bool prepared_store = MEM_P (dest) && GET_CODE (src) == UNSPEC_VOLATILE
-	  && ((XINT (src, 1) == UNSPECV_ZTT_STATE_STORE && XVECLEN (src, 0) == 1)
-	      || (XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE
-		  && XVECLEN (src, 0) == 3));
-	if (!prepared_store
-	    && ((!md_raw_transfer_p (pat) && !md_scalar_insn_p (pat))
-		|| side_effects_p (pat)))
-	  return false;
-	if (spill_read_p (src)
-	    || (MEM_P (dest)
-		? MEM_VOLATILE_P (dest) || spill_read_p (XEXP (dest, 0))
-		: !REG_P (dest)))
+	if (!tail_insn_p (p, [&] (rtx x) { return spill_read_p (x); }))
 	  return false;
       }
     return false;
+  }
+
+  /* Share one suffix proof when no private slot is read at all.  */
+  static bool remove_unread_tail (basic_block bb)
+  {
+    tree decl = get_spill_slot_decl (false);
+    rtx canonical = decl ? DECL_RTL_IF_SET (decl) : nullptr;
+    rtx_insn *end = BB_END (bb);
+    if (!canonical || !MEM_P (canonical) || !MEM_ALIAS_SET (canonical)
+	|| cfun->stdarg || cfun->calls_setjmp || cfun->has_nonlocal_label
+	|| crtl->calls_eh_return || flag_non_call_exceptions
+	|| !md_normal_edge_p (single_succ_edge (bb))
+	|| !JUMP_P (end) || !returnjump_p (end) || recog_memoized (end) < 0
+	|| contains_mem_rtx_p (PATTERN (end)))
+      return false;
+    auto read = [&] (rtx x) {
+      subrtx_iterator::array_type array;
+      FOR_EACH_SUBRTX (iter, array, x, NONCONST)
+	if (MEM_P (*iter)
+	    && (MEM_VOLATILE_P (*iter)
+		|| alias_sets_conflict_p (MEM_ALIAS_SET (canonical),
+					 MEM_ALIAS_SET (*iter))))
+	  return true;
+      return false;
+    };
+    unsigned int count = 1;
+    bool changed = false;
+    rtx_insn *insn, *prev;
+    FOR_BB_INSNS_REVERSE_SAFE (bb, insn, prev)
+      {
+	if (!INSN_P (insn) || insn == end)
+	  continue;
+	if ((!DEBUG_INSN_P (insn) && ++count > 128)
+	    || !tail_insn_p (insn, read))
+	  break;
+	rtx pat = PATTERN (insn);
+	if (NONJUMP_INSN_P (insn) && !RTX_FRAME_RELATED_P (insn)
+	    && md_raw_transfer_p (pat) && private_slot_p (SET_DEST (pat))
+	    && MEM_ALIAS_SET (SET_DEST (pat)) == MEM_ALIAS_SET (canonical))
+	  {
+	    if (dump_file)
+	      fprintf (dump_file, "Drop dead private spill at insn %d (unread tail)\n",
+		       INSN_UID (insn));
+	    delete_insn (insn);
+	    changed = true;
+	  }
+      }
+    return changed;
   }
 
   /* Revisit split members after all reloads in the return tail are cleaned.  */
@@ -13940,7 +13991,7 @@ public:
     if (!single_succ_p (bb)
 	|| single_succ (bb) != EXIT_BLOCK_PTR_FOR_FN (cfun))
       return false;
-    bool changed = false;
+    bool changed = remove_unread_tail (bb);
     unsigned int count = 0;
     rtx_insn *insn, *prev;
     FOR_BB_INSNS_REVERSE_SAFE (bb, insn, prev)
@@ -16459,7 +16510,7 @@ run_md_reuse_selftests ()
 	BB_END (bb) = emit_jump_insn_after
 	  (gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
 	   BB_END (bb));
-	ASSERT_EQ (TARGET_ZTT && (test == 0 || test == 9),
+	ASSERT_EQ (TARGET_ZTT && (test == 0 || test == 6 || test == 9),
 		   local_raw_spill::remove_dead_tail (bb));
 	ASSERT_FALSE (local_raw_spill::remove_dead_tail (bb));
 	reload_completed = saved_reload;
@@ -16537,11 +16588,83 @@ run_md_reuse_selftests ()
 	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
 	 BB_END (bb));
       ASSERT_EQ (test == 0 || test == 1 || test == 10 || test == 12
-		 || test == 16 || test == 18,
+		 || test == 16 || (test == 17 && raw) || test == 18,
 		 local_raw_spill::remove_dead_tail (bb));
       ASSERT_FALSE (local_raw_spill::remove_dead_tail (bb));
       riscv_ztt_profile_string = saved_profile;
       flag_strict_aliasing = strict_aliasing;
+    }
+  for (unsigned int test = 0; test != 26; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+      basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+      make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      const char *profile = riscv_ztt_profile_string;
+      riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+      int non_call = flag_non_call_exceptions;
+      int strict_aliasing = flag_strict_aliasing;
+      flag_strict_aliasing = test != 25;
+      rtx addr = gen_rtx_REG (Pmode, 10), tmp = gen_rtx_REG (Pmode, 11);
+      rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (slot);
+      rtx other = copy_rtx (slot);
+      set_mem_offset (other, GET_MODE_SIZE (ZTTMR1mode));
+      auto append = [&] (rtx pattern) {
+	rtx_insn *p = emit_insn_after (pattern, BB_END (bb));
+	BB_END (bb) = p;
+	return p;
+      };
+      if (test == 12) MEM_NOTRAP_P (slot) = 0;
+      if (test == 13) MEM_VOLATILE_P (slot) = 1;
+      if (test == 14) set_mem_alias_set (slot, 0);
+      rtx_insn *store = append (gen_rtx_SET (slot, m)), *second = nullptr;
+      if (test == 15) RTX_FRAME_RELATED_P (store) = 1;
+      if (test == 3 || test == 4 || test == 24)
+	append (gen_rtx_SET (m, test == 4 ? other : slot));
+      if (test == 5 || test == 6 || test == 7 || test == 25)
+	{
+	  rtx read = gen_rtx_MEM (Pmode, addr);
+	  if (test != 5) set_mem_alias_set (read, new_alias_set ());
+	  if (test == 7) MEM_VOLATILE_P (read) = 1;
+	  append (gen_rtx_SET (tmp, read));
+	}
+      if (test == 8)
+	BB_END (bb) = emit_debug_insn_after
+	  (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				slot, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+      if (test == 9)
+	BB_END (bb) = emit_call_insn_after
+	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, addr), const0_rtx), BB_END (bb));
+      if (test == 10) append (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      if (test == 11)
+	append (gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, m), UNSPECV_ZTT));
+      if (test == 16) single_succ_edge (bb)->flags |= EDGE_EH;
+      if (test == 17) flag_non_call_exceptions = 1;
+      if (test == 18) cfun->stdarg = true;
+      if (test == 19) cfun->calls_setjmp = true;
+      if (test == 20) cfun->has_nonlocal_label = true;
+      if (test == 21) crtl->calls_eh_return = true;
+      if (test == 23 || test == 24)
+	second = append (gen_rtx_SET (other, m));
+      unsigned int padding = test == 1 ? 126 : test == 2 ? 127 : 64;
+      for (unsigned int i = 0; i < padding; ++i)
+	append (gen_rtx_SET (tmp, GEN_INT (i)));
+      if (test != 22)
+	BB_END (bb) = emit_jump_insn_after
+	  (gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)), BB_END (bb));
+      bool expected = TARGET_ZTT && typed_profile_p () && riscv_ztt_explicit_state_p ()
+	&& (test == 0 || test == 1 || test == 6 || test == 23 || test == 24);
+      char context[64];
+      snprintf (context, sizeof context, "unread private tail case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected, local_raw_spill::remove_dead_tail (bb));
+      ASSERT_EQ (expected && test != 24, store->deleted ());
+      if (second) ASSERT_EQ (expected, second->deleted ());
+      ASSERT_FALSE (local_raw_spill::remove_dead_tail (bb));
+      flag_non_call_exceptions = non_call;
+      flag_strict_aliasing = strict_aliasing;
+      riscv_ztt_profile_string = profile;
     }
   for (unsigned int test = 0; test != 24; ++test)
     {
