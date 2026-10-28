@@ -602,6 +602,9 @@ remain; unproven packets keep their original preservation sequence.
 Matmul applies the same proof independently to both complete source groups.
 An identical shared input is prepared once. Partial overlap and conflicting
 descriptors retain the original path; the old ACC and multiply are unchanged.
+Zip/unzip independently proves the complete reloads of its two halves.
+Each proven half joins the preparation mask; the tied 1x2 value and the
+original permutation remain unchanged.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and
