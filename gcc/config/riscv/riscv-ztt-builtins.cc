@@ -1230,15 +1230,18 @@ store_builtin_code (expansion_index expansion, type_index type)
   unsigned int &code = codes[memory_variant (expansion)][type];
   if (!code)
     {
-      while (scanned < ZTT_BUILTIN_MAX)
+      /* Compact Scalar families contain no stores.  */
+      while (scanned < ARRAY_SIZE (stored_builtin_descriptions))
 	{
-	  unsigned int i = scanned++;
-	  const auto &d = builtin_description_for (i);
-	  if (!memory_store_p (d.expansion)
-	      || (store_dispatch_p (i) && i != ZTT_BUILTIN_MSS_RM_I8_RNE_1X1))
+	  const auto &d = stored_builtin_descriptions[scanned++];
+	  auto stored_expansion = static_cast<expansion_index> (d.expansion);
+	  if (!memory_store_p (stored_expansion))
+	    continue;
+	  unsigned int i = stored_builtin_code (scanned - 1);
+	  if (store_dispatch_p (i) && i != ZTT_BUILTIN_MSS_RM_I8_RNE_1X1)
 	    continue;
 	  gcc_assert (d.type < TYPE_MAX);
-	  unsigned int &entry = codes[memory_variant (d.expansion)][d.type];
+	  unsigned int &entry = codes[memory_variant (stored_expansion)][d.type];
 	  if (!entry)
 	    entry = i + 1;
 	  if (code)

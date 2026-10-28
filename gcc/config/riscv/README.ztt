@@ -183,6 +183,9 @@ operation descriptors and type axis.  Compact stored indices map back to
 public codes without changing either narrow or wide interval boundaries.
 Lookup partitions codes at the wide interval: later entries bypass the
 narrow interval scan and subtract its complete prefix directly.
+Store lookup scans only stored metadata, since the compact Scalar families
+contain no stores.  Matches map back to the original public codes; the
+cache retains the first matching code and the missing-entry sentinel.
 
 Structural folding
 ------------------
