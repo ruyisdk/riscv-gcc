@@ -8763,7 +8763,8 @@ expand_self_zero (const builtin_description &d, tree exp)
   if (!optimize || !runtime_profile_p ()
       || !currently_expanding_gimple_stmt
       || (d.expansion != EXPAND_MXOR_EW
-	  && d.expansion != EXPAND_MANDNOT_EW)
+	  && d.expansion != EXPAND_MANDNOT_EW
+	  && d.expansion != EXPAND_MSUB_EW)
       || d.type == TYPE_MAX || types[d.type].accumulator
       || floating_descriptor_p (types[d.type].descriptor)
       || types[d.type].rows * types[d.type].columns <= 1)

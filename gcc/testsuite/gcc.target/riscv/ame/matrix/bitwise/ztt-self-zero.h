@@ -16,7 +16,7 @@ typedef AC_ELEMENT ac_element;
 #define AC_LOAD ac_matrix a = AC_OP(mls_rm) (in)
 #define AC_SAVE(v) __riscv_ztt_mss_rm (saved_a, a); \
   __riscv_ztt_mss_rm (out, v)
-#ifdef AC_FLOAT
+#if defined (AC_FLOAT) || defined (AC_SUB)
 #define AC_XOR msub_ew
 #define AC_ANDNOT msub_ew
 #else
