@@ -1213,6 +1213,39 @@ builtin_description_for (unsigned int code)
 	   static_cast<type_index> (d.type) };
 }
 
+/* Sequential Scalar entries differ only in their prototype ordinal.  */
+class builtin_catalog_cursor
+{
+  unsigned int m_next = 0;
+  unsigned int m_end = 0;
+  builtin_description m_description = {};
+
+public:
+  builtin_description next (unsigned int code)
+  {
+    if (code != m_next || code == m_end)
+      {
+	m_description = builtin_description_for (code);
+	m_end = scalar_destination_end (code);
+	if (code >= wide_scalar_first
+	    && code < wide_scalar_first + wide_scalar_count)
+	  {
+	    unsigned int offset = (code - wide_scalar_first)
+	      % wide_scalar_per_operation;
+	    /* The 40-entry groups cross two separate prototype intervals.  */
+	    if (offset >= wide_scalar_narrow_part
+		&& (offset - wide_scalar_narrow_part) % 40 < 24)
+	      m_end -= 16;
+	  }
+      }
+    else
+      m_description.prototype
+	= static_cast<prototype_index> (m_description.prototype + 1);
+    m_next = code + 1;
+    return m_description;
+  }
+};
+
 /* Keep the original RM
    dispatch ID and append the other memory families.  */
 static int
@@ -3958,6 +3991,7 @@ run_decoder_anchor_selftests ()
   unsigned int matmul_limit = 0, elementwise_limit = 0;
   unsigned int stored_index = 0, scalar_end = 0;
   type_index scalar_type = TYPE_MAX;
+  builtin_catalog_cursor sequential, jumps;
   wide.safe_grow_cleared (WIDE_MAX * wide_shape_count * wide_dtype_count);
   unary.safe_grow_cleared
     (integer_unary_operations * wide_shape_count * integer_dtype_count);
@@ -3965,6 +3999,18 @@ run_decoder_anchor_selftests ()
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
       const auto d = builtin_description_for (i);
+      const auto walked = sequential.next (i);
+      ASSERT_STREQ (walked.name, d.name);
+      ASSERT_EQ (walked.prototype, d.prototype);
+      ASSERT_EQ (walked.expansion, d.expansion);
+      ASSERT_EQ (walked.type, d.type);
+      unsigned int jump = ZTT_BUILTIN_MAX - 1 - i;
+      const auto jumped = jumps.next (jump);
+      const auto expected_jump = builtin_description_for (jump);
+      ASSERT_STREQ (jumped.name, expected_jump.name);
+      ASSERT_EQ (jumped.prototype, expected_jump.prototype);
+      ASSERT_EQ (jumped.expansion, expected_jump.expansion);
+      ASSERT_EQ (jumped.type, expected_jump.type);
       unsigned int end = scalar_destination_end (i);
       ASSERT_TRUE (end > i && end <= ZTT_BUILTIN_MAX);
       if (i == scalar_end)
@@ -6382,9 +6428,10 @@ register_functions ()
   register_nominal_scalars ();
   const profile_info &profile = *active_profile ();
   scalar_name_cache names;
+  builtin_catalog_cursor catalog;
   for (unsigned int i = 0; i < ZTT_BUILTIN_MAX; ++i)
     {
-      const builtin_description &d = builtin_description_for (i);
+      const builtin_description d = catalog.next (i);
       type_index type;
       prototype_index prototype;
       if (!registration_signature (i, d, profile, type, prototype))

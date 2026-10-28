@@ -109,6 +109,9 @@ in a local two-spelling cache while iterating over Scalar source types.
 Unavailable destinations skip their complete TC group in the compact Scalar
 catalog.  Available entries retain their original order and signature checks;
 stored non-Scalar entries, including overloaded stores, keep individual gates.
+Sequential registration decodes compact Scalar metadata at group boundaries
+and advances the prototype ordinal within each contiguous interval.  The
+narrow/wide TC boundary and skipped groups restart decoding.
 
 Scalar resolution indexes exact main-variant type identities on first use.
 The GC/PCH-visible reverse index grows only through the catalog prefix
