@@ -1005,7 +1005,11 @@ Private scalar spills can remain if every access is SP-relative, fits the
 fixed local area and lies between the allocation and release on every path.
 Removing the scalable gap relocates those slots together, keeping their
 offsets and memory operations.  The fixed saves and CFA do not move.
-Proven debug slot locations are adjusted to their new fixed FP offsets.
+At two-predecessor joins, bounded local rescans retain only identical stack
+address facts established independently on both paths.
+Proven debug slot locations are adjusted to their new fixed FP offsets,
+including slots in compound expressions.  The complete expression must
+contain no other affected stack references before any slot is relocated.
 Unknown stack locations or equivalence notes retain the allocation.
 Scalar parameter loads at fixed nonnegative CFA offsets do not use this
 workspace and remain in place, including sign/zero-extended loads and their
