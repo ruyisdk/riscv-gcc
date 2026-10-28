@@ -8731,6 +8731,23 @@ repeated_broadcast_value (const builtin_description &d,
   return result;
 }
 
+/* A zero basic Square stays zero for every signed row/column offset.  */
+static tree
+zero_data_shift_value (const builtin_description &d,
+		       gimple_stmt_iterator *gsi, gcall *stmt)
+{
+  if (d.type == TYPE_MAX || types[d.type].accumulator
+      || types[d.type].rows != 1 || types[d.type].columns != 1
+      || !type_nregs (d.type)
+      || (types[d.type].descriptor & 0xff) < active_profile ()->uds)
+    return NULL_TREE;
+  tree value = gimple_call_arg (stmt, 0);
+  gimple *producers[6];
+  unsigned int count = 0;
+  return structure_zero_p (value, d.type, producers, count)
+    && local_structure_producers_p (gsi, producers, count) ? value : NULL_TREE;
+}
+
 gimple *
 gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
@@ -8748,12 +8765,16 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
       bool broadcast = d.prototype == PROTO_M_ROWCOL_INDEX
 	&& (d.expansion == EXPAND_MCOLBCAST_EW_X
 	    || d.expansion == EXPAND_MROWBCAST_EW_X);
-      if ((!zip && !broadcast && d.expansion != EXPAND_MEXTRACT
+      bool shift = d.prototype == PROTO_M_ROWCOL_OFFSET
+	&& (d.expansion == EXPAND_MCOLSHIFT_EW_X
+	    || d.expansion == EXPAND_MROWSHIFT_EW_X);
+      if ((!zip && !broadcast && !shift && d.expansion != EXPAND_MEXTRACT
 	   && d.expansion != EXPAND_MCONCAT)
 	  || gimple_call_num_args (stmt) != (zip ? 1 : 2)
 	  || type_for_tree (TREE_TYPE (lhs)) != d.type)
 	return nullptr;
       value = broadcast ? repeated_broadcast_value (d, gsi, stmt)
+	: shift ? zero_data_shift_value (d, gsi, stmt)
 	: zip ? inverse_zip_value (d, gsi, stmt)
 	: d.expansion == EXPAND_MEXTRACT ? extracted_concat_value (d, gsi, stmt)
 	: rebuilt_pair_value (d, gsi, stmt);

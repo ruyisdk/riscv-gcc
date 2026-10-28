@@ -388,6 +388,10 @@ complete basic Squares, using their existing full-value copy semantics.
 Such shifts may serve as terminal ownership witnesses.  Repeated broadcasts
 use this search too, retaining the final copy as the replacement value.
 Nonzero/dynamic offsets and longer or shared-inner chains remain boundaries.
+Separately, a local same-type zero constructor remains zero under any signed
+row/column offset, including floating positive zero.  Complete non-packed
+basic Squares reuse the original zero value and retain scalar side effects.
+Calls, asm and observable memory operations still bound the local proof.
 
 An optimized runtime-profile integer mconv with identical source and
 destination type indices expands to a full-mode M copy.  Width, signedness,
