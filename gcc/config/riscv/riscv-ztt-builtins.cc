@@ -14517,7 +14517,8 @@ public:
 	|| md_preserving_fence_p (code) || md_read_csr_p (code))
       return true;
     if ((md_preserving_fp_p (code, pat) || md_preserving_clmul_p (code)
-	 || md_preserving_hash_p (pat)) && !contains_mem_rtx_p (pat))
+	 || md_preserving_hash_p (pat) || md_preserving_bitperm_p (code))
+	&& !contains_mem_rtx_p (pat))
       return true;
     if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
 	&& md_preserving_vector_p (get_attr_type (insn), pat))
@@ -17191,7 +17192,7 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
-  for (unsigned int test = 0; test != 48; ++test)
+  for (unsigned int test = 0; test != 56; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
       basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
@@ -17351,6 +17352,34 @@ run_md_reuse_selftests ()
 	    flag_non_call_exceptions = 1;
 	  append (gen_rtx_USE (VOIDmode, value));
 	  break;
+	case 48: case 49: case 50: case 51: case 52:
+	case 53: case 54: case 55:
+	  if (test == 49)
+	    append (TARGET_64BIT ? gen_riscv_xperm4_di (value, value, addr)
+		    : gen_riscv_xperm4_si (value, value, addr));
+	  else if (test == 50)
+	    append (TARGET_64BIT ? gen_riscv_xperm8_di (value, value, addr)
+		    : gen_riscv_xperm8_si (value, value, addr));
+	  else if (test == 51 || test == 52)
+	    {
+	      rtx output = gen_rtx_REG (SImode, 11);
+	      rtx input = gen_rtx_REG (SImode, 12);
+	      append (test == 51 ? gen_riscv_zip (output, input)
+		      : gen_riscv_unzip (output, input));
+	    }
+	  else
+	    append (TARGET_64BIT ? gen_riscv_brev8_di (value, value)
+		    : gen_riscv_brev8_si (value, value));
+	  if (test == 53)
+	    append (gen_rtx_SET (value, read));
+	  else if (test == 54)
+	    BB_END (bb) = emit_debug_insn_after
+	      (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				     mem, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+	  else if (test == 55)
+	    flag_non_call_exceptions = 1;
+	  append (gen_rtx_USE (VOIDmode, value));
+	  break;
 	}
       BB_END (bb) = emit_jump_insn_after
 	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
@@ -17365,6 +17394,9 @@ run_md_reuse_selftests ()
 		 || test == 32 || test == 33
 		 || (test == 42 && TARGET_ZBC)
 		 || (test == 43 && TARGET_ZKNH)
+		 || (test == 48 && TARGET_ZBKB)
+		 || ((test == 49 || test == 50) && TARGET_ZBKX)
+		 || ((test == 51 || test == 52) && TARGET_ZBKB && !TARGET_64BIT)
 		 || ((test == 36 || test == 38)
 		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 spill.remove_dead_store ());

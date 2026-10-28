@@ -822,6 +822,7 @@ per-slot check still handles disjoint reads. Calls, asm, unknown effects,
 exceptional paths and frame-related stores retain their existing guards.
 Known register-only clmul and SHA/SM3 instructions do not read private
 slots and may appear in this return-tail scan. Their operations remain.
+Recognized brev8, CPU zip/unzip and xperm4/8 also permit this scan.
 Recognized prepared M computations without memory operands also permit
 the scan to continue. Their calculations and status effects remain;
 unprepared preservation sequences still stop the scan.
