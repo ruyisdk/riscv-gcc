@@ -94,6 +94,9 @@ with the same destination reuse these signatures during registration;
 the resolver still checks exact source and Scalar identities at each call.
 Unused prototypes and destinations allocate no type vector.  Both caches
 end at registration; later lazy declarations do not retain these caches.
+Nominal signatures share immutable Scalar argument tails and reuse shorter
+cached argument lists when adding M parameters.  The registration cache
+roots those tails until their function types retain them.
 
 Scalar resolution indexes exact main-variant type identities on first use.
 The GC/PCH-visible reverse index grows only through the catalog prefix

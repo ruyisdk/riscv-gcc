@@ -1679,6 +1679,7 @@ static GTY (()) builtin_decl_table nominal_broadcast_decls
 struct GTY (()) nominal_registration_cache
 {
   vec<tree, va_gc> *blocks[riscv_ztt::TYPE_MAX];
+  tree scalar_args[numeric_scalar_dtype_count + 1];
 };
 static GTY (()) nominal_registration_cache *nominal_registration_types;
 
@@ -3157,11 +3158,26 @@ nominal_registration_type (type_index dst, unsigned int c, unsigned int nargs)
   if (!ftype)
     {
       tree m = ztt_m_type_nodes[dst];
-      tree scalar = c == numeric_scalar_dtype_count
-	? void_type_node : nominal_scalar_types[c];
-      ftype = nargs == 1 ? build_function_type_list (m, scalar, NULL_TREE)
-	: nargs == 2 ? build_function_type_list (m, m, scalar, NULL_TREE)
-	: build_function_type_list (m, m, m, scalar, NULL_TREE);
+      /* Function argument lists are immutable; prepend to an existing tail.  */
+      tree args = entries && nargs > 1 && (*entries)[key - 1]
+	? TYPE_ARG_TYPES ((*entries)[key - 1]) : NULL_TREE;
+      unsigned int prefix = args ? 1 : nargs - 1;
+      if (!args)
+	{
+	  if (nominal_registration_types)
+	    args = nominal_registration_types->scalar_args[c];
+	  if (!args)
+	    {
+	      tree scalar = c == numeric_scalar_dtype_count
+		? void_type_node : nominal_scalar_types[c];
+	      args = tree_cons (NULL_TREE, scalar, void_list_node);
+	      if (nominal_registration_types)
+		nominal_registration_types->scalar_args[c] = args;
+	    }
+	}
+      for (unsigned int i = 0; i < prefix; ++i)
+	args = tree_cons (NULL_TREE, m, args);
+      ftype = ::build_function_type (m, args);
       if (entries)
 	(*entries)[key] = ftype;
     }
