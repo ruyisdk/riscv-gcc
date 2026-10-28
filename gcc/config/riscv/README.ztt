@@ -440,9 +440,11 @@ results while retaining the reduction, conversions and status effects.
 This proof can cross one elementwise conversion or abs between unpacked basic
 Squares.  The unary operation and its status effects remain; calls and memory
 effects still bound the local proof.
-The same bound covers one same-type integer elementwise binary operation
-whose two inputs are invariant along that axis.  The operation remains,
-including its saturation effects; neither input's live range is extended.
+The same bound covers one same-type elementwise binary operation whose two
+inputs are invariant along that axis.  Generic carrier calls revalidate their
+explicit datatype metadata; equal physical modes alone do not establish this
+proof.  The operation remains, including rounding, saturation and floating
+flags; neither input's live range is extended.
 Floating carrier calls are checked against their exact destination metadata.
 Zero constructors record their consumed descriptor GPR so later loads can
 reuse it without rebuilding the same constant; the clearing setter remains.

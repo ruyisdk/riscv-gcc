@@ -8670,9 +8670,7 @@ structure_integer_constant (tree value, type_index type, gimple **producers,
 }
 
 static bool
-describe_structure_unary (gimple *&call, type_index type,
-			  builtin_description &d,
-			  conversion_description &operation)
+strip_structure_call_view (gimple *&call, type_index type)
 {
   if (is_gimple_assign (call)
       && gimple_assign_rhs_code (call) == VIEW_CONVERT_EXPR
@@ -8685,6 +8683,16 @@ describe_structure_unary (gimple *&call, type_index type,
 	return false;
       call = SSA_NAME_DEF_STMT (value);
     }
+  return true;
+}
+
+static bool
+describe_structure_unary (gimple *&call, type_index type,
+			  builtin_description &d,
+			  conversion_description &operation)
+{
+  if (!strip_structure_call_view (call, type))
+    return false;
   unsigned int code = structure_builtin_code (call, 1);
   if (decode_conversion_builtin (code, operation))
     d = builtin_description_for (operation.canonical);
@@ -8699,6 +8707,37 @@ describe_structure_unary (gimple *&call, type_index type,
 	return false;
     }
   return d.type == type;
+}
+
+static bool
+describe_structure_binary (gimple *&call, type_index type,
+			   builtin_description &d)
+{
+  if (!strip_structure_call_view (call, type))
+    return false;
+  elementwise_description operation;
+  unsigned int code = structure_builtin_code (call, 5);
+  if (integer_matrix_code_p (code) || floating_matrix_code_p (code))
+    {
+      tree args[5];
+      for (unsigned int i = 0; i < 5; ++i)
+	args[i] = gimple_call_arg (call, i);
+      if (!describe_integer_matrix (code, 5, args, d, operation))
+	return false;
+    }
+  else
+    {
+      code = structure_builtin_code (call);
+      if (code < ZTT_BUILTIN_MAX)
+	{
+	  d = builtin_description_for (code);
+	  return d.type == type;
+	}
+      if (!decode_elementwise_builtin (code, operation))
+	return false;
+      d = builtin_description_for (operation.canonical);
+    }
+  return d.type == type && operation.data == type && operation.count == type;
 }
 
 /* A reduction broadcasts its result along the reduced axis.  Keep the fold
@@ -8784,19 +8823,9 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	      return true;
 	    }
 	}
-      unsigned int code = structure_builtin_code (producer);
-      elementwise_description binary;
-      bool decoded = code < ZTT_BUILTIN_MAX;
-      if (decoded)
-	d = builtin_description_for (code);
-      else if (decode_elementwise_builtin (code, binary))
-	{
-	  d = builtin_description_for (binary.canonical);
-	  decoded = binary.data == type && binary.count == type;
-	}
-      if (decoded && d.type == type
-	  && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M)
-	  && !floating_descriptor_p (types[type].descriptor) && count <= 6)
+      call = producer;
+      if (count <= 6 && describe_structure_binary (call, type, d)
+	  && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M))
 	{
 	  switch (d.expansion)
 	    {
@@ -8814,7 +8843,7 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 		unsigned int end = count, side;
 		for (side = 0; side < 2; ++side)
 		  {
-		    tree input = gimple_call_arg (producer, side);
+		    tree input = gimple_call_arg (call, side);
 		    if (!strip_structure_view (input, type, producers, end)
 			|| !axis_invariant_structure_producer_p
 			     (SSA_NAME_DEF_STMT (input), type, expansion,
@@ -8824,6 +8853,8 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 		  }
 		if (side == 2)
 		  {
+		    if (call != producer)
+		      producers[end++] = call;
 		    count = end;
 		    return true;
 		  }

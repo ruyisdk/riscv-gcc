@@ -3,7 +3,7 @@
 /* { dg-additional-options "-march=rv32im_zicsr_ztt0p6 -mabi=ilp32" { target rv32 } } */
 /* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
 #include "../../../../../gcc.target/riscv/ame/matrix/indexed/ztt-binary-layout-ops.h"
-/* { dg-final { scan-assembler-times {mrowgather\.ew\s} 2 } } */
+/* { dg-final { scan-assembler-not {mrowgather\.ew\s} } } */
 /* { dg-final { scan-assembler-times {mrowbcast\.ew\.x\s} 14 } } */
 /* { dg-final { scan-assembler-times {madd\.ew\s} 2 } } */
 /* { dg-final { scan-assembler-times {mmax\.ew\s} 1 } } */
