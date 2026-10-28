@@ -8859,10 +8859,10 @@ structure_scalar_producer_p (gimple *&call, type_index type, unsigned int &value
   if (!strip_structure_call_view (call, type) || !is_gimple_call (call))
     return false;
   unsigned int nargs = gimple_call_num_args (call);
-  if (nargs != 4 && nargs != 5)
+  if (nargs != 4 && nargs != 5 && nargs != 6)
     return false;
   unsigned int code = structure_builtin_code (call, nargs);
-  tree args[5];
+  tree args[6];
   for (unsigned int i = 0; i < nargs; ++i)
     args[i] = gimple_call_arg (call, i);
   builtin_description d;
@@ -8875,10 +8875,10 @@ structure_scalar_producer_p (gimple *&call, type_index type, unsigned int &value
     }
   else
     {
-      if (nargs != 5 || !numeric_scalar_code_p (code)
+      if ((nargs != 5 && nargs != 6) || !numeric_scalar_code_p (code)
 	  || !describe_integer_scalar (code, nargs, args, d, operation))
 	return false;
-      values = 1;
+      values = nargs - 4;
     }
   return d.type == type && operation.source == type;
 }
