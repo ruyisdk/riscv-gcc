@@ -13826,6 +13826,22 @@ md_preserving_clmul_p (int code)
     }
 }
 
+/* Scalar bit permutations write only their result GPR.  */
+static bool
+md_preserving_bitperm_p (int code)
+{
+  switch (code)
+    {
+    case CODE_FOR_riscv_brev8_si: case CODE_FOR_riscv_brev8_di:
+    case CODE_FOR_riscv_zip: case CODE_FOR_riscv_unzip:
+    case CODE_FOR_riscv_xperm4_si: case CODE_FOR_riscv_xperm4_di:
+    case CODE_FOR_riscv_xperm8_si: case CODE_FOR_riscv_xperm8_di:
+      return true;
+    default:
+      return false;
+    }
+}
+
 /* Recognized scalar hash instructions write only their result GPR.  */
 static bool
 md_preserving_hash_p (rtx pattern)
@@ -14896,6 +14912,7 @@ reuse_cleaned_descriptors (bool &spill_cleanup)
 	    continue;
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_clmul_p (code)
+	      || md_preserving_bitperm_p (code)
 	      || (code >= 0 && md_preserving_hash_p (PATTERN (insn)))
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
@@ -15167,6 +15184,7 @@ reuse_local_md ()
 	    }
 	  if (md_read_csr_p (code) || md_preserving_cache_p (code)
 	      || md_preserving_clmul_p (code)
+	      || md_preserving_bitperm_p (code)
 	      || (code >= 0 && md_preserving_hash_p (PATTERN (insn)))
 	      || md_preserving_fp_p (code, PATTERN (insn))
 	      || md_preserving_atomic_p (code, PATTERN (insn))
@@ -16106,6 +16124,45 @@ run_md_reuse_selftests ()
 		     (int) CODE_FOR_riscv_ztt_release,
 		     (int) CODE_FOR_riscv_ztt_none })
       ASSERT_FALSE (md_preserving_clmul_p (code));
+  }
+  {
+    const insn_code codes[] = {
+      CODE_FOR_riscv_brev8_si, CODE_FOR_riscv_brev8_di,
+      CODE_FOR_riscv_zip, CODE_FOR_riscv_unzip,
+      CODE_FOR_riscv_xperm4_si, CODE_FOR_riscv_xperm4_di,
+      CODE_FOR_riscv_xperm8_si, CODE_FOR_riscv_xperm8_di
+    };
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    rtx descriptor = gen_rtx_REG (Pmode, 10);
+    rtx matrix = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+    rtx other = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+    for (unsigned int i = 0; i < ARRAY_SIZE (codes); ++i)
+      {
+	ASSERT_TRUE (md_preserving_bitperm_p (codes[i]));
+	machine_mode mode = i != 3 && i % 2 ? DImode : SImode;
+	for (unsigned int dest : { 10U, 11U })
+	  {
+	    rtx output = gen_rtx_REG (mode, dest);
+	    rtx input = gen_rtx_REG (mode, 12);
+	    rtx pat = i < 4
+	      ? GEN_FCN (codes[i]) (output, input)
+	      : GEN_FCN (codes[i]) (output, input, gen_rtx_REG (mode, 13));
+	    rtx_insn *insn = emit_insn (pat);
+	    local_md_state state;
+	    state.remember (matrix, descriptor);
+	    rtx known = gen_rtx_REG (Pmode, 14);
+	    state.record_constant (known, GEN_INT (37));
+	    state.remember (other, known);
+	    note_stores (insn, invalidate_md_store, &state);
+	    ASSERT_EQ (dest != 10, state.matches (matrix, descriptor));
+	    ASSERT_TRUE (state.matches (other, GEN_INT (37)));
+	    ASSERT_FALSE (md_scalar_insn_p (pat));
+	  }
+      }
+    for (int code : { -1, (int) CODE_FOR_nothing,
+		     (int) CODE_FOR_riscv_ztt_release,
+		     (int) CODE_FOR_riscv_ztt_none })
+      ASSERT_FALSE (md_preserving_bitperm_p (code));
   }
   {
     const insn_code codes[] = {

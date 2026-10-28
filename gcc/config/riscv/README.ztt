@@ -708,6 +708,8 @@ instructions, fences and memory orders remain unchanged.
 Scalar clmul, clmulh and clmulr preserve Md and amestype while invalidating
 their result GPR facts. Their calculations remain unchanged, including
 when emitted by CRC expansion; live spill forwarding still stops.
+Scalar brev8, zip/unzip and xperm4/8 also preserve Md and amestype;
+their result GPR facts are invalidated. Private spill rules are unchanged.
 Recognized scalar SHA256, SHA512 and SM3 operations also preserve these
 facts. Only their result GPR changes; unknown UNSPECs and live spill
 forwarding keep their existing boundaries.
