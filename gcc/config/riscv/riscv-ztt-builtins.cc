@@ -13701,7 +13701,8 @@ public:
 	    || code == CODE_FOR_stack_tie_spsi || code == CODE_FOR_stack_tie_spdi
 	    || md_preserving_fence_p (code) || md_read_csr_p (code))
 	  continue;
-	if (md_preserving_fp_p (code, pat) && !contains_mem_rtx_p (pat))
+	if ((md_preserving_fp_p (code, pat) || md_preserving_clmul_p (code)
+	     || md_preserving_hash_p (pat)) && !contains_mem_rtx_p (pat))
 	  continue;
 	if (TARGET_VECTOR && !TARGET_XTHEADVECTOR
 	    && md_preserving_vector_p (get_attr_type (p), pat)
@@ -15953,7 +15954,7 @@ run_md_reuse_selftests ()
 	ASSERT_FALSE (spill.redundant_reload_p (load));
       }
   }
-  for (unsigned int test = 0; test != 42; ++test)
+  for (unsigned int test = 0; test != 48; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
       basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
@@ -16092,6 +16093,27 @@ run_md_reuse_selftests ()
 	  else if (test == 41)
 	    flag_non_call_exceptions = 1;
 	  break;
+	case 42: case 43: case 44: case 45: case 46: case 47:
+	  if (test == 42 || test == 44)
+	    append (TARGET_64BIT ? gen_riscv_clmul_di (value, value, addr)
+		    : gen_riscv_clmul_si (value, value, addr));
+	  else if (TARGET_64BIT)
+	    append (gen_riscv_sha256sig0_di_extended
+		    (value, gen_rtx_REG (SImode, 12)));
+	  else
+	    append (gen_rtx_SET (value, gen_rtx_UNSPEC
+		    (SImode, gen_rtvec (1, gen_rtx_REG (SImode, 12)),
+		     UNSPEC_SHA_256_SIG0)));
+	  if (test == 44 || test == 45)
+	    append (gen_rtx_SET (value, read));
+	  else if (test == 46)
+	    BB_END (bb) = emit_debug_insn_after
+	      (gen_rtx_VAR_LOCATION (ZTTMR1mode, get_spill_slot_decl (false),
+				     mem, VAR_INIT_STATUS_INITIALIZED), BB_END (bb));
+	  else if (test == 47)
+	    flag_non_call_exceptions = 1;
+	  append (gen_rtx_USE (VOIDmode, value));
+	  break;
 	}
       BB_END (bb) = emit_jump_insn_after
 	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)),
@@ -16104,6 +16126,8 @@ run_md_reuse_selftests ()
 		 || (test == 26 && TARGET_HARD_FLOAT)
 		 || ((test == 30 || test == 31) && HAVE_riscv_frflags)
 		 || test == 32 || test == 33
+		 || (test == 42 && TARGET_ZBC)
+		 || (test == 43 && TARGET_ZKNH)
 		 || ((test == 36 || test == 38)
 		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 spill.remove_dead_store ());
