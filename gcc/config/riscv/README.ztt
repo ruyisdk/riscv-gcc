@@ -940,6 +940,11 @@ A local scan also removes raw M saves fully overwritten before any read.
 It checks at most 128 trailing instructions and 64 instructions per save,
 requiring equal spill ranges and proven equal address values. Calls, asm,
 possible reads, exceptional edges and frame-related saves stop deletion.
+Single-block loops also discard unread private M saves whose local address
+resolves to a loop-invariant SP expression. The bounded loop scan uses
+base-alias analysis, including reads on later iterations; all exit paths
+must pass the existing unread-return proof. Calls, asm and unknown effects
+stop the scan. Each wide-group member requires its own address proof.
 Dead fixed-size locals do not prevent removal of an unused scalable
 workspace.  The matched scalable adjustment pair is removed only after
 the existing reference checks; fixed adjustments and CFA remain intact.

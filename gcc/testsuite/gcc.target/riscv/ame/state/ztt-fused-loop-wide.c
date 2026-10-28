@@ -5,3 +5,4 @@
 #include "ztt-fused-loop.h"
 /* { dg-final { scan-rtl-dump-times "Intersect Md on self loop" 5 "ztt_md_reuse" } } */
 /* { dg-final { scan-rtl-dump-times "Retain loop descriptor registers" 1 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Drop unread loop spill" 4 "ztt_md_reuse" } } */

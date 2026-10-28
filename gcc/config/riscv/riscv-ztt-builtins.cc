@@ -15286,6 +15286,175 @@ public:
     return true;
   }
 
+  /* Resolve local address temporaries to a loop-invariant stack address.  */
+  static rtx loop_spill_address (rtx_insn *store, const HARD_REG_SET &writes)
+  {
+    rtx address = XEXP (SET_DEST (PATTERN (store)), 0);
+    basic_block bb = BLOCK_FOR_INSN (store);
+    if (!bb)
+      return nullptr;
+    rtx_insn *stop = PREV_INSN (BB_HEAD (bb));
+    unsigned int count = 0;
+    for (rtx_insn *p = store; p && p != stop; p = PREV_INSN (p))
+      {
+	if (!address_expr_p (address))
+	  return nullptr;
+	bool stack = rtx_equal_p (address, stack_pointer_rtx)
+	  || (GET_CODE (address) == PLUS
+	      && (rtx_equal_p (XEXP (address, 0), stack_pointer_rtx)
+		  || rtx_equal_p (XEXP (address, 1), stack_pointer_rtx)));
+	if (stack)
+	  {
+	    bool invariant = true;
+	    subrtx_iterator::array_type array;
+	    FOR_EACH_SUBRTX (iter, array, address, NONCONST)
+	      if (REG_P (*iter))
+		{
+		  unsigned int regno = REGNO (*iter);
+		  invariant &= !TEST_HARD_REG_BIT (writes, regno)
+		    && !global_regs[regno]
+		    && (regno == STACK_POINTER_REGNUM || !fixed_regs[regno]);
+		}
+	    if (invariant)
+	      return address;
+	  }
+	if (p == store || !NONDEBUG_INSN_P (p))
+	  continue;
+	if (++count > 64)
+	  return nullptr;
+	if (!modified_in_p (address, p))
+	  continue;
+	rtx pat = PATTERN (p);
+	if (!NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p)
+	    || GET_CODE (pat) != SET
+	    || !local_md_state::full_gpr_p (SET_DEST (pat))
+	    || !address_expr_p (SET_SRC (pat)))
+	  return nullptr;
+	address = compact_address
+	  (simplify_replace_rtx (address, SET_DEST (pat), SET_SRC (pat)));
+      }
+    return nullptr;
+  }
+
+  template<typename Read>
+  static bool loop_tail_insn_p (rtx_insn *insn, Read read)
+  {
+    if (tail_insn_p (insn, read))
+      return true;
+    rtx pat = PATTERN (insn);
+    if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	|| recog_memoized (insn) < 0 || GET_CODE (pat) != SET
+	|| !REG_P (SET_DEST (pat)) || !m_mode_p (GET_MODE (SET_DEST (pat)))
+	|| GET_CODE (SET_SRC (pat)) != UNSPEC_VOLATILE)
+      return false;
+    int code = XINT (SET_SRC (pat), 1);
+    return (code == UNSPECV_ZTT_STATE_LOAD
+	    || code == UNSPECV_ZTT_STATE_MEMORY_LOAD) && !read (SET_SRC (pat));
+  }
+
+  /* A loop-wide proof also covers reads before the store on its next turn.  */
+  static bool remove_unread_loop_stores ()
+  {
+    tree decl = get_spill_slot_decl (false);
+    rtx canonical = decl ? DECL_RTL_IF_SET (decl) : nullptr;
+    if (!canonical || !MEM_P (canonical) || !MEM_ALIAS_SET (canonical)
+	|| cfun->stdarg || cfun->calls_setjmp || cfun->has_nonlocal_label
+	|| crtl->calls_eh_return || flag_non_call_exceptions)
+      return false;
+    bool changed = false, aliases = false;
+    basic_block bb;
+    FOR_EACH_BB_FN (bb, cfun)
+      {
+	if (EDGE_COUNT (bb->preds) != 2 || EDGE_COUNT (bb->succs) != 2
+	    || !md_preserving_branch_p (BB_END (bb)))
+	  continue;
+	edge back = EDGE_SUCC (bb, 0), out = EDGE_SUCC (bb, 1);
+	if (back->dest != bb)
+	  std::swap (back, out);
+	edge entry = EDGE_PRED (bb, 0) == back
+	  ? EDGE_PRED (bb, 1) : EDGE_PRED (bb, 0);
+	if (back->dest != bb || entry->src == bb
+	    || out->dest == EXIT_BLOCK_PTR_FOR_FN (cfun) || !md_normal_edge_p (entry)
+	    || !md_normal_edge_p (out)
+	    || (back->flags & (EDGE_COMPLEX | EDGE_FAKE | EDGE_CROSSING
+			      | EDGE_IRREDUCIBLE_LOOP)))
+	  continue;
+	HARD_REG_SET writes;
+	CLEAR_HARD_REG_SET (writes);
+	auto_vec<rtx_insn *, 32> stores;
+	bool valid = true;
+	unsigned int count = 0;
+	rtx_insn *insn;
+	FOR_BB_INSNS (bb, insn)
+	  if (INSN_P (insn))
+	    {
+	      if ((!DEBUG_INSN_P (insn) && ++count > 64)
+		  || (insn != BB_END (bb)
+		      && !loop_tail_insn_p (insn, [] (rtx) { return false; })))
+		{
+		  valid = false;
+		  break;
+		}
+	      if (!NONDEBUG_INSN_P (insn))
+		continue;
+	      HARD_REG_SET defs;
+	      find_all_hard_reg_sets (insn, &defs, true);
+	      writes |= defs;
+	      rtx pat = PATTERN (insn);
+	      if (!RTX_FRAME_RELATED_P (insn) && md_raw_transfer_p (pat)
+		  && private_slot_p (SET_DEST (pat))
+		  && MEM_ALIAS_SET (SET_DEST (pat)) == MEM_ALIAS_SET (canonical)
+		  && MEM_ADDR_SPACE (SET_DEST (pat)) == ADDR_SPACE_GENERIC)
+		stores.safe_push (insn);
+	    }
+	if (!valid || TEST_HARD_REG_BIT (writes, STACK_POINTER_REGNUM))
+	  continue;
+	for (rtx_insn *store : stores)
+	  {
+	    rtx address = loop_spill_address (store, writes);
+	    if (!address)
+	      continue;
+	    if (!aliases)
+	      {
+		init_alias_analysis ();
+		aliases = true;
+	      }
+	    rtx mem = replace_equiv_address_nv (SET_DEST (PATTERN (store)), address);
+	    auto read = [&] (rtx x) {
+	      subrtx_iterator::array_type array;
+	      FOR_EACH_SUBRTX (iter, array, x, NONCONST)
+		if (MEM_P (*iter)
+		    && (MEM_VOLATILE_P (*iter) || may_alias_p (mem, *iter)))
+		  return true;
+	      return false;
+	    };
+	    valid = true;
+	    FOR_BB_INSNS (bb, insn)
+	      if (INSN_P (insn) && insn != BB_END (bb)
+		  && !loop_tail_insn_p (insn, read))
+		{
+		  valid = false;
+		  break;
+		}
+	    auto_vec<basic_block, 4> path;
+	    path.quick_push (bb);
+	    count = 0;
+	    local_raw_spill saved;
+	    saved.mem = SET_DEST (PATTERN (store));
+	    if (!valid || !saved.unread_return_p
+		(out->dest, BB_HEAD (out->dest), path, count))
+	      continue;
+	    if (dump_file)
+	      fprintf (dump_file, "Drop unread loop spill at insn %d\n", INSN_UID (store));
+	    delete_insn (store);
+	    changed = true;
+	  }
+      }
+    if (aliases)
+      end_alias_analysis ();
+    return changed;
+  }
+
   /* Share one suffix proof when no private slot is read at all.  */
   static bool remove_unread_tail (basic_block bb)
   {
@@ -16821,6 +16990,13 @@ reuse_local_md ()
 	  if (dump_file)
 	    fprintf (dump_file, "Reuse descriptors after workspace cleanup\n");
 	}
+      if (explicit_state && local_raw_spill::remove_unread_loop_stores ())
+	{
+	  descriptor_cleanup = true;
+	  run_fast_dce ();
+	  if (riscv_ztt_remove_unused_workspace ())
+	    run_fast_dce ();
+	}
       if (descriptor_cleanup)
 	{
 	  df_note_add_problem ();
@@ -16840,9 +17016,130 @@ reuse_local_md ()
 
 #if CHECKING_P
 static void
+run_loop_spill_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  for (unsigned int test = 0; test != 28; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      const char *profile = riscv_ztt_profile_string;
+      int reload = reload_completed, non_call = flag_non_call_exceptions;
+      int strict_aliasing = flag_strict_aliasing;
+      riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+      reload_completed = 1;
+      riscv_ztt_note_call_boundary ();
+      basic_block bb = BASIC_BLOCK_FOR_FN (cfun, 2);
+      rtx_note *note = emit_note (NOTE_INSN_BASIC_BLOCK);
+      NOTE_BASIC_BLOCK (note) = bb;
+      BB_HEAD (bb) = BB_END (bb) = note;
+      basic_block out = create_empty_bb (bb);
+      redirect_edge_succ (single_succ_edge (bb), out);
+      edge back = make_edge (bb, bb, EDGE_DFS_BACK);
+      make_edge (out, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      auto append = [] (basic_block block, rtx pat) {
+	rtx_insn *insn = emit_insn_after (pat, BB_END (block));
+	set_block_for_insn (insn, block);
+	return BB_END (block) = insn;
+      };
+      rtx addr = gen_rtx_REG (Pmode, 5), pointer = gen_rtx_REG (Pmode, 10);
+      rtx tmp = gen_rtx_REG (Pmode, 11), offset = gen_rtx_REG (Pmode, 14);
+      rtx m = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, addr);
+      set_mem_attrs_for_spill (slot);
+      rtx address = test == 16 ? pointer
+	: test == 17 || test == 18 ? gen_rtx_PLUS (Pmode, stack_pointer_rtx, offset)
+	: stack_pointer_rtx;
+      append (bb, gen_rtx_SET (addr, address));
+      rtx input = gen_rtx_MEM (ZTTMR1mode, test == 23 ? stack_pointer_rtx : pointer);
+      if (test == 4) MEM_VOLATILE_P (input) = 1;
+      if (test == 3 || test == 4 || test == 23 || test == 24)
+	append (bb, gen_ztt_state_load (ZTTMR1mode, Pmode, m, input, const0_rtx));
+      if (test == 1) append (bb, gen_rtx_SET (m, copy_rtx (slot)));
+      if (test == 14) set_mem_alias_set (slot, 0);
+      if (test == 15) set_mem_expr (slot, nullptr);
+      rtx_insn *store = append (bb, gen_rtx_SET (slot, m));
+      if (test == 13) RTX_FRAME_RELATED_P (store) = 1;
+      if (test == 2) append (bb, gen_rtx_SET (m, copy_rtx (slot)));
+      if (test == 5)
+	BB_END (bb) = emit_call_insn_after
+	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (bb));
+      if (test == 6) append (bb, gen_rtx_ASM_INPUT (VOIDmode, ""));
+      if (test == 7)
+	append (bb, gen_rtx_SET (stack_pointer_rtx,
+				 plus_constant (Pmode, stack_pointer_rtx, 16)));
+      if (test == 18)
+	append (bb, gen_rtx_SET (offset, plus_constant (Pmode, offset, 16)));
+      if (test == 19)
+	append (bb, gen_rtx_UNSPEC_VOLATILE (VOIDmode, gen_rtvec (1, m), UNSPECV_ZTT));
+      if (test == 24)
+	append (bb, gen_rtx_SET (pointer, plus_constant (Pmode, pointer, 16)));
+      BB_END (bb) = emit_jump_insn_after
+	(gen_rtx_SET (pc_rtx, gen_rtx_IF_THEN_ELSE
+	  (VOIDmode, gen_rtx_NE (VOIDmode, tmp, const0_rtx),
+	   gen_rtx_LABEL_REF (VOIDmode, gen_label_rtx ()), pc_rtx)), BB_END (bb));
+      if (test == 8) append (out, gen_rtx_SET (m, copy_rtx (slot)));
+      if (test == 9)
+	BB_END (out) = emit_call_insn_after
+	  (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (out));
+      if (test >= 25)
+	{
+	  flag_strict_aliasing = test != 27;
+	  append (out, gen_rtx_SET (stack_pointer_rtx,
+				   plus_constant (Pmode, stack_pointer_rtx, 16)));
+	  rtx restore = gen_rtx_MEM
+	    (Pmode, plus_constant (Pmode, stack_pointer_rtx, 8));
+	  if (test != 26) set_mem_alias_set (restore, get_frame_alias_set ());
+	  RTX_FRAME_RELATED_P (append (out, gen_rtx_SET (tmp, restore))) = 1;
+	}
+      BB_END (out) = emit_jump_insn_after
+	(gen_simple_return_internal (gen_rtx_REG (Pmode, RETURN_ADDR_REGNUM)), BB_END (out));
+      if (test == 10) back->flags |= EDGE_EH;
+      if (test == 11)
+	make_edge (create_empty_bb (out), bb, 0);
+      if (test == 12) flag_non_call_exceptions = 1;
+      if (test == 20) make_edge (bb, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      if (test == 21) make_edge (out, out, 0);
+      if (test == 22) cfun->calls_setjmp = true;
+      bool expected = test == 0 || test == 3 || test == 17 || test == 24
+	|| test == 25;
+      if (test == 0)
+	{
+	  ASSERT_TRUE (md_preserving_branch_p (BB_END (bb)));
+	  ASSERT_TRUE (md_raw_transfer_p (PATTERN (store)));
+	  ASSERT_TRUE (local_raw_spill::loop_tail_insn_p
+		       (store, [] (rtx) { return false; }));
+	  HARD_REG_SET writes;
+	  CLEAR_HARD_REG_SET (writes);
+	  SET_HARD_REG_BIT (writes, 5);
+	  ASSERT_RTX_EQ (stack_pointer_rtx,
+			 local_raw_spill::loop_spill_address (store, writes));
+	  local_raw_spill saved;
+	  auto_vec<basic_block, 4> path;
+	  path.quick_push (bb);
+	  unsigned int count = 0;
+	  ASSERT_TRUE (saved.unread_return_p
+		       (out, BB_HEAD (out), path, count));
+	}
+      char context[64];
+      snprintf (context, sizeof context, "loop private spill case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected, local_raw_spill::remove_unread_loop_stores ());
+      ASSERT_EQ_AT (loc, expected, store->deleted ());
+      ASSERT_FALSE (local_raw_spill::remove_unread_loop_stores ());
+      reload_completed = reload;
+      flag_non_call_exceptions = non_call;
+      flag_strict_aliasing = strict_aliasing;
+      riscv_ztt_profile_string = profile;
+    }
+}
+
+static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  run_loop_spill_selftests ();
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
     rtx query = gen_rtx_REG (Pmode, 10), value = GEN_INT (32);
