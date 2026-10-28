@@ -10473,6 +10473,21 @@ riscv_ztt_stack_continuation_p (basic_block bb, basic_block previous)
   return previous && single_pred_p (bb) && single_pred (bb) == previous;
 }
 
+/* Recover local facts from a nonadjacent predecessor without a CFG cache.  */
+static bool
+riscv_ztt_stack_seed (basic_block bb, riscv_ztt_stack_value sp,
+		      riscv_ztt_stack_value *regs)
+{
+  unsigned int count = 0;
+  rtx_insn *insn;
+  FOR_BB_INSNS (bb, insn)
+    if (NONDEBUG_INSN_P (insn) && ++count > 32)
+      return false;
+  bool changed = false;
+  riscv_ztt_stack_block (bb, sp, false, changed, regs);
+  return true;
+}
+
 #if CHECKING_P
 static void
 riscv_ztt_stack_selftests (basic_block bb)
@@ -10614,6 +10629,50 @@ riscv_ztt_stack_selftests (basic_block bb)
   vec_safe_push (dest.preds, &extra);
   ASSERT_FALSE (riscv_ztt_stack_continuation_p (&dest, &pred));
   vec_free (dest.preds);
+
+  for (unsigned int test = 0; test < 6; ++test)
+    {
+      memset (regs, 0, sizeof regs);
+      start_sequence ();
+      append (gen_rtx_SET (a, size));
+      append (gen_rtx_SET (b, gen_rtx_NEG (Pmode, a)));
+      if (test == 1)
+	append (gen_rtx_SET (gen_rtx_REG (QImode, 6), const0_rtx));
+      else if (test == 2)
+	append (gen_rtx_SET (scale, a));
+      else if (test == 3)
+	append (gen_rtx_SET (fp, a));
+      else if (test == 4)
+	append (gen_rtx_SET (b, gen_rtx_LSHIFTRT (Pmode, b, const1_rtx)));
+      else if (test == 5)
+	append (gen_rtx_CLOBBER (VOIDmode, b));
+      BB_HEAD (bb) = get_insns ();
+      BB_END (bb) = get_last_insn ();
+      ASSERT_TRUE (riscv_ztt_stack_seed (bb, expected, regs));
+      auto value = riscv_ztt_stack_expr (gen_rtx_PLUS (Pmode, fp, b), regs);
+      ASSERT_EQ (value.known, test == 0);
+      if (value.known)
+	ASSERT_RTX_EQ (riscv_ztt_stack_address (value, expected),
+		       plus_constant (Pmode, sp, 208));
+      BB_HEAD (bb) = head;
+      BB_END (bb) = end;
+      end_sequence ();
+    }
+
+  for (unsigned int count : { 32U, 33U })
+    {
+      memset (regs, 0, sizeof regs);
+      start_sequence ();
+      for (unsigned int i = 0; i < count; ++i)
+	append (gen_rtx_SET (a, size));
+      BB_HEAD (bb) = get_insns ();
+      BB_END (bb) = get_last_insn ();
+      ASSERT_EQ (riscv_ztt_stack_seed (bb, expected, regs), count == 32);
+      ASSERT_EQ (regs[5].known, count == 32);
+      BB_HEAD (bb) = head;
+      BB_END (bb) = end;
+      end_sequence ();
+    }
 }
 #endif
 
@@ -10667,7 +10726,15 @@ riscv_ztt_rebase_stack_addresses ()
     if (seen[bb->index])
       {
 	if (!riscv_ztt_stack_continuation_p (bb, previous))
-	  memset (regs, 0, sizeof regs);
+	  {
+	    memset (regs, 0, sizeof regs);
+	    if (single_pred_p (bb))
+	      {
+		basic_block pred = single_pred (bb);
+		if (pred != entry && pred != bb && seen[pred->index])
+		  riscv_ztt_stack_seed (pred, states[pred->index], regs);
+	      }
+	  }
 	riscv_ztt_stack_block (bb, states[bb->index], true, changed, regs);
 	previous = bb;
       }
