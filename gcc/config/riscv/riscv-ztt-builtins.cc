@@ -15312,6 +15312,19 @@ public:
 	rtx pat = PATTERN (p);
 	if (register_vector_p (p) || private_scalar_transfer_p (p))
 	  continue;
+	if (state && GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
+	    && M_REG_P (REGNO (SET_DEST (pat)))
+	    && m_mode_p (GET_MODE (SET_DEST (pat)))
+	    && GET_CODE (SET_SRC (pat)) == UNSPEC_VOLATILE
+	    && XINT (SET_SRC (pat), 1) == UNSPECV_ZTT_SETTYP_P0
+	    && recog_memoized (p) >= 0)
+	  {
+	    /* A setter clears every payload in its destination group.  */
+	    unsigned int count = m_nregs (GET_MODE (SET_DEST (pat)));
+	    written |= ((HOST_WIDE_INT_1U << count) - 1)
+	      << (REGNO (SET_DEST (pat)) - M_REG_FIRST);
+	    continue;
+	  }
 	/* Earlier forwarded loads can occur among the remaining spill members.  */
 	if (state && GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
 	    && M_REG_P (REGNO (SET_DEST (pat)))
@@ -15369,6 +15382,49 @@ public:
   static bool interleaved_reload_p (rtx_insn *load)
   {
     return interleaved_reload_source (load) != nullptr;
+  }
+
+  static bool forward_reload (rtx_insn *insn, const local_md_state &state)
+  {
+    rtx source = interleaved_reload_source (insn, &state);
+    rtx dest = SET_DEST (PATTERN (insn));
+    if (!source || rtx_equal_p (dest, source)
+	|| !validate_change (insn, &PATTERN (insn),
+		gen_ztt_state_copy_prepared (GET_MODE (dest), Pmode,
+					    dest, source, const0_rtx), false))
+      return false;
+    df_insn_rescan (insn);
+    if (dump_file)
+      fprintf (dump_file, "Forward private reload from M%u at insn %d\n",
+	       REGNO (source) - M_REG_FIRST, INSN_UID (insn));
+    return true;
+  }
+
+  static void forward_prepared_reloads (const reload_preparation &plan,
+					rtx group, rtx descriptor, rtx_insn *use,
+					const local_md_state &state)
+  {
+    if (plan.packet_step != 1)
+      return;
+    rtx type = state.descriptor_value (descriptor);
+    if (integer_zero_width (type) != active_profile ()->uds
+	&& floating_zero_width (type) != active_profile ()->uds)
+      return;
+    /* The admitted window contains no Md changes except our new setters.  */
+    local_md_state prepared;
+    prepared.copy_from (state);
+    for (unsigned int i = 0; i < m_nregs (GET_MODE (group)); ++i)
+      prepared.remember (gen_rtx_REG (matrix_mode (1), REGNO (group) + i),
+			 descriptor);
+    for (rtx_insn *p = plan.point; p != use; p = NEXT_INSN (p))
+      if (NONDEBUG_INSN_P (p) && md_raw_transfer_p (PATTERN (p))
+	  && REG_P (SET_DEST (PATTERN (p))))
+	{
+	  unsigned int member = REGNO (SET_DEST (PATTERN (p))) - REGNO (group);
+	  if (member < m_nregs (GET_MODE (group))
+	      && (plan.packet_mask & (1U << member)))
+	    forward_reload (p, prepared);
+	}
   }
 
   /* Prepared register operations have no private preservation transfers.  */
@@ -16858,19 +16914,8 @@ reuse_local_md ()
 	  if (code >= 0 && explicit_state
 	      && md_raw_transfer_p (PATTERN (insn)))
 	    {
-	      rtx source = local_raw_spill::interleaved_reload_source (insn, &state);
-	      rtx dest = SET_DEST (PATTERN (insn));
-	      if (source && !rtx_equal_p (dest, source)
-		  && validate_change (insn, &PATTERN (insn),
-			gen_ztt_state_copy_prepared (GET_MODE (dest), Pmode,
-					    dest, source, const0_rtx), false))
-		{
-		  df_insn_rescan (insn);
-		  cleanup = descriptor_cleanup = true;
-		  if (dump_file)
-		    fprintf (dump_file, "Forward private reload from M%u at insn %d\n",
-			     REGNO (source) - M_REG_FIRST, INSN_UID (insn));
-		}
+	      if (local_raw_spill::forward_reload (insn, state))
+		cleanup = descriptor_cleanup = true;
 	      continue;
 	    }
 	  rtx set = single_set (insn);
@@ -17163,6 +17208,8 @@ reuse_local_md ()
 			    if (reload_before)
 			      {
 				reload_before.emit (group, descriptor, insn);
+				local_raw_spill::forward_prepared_reloads
+				  (reload_before, group, descriptor, insn, state);
 				descriptor_cleanup = true;
 				if (dump_file)
 				  fprintf (dump_file,
@@ -18682,12 +18729,13 @@ run_reload_copy_selftests ()
   riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
   int saved_reload = reload_completed;
   reload_completed = 1;
-  for (unsigned int test = 0; test != 29; ++test)
+  for (unsigned int test = 0; test != 38; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
       rtx descriptor = gen_rtx_REG (Pmode, 12);
-      rtx src = gen_rtx_REG (matrix_mode (1), M_REG_FIRST);
+      rtx src = gen_rtx_REG (matrix_mode (1), M_REG_FIRST
+			    + (test >= 35 ? 31 : 0));
       rtx dest = gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 2);
       rtx other = gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 4);
       rtx slot = gen_rtx_MEM (matrix_mode (1), a);
@@ -18741,12 +18789,33 @@ run_reload_copy_selftests ()
 	  emit_insn (gen_rtx_SET (gap, other));
 	  break;
 	case 27: emit_insn (gen_rtx_SET (dest, gap)); break;
+	case 29: case 30: case 31: case 32: case 33: case 34:
+	case 35: case 36: case 37:
+	  {
+	    rtx target = test == 29 ? dest : test == 30 ? src : other;
+	    if (test == 31 || test == 32)
+	      target = gen_rtx_REG (matrix_mode (4),
+				   M_REG_FIRST + (test == 31 ? 0 : 4));
+	    if (test == 35 || test == 36)
+	      target = gen_rtx_REG (matrix_mode (8),
+				   M_REG_FIRST + (test == 35 ? 24 : 0));
+	    if (test == 37)
+	      target = gen_rtx_REG (matrix_mode (32), M_REG_FIRST);
+	    rtx_insn *setter = emit_insn (gen_ztt_typed_msettyp_p0
+	      (GET_MODE (target), Pmode, target, descriptor));
+	    if (test == 33)
+	      RTX_FRAME_RELATED_P (setter) = 1;
+	    if (test == 34)
+	      emit_insn (gen_rtx_SET (src, gap));
+	    break;
+	  }
 	}
       rtx_insn *load = emit_insn (gen_rtx_SET (dest, read));
       if (test == 28)
 	RTX_FRAME_RELATED_P (load) = 1;
       bool expected = test == 0 || test == 9 || test == 11 || test == 21
-	|| test == 23 || test == 25 || test == 27;
+	|| test == 23 || test == 25 || test == 27 || test == 29 || test == 32
+	|| test == 36;
       char context[64];
       snprintf (context, sizeof context, "private reload copy %u", test);
       location loc (__FILE__, __LINE__, context);
