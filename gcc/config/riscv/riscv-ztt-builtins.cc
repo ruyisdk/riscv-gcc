@@ -14119,16 +14119,18 @@ record_common_md (rtx_insn *insn, rtx dest, rtx src, unsigned int steps,
     }
 }
 
-/* Limit the loop proof to complete binary groups with one constant Md.  */
+/* Limit the loop proof to complete common groups with one constant Md.  */
 static bool
 md_loop_common_p (rtx set, bool scalar, local_md_state &state)
 {
   rtx src = SET_SRC (set);
-  if (XVECLEN (src, 0) != 9)
+  bool old_dest = common_old_dest_p (XINT (src, 1));
+  if (XVECLEN (src, 0) != (old_dest ? 10 : 9)
+      || (old_dest && !rtx_equal_p (SET_DEST (set), XVECEXP (src, 0, 8))))
     return false;
   rtx regs[] = { SET_DEST (set), XVECEXP (src, 0, 0), XVECEXP (src, 0, 1) };
   unsigned int steps = UINTVAL (XVECEXP (src, 0, 7));
-  unsigned int mask = UINTVAL (XVECEXP (src, 0, 8));
+  unsigned int mask = UINTVAL (XVECEXP (src, 0, old_dest ? 9 : 8));
   rtx value = NULL_RTX;
   for (unsigned int i = 0; i != (scalar ? 2U : 3U); ++i)
     {
@@ -14167,6 +14169,9 @@ md_loop_exit (basic_block bb, local_md_state &state)
       if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
 	  || recog_memoized (insn) < 0)
 	return false;
+      /* Raw transfers preserve Md but cannot establish a new fact.  */
+      if (md_raw_transfer_p (PATTERN (insn)))
+	continue;
       if (md_scalar_insn_p (PATTERN (insn)))
 	{
 	  record_scalar_md (insn, state);
@@ -14185,26 +14190,37 @@ md_loop_exit (basic_block bb, local_md_state &state)
 	case UNSPECV_ZTT_STATE_ELEMENTWISE_M_REUSE_RIGHT:
 	case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
 	case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
+	case UNSPECV_ZTT_STATE_TERNARY:
+	case UNSPECV_ZTT_STATE_TERNARY_REUSE:
+	case UNSPECV_ZTT_STATE_TERNARY_REUSE_LEFT:
+	case UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT:
+	case UNSPECV_ZTT_STATE_TERNARY_X:
+	case UNSPECV_ZTT_STATE_TERNARY_X_REUSE:
 	  if (!md_loop_common_p (set, common_scalar_p (XINT (src, 1)), state))
 	    return false;
 	  /* This scan establishes matrix facts, not amestype availability.  */
 	  record_common_md (insn, group, src, UINTVAL (XVECEXP (src, 0, 7)),
-			    common_scalar_p (XINT (src, 1)), false, state);
+			    common_scalar_p (XINT (src, 1)),
+			    common_old_dest_p (XINT (src, 1)), state);
 	  continue;
+	case UNSPECV_ZTT_STATE_COPY:
 	case UNSPECV_ZTT_STATE_ROWCOL:
 	case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
-	  if (XVECLEN (src, 0) != 5)
-	    return false;
-	  descriptor = XVECEXP (src, 0, 2);
-	  group = XVECEXP (src, 0, 0);
-	  if (!local_md_state::full_gpr_p (descriptor)
-	      || !CONST_INT_P (state.descriptor_value (descriptor))
-	      || GET_MODE (group) != GET_MODE (SET_DEST (set))
-	      || (reg_overlap_mentioned_p (group, SET_DEST (set))
-		  && !rtx_equal_p (group, SET_DEST (set))))
-	    return false;
-	  record_unary_md (insn, group, SET_DEST (set), descriptor, state);
-	  continue;
+	  {
+	    bool copy = XINT (src, 1) == UNSPECV_ZTT_STATE_COPY;
+	    if (XVECLEN (src, 0) != (copy ? 3 : 5))
+	      return false;
+	    descriptor = XVECEXP (src, 0, copy ? 1 : 2);
+	    group = XVECEXP (src, 0, 0);
+	    if (!local_md_state::full_gpr_p (descriptor)
+		|| !CONST_INT_P (state.descriptor_value (descriptor))
+		|| GET_MODE (group) != GET_MODE (SET_DEST (set))
+		|| (reg_overlap_mentioned_p (group, SET_DEST (set))
+		    && !rtx_equal_p (group, SET_DEST (set))))
+	      return false;
+	    record_unary_md (insn, group, SET_DEST (set), descriptor, state);
+	    continue;
+	  }
 	case UNSPECV_ZTT_STATE_LOAD:
 	  descriptor = XVECEXP (src, 0, 1);
 	  break;
@@ -17751,6 +17767,118 @@ run_md_reuse_selftests ()
 	  {
 	    ASSERT_TRUE (state.matches (a, GEN_INT (32)));
 	    ASSERT_FALSE (state.record_scalar_type (tc));
+	  }
+	reload_completed = saved_reload;
+	riscv_ztt_profile_string = profile;
+      }
+  if (TARGET_ZTT)
+    for (unsigned int test = 0; test != 16; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	int saved_reload = reload_completed;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	reload_completed = 1;
+	riscv_ztt_note_call_boundary ();
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *insn = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = insn;
+	  return insn;
+	};
+	machine_mode mode = test == 10 || test == 11 ? ZTTMR2mode : ZTTMR1mode;
+	rtx desc = gen_rtx_REG (Pmode, 10), other = gen_rtx_REG (Pmode, 12);
+	rtx tc = gen_rtx_REG (Pmode, 13), value = gen_rtx_REG (Pmode, 14);
+	rtx dest = gen_rtx_REG (mode, M_REG_FIRST + 8);
+	rtx a = gen_rtx_REG (mode, M_REG_FIRST + (test == 10 ? 9 : 10));
+	rtx b = gen_rtx_REG (mode, M_REG_FIRST + 12);
+	rtx slot = gen_rtx_MEM (mode, gen_rtx_REG (Pmode, 11));
+	if (test == 12)
+	  a = dest;
+	if (test != 9)
+	  append (gen_rtx_SET (desc, GEN_INT (32)));
+	append (gen_rtx_SET (other, GEN_INT (64)));
+	append (gen_rtx_SET (tc, GEN_INT (64)));
+	if (test == 3 || test == 5)
+	  append (gen_ztt_typed_msettyp_p0 (mode, Pmode, dest, desc));
+	if (test == 5)
+	  {
+	    append (gen_ztt_typed_msettyp_p0 (mode, Pmode, a, desc));
+	    append (gen_ztt_typed_msettyp_p0 (mode, Pmode, b, desc));
+	  }
+	rtx steps = GEN_INT (pack_datatype_steps (1, 1, test == 1 ? 0 : 1));
+	rtx mask = GEN_INT (test == 2 || test == 3 ? 1 : test == 4 ? 2
+			    : test == 5 ? 7 : 0);
+	if (test == 7)
+	  append (gen_ztt_state_common_old_prepared
+		  (UNSPECV_ZTT_STATE_TERNARY, mode, Pmode, dest, a, b,
+		   desc, desc, desc, GEN_INT (2), steps, dest));
+	else if (test == 1)
+	  append (gen_ztt_state_ternary_x
+		  (UNSPECV_ZTT_STATE_TERNARY_X, mode, Pmode, dest, a, value,
+		   desc, desc, tc, slot, const0_rtx, GEN_INT (2), steps,
+		   gen_rtx_SCRATCH (Pmode), dest, mask));
+	else if (test != 14)
+	  append (gen_ztt_state_ternary
+		  (UNSPECV_ZTT_STATE_TERNARY, mode, Pmode, dest, a, b,
+		   desc, desc, test == 8 ? other : desc, slot, const0_rtx,
+		   GEN_INT (2), steps, gen_rtx_SCRATCH (Pmode),
+		   test == 6 ? a : dest, mask));
+	if (test == 13 || test == 14)
+	  {
+	    append (gen_rtx_SET (slot, dest));
+	    append (gen_rtx_SET (dest, slot));
+	  }
+	if (test == 15)
+	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
+	local_md_state state;
+	bool valid = md_loop_exit (bb, state);
+	ASSERT_EQ (test == 0 || test == 1 || test == 3 || test == 5
+		   || test == 12 || test == 13 || test == 14, valid);
+	if (valid)
+	  {
+	    ASSERT_EQ (test != 14, state.matches (dest, GEN_INT (32)));
+	    ASSERT_FALSE (state.record_scalar_type (tc));
+	  }
+	reload_completed = saved_reload;
+	riscv_ztt_profile_string = profile;
+      }
+  if (TARGET_ZTT)
+    for (unsigned int test = 0; test != 5; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	int saved_reload = reload_completed;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	reload_completed = 1;
+	riscv_ztt_note_call_boundary ();
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *insn = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = insn;
+	};
+	machine_mode mode = test == 4 ? ZTTMR2mode : ZTTMR1mode;
+	rtx desc = gen_rtx_REG (Pmode, 10);
+	rtx a = gen_rtx_REG (mode, M_REG_FIRST + 8);
+	rtx dest = gen_rtx_REG (mode, M_REG_FIRST + (test == 4 ? 9 : 10));
+	rtx slot = gen_rtx_MEM (mode, gen_rtx_REG (Pmode, 11));
+	if (test != 2)
+	  append (gen_rtx_SET (desc, GEN_INT (32)));
+	append (test == 1
+		? gen_ztt_state_copy_prepared (mode, Pmode, dest, a, desc)
+		: gen_ztt_state_copy (mode, Pmode, dest, a, desc, slot, const0_rtx));
+	if (test == 3)
+	  {
+	    append (gen_rtx_SET (slot, dest));
+	    append (gen_rtx_SET (dest, slot));
+	  }
+	local_md_state state;
+	bool valid = md_loop_exit (bb, state);
+	ASSERT_EQ (test == 0 || test == 3, valid);
+	if (valid)
+	  {
+	    ASSERT_TRUE (state.matches (a, GEN_INT (32)));
+	    ASSERT_TRUE (state.matches (dest, GEN_INT (32)));
 	  }
 	reload_completed = saved_reload;
 	riscv_ztt_profile_string = profile;

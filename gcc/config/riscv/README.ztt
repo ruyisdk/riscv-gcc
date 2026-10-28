@@ -714,6 +714,9 @@ body fact; mixed types and partial group overlap remain boundaries.
 Full row/column preparation and scalar binary envelopes also establish
 matrix facts in the loop scan. Scalar type availability is not inferred;
 amestype writes remain under the existing local rules.
+Full old-destination envelopes follow destination-first setup order and
+require the tied old value to match the result. Full copies establish Md;
+recognized raw transfers only preserve existing facts.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
 Narrow broadcast queries read the GPR constant cache directly and truncate
