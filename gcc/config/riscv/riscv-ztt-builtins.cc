@@ -2354,6 +2354,36 @@ m_utility_source_type (prototype_index prototype, type_index type)
   return matrix_type_index (t.descriptor, rows, columns);
 }
 
+/* M-only argument prefixes are shared with matmul signatures.  */
+static tree
+registration_matrix_type (prototype_index key, type_index type)
+{
+  vec<tree, va_gc> *&entries = registration_function_types[key];
+  if (!entries)
+    vec_safe_grow_cleared (entries, TYPE_MAX, true);
+  tree &result = (*entries)[type];
+  if (!result)
+    {
+      tree m = ztt_m_type_nodes[type];
+      tree args = void_list_node;
+      for (prototype_index prefix : { PROTO_M_M, PROTO_M_M_M,
+				      PROTO_M_SCATTER })
+	{
+	  auto &block = registration_function_types[prefix];
+	  if (!block)
+	    vec_safe_grow_cleared (block, TYPE_MAX, true);
+	  tree &signature = (*block)[type];
+	  if (!signature)
+	    signature = ::build_function_type
+	      (m, tree_cons (NULL_TREE, m, args));
+	  args = TYPE_ARG_TYPES (signature);
+	  if (prefix == key)
+	    break;
+	}
+    }
+  return result;
+}
+
 static tree
 build_function_type (prototype_index prototype, type_index type)
 {
@@ -2476,10 +2506,18 @@ build_function_type (prototype_index prototype, type_index type)
 	const auto &shape = *matmul_shape (prototype);
 	tree lhs = acc_matrix_type (type, shape.lhs_column ? shape.squares : 1,
 				    shape.lhs_column ? 1 : shape.squares);
-	tree rhs = acc_matrix_type (type, shape.rhs_column ? shape.squares : 1,
-				    shape.rhs_column ? 1 : shape.squares);
-	return build_function_type_list (ztt_m_type_node, ztt_m_type_node,
-					 lhs, rhs, NULL_TREE);
+	type_index rhs_type = matrix_type_index
+	  (types[type].descriptor, shape.rhs_column ? shape.squares : 1,
+	   shape.rhs_column ? 1 : shape.squares);
+	gcc_assert (rhs_type != TYPE_MAX);
+	tree rhs = ztt_m_type_nodes[rhs_type];
+	/* Reuse the immutable M tail, keeping the old ACC as the first input.  */
+	tree args = TYPE_ARG_TYPES (registration_matrix_type
+	  (lhs == rhs ? PROTO_M_M_M : PROTO_M_M, rhs_type));
+	if (lhs != rhs)
+	  args = tree_cons (NULL_TREE, lhs, args);
+	return ::build_function_type
+	  (ztt_m_type_node, tree_cons (NULL_TREE, ztt_m_type_node, args));
       }
     default:
       gcc_unreachable ();
@@ -2525,29 +2563,9 @@ registration_function_type (prototype_index prototype, type_index type)
     vec_safe_grow_cleared (entries, TYPE_MAX, true);
   tree &result = (*entries)[type];
   if (!result)
-    {
-      if (key == PROTO_M_M_M || key == PROTO_M_SCATTER)
-	{
-	  tree m = ztt_m_type_nodes[type];
-	  tree args = void_list_node;
-	  for (prototype_index prefix : { PROTO_M_M, PROTO_M_M_M,
-					  PROTO_M_SCATTER })
-	    {
-	      auto &block = registration_function_types[prefix];
-	      if (!block)
-		vec_safe_grow_cleared (block, TYPE_MAX, true);
-	      tree &signature = (*block)[type];
-	      if (!signature)
-		signature = ::build_function_type
-		  (m, tree_cons (NULL_TREE, m, args));
-	      args = TYPE_ARG_TYPES (signature);
-	      if (prefix == key)
-		break;
-	    }
-	}
-      else
-	result = build_function_type (prototype, type);
-    }
+    result = key == PROTO_M_M || key == PROTO_M_M_M || key == PROTO_M_SCATTER
+      ? registration_matrix_type (static_cast<prototype_index> (key), type)
+      : build_function_type (prototype, type);
   return result;
 }
 
