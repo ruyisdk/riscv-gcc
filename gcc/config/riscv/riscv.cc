@@ -9696,9 +9696,10 @@ riscv_ztt_workspace_debug_slot (rtx pat, HOST_WIDE_INT fixed_size,
 static void riscv_ztt_stack_selftests (basic_block);
 static void riscv_ztt_workspace_paths_selftests (basic_block);
 
-void
-selftest::riscv_ztt_workspace_selftests ()
+static void
+riscv_ztt_workspace_single_selftests ()
 {
+  using namespace selftest;
   rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
   basic_block bb = BASIC_BLOCK_FOR_FN (cfun, 2);
   rtx scale = gen_rtx_REG (Pmode, RISCV_ZTT_SCALE_REGNUM);
@@ -9870,18 +9871,23 @@ selftest::riscv_ztt_workspace_selftests ()
 /* Propagate allocation state once per reachable block.  Relocatable spills
    must stay within the allocated interval; other stack references reject it.  */
 static bool
-riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release,
+riscv_ztt_workspace_paths_p (rtx_insn *allocate,
+			     const vec<rtx_insn *> &releases,
 			     HOST_WIDE_INT fixed_size, HOST_WIDE_INT fixed_frame,
 			     HOST_WIDE_INT factor)
 {
   enum { unseen, unallocated, allocated };
+  auto_bitmap release_uids;
+  for (rtx_insn *release : releases)
+    bitmap_set_bit (release_uids, INSN_UID (release));
   auto_vec<unsigned char> state;
   state.safe_grow_cleared (last_basic_block_for_fn (cfun));
   auto_vec<basic_block, 16> worklist;
   basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (cfun);
   state[entry->index] = unallocated;
   worklist.safe_push (entry);
-  bool seen_allocate = false, seen_release = false;
+  bool seen_allocate = false;
+  unsigned int seen_releases = 0;
   while (!worklist.is_empty ())
     {
       basic_block bb = worklist.pop ();
@@ -9898,12 +9904,13 @@ riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release,
 		  current = allocated;
 		  seen_allocate = true;
 		}
-	      else if (insn == release)
+	      else if (INSN_P (insn)
+		       && bitmap_bit_p (release_uids, INSN_UID (insn)))
 		{
 		  if (current != allocated)
 		    return false;
 		  current = unallocated;
-		  seen_release = true;
+		  ++seen_releases;
 		}
 	      else if (INSN_P (insn))
 		{
@@ -9950,7 +9957,7 @@ riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release,
 	    return false;
 	}
     }
-  return seen_allocate && seen_release;
+  return seen_allocate && seen_releases && seen_releases == releases.length ();
 }
 
 #if CHECKING_P
@@ -9996,12 +10003,121 @@ riscv_ztt_workspace_paths_selftests (basic_block bb)
       if (test == 6) append (copy_rtx (location));
       BB_HEAD (bb) = get_insns ();
       BB_END (bb) = get_last_insn ();
-      ASSERT_EQ (riscv_ztt_workspace_paths_p (allocate, release, 64, 208, 16),
+      auto_vec<rtx_insn *, 1> releases;
+      releases.quick_push (release);
+      ASSERT_EQ (riscv_ztt_workspace_paths_p (allocate, releases, 64, 208, 16),
 		 test == 0 || test == 5);
       BB_HEAD (bb) = head;
       BB_END (bb) = end;
       end_sequence ();
     }
+}
+
+static void
+riscv_ztt_workspace_exits_selftests ()
+{
+  using namespace selftest;
+  for (unsigned int test = 0; test != 27; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx sp = stack_pointer_rtx, a = gen_rtx_REG (Pmode, 5);
+      rtx slot = gen_rtx_MEM (Pmode, plus_constant (Pmode, sp, 16));
+      set_mem_attrs_for_spill (slot);
+      rtx debug_slot = gen_rtx_MEM (Pmode, gen_rtx_PLUS
+	(Pmode, hard_frame_pointer_rtx,
+	 gen_int_mode (poly_int64 (-208, 0, -16), Pmode)));
+      set_mem_attrs_for_spill (debug_slot);
+      tree var = build_decl (UNKNOWN_LOCATION, VAR_DECL, NULL_TREE,
+			     long_integer_type_node);
+      rtx location = gen_rtx_VAR_LOCATION (Pmode, var, debug_slot,
+					 VAR_INIT_STATUS_INITIALIZED);
+      basic_block entry = ENTRY_BLOCK_PTR_FOR_FN (cfun);
+      basic_block exit = EXIT_BLOCK_PTR_FOR_FN (cfun);
+      basic_block root = BASIC_BLOCK_FOR_FN (cfun, 2);
+      rtx_note *note = emit_note (NOTE_INSN_BASIC_BLOCK);
+      NOTE_BASIC_BLOCK (note) = root;
+      BB_HEAD (root) = BB_END (root) = note;
+      basic_block left = create_empty_bb (root);
+      basic_block right = create_empty_bb (left);
+      basic_block join = create_empty_bb (right);
+      basic_block extra = create_empty_bb (join);
+      remove_edge (single_succ_edge (root));
+      auto append = [] (basic_block block, rtx pat) {
+	return BB_END (block) = GET_CODE (pat) == VAR_LOCATION
+	  ? emit_debug_insn_after (pat, BB_END (block))
+	  : emit_insn_after (pat, BB_END (block));
+      };
+      auto_vec<rtx_insn *, 4> releases;
+      auto release = [&] (basic_block block) {
+	rtx_insn *insn = append (block, gen_rtx_SET
+	  (sp, gen_rtx_PLUS (Pmode, sp, a)));
+	releases.safe_push (insn);
+	return insn;
+      };
+      if (test == 5) release (root);
+      if (test == 9) append (root, gen_rtx_SET (a, slot));
+      rtx_insn *allocate = append (root, gen_rtx_SET
+	(sp, gen_rtx_MINUS (Pmode, sp, a)));
+      if (test == 8) append (left, gen_rtx_SET (a, sp));
+      if (test == 11) append (left, copy_rtx (location));
+      if (test == 13)
+	{
+	  rtx outside = adjust_address_nv (slot, Pmode, 64);
+	  append (left, gen_rtx_SET (a, outside));
+	}
+      if (test == 23)
+	{
+	  append (left, gen_rtx_SET (slot, a));
+	  append (right, gen_rtx_SET (a, slot));
+	}
+      rtx_insn *first = release (left);
+      if (test != 3 && test != 26) release (right);
+      if (test == 4) release (right);
+      if (test == 10) append (right, gen_rtx_SET (a, slot));
+      if (test == 12) append (right, copy_rtx (location));
+      if (test == 17) releases.safe_push (first);
+      if (test == 18) releases.truncate (0);
+      edge arm = make_edge (root, test == 14 ? extra : left, 0);
+      make_edge (root, right, EDGE_FALLTHRU);
+      bool merged = test == 2 || test == 26;
+      make_edge (left, merged ? join : exit, 0);
+      make_edge (right, merged ? join : exit, 0);
+      if (merged) make_edge (join, exit, 0);
+      if (test == 1 || test == 7)
+	{
+	  if (test == 1) make_edge (root, extra, 0);
+	  release (extra);
+	  make_edge (extra, exit, 0);
+	}
+      if (test == 6) make_edge (entry, right, 0);
+      if (test == 14)
+	{
+	  make_edge (extra, extra, 0);
+	  make_edge (extra, left, 0);
+	}
+      if (test == 15) make_edge (left, left, 0);
+      if (test == 16) make_edge (root, exit, 0);
+      if (test >= 19 && test <= 22)
+	{
+	  int flags[] = { EDGE_EH, EDGE_ABNORMAL, EDGE_ABNORMAL_CALL, EDGE_FAKE };
+	  arm->flags |= flags[test - 19];
+	}
+      if (test == 24 || test == 25) make_edge (entry, exit, 0);
+      if (test == 25) remove_edge (single_pred_edge (root));
+      char context[64];
+      snprintf (context, sizeof context, "workspace release paths %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, test <= 2 || test == 11 || test == 14
+		    || test == 23 || test == 24,
+		    riscv_ztt_workspace_paths_p (allocate, releases, 64, 208, 16));
+    }
+}
+
+void
+selftest::riscv_ztt_workspace_selftests ()
+{
+  riscv_ztt_workspace_single_selftests ();
+  riscv_ztt_workspace_exits_selftests ();
 }
 #endif
 
@@ -10029,7 +10145,8 @@ riscv_ztt_remove_unused_workspace ()
       || frame.total_size.coeffs[2] != locals.coeffs[2])
     return false;
 
-  rtx_insn *allocate = nullptr, *release = nullptr;
+  rtx_insn *allocate = nullptr;
+  auto_vec<rtx_insn *, 4> releases;
   HOST_WIDE_INT fixed_size = frame.frame_pointer_offset.coeffs[0] - locals.coeffs[2];
   HOST_WIDE_INT fixed_frame = frame.hard_frame_pointer_offset.coeffs[0] - locals.coeffs[2];
   if (fixed_size < 0 || fixed_frame < fixed_size)
@@ -10082,17 +10199,19 @@ riscv_ztt_remove_unused_workspace ()
 	return false;
       if (GET_CODE (src) == MINUS && prologue_contains (insn) && !allocate)
 	allocate = insn;
-      else if (GET_CODE (src) == PLUS && epilogue_contains (insn) && !release)
-	release = insn;
+      else if (GET_CODE (src) == PLUS && epilogue_contains (insn))
+	releases.safe_push (insn);
       else
 	return false;
     }
-  if (!allocate || !release || (scalar_spills && frame_notes))
+  if (!allocate || releases.is_empty () || (scalar_spills && frame_notes))
     return false;
-  if (scalar_spills || BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
+  rtx_insn *release = releases[0];
+  if (scalar_spills || releases.length () > 1
+      || BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
     {
       if (!riscv_ztt_workspace_paths_p
-	    (allocate, release, fixed_size, fixed_frame, locals.coeffs[2]))
+	    (allocate, releases, fixed_size, fixed_frame, locals.coeffs[2]))
 	return false;
     }
   else
@@ -10129,13 +10248,18 @@ riscv_ztt_remove_unused_workspace ()
 	    }
 	}
   if (dump_file)
-    fprintf (dump_file, "%s AME workspace: " HOST_WIDE_INT_PRINT_DEC
-	     " * scale, insns %d and %d\n",
-	     scalar_spills ? "Compact scalar-spill" : "Remove unused",
-	     locals.coeffs[2],
-	     INSN_UID (allocate), INSN_UID (release));
+    {
+      fprintf (dump_file, "%s AME workspace: " HOST_WIDE_INT_PRINT_DEC
+	       " * scale, insns %d",
+	       scalar_spills ? "Compact scalar-spill" : "Remove unused",
+	       locals.coeffs[2], INSN_UID (allocate));
+      for (rtx_insn *end : releases)
+	fprintf (dump_file, " and %d", INSN_UID (end));
+      fputc ('\n', dump_file);
+    }
   delete_insn (allocate);
-  delete_insn (release);
+  for (rtx_insn *end : releases)
+    delete_insn (end);
   return true;
 }
 
