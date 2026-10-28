@@ -11913,14 +11913,19 @@ shared_old_copy_sites (bitmap sites)
       if (rtx set = single_set (insn))
 	{
 	  rtx src = SET_SRC (set);
-	  if (((GET_CODE (src) == UNSPEC
+	  bool scalar = (GET_CODE (src) == UNSPEC
+			 && XINT (src, 1) == UNSPEC_ZTT_TERNARY_X)
+	    || (GET_CODE (src) == UNSPEC_VOLATILE
+		&& XINT (src, 1) == UNSPECV_ZTT_TERNARY_X_FLAGS);
+	  if ((scalar || (GET_CODE (src) == UNSPEC
 		&& (XINT (src, 1) == UNSPEC_ZTT_SCATTER
 		    || XINT (src, 1) == UNSPEC_ZTT_TERNARY))
 	       || (GET_CODE (src) == UNSPEC_VOLATILE
 		   && (XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS
 		       || XINT (src, 1) == UNSPECV_ZTT_TERNARY_FLAGS)))
 	      && REG_P (SET_DEST (set))
-	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
+	      && (scalar
+		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1)))
 	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
 	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	    bitmap_set_bit (sites, INSN_UID (insn));
@@ -11954,6 +11959,14 @@ shared_old_copy_sites (bitmap sites)
 		    needed += m_nregs (GET_MODE (reg));
 		}
 	      if (needed > active_profile ()->mregs)
+		bitmap_clear_bit (sites, INSN_UID (insn));
+	      rtx src = SET_SRC (single_set (insn));
+	      bool scalar = (GET_CODE (src) == UNSPEC
+			     && XINT (src, 1) == UNSPEC_ZTT_TERNARY_X)
+		|| (GET_CODE (src) == UNSPEC_VOLATILE
+		    && XINT (src, 1) == UNSPECV_ZTT_TERNARY_X_FLAGS);
+	      /* Scalar controls compete with live-group descriptors for GPRs.  */
+	      if (scalar && needed > 2 * m_nregs (GET_MODE (dest)))
 		bitmap_clear_bit (sites, INSN_UID (insn));
 	    }
 	  df_simulate_one_insn_backwards (bb, insn, live);
@@ -12367,6 +12380,28 @@ lower_explicit_state ()
 	      groups[i] = MAX (1U, (UINTVAL (XVECEXP (src, 0, i + 2)) & 0xff)
 				  / active_profile ()->uds);
 	    unsigned int steps = pack_datatype_steps (groups[0], groups[1], groups[2]);
+	    rtx copied_old = NULL_RTX;
+	    if ((code == UNSPEC_ZTT_TERNARY || code == UNSPEC_ZTT_SCATTER
+		 || (code == UNSPEC_ZTT_TERNARY_X
+		     && UINTVAL (XVECEXP (src, 0, 2)) < 4))
+		&& bitmap_bit_p (copy_sites, INSN_UID (insn))
+		&& !ternary_bank_reuse && !scatter_bank_reuse
+		&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
+		&& m_nregs (mode) == groups[0]
+		&& mode == GET_MODE (XVECEXP (src, 0, 0))
+		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+		&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0))
+		&& (scalar
+		    || (mode == GET_MODE (XVECEXP (src, 0, 1))
+			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
+			&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1))))
+		&& !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
+	      {
+		copied_old = gen_reg_rtx (mode);
+		emit_insn (gen_ztt_state_copy
+		  (mode, Pmode, copied_old, XVECEXP (src, 0, 5), descriptor,
+		   copy_rtx (scratch), stride ? stride : const0_rtx));
+	      }
 	    if (code == UNSPEC_ZTT_TERNARY_X)
 	      {
 		bool exponent = UINTVAL (XVECEXP (src, 0, 2)) == 4;
@@ -12404,28 +12439,10 @@ lower_explicit_state ()
 			    exponent ? const0_rtx : force_reg (Pmode, XVECEXP (src, 0, 4)),
 			    scratch, stride ? stride : const0_rtx,
 			    XVECEXP (src, 0, 2), GEN_INT (steps),
-			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
+			    gen_rtx_SCRATCH (Pmode),
+			    copied_old ? copied_old : XVECEXP (src, 0, 5),
 			    const0_rtx));
 		break;
-	      }
-	    rtx copied_old = NULL_RTX;
-	    if ((code == UNSPEC_ZTT_TERNARY || code == UNSPEC_ZTT_SCATTER)
-		&& bitmap_bit_p (copy_sites, INSN_UID (insn))
-		&& !ternary_bank_reuse && !scatter_bank_reuse
-		&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
-		&& m_nregs (mode) == groups[0]
-		&& mode == GET_MODE (XVECEXP (src, 0, 0))
-		&& mode == GET_MODE (XVECEXP (src, 0, 1))
-		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
-		&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
-		&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0))
-		&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1))
-		&& !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
-	      {
-		copied_old = gen_reg_rtx (mode);
-		emit_insn (gen_ztt_state_copy
-		  (mode, Pmode, copied_old, XVECEXP (src, 0, 5), descriptor,
-		   copy_rtx (scratch), stride ? stride : const0_rtx));
 	      }
 	    if (code == UNSPEC_ZTT_TERNARY)
 	      {

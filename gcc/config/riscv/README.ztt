@@ -842,10 +842,13 @@ also removes its setter and descriptor dependency.  The row/column operation
 and control argument remain, with the same state invalidation boundaries
 as other consumers.
 
-Leaf scatter and matrix ternary operations with one shared, live input can copy
-the old destination with mmov.m.m after establishing matching complete Md.
+Leaf scatter and matrix/scalar multiply ternaries with a shared, live M
+input can copy the old destination with mmov.m.m after establishing matching
+complete Md.
 The operands must have the same non-packed basic-Square type.  A backward
 DF liveness scan admits only sites whose live M groups fit the profile;
 live ACC values and fixed M registers prevent this choice.  The separate
 copy has an independent destination and can reuse known source Md.  Calls,
 bank pressure and ordinary untyped moves retain their existing paths.
+Scalar forms also require no additional live M values to limit descriptor
+pressure on GPRs.  Scalar exponent operations retain their existing path.
