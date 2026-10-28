@@ -16110,6 +16110,112 @@ unused_prologue_scale_p ()
   return false;
 }
 
+/* Prove a load's constant Md on all incoming paths, including backedges.
+   A revisited block is only a cycle, not a proof: every external entry
+   must reach an establishing load before a state-changing operation.  */
+static bool
+load_path_md_p (rtx_insn *load, rtx group, rtx value,
+		unsigned int &budget)
+{
+  if (!CONST_INT_P (value) || flag_non_call_exceptions || cfun->calls_setjmp)
+    return false;
+  auto_vec<basic_block, 32> blocks;
+  basic_block bb = BLOCK_FOR_INSN (load);
+  rtx_insn *stop = load;
+  unsigned int next = 0;
+  bool established = false;
+  for (;;)
+    {
+      local_md_state state;
+      bool transparent = true;
+      rtx_insn *insn;
+      FOR_BB_INSNS (bb, insn)
+	{
+	  if (insn == stop)
+	    break;
+	  if (!NONDEBUG_INSN_P (insn))
+	    continue;
+	  if (!budget)
+	    return false;
+	  --budget;
+	  if (JUMP_P (insn) && insn == BB_END (bb)
+	      && md_preserving_branch_p (insn))
+	    continue;
+	  if (NONJUMP_INSN_P (insn) && !RTX_FRAME_RELATED_P (insn)
+	      && recog_memoized (insn) >= 0)
+	    {
+	      rtx pat = PATTERN (insn);
+	      if (INSN_CODE (insn) == CODE_FOR_stack_tiesi
+		  || INSN_CODE (insn) == CODE_FOR_stack_tiedi
+		  || INSN_CODE (insn) == CODE_FOR_stack_tie_spsi
+		  || INSN_CODE (insn) == CODE_FOR_stack_tie_spdi)
+		continue;
+	      if (md_scalar_insn_p (pat))
+		{
+		  record_scalar_md (insn, state);
+		  continue;
+		}
+	      if (md_raw_transfer_p (pat))
+		continue;
+	      if (GET_CODE (pat) == SET
+		  && GET_CODE (SET_SRC (pat)) == UNSPEC_VOLATILE)
+		{
+		  rtx src = SET_SRC (pat), dest = SET_DEST (pat);
+		  int code = XINT (src, 1);
+		  unsigned int len = XVECLEN (src, 0);
+		  /* These prepared forms modify Ad and payload, not Md.  */
+		  if (acc_mode_p (GET_MODE (dest))
+		      && ((code == UNSPECV_ZTT_ACC_FROM_M && len == 2)
+			  || (code == UNSPECV_ZTT_ACC_MMUL && len == 4)))
+		    continue;
+		  if ((code == UNSPECV_ZTT_STATE_LOAD && len == 2)
+		      || (code == UNSPECV_ZTT_STATE_MEMORY_LOAD && len == 4))
+		    {
+		      rtx descriptor = XVECEXP (src, 0, len - 1);
+		      if (descriptor == const0_rtx)
+			continue;
+		      if (local_md_state::full_gpr_p (descriptor))
+			{
+			  transparent &= !reg_overlap_mentioned_p (dest, group);
+			  state.remember (dest, descriptor);
+			  continue;
+			}
+		    }
+		}
+	    }
+	  state.clear ();
+	  transparent = false;
+	}
+      if (state.matches (group, value))
+	established = true;
+      else
+	{
+	  if (!transparent || EDGE_COUNT (bb->preds) == 0)
+	    return false;
+	  edge incoming;
+	  edge_iterator ei;
+	  FOR_EACH_EDGE (incoming, ei, bb->preds)
+	    {
+	      basic_block pred = incoming->src;
+	      if (pred->index < NUM_FIXED_BLOCKS
+		  || (incoming->flags & (EDGE_COMPLEX | EDGE_FAKE
+					 | EDGE_IRREDUCIBLE_LOOP | EDGE_CROSSING)))
+		return false;
+	      if (!blocks.contains (pred))
+		{
+		  if (blocks.length () == 32)
+		    return false;
+		  blocks.quick_push (pred);
+		}
+	    }
+	}
+      if (next == blocks.length ())
+	return established;
+      bb = blocks[next++];
+      stop = nullptr;
+    }
+}
+
 /* Reuse Md along proven paths and constant-state joins after allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -16986,6 +17092,48 @@ reuse_local_md ()
 	}
       path.leave (bb, state);
     }
+  /* The backward scan must see the final preparation of loop consumers.  */
+  if (explicit_state)
+    {
+      unsigned int budget = 2048;
+      FOR_EACH_BB_FN (bb, cfun)
+	{
+	  state.clear ();
+	  rtx_insn *insn;
+	  FOR_BB_INSNS (bb, insn)
+	    {
+	      if (!NONDEBUG_INSN_P (insn))
+		continue;
+	      if (!NONJUMP_INSN_P (insn) || recog_memoized (insn) < 0)
+		{
+		  state.clear ();
+		  continue;
+		}
+	      rtx set = single_set (insn), src = set ? SET_SRC (set) : NULL_RTX;
+	      if (src && GET_CODE (src) == UNSPEC_VOLATILE
+		  && (XINT (src, 1) == UNSPECV_ZTT_STATE_LOAD
+		      || XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_LOAD))
+		{
+		  rtx *descriptor = &XVECEXP (src, 0, XVECLEN (src, 0) - 1);
+		  if (*descriptor != const0_rtx
+		      && load_path_md_p (insn, SET_DEST (set),
+					 state.descriptor_value (*descriptor), budget)
+		      && validate_change (insn, descriptor, const0_rtx, false))
+		    {
+		      df_insn_rescan (insn);
+		      cleanup = descriptor_cleanup = true;
+		      if (dump_file)
+			fprintf (dump_file, "Reuse load Md across paths at insn %d\n",
+				 INSN_UID (insn));
+		    }
+		}
+	      if (md_scalar_insn_p (PATTERN (insn)))
+		record_scalar_md (insn, state);
+	      else
+		state.clear ();
+	    }
+	}
+    }
   /* Dropping private operands exposes dead address and stride calculations.  */
   if (riscv_ztt_rebase_stack_addresses ())
     cleanup = descriptor_cleanup = true;
@@ -17034,6 +17182,105 @@ reuse_local_md ()
 }
 
 #if CHECKING_P
+static void
+run_load_path_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  for (unsigned int test = 0; test != 21; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      const char *profile = riscv_ztt_profile_string;
+      int reload = reload_completed, non_call = flag_non_call_exceptions;
+      riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+      reload_completed = 1;
+      basic_block entry = BASIC_BLOCK_FOR_FN (cfun, 2);
+      rtx_note *note = emit_note (NOTE_INSN_BASIC_BLOCK);
+      NOTE_BASIC_BLOCK (note) = entry;
+      BB_HEAD (entry) = BB_END (entry) = note;
+      basic_block left = create_empty_bb (entry);
+      basic_block right = create_empty_bb (left);
+      basic_block join = create_empty_bb (right);
+      redirect_edge_succ (single_succ_edge (entry), left);
+      make_edge (entry, right, 0);
+      make_edge (left, join, 0);
+      edge second = make_edge (right, join, 0);
+      make_edge (join, EXIT_BLOCK_PTR_FOR_FN (cfun), 0);
+      auto append = [] (basic_block block, rtx pat) {
+	rtx_insn *insn = emit_insn_after (pat, BB_END (block));
+	set_block_for_insn (insn, block);
+	return BB_END (block) = insn;
+      };
+      rtx descriptor = gen_rtx_REG (Pmode, 10);
+      rtx pointer = gen_rtx_REG (Pmode, 12);
+      rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx other = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + 1);
+      rtx mem = gen_rtx_MEM (ZTTMR1mode, pointer);
+      auto establish = [&] (basic_block block, rtx reg, rtx value) {
+	append (block, gen_rtx_SET (descriptor, value));
+	if (test == 20)
+	  append (block, gen_stack_tie (Pmode, stack_pointer_rtx, hard_frame_pointer_rtx));
+	return append (block, gen_ztt_state_load
+	  (ZTTMR1mode, Pmode, reg, mem, descriptor));
+      };
+      if (test != 1 && test != 9 && test != 14 && test != 16)
+	establish (entry, group, GEN_INT (32));
+      if (test == 9)
+	{
+	  establish (left, group, GEN_INT (32));
+	  establish (right, group, GEN_INT (32));
+	}
+      if (test == 2) establish (right, group, GEN_INT (64));
+      if (test == 3) establish (right, group, pointer);
+      if (test == 4) establish (right, other, GEN_INT (64));
+      if (test == 5)
+	append (right, gen_rtx_ASM_INPUT_loc (VOIDmode, "# boundary", UNKNOWN_LOCATION));
+      if (test == 6)
+	{
+	  rtx_insn *call = emit_call_insn_after
+	    (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx),
+	     BB_END (right));
+	  set_block_for_insn (call, right);
+	  BB_END (right) = call;
+	}
+      if (test == 7) second->flags |= EDGE_EH;
+      if (test == 8) second->flags |= EDGE_IRREDUCIBLE_LOOP;
+      if (test == 10)
+	append (right, gen_ztt_state_load
+	  (ZTTMR1mode, Pmode, group, mem, const0_rtx));
+      if (test == 11)
+	RTX_FRAME_RELATED_P (append (right, gen_rtx_SET (descriptor, const0_rtx))) = 1;
+      if (test == 12) flag_non_call_exceptions = 1;
+      if (test == 13) cfun->calls_setjmp = true;
+      if (test == 14 || test == 15)
+	make_edge (join, left, EDGE_DFS_BACK);
+      if (test == 16) establish (left, group, GEN_INT (32));
+      if (test == 18 || test == 19)
+	{
+	  basic_block prev = right;
+	  for (unsigned int i = 0; i != (test == 18 ? 4U : 33U); ++i)
+	    {
+	      basic_block more = create_empty_bb (prev);
+	      redirect_edge_succ (single_succ_edge (prev), more);
+	      make_edge (more, join, 0);
+	      prev = more;
+	    }
+	}
+      rtx_insn *load = establish (join, group, GEN_INT (32));
+      unsigned int budget = test == 17 ? 1 : 2048;
+      bool expected = test == 0 || test == 4 || test == 9 || test == 10
+	|| test == 15 || test == 18 || test == 20;
+      char context[64];
+      snprintf (context, sizeof context, "load Md path case %u", test);
+      selftest::location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected, load_path_md_p (load, group, GEN_INT (32), budget));
+      reload_completed = reload;
+      flag_non_call_exceptions = non_call;
+      riscv_ztt_profile_string = profile;
+    }
+}
+
 static void
 run_loop_spill_selftests ()
 {
@@ -17195,6 +17442,7 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  run_load_path_selftests ();
   run_loop_spill_selftests ();
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
