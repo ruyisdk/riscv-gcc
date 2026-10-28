@@ -16216,14 +16216,16 @@ load_path_md_p (rtx_insn *load, rtx group, rtx value,
     }
 }
 
-/* Stack loads can remain after hard-register propagation.  */
+/* Stack transfers can remain after hard-register propagation.  */
 static rtx
-scalar_stack_load (rtx_insn *insn)
+scalar_stack_transfer (rtx_insn *insn, bool store = false)
 {
   if (!NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
       || recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET)
     return nullptr;
   rtx set = PATTERN (insn), reg = SET_DEST (set), mem = SET_SRC (set);
+  if (store)
+    std::swap (reg, mem);
   if (!local_md_state::full_gpr_p (reg) || fixed_regs[REGNO (reg)]
       || global_regs[REGNO (reg)] || REGNO (reg) == HARD_FRAME_POINTER_REGNUM
       || !MEM_P (mem) || GET_MODE (mem) != Pmode || MEM_VOLATILE_P (mem)
@@ -16233,7 +16235,7 @@ scalar_stack_load (rtx_insn *insn)
     return nullptr;
   tree expr = MEM_EXPR (mem);
   if (expr != get_spill_slot_decl (false)
-      && (TREE_CODE (expr) != PARM_DECL || TREE_ADDRESSABLE (expr)))
+      && (store || TREE_CODE (expr) != PARM_DECL || TREE_ADDRESSABLE (expr)))
     return nullptr;
   rtx addr = XEXP (mem, 0);
   if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
@@ -16250,7 +16252,18 @@ same_scalar_stack_slot_p (rtx a, rtx b)
     && MEM_ADDR_SPACE (a) == MEM_ADDR_SPACE (b);
 }
 
-/* Every entry must reach the same load before a register or memory kill.
+static rtx
+scalar_stack_carrier (rtx_insn *insn, rtx mem)
+{
+  bool store = GET_CODE (PATTERN (insn)) == SET
+    && MEM_P (SET_DEST (PATTERN (insn)));
+  rtx set = scalar_stack_transfer (insn, store);
+  if (!set || !same_scalar_stack_slot_p (store ? SET_DEST (set) : SET_SRC (set), mem))
+    return nullptr;
+  return store ? SET_SRC (set) : SET_DEST (set);
+}
+
+/* Every entry must reach an equal value before a register or memory kill.
    Visiting a backedge does not by itself establish availability.  */
 static bool
 scalar_stack_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
@@ -16274,9 +16287,8 @@ scalar_stack_path_p (rtx_insn *load, rtx reg, rtx mem, unsigned int &budget)
 	  if (!budget)
 	    return false;
 	  --budget;
-	  rtx set = scalar_stack_load (insn);
-	  if (set && rtx_equal_p (SET_DEST (set), reg)
-	      && same_scalar_stack_slot_p (SET_SRC (set), mem))
+	  rtx carrier = scalar_stack_carrier (insn, mem);
+	  if (carrier && rtx_equal_p (carrier, reg))
 	    {
 	      established = found = true;
 	      break;
@@ -16341,7 +16353,7 @@ reuse_scalar_stack_operand (rtx_insn *insn, unsigned int &budget)
       && (insn != BB_END (bb) || !md_preserving_branch_p (insn)))
     return false;
   rtx_insn *load = prev_nonnote_nondebug_insn_bb (insn);
-  rtx set = load ? scalar_stack_load (load) : nullptr;
+  rtx set = load ? scalar_stack_transfer (load) : nullptr;
   if (!set || BLOCK_FOR_INSN (load) != bb
       || !reg_referenced_p (SET_DEST (set), PATTERN (insn)))
     return false;
@@ -16353,13 +16365,18 @@ reuse_scalar_stack_operand (rtx_insn *insn, unsigned int &budget)
 	continue;
       ++distance;
       --budget;
-      rtx source = scalar_stack_load (prev);
-      if (!source || rtx_equal_p (SET_DEST (source), SET_DEST (set))
-	  || !same_scalar_stack_slot_p (SET_SRC (source), SET_SRC (set))
-	  || !scalar_stack_path_p (load, SET_DEST (source), SET_SRC (set), budget))
+      rtx source = scalar_stack_carrier (prev, SET_SRC (set));
+      if (!source || !scalar_stack_path_p (load, source, SET_SRC (set), budget))
 	continue;
+      if (rtx_equal_p (source, SET_DEST (set)))
+	{
+	  if (dump_file)
+	    fprintf (dump_file, "Drop scalar stack reload at insn %d\n", INSN_UID (load));
+	  delete_insn (load);
+	  return true;
+	}
       int length = get_attr_length (insn);
-      validate_replace_src_group (SET_DEST (set), SET_DEST (source), insn);
+      validate_replace_src_group (SET_DEST (set), source, insn);
       if (!verify_changes (0) || get_attr_length (insn) > length)
 	{
 	  cancel_changes (0);
@@ -17401,10 +17418,13 @@ reuse_local_md ()
   /* Dropping private operands exposes dead address and stride calculations.  */
   if (riscv_ztt_rebase_stack_addresses ())
     cleanup = descriptor_cleanup = true;
-  if (reuse_scalar_stack_operands ())
-    cleanup = descriptor_cleanup = true;
   if (cleanup)
     run_fast_dce ();
+  if (reuse_scalar_stack_operands ())
+    {
+      cleanup = descriptor_cleanup = true;
+      run_fast_dce ();
+    }
   if (riscv_ztt_remove_unused_workspace ())
     {
       cleanup = descriptor_cleanup = true;
@@ -17557,7 +17577,7 @@ run_scalar_spill_path_selftests ()
   using namespace selftest;
   if (!TARGET_ZTT)
     return;
-  for (unsigned int test = 0; test != 39; ++test)
+  for (unsigned int test = 0; test != 61; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       int reload = reload_completed, non_call = flag_non_call_exceptions;
@@ -17588,7 +17608,7 @@ run_scalar_spill_path_selftests ()
       rtx tmp = gen_rtx_REG (Pmode, 11), pointer = gen_rtx_REG (Pmode, 10);
       rtx mem = gen_rtx_MEM (Pmode, plus_constant (Pmode, stack_pointer_rtx, 64));
       set_mem_attrs_for_spill (mem);
-      if (test >= 30)
+      if (test >= 30 && test <= 38)
 	{
 	  tree arg = build_decl (UNKNOWN_LOCATION, test == 32 ? VAR_DECL : PARM_DECL,
 				get_identifier ("stack_arg"), ptr_type_node);
@@ -17607,8 +17627,35 @@ run_scalar_spill_path_selftests ()
       if (test == 25) set_mem_offset (source, 8);
       if (test == 27) global_regs[25] = 1;
       if (test == 28) fixed_regs[25] = 1;
-      if (test != 1 && test != 14 && test != 16 && test != 17)
+      if (test < 39 && test != 1 && test != 14 && test != 16 && test != 17)
 	append (entry, gen_rtx_SET (reg, source));
+      if (test >= 39)
+	{
+	  if (test == 45) MEM_VOLATILE_P (source) = 1;
+	  if (test == 46)
+	    set_mem_expr (source, build_decl (UNKNOWN_LOCATION, PARM_DECL,
+					     get_identifier ("stored_arg"), ptr_type_node));
+	  if (test == 49) PUT_MODE (source, QImode);
+	  if (test == 50) XEXP (source, 0) = plus_constant (Pmode, stack_pointer_rtx, 72);
+	  if (test == 60) MEM_NOTRAP_P (source) = 0;
+	  rtx pat = test == 54 ? gen_rtx_SET (reg, source)
+	    : gen_rtx_SET (source, test == 42 ? tmp : reg);
+	  rtx_insn *first = append (test == 40 || test == 41 ? left : entry, pat);
+	  if (test == 48) RTX_FRAME_RELATED_P (first) = 1;
+	  if (test == 40) append (right, copy_rtx (pat));
+	  if (test == 43 || test == 53 || test == 55)
+	    {
+	      rtx dest = copy_rtx (source);
+	      if (test == 43) PUT_MODE (dest, QImode);
+	      if (test == 55) XEXP (dest, 0) = plus_constant (Pmode, stack_pointer_rtx, 72);
+	      append (right, gen_rtx_SET (dest, const0_rtx));
+	    }
+	  if (test == 44 || test == 57)
+	    append (right, gen_rtx_SET (test == 44 ? reg : gen_rtx_REG (QImode, REGNO (reg)),
+				       const0_rtx));
+	  if (test == 56) flag_non_call_exceptions = 1;
+	  if (test == 59) cfun->calls_setjmp = true;
+	}
       if (test == 16 || test == 17)
 	append (left, gen_rtx_SET (reg, copy_rtx (source)));
       if (test == 17)
@@ -17627,9 +17674,9 @@ run_scalar_spill_path_selftests ()
 	  if (test == 6 || test == 29) set_mem_alias_set (dest, new_alias_set ());
 	  append (right, gen_rtx_SET (dest, const0_rtx));
 	}
-      if (test == 7)
+      if (test == 7 || test == 52)
 	append (right, gen_rtx_ASM_INPUT_loc (VOIDmode, "# boundary", UNKNOWN_LOCATION));
-      if (test == 8)
+      if (test == 8 || test == 51)
 	{
 	  rtx_insn *call = emit_call_insn_after
 	    (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, pointer), const0_rtx), BB_END (right));
@@ -17656,11 +17703,13 @@ run_scalar_spill_path_selftests ()
 	append (right, gen_rtx_SET (gen_rtx_REG (QImode, REGNO (reg)), const0_rtx));
       if (test == 24)
 	RTX_FRAME_RELATED_P (append (right, gen_rtx_SET (pointer, const0_rtx))) = 1;
-      rtx_insn *load = append (join, gen_rtx_SET (tmp, copy_rtx (mem)));
+      rtx dest = test == 47 || test == 54 ? reg : tmp;
+      rtx_insn *load = append (join, gen_rtx_SET (dest, copy_rtx (mem)));
       if (test == 15) append (join, gen_rtx_SET (reg, const0_rtx));
-      unsigned int budget = test == 18 ? 0 : 2048;
+      unsigned int budget = test == 18 || test == 58 ? 0 : 2048;
       bool expected = test == 0 || test == 6 || test == 13 || test == 17
-	|| test == 20 || test == 30 || test == 33 || test >= 36;
+	|| test == 20 || test == 30 || test == 33 || (test >= 36 && test <= 40)
+	|| test == 47 || test == 54;
       char context[64];
       snprintf (context, sizeof context, "scalar spill path case %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
@@ -17678,7 +17727,7 @@ run_scalar_spill_path_selftests ()
 	  ASSERT_FALSE_AT (loc, reg_referenced_p (tmp, PATTERN (jump)));
 	  ASSERT_FALSE_AT (loc, load->deleted ());
 	}
-      if (test >= 36)
+      if (test >= 36 && test <= 38)
 	{
 	  rtx dest = test == 36 ? tmp : gen_rtx_MEM (Pmode, pointer);
 	  if (test == 38) MEM_VOLATILE_P (dest) = 1;
@@ -17691,6 +17740,18 @@ run_scalar_spill_path_selftests ()
 	  ASSERT_EQ_AT (loc, test == 38, reg_referenced_p (tmp, PATTERN (use)));
 	  ASSERT_FALSE_AT (loc, find_reg_equal_equiv_note (use));
 	  ASSERT_FALSE_AT (loc, load->deleted ());
+	}
+      if (test >= 39)
+	{
+	  rtx_insn *use = append (join, gen_rtx_SET
+	    (pointer, gen_rtx_PLUS (Pmode, dest, const1_rtx)));
+	  budget = test == 58 ? 0 : 2048;
+	  ASSERT_EQ_AT (loc, expected || test == 42,
+			reuse_scalar_stack_operand (use, budget));
+	  ASSERT_EQ_AT (loc, test == 42 || test == 47 || test == 54, load->deleted ());
+	  ASSERT_TRUE_AT (loc, rtx_equal_p (pointer, SET_DEST (PATTERN (use))));
+	  ASSERT_EQ_AT (loc, test == 39 || test == 40 || test == 47 || test == 54,
+			reg_referenced_p (reg, PATTERN (use)));
 	}
       reload_completed = reload;
       flag_non_call_exceptions = non_call;
