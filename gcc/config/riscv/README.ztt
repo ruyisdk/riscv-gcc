@@ -717,6 +717,9 @@ amestype writes remain under the existing local rules.
 Full old-destination envelopes follow destination-first setup order and
 require the tied old value to match the result. Full copies establish Md;
 recognized raw transfers only preserve existing facts.
+Gather and scatter use the same complete-group loop proof when result,
+data and indices have matching constant Md. Index routing and scatter
+accumulation order remain unchanged.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
 Narrow broadcast queries read the GPR constant cache directly and truncate

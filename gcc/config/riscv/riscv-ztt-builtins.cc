@@ -14198,6 +14198,12 @@ md_loop_exit (basic_block bb, local_md_state &state)
 	case UNSPECV_ZTT_STATE_TERNARY_REUSE_RIGHT:
 	case UNSPECV_ZTT_STATE_TERNARY_X:
 	case UNSPECV_ZTT_STATE_TERNARY_X_REUSE:
+	case UNSPECV_ZTT_STATE_GATHER:
+	case UNSPECV_ZTT_STATE_GATHER_REUSE:
+	case UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH:
+	case UNSPECV_ZTT_STATE_SCATTER:
+	case UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT:
+	case UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT:
 	  if (!md_loop_common_p (set, common_scalar_p (XINT (src, 1)), state))
 	    return false;
 	  /* This scan establishes matrix facts, not amestype availability.  */
@@ -17908,6 +17914,89 @@ run_md_reuse_selftests ()
 	  {
 	    ASSERT_EQ (test != 14, state.matches (dest, GEN_INT (32)));
 	    ASSERT_FALSE (state.record_scalar_type (tc));
+	  }
+	reload_completed = saved_reload;
+	riscv_ztt_profile_string = profile;
+      }
+  if (TARGET_ZTT)
+    for (int code : { UNSPECV_ZTT_STATE_GATHER,
+		     UNSPECV_ZTT_STATE_GATHER_REUSE,
+		     UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH,
+		     UNSPECV_ZTT_STATE_SCATTER,
+		     UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT,
+		     UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT })
+      for (unsigned int test = 0; test != 10; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	int saved_reload = reload_completed;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	reload_completed = 1;
+	riscv_ztt_note_call_boundary ();
+	basic_block bb = create_empty_bb (EXIT_BLOCK_PTR_FOR_FN (cfun)->prev_bb);
+	auto append = [&] (rtx pattern) {
+	  rtx_insn *insn = emit_insn_after (pattern, BB_END (bb));
+	  BB_END (bb) = insn;
+	  return insn;
+	};
+	bool scatter = common_old_dest_p (code);
+	machine_mode mode = test == 6 || test == 7 ? ZTTMR2mode : ZTTMR1mode;
+	rtx desc = gen_rtx_REG (Pmode, 10), other = gen_rtx_REG (Pmode, 12);
+	rtx dest = gen_rtx_REG (mode, M_REG_FIRST + 8);
+	rtx a = gen_rtx_REG (mode, M_REG_FIRST + 10);
+	rtx b = gen_rtx_REG (mode, M_REG_FIRST + 12);
+	if (code == UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT)
+	  a = dest;
+	if (code == UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT)
+	  b = dest;
+	if (test == 7)
+	  (rtx_equal_p (b, dest) ? a : b)
+	    = gen_rtx_REG (mode, M_REG_FIRST + 9);
+	if (test == 9)
+	  a = b = dest;
+	if (test != 1)
+	  append (gen_rtx_SET (desc, GEN_INT (32)));
+	if (test == 2)
+	  append (gen_rtx_SET (other, GEN_INT (64)));
+	if (test == 4)
+	  append (gen_ztt_typed_msettyp_p0 (mode, Pmode, a, desc));
+	unsigned int step = test == 7 ? 2 : 1;
+	rtx steps = GEN_INT (pack_datatype_steps (step, step, step));
+	rtx variant = GEN_INT (scatter ? 2 : 0);
+	rtx mask = GEN_INT (test == 3 || test == 4 ? 2 : 0);
+	rtx pat;
+	if (test == 5)
+	  pat = scatter
+	    ? gen_ztt_state_common_old_prepared
+	      (UNSPECV_ZTT_STATE_SCATTER, mode, Pmode, dest, a, b,
+	       desc, desc, desc, variant, steps, dest)
+	    : gen_ztt_state_common_prepared
+	      (UNSPECV_ZTT_STATE_GATHER, mode, Pmode, dest, a, b,
+	       desc, desc, desc, variant, steps);
+	else
+	  {
+	    rtvec args = scatter
+	      ? gen_rtvec (10, a, b, desc, desc, test == 2 ? other : desc,
+			   const0_rtx, variant, steps, dest, mask)
+	      : gen_rtvec (9, a, b, desc, desc, test == 2 ? other : desc,
+			   const0_rtx, variant, steps, mask);
+	    rtx slot = gen_rtx_MEM (mode, gen_rtx_REG (Pmode, 11));
+	    pat = gen_rtx_PARALLEL (VOIDmode, gen_rtvec
+	      (3, gen_rtx_SET (dest, gen_rtx_UNSPEC_VOLATILE (mode, args, code)),
+	       gen_rtx_CLOBBER (VOIDmode, slot),
+	       gen_rtx_CLOBBER (VOIDmode, gen_rtx_SCRATCH (Pmode))));
+	  }
+	append (pat);
+	if (test == 8)
+	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
+	local_md_state state;
+	bool valid = md_loop_exit (bb, state);
+	ASSERT_EQ (test == 0 || test == 4 || test == 9, valid);
+	if (valid)
+	  {
+	    ASSERT_TRUE (state.matches (dest, GEN_INT (32)));
+	    ASSERT_TRUE (state.matches (a, GEN_INT (32)));
+	    ASSERT_TRUE (state.matches (b, GEN_INT (32)));
 	  }
 	reload_completed = saved_reload;
 	riscv_ztt_profile_string = profile;
