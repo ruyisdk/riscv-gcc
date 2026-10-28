@@ -9563,18 +9563,8 @@ riscv_ztt_workspace_factor (rtx x, rtx_insn *before, HOST_WIDE_INT limit,
 /* Incoming scalar arguments are above the fixed CFA, outside the scalable
    workspace.  Their loads and debug locations survive allocation removal.  */
 static bool
-riscv_ztt_incoming_arg_load_p (rtx pat)
+riscv_ztt_incoming_arg_p (rtx src, rtx base)
 {
-  rtx src;
-  if (GET_CODE (pat) == VAR_LOCATION)
-    src = PAT_VAR_LOCATION_LOC (pat);
-  else if (GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
-	   && GP_REG_P (REGNO (SET_DEST (pat)))
-	   && !reg_overlap_mentioned_p (stack_pointer_rtx, SET_DEST (pat))
-	   && !reg_overlap_mentioned_p (hard_frame_pointer_rtx, SET_DEST (pat)))
-    src = SET_SRC (pat);
-  else
-    return false;
   if (!src)
     return false;
   if (GET_CODE (src) == SIGN_EXTEND || GET_CODE (src) == ZERO_EXTEND)
@@ -9586,11 +9576,125 @@ riscv_ztt_incoming_arg_load_p (rtx pat)
   if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1))
       && INTVAL (XEXP (addr, 1)) >= 0)
     addr = XEXP (addr, 0);
-  return rtx_equal_p (addr, hard_frame_pointer_rtx);
+  return rtx_equal_p (addr, base);
+}
+
+static bool
+riscv_ztt_incoming_arg_load_p (rtx pat)
+{
+  if (GET_CODE (pat) == VAR_LOCATION)
+    return riscv_ztt_incoming_arg_p (PAT_VAR_LOCATION_LOC (pat),
+				     hard_frame_pointer_rtx);
+  if (GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
+      && GP_REG_P (REGNO (SET_DEST (pat)))
+      && !reg_overlap_mentioned_p (stack_pointer_rtx, SET_DEST (pat))
+      && !reg_overlap_mentioned_p (hard_frame_pointer_rtx, SET_DEST (pat)))
+    return riscv_ztt_incoming_arg_p (SET_SRC (pat), hard_frame_pointer_rtx);
+  return false;
+}
+
+static bool
+riscv_ztt_workspace_notes_p (rtx notes)
+{
+  for (rtx note = notes; note; note = XEXP (note, 1))
+    {
+      if (GET_CODE (note) == INT_LIST)
+	continue;
+      rtx value = XEXP (note, 0);
+      if (!value)
+	continue;
+      /* Incoming argument equivalences use the unchanged caller frame.  */
+      if ((REG_NOTE_KIND (note) == REG_EQUAL
+	   || REG_NOTE_KIND (note) == REG_EQUIV)
+	  && riscv_ztt_incoming_arg_p (value, arg_pointer_rtx))
+	continue;
+      if (reg_overlap_mentioned_p (stack_pointer_rtx, value)
+	  || reg_overlap_mentioned_p (hard_frame_pointer_rtx, value)
+	  || reg_overlap_mentioned_p (frame_pointer_rtx, value)
+	  || reg_overlap_mentioned_p (arg_pointer_rtx, value))
+	return false;
+    }
+  return true;
+}
+
+static rtx *riscv_ztt_stack_mem (rtx);
+
+static bool
+riscv_ztt_private_scalar_spill_p (rtx mem)
+{
+  if (!mem || !MEM_P (mem) || !SCALAR_INT_MODE_P (GET_MODE (mem))
+      || !known_le (GET_MODE_SIZE (GET_MODE (mem)), UNITS_PER_WORD)
+      || !MEM_EXPR (mem) || MEM_EXPR (mem) != get_spill_slot_decl (false)
+      || MEM_VOLATILE_P (mem) || MEM_ADDR_SPACE (mem) != ADDR_SPACE_GENERIC
+      || MEM_ALIGN (mem) > STACK_BOUNDARY || !MEM_SIZE_KNOWN_P (mem)
+      || !known_eq (MEM_SIZE (mem), GET_MODE_SIZE (GET_MODE (mem))))
+    return false;
+  rtx canonical = DECL_RTL_IF_SET (MEM_EXPR (mem));
+  return canonical && MEM_P (canonical) && MEM_ALIAS_SET (mem)
+    && MEM_ALIAS_SET (mem) == MEM_ALIAS_SET (canonical);
+}
+
+/* Only private scalar slots wholly inside the fixed local area can move
+   with SP when the scalable gap is removed.  */
+static bool
+riscv_ztt_workspace_spill_p (rtx pat, HOST_WIDE_INT fixed_size)
+{
+  rtx *loc = riscv_ztt_stack_mem (pat);
+  if (!loc || !riscv_ztt_private_scalar_spill_p (*loc))
+    return false;
+  rtx mem = *loc;
+  rtx other = MEM_P (SET_DEST (pat)) ? SET_SRC (pat) : SET_DEST (pat);
+  if (reg_overlap_mentioned_p (stack_pointer_rtx, other)
+      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, other))
+    return false;
+  rtx addr = XEXP (mem, 0);
+  HOST_WIDE_INT offset = 0;
+  if (GET_CODE (addr) == PLUS && CONST_INT_P (XEXP (addr, 1)))
+    {
+      offset = INTVAL (XEXP (addr, 1));
+      addr = XEXP (addr, 0);
+    }
+  HOST_WIDE_INT bytes = GET_MODE_SIZE (GET_MODE (mem)).to_constant ();
+  return rtx_equal_p (addr, stack_pointer_rtx) && offset >= 0
+    && fixed_size >= bytes && offset <= fixed_size - bytes;
+}
+
+/* Return a relocatable debug MEM and its new fixed FP offset.  */
+static rtx *
+riscv_ztt_workspace_debug_slot (rtx pat, HOST_WIDE_INT fixed_size,
+			       HOST_WIDE_INT fixed_frame, HOST_WIDE_INT factor,
+			       HOST_WIDE_INT &new_offset)
+{
+  if (GET_CODE (pat) != VAR_LOCATION)
+    return nullptr;
+  rtx *loc = &PAT_VAR_LOCATION_LOC (pat);
+  if (*loc && (GET_CODE (*loc) == SIGN_EXTEND || GET_CODE (*loc) == ZERO_EXTEND))
+    loc = &XEXP (*loc, 0);
+  if (!riscv_ztt_private_scalar_spill_p (*loc))
+    return nullptr;
+  rtx addr = XEXP (*loc, 0);
+  poly_int64 offset = 0;
+  if (GET_CODE (addr) == PLUS && poly_int_rtx_p (XEXP (addr, 1), &offset))
+    addr = XEXP (addr, 0);
+  if (rtx_equal_p (addr, hard_frame_pointer_rtx)
+      && !offset.coeffs[1] && offset.coeffs[2] == -factor
+      && offset.coeffs[0] <= 0)
+    new_offset = offset.coeffs[0] + factor;
+  else if (rtx_equal_p (addr, stack_pointer_rtx) && offset.is_constant ()
+	   && IN_RANGE (offset.coeffs[0], 0, fixed_size))
+    new_offset = offset.coeffs[0] - fixed_frame;
+  else
+    return nullptr;
+  if (new_offset > 0 || new_offset < -fixed_frame)
+    return nullptr;
+  HOST_WIDE_INT bytes = GET_MODE_SIZE (GET_MODE (*loc)).to_constant ();
+  return fixed_size >= bytes && fixed_frame + new_offset <= fixed_size - bytes
+    ? loc : nullptr;
 }
 
 #if CHECKING_P
 static void riscv_ztt_stack_selftests (basic_block);
+static void riscv_ztt_workspace_paths_selftests (basic_block);
 
 void
 selftest::riscv_ztt_workspace_selftests ()
@@ -9703,15 +9807,72 @@ selftest::riscv_ztt_workspace_selftests ()
 				       VAR_INIT_STATUS_UNKNOWN)));
   set_mem_expr (SET_SRC (incoming), NULL_TREE);
   ASSERT_FALSE (riscv_ztt_incoming_arg_load_p (incoming));
+  ASSERT_TRUE (riscv_ztt_workspace_notes_p (NULL_RTX));
+  rtx probability = gen_rtx_INT_LIST ((machine_mode) REG_BR_PROB, 123, NULL_RTX);
+  ASSERT_TRUE (riscv_ztt_workspace_notes_p (probability));
+  XEXP (probability, 1) = alloc_reg_note (REG_EQUAL, stack_pointer_rtx, NULL_RTX);
+  ASSERT_FALSE (riscv_ztt_workspace_notes_p (probability));
+  for (unsigned int test = 0; test != 7; ++test)
+    {
+      rtx value = SET_SRC (load (plus_constant (Pmode, arg_pointer_rtx, 16)));
+      switch (test)
+	{
+	case 1: value = gen_rtx_ZERO_EXTEND (Pmode, narrow); break;
+	case 2: XEXP (value, 0) = stack_pointer_rtx; break;
+	case 3: XEXP (value, 0) = hard_frame_pointer_rtx; break;
+	case 4: XEXP (value, 0) = frame_pointer_rtx; break;
+	case 5: XEXP (value, 0) = plus_constant (Pmode, arg_pointer_rtx, -1); break;
+	case 6: set_mem_expr (value, NULL_TREE); break;
+	}
+      if (test == 1)
+	XEXP (XEXP (value, 0), 0) = arg_pointer_rtx;
+      rtx note = alloc_reg_note (REG_EQUIV, value, NULL_RTX);
+      ASSERT_EQ (riscv_ztt_workspace_notes_p (note), test <= 1);
+      XEXP (note, 1) = alloc_reg_note (REG_EQUAL, stack_pointer_rtx, NULL_RTX);
+      ASSERT_FALSE (riscv_ztt_workspace_notes_p (note));
+    }
   end_sequence ();
+
+  rtx slot = gen_rtx_MEM (Pmode, plus_constant (Pmode, stack_pointer_rtx, 16));
+  set_mem_attrs_for_spill (slot);
+  rtx load_slot = gen_rtx_SET (a, slot);
+  rtx store_slot = gen_rtx_SET (slot, a);
+  ASSERT_TRUE (riscv_ztt_workspace_spill_p (load_slot, 16 + UNITS_PER_WORD));
+  ASSERT_TRUE (riscv_ztt_workspace_spill_p (store_slot, 16 + UNITS_PER_WORD));
+  ASSERT_FALSE (riscv_ztt_workspace_spill_p (load_slot, 15 + UNITS_PER_WORD));
+  ASSERT_FALSE (riscv_ztt_workspace_spill_p (load_slot, 0));
+  for (unsigned int test = 0; test != 10; ++test)
+    {
+      rtx other = copy_rtx (slot);
+      rtx dest = a;
+      switch (test)
+	{
+	case 0: set_mem_expr (other, NULL_TREE); break;
+	case 1: set_mem_alias_set (other, 0); break;
+	case 2: MEM_VOLATILE_P (other) = 1; break;
+	case 3: set_mem_addr_space (other, 1); break;
+	case 4: set_mem_size (other, UNITS_PER_WORD + 1); break;
+	case 5: set_mem_align (other, 2 * STACK_BOUNDARY); break;
+	case 6: XEXP (other, 0) = plus_constant (Pmode, stack_pointer_rtx, -1); break;
+	case 7: XEXP (other, 0) = hard_frame_pointer_rtx; break;
+	case 8: dest = stack_pointer_rtx; break;
+	case 9: dest = hard_frame_pointer_rtx; break;
+	}
+      ASSERT_FALSE (riscv_ztt_workspace_spill_p (gen_rtx_SET (dest, other), 64));
+    }
+  ASSERT_FALSE (riscv_ztt_workspace_spill_p
+		(gen_rtx_SET (a, plus_constant (Pmode, stack_pointer_rtx, 16)), 64));
   riscv_ztt_stack_selftests (bb);
+  riscv_ztt_workspace_paths_selftests (bb);
 }
 #endif
 
-/* Propagate the allocation state once per reachable block.  A conflicting
-   join, unbalanced exit or stack reference while allocated rejects the pair.  */
+/* Propagate allocation state once per reachable block.  Relocatable spills
+   must stay within the allocated interval; other stack references reject it.  */
 static bool
-riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release)
+riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release,
+			     HOST_WIDE_INT fixed_size, HOST_WIDE_INT fixed_frame,
+			     HOST_WIDE_INT factor)
 {
   enum { unseen, unallocated, allocated };
   auto_vec<unsigned char> state;
@@ -9744,9 +9905,21 @@ riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release)
 		  current = unallocated;
 		  seen_release = true;
 		}
-	      else if (INSN_P (insn) && current == allocated)
+	      else if (INSN_P (insn))
 		{
 		  rtx pat = PATTERN (insn);
+		  HOST_WIDE_INT offset;
+		  if (riscv_ztt_workspace_spill_p (pat, fixed_size)
+		      || (DEBUG_INSN_P (insn)
+			  && riscv_ztt_workspace_debug_slot
+			       (pat, fixed_size, fixed_frame, factor, offset)))
+		    {
+		      if (current != allocated)
+			return false;
+		      continue;
+		    }
+		  if (current != allocated)
+		    continue;
 		  if (riscv_ztt_incoming_arg_load_p (pat)
 		      || (GET_CODE (pat) == SET && GET_CODE (SET_SRC (pat)) == UNSPEC
 			  && XINT (SET_SRC (pat), 1) == UNSPEC_TIE))
@@ -9780,8 +9953,60 @@ riscv_ztt_workspace_paths_p (rtx_insn *allocate, rtx_insn *release)
   return seen_allocate && seen_release;
 }
 
-/* Local Md reuse can make every private slot dead after frame expansion.
-   Keep the fixed CFA and N checks, and remove only an unused scalable pair.  */
+#if CHECKING_P
+static void
+riscv_ztt_workspace_paths_selftests (basic_block bb)
+{
+  using namespace selftest;
+  rtx_insn *head = BB_HEAD (bb), *end = BB_END (bb);
+  rtx sp = stack_pointer_rtx, a = gen_rtx_REG (Pmode, 5);
+  rtx slot = gen_rtx_MEM (Pmode, plus_constant (Pmode, sp, 16));
+  set_mem_attrs_for_spill (slot);
+  rtx debug_slot = gen_rtx_MEM (Pmode, gen_rtx_PLUS
+    (Pmode, hard_frame_pointer_rtx, gen_int_mode (poly_int64 (-208, 0, -16), Pmode)));
+  set_mem_attrs_for_spill (debug_slot);
+  tree var = build_decl (UNKNOWN_LOCATION, VAR_DECL, NULL_TREE, long_integer_type_node);
+  rtx location = gen_rtx_VAR_LOCATION (Pmode, var, debug_slot,
+				     VAR_INIT_STATUS_INITIALIZED);
+  HOST_WIDE_INT offset;
+  ASSERT_TRUE (riscv_ztt_workspace_debug_slot (location, 64, 208, 16, offset));
+  ASSERT_EQ (offset, -192);
+  ASSERT_FALSE (riscv_ztt_workspace_debug_slot (location, 16, 208, 16, offset));
+  ASSERT_FALSE (riscv_ztt_workspace_debug_slot (location, 64, 208, 32, offset));
+  for (unsigned int test = 0; test != 7; ++test)
+    {
+      start_sequence ();
+      auto append = [bb] (rtx pat) {
+	rtx_insn *insn = GET_CODE (pat) == VAR_LOCATION
+	  ? emit_debug_insn (pat) : emit_insn (pat);
+	set_block_for_insn (insn, bb);
+	return insn;
+      };
+      if (test == 1) append (gen_rtx_SET (a, slot));
+      if (test == 4) append (copy_rtx (location));
+      rtx_insn *allocate = append (gen_rtx_SET
+	(sp, gen_rtx_MINUS (Pmode, sp, a)));
+      append (gen_rtx_SET (slot, a));
+      append (gen_rtx_SET (a, slot));
+      if (test == 3) append (gen_rtx_SET (a, sp));
+      if (test == 5) append (copy_rtx (location));
+      rtx_insn *release = append (gen_rtx_SET
+	(sp, gen_rtx_PLUS (Pmode, sp, a)));
+      if (test == 2) append (gen_rtx_SET (a, slot));
+      if (test == 6) append (copy_rtx (location));
+      BB_HEAD (bb) = get_insns ();
+      BB_END (bb) = get_last_insn ();
+      ASSERT_EQ (riscv_ztt_workspace_paths_p (allocate, release, 64, 208, 16),
+		 test == 0 || test == 5);
+      BB_HEAD (bb) = head;
+      BB_END (bb) = end;
+      end_sequence ();
+    }
+}
+#endif
+
+/* Remove an unused scalable area, retaining scalar spills that fit the fixed
+   local area.  Keep the fixed CFA, register saves and N checks.  */
 bool
 riscv_ztt_remove_unused_workspace ()
 {
@@ -9796,22 +10021,40 @@ riscv_ztt_remove_unused_workspace ()
       || cfun->machine->varargs_size || crtl->args.pretend_args_size
       || known_ne (crtl->outgoing_args_size, 0) || frame.vmask
       || frame.total_size.coeffs[1] || locals.coeffs[1]
+      || frame.frame_pointer_offset.coeffs[1]
+      || frame.frame_pointer_offset.coeffs[2] != locals.coeffs[2]
+      || frame.hard_frame_pointer_offset.coeffs[1]
+      || frame.hard_frame_pointer_offset.coeffs[2] != locals.coeffs[2]
       || locals.coeffs[2] <= 0 || locals.coeffs[0] < locals.coeffs[2]
       || frame.total_size.coeffs[2] != locals.coeffs[2])
     return false;
 
   rtx_insn *allocate = nullptr, *release = nullptr;
+  HOST_WIDE_INT fixed_size = frame.frame_pointer_offset.coeffs[0] - locals.coeffs[2];
+  HOST_WIDE_INT fixed_frame = frame.hard_frame_pointer_offset.coeffs[0] - locals.coeffs[2];
+  if (fixed_size < 0 || fixed_frame < fixed_size)
+    return false;
+  bool scalar_spills = false, frame_notes = false;
   for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
     {
       if (!INSN_P (insn))
 	continue;
       rtx pat = PATTERN (insn);
+      HOST_WIDE_INT offset;
+      bool spill = riscv_ztt_workspace_spill_p (pat, fixed_size)
+	|| (DEBUG_INSN_P (insn) && riscv_ztt_workspace_debug_slot
+	    (pat, fixed_size, fixed_frame, locals.coeffs[2], offset));
+      scalar_spills |= spill;
+      if (NONDEBUG_INSN_P (insn) && REG_NOTES (insn)
+	  && !prologue_epilogue_contains (insn))
+	frame_notes |= !riscv_ztt_workspace_notes_p (REG_NOTES (insn));
       if (CALL_P (insn)
 	  || (asm_noperands (pat) >= 0 && !riscv_ztt::memory_barrier_p (pat))
 	  || GET_CODE (pat) == ASM_INPUT)
 	return false;
       if (!prologue_epilogue_contains (insn)
 	  && !riscv_ztt_incoming_arg_load_p (pat)
+	  && !spill
 	  && (reg_overlap_mentioned_p (stack_pointer_rtx, pat)
 	      || reg_overlap_mentioned_p (hard_frame_pointer_rtx, pat)
 	      || reg_overlap_mentioned_p (frame_pointer_rtx, pat)
@@ -9844,11 +10087,12 @@ riscv_ztt_remove_unused_workspace ()
       else
 	return false;
     }
-  if (!allocate || !release)
+  if (!allocate || !release || (scalar_spills && frame_notes))
     return false;
-  if (BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
+  if (scalar_spills || BLOCK_FOR_INSN (allocate) != BLOCK_FOR_INSN (release))
     {
-      if (!riscv_ztt_workspace_paths_p (allocate, release))
+      if (!riscv_ztt_workspace_paths_p
+	    (allocate, release, fixed_size, fixed_frame, locals.coeffs[2]))
 	return false;
     }
   else
@@ -9870,9 +10114,25 @@ riscv_ztt_remove_unused_workspace ()
       if (!insn)
 	return false;
     }
+  if (scalar_spills)
+    for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
+      if (DEBUG_INSN_P (insn))
+	{
+	  HOST_WIDE_INT offset;
+	  rtx *loc = riscv_ztt_workspace_debug_slot
+	    (PATTERN (insn), fixed_size, fixed_frame, locals.coeffs[2], offset);
+	  if (loc)
+	    {
+	      *loc = replace_equiv_address_nv
+		(*loc, plus_constant (Pmode, hard_frame_pointer_rtx, offset));
+	      df_insn_rescan (insn);
+	    }
+	}
   if (dump_file)
-    fprintf (dump_file, "Remove unused AME workspace: " HOST_WIDE_INT_PRINT_DEC
-	     " * scale, insns %d and %d\n", locals.coeffs[2],
+    fprintf (dump_file, "%s AME workspace: " HOST_WIDE_INT_PRINT_DEC
+	     " * scale, insns %d and %d\n",
+	     scalar_spills ? "Compact scalar-spill" : "Remove unused",
+	     locals.coeffs[2],
 	     INSN_UID (allocate), INSN_UID (release));
   delete_insn (allocate);
   delete_insn (release);

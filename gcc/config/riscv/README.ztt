@@ -957,6 +957,12 @@ mode and attributes; dead intermediate address registers are then removed.
 After DCE, leaf functions with no live stack references can
 drop an unused AME workspace allocation/release pair.  Both adjustments
 use the proven frame-size coefficient.
+Private scalar spills can remain if every access is SP-relative, fits the
+fixed local area and lies between the allocation and release on every path.
+Removing the scalable gap relocates those slots together, keeping their
+offsets and memory operations.  The fixed saves and CFA do not move.
+Proven debug slot locations are adjusted to their new fixed FP offsets.
+Unknown stack locations or equivalence notes retain the allocation.
 Scalar parameter loads at fixed nonnegative CFA offsets do not use this
 workspace and remain in place, including sign/zero-extended loads and their
 debug locations.  Other frame references, writes and escaping addresses
