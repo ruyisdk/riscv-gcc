@@ -702,6 +702,13 @@ run_ztt_runtime_n_bound_selftests ()
 	    ASSERT_TRUE (n >= 4);
 	    ASSERT_TRUE (n * n <= (limit - fixed) / factor);
 	    ASSERT_TRUE ((2 * n) * (2 * n) > (limit - fixed) / factor);
+	    unsigned int entry_bound
+	      = riscv_ztt::runtime_n_max_log2 (xlen, poly_int64 (0), uds);
+	    ASSERT_TRUE (exponent <= entry_bound);
+	    for (unsigned int bits : { 8U, 16U, 32U, 64U })
+	      for (unsigned int sign : { 0U, 1U })
+		if (bits - sign >= entry_bound && bits - sign < 64)
+		  ASSERT_TRUE (n - 1 < (HOST_WIDE_INT_1U << (bits - sign)));
 	  }
   ASSERT_EQ (riscv_ztt::runtime_n_max_log2
 	     (32, poly_int64 (HOST_WIDE_INT_1U << 31)), 0U);

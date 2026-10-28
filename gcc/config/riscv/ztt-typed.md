@@ -270,7 +270,7 @@
         (if_then_else (match_test "operands[3] == const0_rtx")
                       (const_int 4) (const_int 8)))])
 
-;; The call-site range check precedes the complete index construction.
+;; Entry validation or a call-site check proves the index range.
 (define_insn "@ztt_typed_index_construct_<ZTT_M:mode>_<P:mode>"
   [(set (match_operand:ZTT_M 0 "register_operand" "=Wmr")
         (unspec_volatile:ZTT_M

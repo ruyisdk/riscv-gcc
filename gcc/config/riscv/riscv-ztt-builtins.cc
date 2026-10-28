@@ -10237,7 +10237,15 @@ expand_builtin (unsigned int code, tree exp, rtx target)
       gcc_assert (types[d.type].rows == 1 && types[d.type].columns == 1
 		  && (dtype & 0xff) >= active_profile ()->uds);
       unsigned int precision = (dtype & 0xff) - ((dtype >> 30) & 1);
-      if (runtime_profile_p () && precision < GET_MODE_BITSIZE (Pmode))
+
+      /* The volatile M result requires the runtime-N prologue even when
+	 unused.  Any actual frame only tightens the zero-frame bound.  */
+      bool entry_proves_range
+	= optimize && runtime_profile_p ()
+	  && precision >= runtime_n_max_log2 (GET_MODE_BITSIZE (Pmode),
+					     poly_int64 (0), active_profile ()->uds);
+      if (runtime_profile_p () && precision < GET_MODE_BITSIZE (Pmode)
+	  && !entry_proves_range)
 	{
 	  rtx n = gen_reg_rtx (Pmode);
 	  emit_insn (TARGET_64BIT ? gen_riscv_ztt_read_amenlen_di (n)
