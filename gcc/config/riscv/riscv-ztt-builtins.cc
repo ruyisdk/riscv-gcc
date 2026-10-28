@@ -14013,6 +14013,21 @@ public:
       && matches (REGNO (group), GET_MODE (group), descriptor);
   }
 
+  /* A typed move must copy the entire raw register, not a packed fragment.  */
+  bool complete_copy_p (rtx dest, rtx src) const
+  {
+    if (!REG_P (src) || !M_REG_P (REGNO (src))
+	|| GET_MODE (src) != matrix_mode (1)
+	|| !(occupied & (1U << (REGNO (src) - M_REG_FIRST))))
+      return false;
+    rtx descriptor = facts[REGNO (src) - M_REG_FIRST].descriptor;
+    unsigned int width = integer_zero_width (descriptor);
+    if (!width)
+      width = floating_zero_width (descriptor);
+    return width == active_profile ()->uds && GET_MODE (dest) == GET_MODE (src)
+      && matches (src, descriptor) && matches (dest, descriptor);
+  }
+
   bool matches_packets (rtx group, rtx descriptor, unsigned int step) const
   {
     if (!REG_P (group) || !M_REG_P (REGNO (group)))
@@ -15243,50 +15258,70 @@ public:
   }
 
   /* Other members of a split spill may separate a save from its reload.  */
-  static bool interleaved_reload_p (rtx_insn *load)
+  static rtx interleaved_reload_source (rtx_insn *load,
+				       const local_md_state *state = nullptr)
   {
     rtx pattern = PATTERN (load);
     if (!md_raw_transfer_p (pattern) || !private_slot_p (SET_SRC (pattern)))
-      return false;
+      return nullptr;
     rtx value = SET_DEST (pattern), slot = SET_SRC (pattern);
-    unsigned int count = 0;
+    if (state && (RTX_FRAME_RELATED_P (load)
+		  || !state->complete_copy_p (value, value)))
+      return nullptr;
+    unsigned int count = 0, written = 0;
     for (rtx_insn *p = PREV_INSN (load); p; p = PREV_INSN (p))
       {
 	if (LABEL_P (p) || BARRIER_P (p)
 	    || (NOTE_P (p) && NOTE_KIND (p) == NOTE_INSN_BASIC_BLOCK))
-	  return false;
+	  return nullptr;
 	if (!NONDEBUG_INSN_P (p))
 	  continue;
 	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p))
-	  return false;
+	  return nullptr;
 	rtx pat = PATTERN (p);
 	if (register_vector_p (p) || private_scalar_transfer_p (p))
 	  continue;
+	/* Earlier forwarded loads can occur among the remaining spill members.  */
+	if (state && GET_CODE (pat) == SET && REG_P (SET_DEST (pat))
+	    && M_REG_P (REGNO (SET_DEST (pat)))
+	    && GET_MODE (SET_DEST (pat)) == matrix_mode (1)
+	    && GET_CODE (SET_SRC (pat)) == UNSPEC_VOLATILE
+	    && XINT (SET_SRC (pat), 1) == UNSPECV_ZTT_STATE_COPY
+	    && XVECLEN (SET_SRC (pat), 0) == 2
+	    && XVECEXP (SET_SRC (pat), 0, 1) == const0_rtx)
+	  {
+	    written |= 1U << (REGNO (SET_DEST (pat)) - M_REG_FIRST);
+	    continue;
+	  }
 	if (md_raw_transfer_p (pat))
 	  {
 	    rtx dest = SET_DEST (pat), src = SET_SRC (pat);
 	    rtx other = MEM_P (dest) ? dest : src;
 	    if (!private_slot_p (other)
 		|| MEM_ADDR_SPACE (other) != MEM_ADDR_SPACE (slot))
-	      return false;
+	      return nullptr;
 	    if (REG_P (dest))
 	      {
-		if (reg_overlap_mentioned_p (value, dest))
-		  return false;
+		if (!state && reg_overlap_mentioned_p (value, dest))
+		  return nullptr;
+		written |= 1U << (REGNO (dest) - M_REG_FIRST);
 		continue;
 	      }
 	    if (known_eq (MEM_OFFSET (slot), MEM_OFFSET (dest))
-		&& rtx_equal_p (src, value) && GET_MODE (slot) == GET_MODE (dest))
+		&& GET_MODE (slot) == GET_MODE (dest)
+		&& (state ? !(written & (1U << (REGNO (src) - M_REG_FIRST)))
+			    && state->complete_copy_p (value, src)
+			  : rtx_equal_p (src, value)))
 	      {
 		local_raw_spill saved;
 		saved.reg = src;
 		saved.mem = dest;
 		saved.store = p;
-		return saved.same_address_p (slot, load, true);
+		return saved.same_address_p (slot, load, true) ? src : nullptr;
 	      }
 	    if (!known_le (MEM_OFFSET (slot) + MEM_SIZE (slot), MEM_OFFSET (dest))
 		&& !known_le (MEM_OFFSET (dest) + MEM_SIZE (dest), MEM_OFFSET (slot)))
-	      return false;
+	      return nullptr;
 	    continue;
 	  }
 	if (GET_CODE (pat) != SET
@@ -15295,9 +15330,14 @@ public:
 	    || global_regs[REGNO (SET_DEST (pat))]
 	    || REGNO (SET_DEST (pat)) == HARD_FRAME_POINTER_REGNUM
 	    || !address_expr_p (SET_SRC (pat)))
-	  return false;
+	  return nullptr;
       }
-    return false;
+    return nullptr;
+  }
+
+  static bool interleaved_reload_p (rtx_insn *load)
+  {
+    return interleaved_reload_source (load) != nullptr;
   }
 
   /* Prepared register operations have no private preservation transfers.  */
@@ -16786,7 +16826,22 @@ reuse_local_md ()
 	  /* Whole-register transfers change payload, not the physical Md.  */
 	  if (code >= 0 && explicit_state
 	      && md_raw_transfer_p (PATTERN (insn)))
-	    continue;
+	    {
+	      rtx source = local_raw_spill::interleaved_reload_source (insn, &state);
+	      rtx dest = SET_DEST (PATTERN (insn));
+	      if (source && !rtx_equal_p (dest, source)
+		  && validate_change (insn, &PATTERN (insn),
+			gen_ztt_state_copy_prepared (GET_MODE (dest), Pmode,
+					    dest, source, const0_rtx), false))
+		{
+		  df_insn_rescan (insn);
+		  cleanup = descriptor_cleanup = true;
+		  if (dump_file)
+		    fprintf (dump_file, "Forward private reload from M%u at insn %d\n",
+			     REGNO (source) - M_REG_FIRST, INSN_UID (insn));
+		}
+	      continue;
+	    }
 	  rtx set = single_set (insn);
 	  rtx src = set ? SET_SRC (set) : NULL_RTX;
 	  if (src && GET_CODE (src) == UNSPEC_VOLATILE)
@@ -18475,10 +18530,96 @@ run_constant_base_selftests ()
 }
 
 static void
+run_reload_copy_selftests ()
+{
+  using namespace selftest;
+  if (!TARGET_ZTT)
+    return;
+  const char *profile = riscv_ztt_profile_string;
+  riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+  int saved_reload = reload_completed;
+  reload_completed = 1;
+  for (unsigned int test = 0; test != 29; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+      rtx descriptor = gen_rtx_REG (Pmode, 12);
+      rtx src = gen_rtx_REG (matrix_mode (1), M_REG_FIRST);
+      rtx dest = gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 2);
+      rtx other = gen_rtx_REG (matrix_mode (1), M_REG_FIRST + 4);
+      rtx slot = gen_rtx_MEM (matrix_mode (1), a);
+      set_mem_attrs_for_spill (slot);
+      rtx read = copy_rtx (slot), gap = copy_rtx (slot);
+      set_mem_offset (gap, GET_MODE_SIZE (matrix_mode (1)));
+      local_md_state state;
+      HOST_WIDE_INT type = test == 5 ? 8 : test == 6 ? 64
+	: test == 7 ? 0x10020 : test == 9 ? 0x20300120 : 32;
+      if (test != 8)
+	state.record_constant (descriptor, GEN_INT (type));
+      if (test != 2)
+	state.remember (test == 4 ? gen_rtx_REG (matrix_mode (2), M_REG_FIRST)
+				 : src, descriptor);
+      if (test == 1)
+	state.record_constant (descriptor, GEN_INT (0x8000020));
+      if (test != 3)
+	state.remember (dest, descriptor);
+      if (test == 25)
+	{
+	  emit_insn (gen_rtx_SET (b, a));
+	  XEXP (read, 0) = b;
+	}
+      emit_insn (gen_rtx_SET (slot, src));
+      switch (test)
+	{
+	case 10: emit_insn (gen_rtx_SET (src, gap)); break;
+	case 11: emit_insn (gen_rtx_SET (other, gap)); break;
+	case 12: MEM_VOLATILE_P (read) = 1; break;
+	case 13: MEM_NOTRAP_P (read) = 0; break;
+	case 14: set_mem_expr (read, NULL_TREE); break;
+	case 15: case 25: emit_insn (gen_rtx_SET (a, const0_rtx)); break;
+	case 16: XEXP (read, 0) = b; break;
+	case 17:
+	  emit_call_insn (gen_rtx_CALL (VOIDmode, gen_rtx_MEM (QImode, b),
+				      const0_rtx));
+	  break;
+	case 18: emit_insn (gen_rtx_ASM_INPUT (VOIDmode, "")); break;
+	case 19: emit_label (gen_label_rtx ()); break;
+	case 20: emit_insn (gen_rtx_SET (slot, other)); break;
+	case 21: case 22:
+	  emit_insn (gen_ztt_state_copy_prepared (matrix_mode (1), Pmode,
+				 test == 21 ? other : src, dest, const0_rtx));
+	  break;
+	case 23: case 24:
+	  for (unsigned int i = 0; i != (test == 23 ? 63U : 64U); ++i)
+	    emit_insn (gen_rtx_SET (b, GEN_INT (i)));
+	  break;
+	case 26:
+	  set_mem_offset (gap, 8);
+	  emit_insn (gen_rtx_SET (gap, other));
+	  break;
+	case 27: emit_insn (gen_rtx_SET (dest, gap)); break;
+	}
+      rtx_insn *load = emit_insn (gen_rtx_SET (dest, read));
+      if (test == 28)
+	RTX_FRAME_RELATED_P (load) = 1;
+      bool expected = test == 0 || test == 9 || test == 11 || test == 21
+	|| test == 23 || test == 25 || test == 27;
+      char context[64];
+      snprintf (context, sizeof context, "private reload copy %u", test);
+      location loc (__FILE__, __LINE__, context);
+      ASSERT_EQ_AT (loc, expected ? src : nullptr,
+		    local_raw_spill::interleaved_reload_source (load, &state));
+    }
+  reload_completed = saved_reload;
+  riscv_ztt_profile_string = profile;
+}
+
+static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
   run_call_constant_selftests ();
+  run_reload_copy_selftests ();
   run_constant_base_selftests ();
   run_scalar_zero_path_selftests ();
   run_scalar_spill_path_selftests ();
