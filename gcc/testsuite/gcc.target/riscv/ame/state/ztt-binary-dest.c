@@ -5,5 +5,5 @@
 #include "ztt-binary-dest.h"
 /* { dg-final { scan-assembler-times {\tmadd\.ew\t} 14 } } */
 /* { dg-final { scan-assembler-times {\tmsub\.ew\t} 7 } } */
-/* { dg-final { scan-assembler-times {l=4\] +ztt_state_sub_prepared_zttmr1_[sd]i} 2 } } */
+/* { dg-final { scan-assembler-times {l=4\] +ztt_state_sub_prepared_zttmr1_[sd]i} 4 } } */
 /* { dg-final { scan-assembler-times {\tm(min|max|and|andnot|or|ornot|xor)\.ew\t} 7 } } */

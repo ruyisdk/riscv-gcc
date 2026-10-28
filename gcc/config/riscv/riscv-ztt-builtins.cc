@@ -15608,6 +15608,23 @@ reuse_local_md ()
 		    rtx lhs = XVECEXP (src, 0, 0), rhs = XVECEXP (src, 0, 1);
 		    unsigned int mask = state.matches (lhs, descriptor)
 		      | (state.matches (rhs, descriptor) << 1);
+		    rtx inputs[] = { lhs, rhs };
+		    rtx_insn *reload_before[2] = {};
+		    if (XVECLEN (src, 0) > 3
+			&& (!reg_overlap_mentioned_p (lhs, rhs)
+			    || rtx_equal_p (lhs, rhs)))
+		      for (unsigned int i = 0; i < 2; ++i)
+			if (!(mask & (1U << i))
+			    && !(i && rtx_equal_p (lhs, rhs)))
+			  {
+			    reload_before[i] = local_raw_spill::reload_preparation_point
+			      (insn, inputs[i], descriptor, m_nregs (GET_MODE (inputs[i])));
+			    if (reload_before[i])
+			      {
+				mask |= 1U << i;
+				state.invalidate (inputs[i]);
+			      }
+			  }
 		    /* Preparing one complete group also prepares an identical input.  */
 		    if (rtx_equal_p (lhs, rhs))
 		      mask |= 2;
@@ -15630,6 +15647,21 @@ reuse_local_md ()
 			    (insn, &XVECEXP (src, 0, XVECLEN (src, 0) - 1),
 			     GEN_INT (mask), false);
 			gcc_assert (changed);
+			if (changed)
+			  for (unsigned int i = 0; i < 2; ++i)
+			    if (reload_before[i])
+			      {
+				rtx_insn *setup = emit_insn_before
+				  (gen_ztt_typed_msettyp_p0
+				   (GET_MODE (inputs[i]), Pmode, inputs[i], descriptor),
+				   reload_before[i]);
+				df_insn_rescan (setup);
+				descriptor_cleanup = true;
+				if (dump_file)
+				  fprintf (dump_file,
+					   "Prepare Md before binary reload %d for insn %d: source %u\n",
+					   INSN_UID (reload_before[i]), INSN_UID (insn), i);
+			      }
 			df_insn_rescan (insn);
 			cleanup = true;
 			if (dump_file)

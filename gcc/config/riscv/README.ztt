@@ -608,6 +608,9 @@ descriptors retain the original path; the old ACC and multiply are unchanged.
 Zip/unzip independently proves the complete reloads of its two halves.
 Each proven half joins the preparation mask; the tied 1x2 value and the
 original permutation remain unchanged.
+Same-type integer binary operations use the same reload proof for each
+source.  Identical inputs share one setup; partial preparation retains the
+existing mask and all arithmetic and user-memory effects.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and
