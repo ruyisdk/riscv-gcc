@@ -4,4 +4,5 @@
 /* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
 #include "ztt-common-self-prep.h"
 /* { dg-final { scan-assembler-times {mldexpacc\.ew\.x\t} 8 } } */
-/* { dg-final { scan-rtl-dump-times {Reuse Md for common preparation at insn [0-9]+: 2} 4 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times {Reuse Md for common preparation at insn [0-9]+: 2} 2 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times {Reuse Md for common preparation at insn [0-9]+: 3} 4 "ztt_md_reuse" } } */

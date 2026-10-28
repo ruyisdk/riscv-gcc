@@ -11089,7 +11089,8 @@ bool
 common_prepared_operands_p (rtx *operands, bool scalar)
 {
   if (!reload_completed || !REG_P (operands[0])
-      || !M_REG_P (REGNO (operands[0])))
+      || !M_REG_P (REGNO (operands[0]))
+      || (scalar && !REG_P (operands[5]) && operands[5] != const0_rtx))
     return false;
   unsigned int steps = UINTVAL (operands[7]);
   for (unsigned int i = 1; i <= (scalar ? 1U : 2U); ++i)
@@ -14146,6 +14147,7 @@ static bool
 reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
 {
   unsigned int mask;
+  unsigned int metadata = 0;
   switch (XINT (src, 1))
     {
     case UNSPECV_ZTT_SETTYP_P0:
@@ -14206,6 +14208,8 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT:
     case UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT:
       mask = 28;
+      if (GET_CODE (PATTERN (insn)) == SET)
+	metadata = 24 | (common_old_dest_p (XINT (src, 1)) ? 4 : 0);
       break;
     case UNSPECV_ZTT_STATE_ELEMENTWISE_X:
     case UNSPECV_ZTT_STATE_ELEMENTWISE_X_REUSE:
@@ -14213,6 +14217,8 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
     case UNSPECV_ZTT_STATE_TERNARY_X_REUSE:
       mask = common_data_scalar_p (src, GET_CODE (PATTERN (insn)) == SET)
 	? 28 : 12;
+      if (GET_CODE (PATTERN (insn)) == SET)
+	metadata = 8 | (common_old_dest_p (XINT (src, 1)) ? 4 : 0);
       break;
     case UNSPECV_ZTT_ACC_MMUL:
       mask = XVECLEN (src, 0) == 8 ? 72 : XVECLEN (src, 0) == 7 ? 8 : 0;
@@ -14221,12 +14227,15 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
       return false;
     }
   unsigned int changed = 0;
+  unsigned int folded = 0;
   for (unsigned int i = 0; mask; ++i, mask >>= 1)
     if (mask & 1)
       {
 	gcc_assert (i < (unsigned int) XVECLEN (src, 0));
 	rtx *where = &XVECEXP (src, 0, i);
-	rtx reg = state.descriptor_register (*where, insn);
+	/* Prepared metadata is not read by the emitted instruction.  */
+	rtx value = metadata & (1U << i) ? state.constant_value (*where) : NULL_RTX;
+	rtx reg = value ? value : state.descriptor_register (*where, insn);
 	if (reg != *where)
 	  {
 	    if (!validate_change (insn, where, reg, true))
@@ -14235,14 +14244,21 @@ reuse_typed_descriptors (rtx_insn *insn, rtx src, local_md_state &state)
 		return false;
 	      }
 	    changed |= 1U << i;
+	    if (value)
+	      folded |= 1U << i;
 	  }
       }
   if (!changed || !apply_change_group ())
     return false;
   df_insn_rescan (insn);
   if (dump_file)
-    fprintf (dump_file, "Reuse typed descriptors at insn %d: 0x%x\n",
-	     INSN_UID (insn), changed);
+    {
+      fprintf (dump_file, "Reuse typed descriptors at insn %d: 0x%x\n",
+	       INSN_UID (insn), changed);
+      if (folded)
+	fprintf (dump_file, "Fold prepared descriptor metadata at insn %d: 0x%x\n",
+		 INSN_UID (insn), folded);
+    }
   return true;
 }
 
@@ -17214,7 +17230,7 @@ run_md_reuse_selftests ()
 		   gen_rtx_REG (ZTTMR4mode, M_REG_FIRST + 8),
 		   gen_rtx_REG (Pmode, 10), gen_rtx_REG (Pmode, 11),
 		   gen_rtx_REG (Pmode, 11), GEN_INT (6),
-		   GEN_INT (pack_datatype_steps (2, 4, 4)) };
+		   GEN_INT (pack_datatype_steps (2, 4, 4)), NULL_RTX };
   ASSERT_TRUE (common_prepared_operands_p (common, false));
   ASSERT_EQ (common_prepared_length
 	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_M), 8U);
@@ -17248,6 +17264,23 @@ run_md_reuse_selftests ()
   common[5] = const0_rtx;
   ASSERT_EQ (common_prepared_length
 	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_X), 4U);
+  common[4] = GEN_INT (0x40000040);
+  ASSERT_TRUE (common_prepared_operands_p (common, true));
+  ASSERT_EQ (common_prepared_length
+	     (common, UNSPECV_ZTT_STATE_ELEMENTWISE_X), 4U);
+  common[5] = GEN_INT (0x40000020);
+  ASSERT_FALSE (common_prepared_operands_p (common, true));
+  common[0] = common[1];
+  common[2] = gen_rtx_REG (ZTTMR4mode, M_REG_FIRST + 8);
+  common[3] = common[4];
+  common[6] = const0_rtx;
+  common[7] = GEN_INT (pack_datatype_steps (4, 4, 4));
+  common[8] = common[0];
+  ASSERT_TRUE (common_prepared_operands_p (common, false));
+  ASSERT_EQ (common_prepared_length
+	     (common, UNSPECV_ZTT_STATE_TERNARY), 4U);
+  common[3] = GEN_INT (0x40000020);
+  ASSERT_FALSE (common_prepared_operands_p (common, false));
   reload_completed = 0;
   ASSERT_FALSE (common_prepared_operands_p (common, true));
   reload_completed = saved_reload_completed;

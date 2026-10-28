@@ -522,6 +522,10 @@ floating register view, avoiding cross-class operands during allocation.
 Local datatype preparation
 --------------------------
 
+Prepared common operations keep proven datatype metadata as constants,
+allowing dead GPR definitions to disappear.  Destination setup and scalar
+TC writes still require GPR operands; packet and overlap checks are unchanged.
+
 Typed row-major, column-major and strided loads reuse matching Md for the
 complete destination group.  Layout, stride and BLK memory extents are unchanged.
 The late zero descriptor marker omits only msettyp; the load and its memory
