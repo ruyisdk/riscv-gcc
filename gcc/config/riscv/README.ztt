@@ -586,6 +586,9 @@ A 64-instruction same-block scan requires every member to be overwritten,
 an unchanged descriptor, and disjoint input groups. Only private nontrapping
 loads and plain GPR address calculations may intervene. Calls, state access,
 stores, frame changes and non-call exceptions retain the original preparation.
+Row-major, column-major and strided stores use the same proof for their
+single source packet. The user store retains its original memory operands
+and position; only its private preservation sequence is replaced.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and

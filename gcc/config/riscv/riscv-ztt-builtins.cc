@@ -15687,7 +15687,13 @@ reuse_local_md ()
 		  bool store = XINT (src, 1) == UNSPECV_ZTT_STATE_STORE;
 		  bool memory_store
 		    = XINT (src, 1) == UNSPECV_ZTT_STATE_MEMORY_STORE;
-		  if ((store || memory_store) && state.matches (group, descriptor))
+		  rtx_insn *reload_before = nullptr;
+		  bool ready = (store || memory_store)
+		    && state.matches (group, descriptor);
+		  if ((store || memory_store) && !ready)
+		    reload_before = local_raw_spill::reload_preparation_point
+		      (insn, group, descriptor, m_nregs (GET_MODE (group)));
+		  if ((store || memory_store) && (ready || reload_before))
 		    {
 		      rtx prepared = store
 			? gen_ztt_state_store_prepared
@@ -15698,6 +15704,18 @@ reuse_local_md ()
 		      bool changed = validate_change
 			(insn, &PATTERN (insn), prepared, false);
 		      gcc_assert (changed);
+		      if (changed && reload_before)
+			{
+			  rtx_insn *setup = emit_insn_before
+			    (gen_ztt_typed_msettyp_p0
+			     (GET_MODE (group), Pmode, group, descriptor), reload_before);
+			  df_insn_rescan (setup);
+			  descriptor_cleanup = true;
+			  if (dump_file)
+			    fprintf (dump_file,
+				     "Prepare Md before store reload %d for insn %d\n",
+				     INSN_UID (reload_before), INSN_UID (insn));
+			}
 		      df_insn_rescan (insn);
 		      cleanup = true;
 		      if (dump_file)
