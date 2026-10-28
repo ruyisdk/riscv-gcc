@@ -328,6 +328,10 @@ zero value.  The other input must feed a complete local store, preserving
 its producers and loads.  Exact datatypes and the bounded local zero proof
 are required; signed min and floating operations do not qualify.
 AND-NOT uses the same absorption proof only for its first input: 0 & ~A = 0.
+Integer multiply and negate-multiply also reuse an explicit zero operand.
+An exact-type carrier view of the other input is included in the local
+proof before checking its complete store.  Floating and mixed datatypes
+retain their arithmetic.
 
 Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently

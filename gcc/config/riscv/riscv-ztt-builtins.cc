@@ -8294,7 +8294,9 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
   bool idempotent = d.expansion == EXPAND_MMIN_EW
     || d.expansion == EXPAND_MMAX_EW || d.expansion == EXPAND_MAND_EW
     || d.expansion == EXPAND_MOR_EW;
-  if ((!commutative && !idempotent && d.expansion != EXPAND_MSUB_EW
+  bool product = d.expansion == EXPAND_MMUL_EW
+    || d.expansion == EXPAND_MMULNEG_EW;
+  if ((!commutative && !idempotent && !product && d.expansion != EXPAND_MSUB_EW
        && d.expansion != EXPAND_MANDNOT_EW)
       || d.type == TYPE_MAX || types[d.type].accumulator
       || !type_nregs (d.type)
@@ -8323,7 +8325,7 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     if (tree repeated = combined_binary_value (stmt, d, gsi))
       return useless_type_conversion_p (lhs_type, TREE_TYPE (repeated))
 	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
-  if (!same && (d.expansion == EXPAND_MAND_EW
+  if (!same && (product || d.expansion == EXPAND_MAND_EW
 		|| d.expansion == EXPAND_MANDNOT_EW
 		|| (d.expansion == EXPAND_MMIN_EW
 		    && !(types[d.type].descriptor & (1U << 30)))))
@@ -8332,8 +8334,12 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
       {
 	count = 0;
 	tree zero = gimple_call_arg (stmt, side);
+	tree other = gimple_call_arg (stmt, 1 - side);
 	if (structure_zero_p (zero, d.type, producers, count)
-	    && stored_binary_input_p (gimple_call_arg (stmt, 1 - side), gsi)
+	    && (stored_binary_input_p (other, gsi)
+		|| (strip_structure_view (other, d.type, producers, count)
+		    && other != gimple_call_arg (stmt, 1 - side)
+		    && stored_binary_input_p (other, gsi)))
 	    && local_structure_producers_p (gsi, producers, count))
 	  return useless_type_conversion_p (lhs_type, TREE_TYPE (zero)) ? zero
 	    : build1 (VIEW_CONVERT_EXPR, lhs_type, zero);

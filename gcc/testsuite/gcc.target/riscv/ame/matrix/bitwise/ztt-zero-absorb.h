@@ -17,6 +17,12 @@ typedef AC_ELEMENT ac_element;
   ac_matrix z = AC_OP(mzero_m) ()
 #define AC_SAVE(v) __riscv_ztt_mss_rm (saved_a, a); \
   __riscv_ztt_mss_rm (out, v)
+#ifndef AC_FIRST_OP
+#define AC_FIRST_OP mand_ew
+#endif
+#ifndef AC_SECOND_OP
+#define AC_SECOND_OP mmin_ew
+#endif
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,50 +30,50 @@ extern void ac_callee (void);
 extern volatile unsigned long ac_observed;
 #define AC_SIMPLE(n,op,l,r) void ac_##n (AC_ARGS) \
 { AC_LOAD; ac_matrix v = AC_OP(op) (l, r); AC_SAVE(v); }
-AC_SIMPLE(and_left, mand_ew, z, a)
-AC_SIMPLE(and_right, mand_ew, a, z)
-AC_SIMPLE(min_left, mmin_ew, z, a)
-AC_SIMPLE(min_right, mmin_ew, a, z)
+AC_SIMPLE(and_left, AC_FIRST_OP, z, a)
+AC_SIMPLE(and_right, AC_FIRST_OP, a, z)
+AC_SIMPLE(min_left, AC_SECOND_OP, z, a)
+AC_SIMPLE(min_right, AC_SECOND_OP, a, z)
 void ac_copy_zero (AC_ARGS)
 {
   AC_LOAD;
   ac_matrix c1 = AC_OP(mcopy_m2m) (z);
   ac_matrix c2 = AC_OP(mcopy_m2m) (c1);
-  ac_matrix v = AC_OP(mand_ew) (a, c2); AC_SAVE(v);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, c2); AC_SAVE(v);
 }
 void ac_live_zero (AC_ARGS)
 {
   AC_LOAD;
-  ac_matrix v = AC_OP(mand_ew) (a, z);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, z);
   ac_callee ();
   __riscv_ztt_mss_rm (kept, z); AC_SAVE(v);
 }
 void ac_call (AC_ARGS)
 {
   AC_LOAD; ac_callee ();
-  ac_matrix v = AC_OP(mand_ew) (a, z); AC_SAVE(v);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, z); AC_SAVE(v);
 }
 void ac_asm (AC_ARGS)
 {
   AC_LOAD; asm volatile ("" ::: "memory");
-  ac_matrix v = AC_OP(mand_ew) (a, z); AC_SAVE(v);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, z); AC_SAVE(v);
 }
 void ac_memory (AC_ARGS)
 {
   AC_LOAD; ac_observed = 11;
-  ac_matrix v = AC_OP(mand_ew) (a, z); AC_SAVE(v);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, z); AC_SAVE(v);
 }
 void ac_unobserved (AC_ARGS)
 {
   AC_LOAD;
-  ac_matrix v = AC_OP(mand_ew) (a, z);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, z);
   __riscv_ztt_mss_rm (out, v);
 }
 void ac_dynamic (AC_ARGS)
 {
   ac_matrix a = AC_OP(mls_rm) (in);
   ac_matrix b = AC_OP(mls_rm) (other);
-  ac_matrix v = AC_OP(mand_ew) (a, b);
+  ac_matrix v = AC_OP(AC_FIRST_OP) (a, b);
   __riscv_ztt_mss_rm (saved_b, b); AC_SAVE(v);
 }
 void ac_reference (AC_ARGS)
