@@ -12400,9 +12400,12 @@ lower_explicit_state ()
 	    unsigned int steps = pack_datatype_steps (groups[0], groups[1], groups[2]);
 	    rtx copied_old = NULL_RTX;
 	    if ((code == UNSPEC_ZTT_TERNARY || code == UNSPEC_ZTT_SCATTER
-		 || (code == UNSPEC_ZTT_TERNARY_X
-		     && UINTVAL (XVECEXP (src, 0, 2)) < 4))
+		 || code == UNSPEC_ZTT_TERNARY_X)
 		&& bitmap_bit_p (copy_sites, INSN_UID (insn))
+		/* Wide shared exponents already have a matching reload operand.  */
+		&& !(code == UNSPEC_ZTT_TERNARY_X
+		     && UINTVAL (XVECEXP (src, 0, 2)) == 4 && nregs > 4
+		     && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5)))
 		&& !ternary_bank_reuse && !scatter_bank_reuse
 		&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
 		&& m_nregs (mode) == groups[0]
