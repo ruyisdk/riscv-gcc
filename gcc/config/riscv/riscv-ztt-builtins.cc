@@ -3166,10 +3166,9 @@ canonical_builtin_name (const builtin_description &d, char (&name)[160],
     }
   if (!exponent_p (d.expansion))
     return d.name;
-  const char *dtype = scalar_datatype_name (types[d.type].descriptor, false);
-  int length = snprintf (name, sizeof (name), "%s_%s_%ux%u", d.name, dtype,
-			 types[d.type].rows, types[d.type].columns);
-  gcc_assert (length >= 0 && static_cast<size_t> (length) < sizeof (name));
+  constexpr size_t prefix = sizeof ("__riscv_ztt_") - 1;
+  gcc_assert (startswith (d.name, "__riscv_ztt_"));
+  matrix_operation_name (name, sizeof (name), d.name + prefix, d.type, false);
   return name;
 }
 

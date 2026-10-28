@@ -112,6 +112,8 @@ GC-rooted unsigned metadata tails.  Each signature prepends its value
 arguments without modifying the shared suffix.
 Explicit Scalar registration reuses the current operation/type name prefixes
 in a local two-spelling cache while iterating over Scalar source types.
+Exponent interface names use the same bounded constructor and existing M type
+suffixes, without reformatting the datatype and shape for each declaration.
 Unavailable destinations skip their complete TC group in the compact Scalar
 catalog.  Available entries retain their original order and signature checks;
 stored non-Scalar entries, including overloaded stores, keep individual gates.
