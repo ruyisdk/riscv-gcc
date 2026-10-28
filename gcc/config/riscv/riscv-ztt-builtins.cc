@@ -10142,12 +10142,89 @@ ter_structure_view_p (gimple *stmt)
     && get_gimple_for_ssa_name (lhs) == stmt;
 }
 
+/* Retain at most four RM loads and their two-level concat tree in place.  */
+struct concat_companion
+{
+  gimple *stmts[7];
+  unsigned int count = 0;
+
+  bool contains (gimple *stmt) const
+  {
+    for (unsigned int i = 0; i < count; ++i)
+      if (stmts[i] == stmt)
+	return true;
+    return false;
+  }
+
+  bool collect (tree value, type_index type, unsigned int depth = 0)
+  {
+    if (TREE_CODE (value) != SSA_NAME
+	|| type_for_tree (TREE_TYPE (value)) != type)
+      return false;
+    gimple *stmt = SSA_NAME_DEF_STMT (value);
+    unsigned int nargs = is_gimple_call (stmt)
+      ? gimple_call_num_args (stmt) : 0;
+    unsigned int code = structure_builtin_code (stmt, nargs);
+    if (code >= ZTT_BUILTIN_MAX || count == ARRAY_SIZE (stmts))
+      return false;
+    const auto d = builtin_description_for (code);
+    if (d.type != type)
+      return false;
+    if (d.expansion != EXPAND_MLS_RM)
+      {
+	if (d.expansion != EXPAND_MCONCAT || depth == 2
+	    || nargs != 2 || !has_single_use (value))
+	  return false;
+	type_index half = m_utility_source_type (d.prototype, type);
+	if (half == TYPE_MAX || type_nregs (type) != 2 * type_nregs (half)
+	    || !collect (gimple_call_arg (stmt, 0), half, depth + 1)
+	    || !collect (gimple_call_arg (stmt, 1), half, depth + 1))
+	  return false;
+      }
+    stmts[count++] = stmt;
+    return true;
+  }
+};
+
+static bool
+local_concat_producers_p (gimple_stmt_iterator *gsi,
+			 gimple *const *producers, unsigned int count,
+			 const concat_companion &companion)
+{
+  if (companion.count <= 1)
+    return local_structure_producers_p
+      (gsi, producers, count, companion.count ? companion.stmts[0] : nullptr);
+  for (unsigned int i = 0; i < count; ++i)
+    if (!gimple_bb (producers[i]) || gimple_bb (producers[i]) != gsi_bb (*gsi))
+      return false;
+  auto prev = *gsi;
+  unsigned int seen = 0, wanted = (1U << count) - 1;
+  for (unsigned int i = 0; i < 32; ++i)
+    {
+      gsi_prev_nondebug (&prev);
+      if (gsi_end_p (prev))
+	return false;
+      gimple *stmt = gsi_stmt (prev);
+      unsigned int before = seen;
+      for (unsigned int j = 0; j < count; ++j)
+	if (stmt == producers[j])
+	  seen |= 1U << j;
+      if (seen == wanted)
+	return true;
+      if (seen == before && !companion.contains (stmt)
+	  && !local_structure_gap_p (stmt))
+	return false;
+    }
+  return false;
+}
+
 /* Recover at most four complete inputs from two levels of concatenation.  */
 static bool
 nested_concat_sources (gimple *parent, type_index half,
 		       unsigned int half_insns, unsigned int step,
 		       gimple *const *outer, unsigned int count,
-		       gimple *load, concat_operand *sources)
+		       const concat_companion &companion,
+		       concat_operand *sources)
 {
   if (half_insns < 2 || half_insns % 2)
     return false;
@@ -10191,7 +10268,7 @@ nested_concat_sources (gimple *parent, type_index half,
 	}
     }
   auto gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
-  if (!local_structure_producers_p (&gsi, producers, count, load))
+  if (!local_concat_producers_p (&gsi, producers, count, companion))
     return false;
   unsigned int seen = 0, wanted = (1U << count) - 1;
   for (gsi_prev_nondebug (&gsi); seen != wanted; gsi_prev_nondebug (&gsi))
@@ -10255,20 +10332,11 @@ concat_operand_sources (tree pair, type_index type,
     return false;
   gimple_stmt_iterator gsi = gsi_for_stmt (currently_expanding_gimple_stmt);
   producers[count++] = producer;
-  gimple *load = nullptr;
+  concat_companion retained;
   if (companion && !flag_non_call_exceptions
-      && TREE_CODE (companion) == SSA_NAME
-      && type_for_tree (TREE_TYPE (companion)) == type)
-    {
-      gimple *stmt = SSA_NAME_DEF_STMT (companion);
-      unsigned int nargs = is_gimple_call (stmt)
-	? gimple_call_num_args (stmt) : 0;
-      unsigned int c = structure_builtin_code (stmt, nargs);
-      if (c < ZTT_BUILTIN_MAX
-	  && builtin_description_for (c).expansion == EXPAND_MLS_RM)
-	load = stmt;
-    }
-  if (!local_structure_producers_p (&gsi, producers, count, load))
+      && !retained.collect (companion, type))
+    retained.count = 0;
+  if (!local_concat_producers_p (&gsi, producers, count, retained))
     return false;
   /* SSA partitions are assigned; crossed definitions must preserve halves.  */
   for (gsi_prev_nondebug (&gsi); gsi_stmt (gsi) != producer;
@@ -10278,13 +10346,13 @@ concat_operand_sources (tree pair, type_index type,
 	if (m_mode_p (TYPE_MODE (TREE_TYPE (lhs)))
 	    && !ter_structure_view_p (gsi_stmt (gsi)))
 	  {
-	    if (gsi_stmt (gsi) != load || TREE_CODE (lhs) != SSA_NAME
+	    if (!retained.contains (gsi_stmt (gsi)) || TREE_CODE (lhs) != SSA_NAME
 		|| var_to_partition (SA.map, lhs) == NO_PARTITION)
 	      return false;
 	    rtx dest = get_rtx_for_ssa_name (lhs);
 	    if (!dest || !REG_P (dest) || REGNO (dest) < FIRST_PSEUDO_REGISTER)
 	      return false;
-	    /* The retained companion load must not overwrite either half.  */
+	    /* Retained definitions must not overwrite either half.  */
 	    for (unsigned int i = 0; i < 2; ++i)
 	      {
 		tree input = gimple_call_arg (producer, i);
@@ -10307,7 +10375,7 @@ concat_operand_sources (tree pair, type_index type,
       && has_single_use (gimple_call_arg (producer, 1)))
     return false;
   if (nested_concat_sources (producer, half, half_insns, step,
-			     producers, count, load, sources))
+			     producers, count, retained, sources))
     return true;
   for (unsigned int i = 0; i < 2; ++i)
     sources[i].value[0]
