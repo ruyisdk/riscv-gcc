@@ -6133,10 +6133,27 @@ riscv_emit_int_order_test (enum rtx_code code, bool *invert_ptr,
 {
   machine_mode mode;
 
+  mode = GET_MODE (cmp0);
+  if (mode == word_mode && !invert_ptr && CONST_INT_P (cmp1)
+      && (code == GTU || code == GEU))
+    {
+      unsigned HOST_WIDE_INT threshold = UINTVAL (cmp1);
+      if (code == GTU)
+	++threshold;
+      int shift = exact_log2 (threshold);
+      if (shift > 0 && shift < BITS_PER_WORD
+	  && riscv_integer_cost (trunc_int_for_mode (threshold, mode), true) > 1)
+	{
+	  /* Avoid a large threshold and inversion; keep shared LTU constants.  */
+	  rtx high = riscv_force_binary (mode, LSHIFTRT, cmp0, GEN_INT (shift));
+	  riscv_emit_binary (NE, target, high, const0_rtx);
+	  return;
+	}
+    }
+
   /* First see if there is a RISCV instruction that can do this operation.
      If not, try doing the same for the inverse operation.  If that also
      fails, force CMP1 into a register and try again.  */
-  mode = GET_MODE (cmp0);
   if (riscv_canonicalize_int_order_test (&code, &cmp1, mode))
     riscv_emit_binary (code, target, cmp0, cmp1);
   else
