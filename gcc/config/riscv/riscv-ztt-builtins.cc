@@ -12891,6 +12891,26 @@ class local_raw_spill
     return true;
   }
 
+  static void cancel_address_terms (rtx &lhs, rtx &rhs)
+  {
+    while (GET_CODE (lhs) == PLUS && GET_CODE (rhs) == PLUS
+	   && GET_MODE (lhs) == Pmode && GET_MODE (rhs) == Pmode)
+      {
+	bool matched = false;
+	for (unsigned int i = 0; i < 2 && !matched; ++i)
+	  for (unsigned int j = 0; j < 2; ++j)
+	    if (rtx_equal_p (XEXP (lhs, i), XEXP (rhs, j)))
+	      {
+		lhs = XEXP (lhs, 1 - i);
+		rhs = XEXP (rhs, 1 - j);
+		matched = true;
+		break;
+	      }
+	if (!matched)
+	  break;
+      }
+  }
+
   /* Compare address values before STORE within a bounded local window.  */
   bool same_address_p (rtx src, rtx_insn *load,
 		       bool interleaved = false) const
@@ -12898,6 +12918,8 @@ class local_raw_spill
     if (!store || !load)
       return false;
     rtx lhs = XEXP (mem, 0), rhs = XEXP (src, 0);
+    if (!address_expr_p (lhs) || !address_expr_p (rhs))
+      return false;
     bool before_store = false;
     unsigned int count = 0;
     for (rtx_insn *p = PREV_INSN (load); p; p = PREV_INSN (p))
@@ -12932,7 +12954,11 @@ class local_raw_spill
 	      return false;
 	    rhs = simplify_replace_rtx (rhs, SET_DEST (pat), SET_SRC (pat));
 	    if (before_store)
-	      lhs = simplify_replace_rtx (lhs, SET_DEST (pat), SET_SRC (pat));
+	      {
+		lhs = simplify_replace_rtx (lhs, SET_DEST (pat), SET_SRC (pat));
+		/* Both expressions now refer to the same program point.  */
+		cancel_address_terms (lhs, rhs);
+	      }
 	    if (!address_expr_p (lhs) || !address_expr_p (rhs))
 	      return false;
 	  }
@@ -15555,6 +15581,56 @@ run_md_reuse_selftests ()
       ASSERT_EQ (test == 0 || test == 14 || test == 15 || test == 17
 		 || test == 21 || test == 23,
 		 visit (gen_rtx_SET (m, other)));
+    }
+  for (unsigned int test = 0; test != 14; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      local_raw_spill spill;
+      auto visit = [&] (rtx pattern) {
+	rtx_insn *insn = emit_insn (pattern);
+	return spill.redundant_reload_p (pattern, insn);
+      };
+      rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+      rtx input = gen_rtx_REG (Pmode, 12), factor = gen_rtx_REG (Pmode, 13);
+      rtx extra = gen_rtx_REG (Pmode, 14);
+      rtx common = test == 9 ? constm1_rtx : factor;
+      rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      rtx slot = gen_rtx_MEM (ZTTMR1mode, a);
+      set_mem_attrs_for_spill (slot);
+      rtx other = copy_rtx (slot);
+      XEXP (other, 0) = b;
+      rtx left = gen_rtx_PLUS (Pmode, input, common);
+      rtx right = gen_rtx_PLUS (test == 7 ? HImode : Pmode, common,
+			      test == 1 ? extra : input);
+      if (test == 8)
+	{
+	  left = gen_rtx_PLUS (Pmode, left, extra);
+	  right = gen_rtx_PLUS (Pmode, extra, right);
+	}
+      if (test == 10)
+	right = gen_rtx_PLUS (Pmode, right, const1_rtx);
+      if (test == 11)
+	for (unsigned int i = 0; i < 8; ++i)
+	  left = gen_rtx_PLUS (Pmode, left, extra);
+      if (test == 13)
+	right = gen_rtx_PLUS (Pmode, input, gen_rtx_MEM (Pmode, factor));
+      visit (gen_rtx_SET (a, left));
+      if (test == 12)
+	visit (gen_rtx_SET (factor, const1_rtx));
+      if (test == 4 || test == 5)
+	visit (gen_rtx_SET (b, right));
+      ASSERT_FALSE (visit (gen_rtx_SET (slot, value)));
+      if (test == 2 || test == 3 || test == 4 || test == 5)
+	{
+	  rtx changed = test == 2 || test == 4 ? factor : input;
+	  visit (gen_rtx_SET (changed, gen_rtx_PLUS (Pmode, changed, const1_rtx)));
+	}
+      if (test == 6)
+	visit (gen_rtx_ASM_INPUT (VOIDmode, ""));
+      if (test != 4 && test != 5)
+	visit (gen_rtx_SET (b, right));
+      ASSERT_EQ (test == 0 || test == 4 || test == 5 || test == 8 || test == 9,
+		 visit (gen_rtx_SET (value, other)));
     }
   for (unsigned int test = 0; test != 35; ++test)
     {
