@@ -3215,17 +3215,38 @@ is_self_write (im_mem_ref *load_ref, im_mem_ref *store_ref)
      or a similar helper to centralize this delicate handling
      complete for MEM_REF offsets and base pointer equality.
 
-     TODO: Also ensure max_size_known_p agrees or resort to
-     alignment considerations to rule out partial overlaps.
+     TODO: Also ensure max_size_known_p agrees in the exact-location case.
 
      See:
      https://gcc.gnu.org/pipermail/gcc-patches/2025-December/704155.html
      For more context on TODOs above.  */
 
   /* They may alias.  Verify exact same location.  */
-  return (operand_equal_p (load_ref->mem.base, store_ref->mem.base, 0)
-	  && known_eq (load_ref->mem.size, store_ref->mem.size)
-	  && known_eq (load_ref->mem.offset, store_ref->mem.offset));
+  if (operand_equal_p (load_ref->mem.base, store_ref->mem.base, 0)
+      && known_eq (load_ref->mem.size, store_ref->mem.size)
+      && known_eq (load_ref->mem.offset, store_ref->mem.offset))
+    return true;
+
+  /* Equally sized aligned integer accesses cannot overlap partially.  */
+  tree load = gimple_assign_rhs1 (load_stmt);
+  tree store = gimple_assign_lhs (store_stmt);
+  HOST_WIDE_INT bits;
+  if (TREE_CODE (load) != MEM_REF || TREE_CODE (store) != MEM_REF
+      || gimple_has_volatile_ops (load_stmt)
+      || gimple_has_volatile_ops (store_stmt)
+      || REF_REVERSE_STORAGE_ORDER (load) || REF_REVERSE_STORAGE_ORDER (store)
+      || !INTEGRAL_TYPE_P (TREE_TYPE (load))
+      || !types_compatible_p (TREE_TYPE (load), TREE_TYPE (store))
+      || !load_ref->mem.size.is_constant (&bits) || bits <= 0
+      || exact_log2 (bits) < 0
+      || TYPE_PRECISION (TREE_TYPE (load)) != bits
+      || !known_eq (load_ref->mem.size, load_ref->mem.max_size)
+      || !known_eq (load_ref->mem.size, store_ref->mem.size)
+      || !known_eq (store_ref->mem.size, store_ref->mem.max_size))
+    return false;
+
+  return (get_object_alignment (load) >= bits
+	  && get_object_alignment (store) >= bits);
 
 }
 
