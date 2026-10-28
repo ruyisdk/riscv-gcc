@@ -14121,7 +14121,7 @@ record_common_md (rtx_insn *insn, rtx dest, rtx src, unsigned int steps,
     }
 }
 
-/* Limit the loop proof to complete common groups with one constant Md.  */
+/* Complete common groups need constant Md, equal only when they overlap.  */
 static bool
 md_loop_common_p (rtx set, bool scalar, local_md_state &state)
 {
@@ -14133,7 +14133,7 @@ md_loop_common_p (rtx set, bool scalar, local_md_state &state)
   rtx regs[] = { SET_DEST (set), XVECEXP (src, 0, 0), XVECEXP (src, 0, 1) };
   unsigned int steps = UINTVAL (XVECEXP (src, 0, 7));
   unsigned int mask = UINTVAL (XVECEXP (src, 0, old_dest ? 9 : 8));
-  rtx value = NULL_RTX;
+  rtx values[3] = {};
   for (unsigned int i = 0; i != (scalar ? 2U : 3U); ++i)
     {
       rtx descriptor = XVECEXP (src, 0, 2 + i);
@@ -14141,15 +14141,16 @@ md_loop_common_p (rtx set, bool scalar, local_md_state &state)
 	  || GET_MODE (regs[i]) != GET_MODE (regs[0])
 	  || datatype_step (steps, i) != m_nregs (GET_MODE (regs[i])))
 	return false;
-      rtx current = state.descriptor_value (descriptor);
-      if (!CONST_INT_P (current) || (value && !rtx_equal_p (value, current)))
+
+      values[i] = state.descriptor_value (descriptor);
+      if (!CONST_INT_P (values[i]))
 	return false;
-      value = current;
       if ((mask & (1U << i)) && !state.matches (regs[i], descriptor))
 	return false;
       for (unsigned int j = 0; j < i; ++j)
 	if (reg_overlap_mentioned_p (regs[i], regs[j])
-	    && !rtx_equal_p (regs[i], regs[j]))
+	    && (!rtx_equal_p (regs[i], regs[j])
+		|| !rtx_equal_p (values[i], values[j])))
 	  return false;
     }
   return true;
@@ -17774,7 +17775,8 @@ run_md_reuse_selftests ()
 	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
 	local_md_state state;
 	bool valid = md_loop_exit (bb, state);
-	ASSERT_EQ (test == 0 || test == 1 || test == 8 || test == 9 || test == 11,
+	ASSERT_EQ (test == 0 || test == 1 || test == 5 || test == 8
+		   || test == 9 || test == 11,
 		   valid);
 	if (valid)
 	  ASSERT_EQ (test != 9, state.matches (a, GEN_INT (32)));
@@ -17837,10 +17839,11 @@ run_md_reuse_selftests ()
 	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
 	local_md_state state;
 	bool valid = md_loop_exit (bb, state);
-	ASSERT_EQ (test == 0 || test == 5 || test == 6 || test == 10, valid);
+	ASSERT_EQ (test == 0 || test == 1 || test == 5 || test == 6 || test == 10,
+		   valid);
 	if (valid)
 	  {
-	    ASSERT_TRUE (state.matches (a, GEN_INT (32)));
+	    ASSERT_TRUE (state.matches (a, GEN_INT (test == 1 ? 64 : 32)));
 	    ASSERT_FALSE (state.record_scalar_type (tc));
 	  }
 	reload_completed = saved_reload;
@@ -17908,7 +17911,7 @@ run_md_reuse_selftests ()
 	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
 	local_md_state state;
 	bool valid = md_loop_exit (bb, state);
-	ASSERT_EQ (test == 0 || test == 1 || test == 3 || test == 5
+	ASSERT_EQ (test == 0 || test == 1 || test == 3 || test == 5 || test == 8
 		   || test == 12 || test == 13 || test == 14, valid);
 	if (valid)
 	  {
@@ -17925,7 +17928,7 @@ run_md_reuse_selftests ()
 		     UNSPECV_ZTT_STATE_SCATTER,
 		     UNSPECV_ZTT_STATE_SCATTER_REUSE_LEFT,
 		     UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT })
-      for (unsigned int test = 0; test != 10; ++test)
+      for (unsigned int test = 0; test != 14; ++test)
       {
 	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
 	const char *profile = riscv_ztt_profile_string;
@@ -17954,16 +17957,25 @@ run_md_reuse_selftests ()
 	    = gen_rtx_REG (mode, M_REG_FIRST + 9);
 	if (test == 9)
 	  a = b = dest;
+	if (test == 10)
+	  b = dest;
+	if (test == 11)
+	  b = a;
+	if (test == 12)
+	  a = dest;
 	if (test != 1)
 	  append (gen_rtx_SET (desc, GEN_INT (32)));
-	if (test == 2)
+	bool different = test == 2 || test >= 10;
+	if (different)
 	  append (gen_rtx_SET (other, GEN_INT (64)));
 	if (test == 4)
 	  append (gen_ztt_typed_msettyp_p0 (mode, Pmode, a, desc));
+	if (test == 13)
+	  append (gen_ztt_typed_msettyp_p0 (mode, Pmode, b, other));
 	unsigned int step = test == 7 ? 2 : 1;
 	rtx steps = GEN_INT (pack_datatype_steps (step, step, step));
 	rtx variant = GEN_INT (scatter ? 2 : 0);
-	rtx mask = GEN_INT (test == 3 || test == 4 ? 2 : 0);
+	rtx mask = GEN_INT (test == 3 || test == 4 ? 2 : test == 13 ? 4 : 0);
 	rtx pat;
 	if (test == 5)
 	  pat = scatter
@@ -17975,10 +17987,12 @@ run_md_reuse_selftests ()
 	       desc, desc, desc, variant, steps);
 	else
 	  {
+	    rtx lhs_md = test == 12 ? other : desc;
+	    rtx rhs_md = different && test != 12 ? other : desc;
 	    rtvec args = scatter
-	      ? gen_rtvec (10, a, b, desc, desc, test == 2 ? other : desc,
+	      ? gen_rtvec (10, a, b, desc, lhs_md, rhs_md,
 			   const0_rtx, variant, steps, dest, mask)
-	      : gen_rtvec (9, a, b, desc, desc, test == 2 ? other : desc,
+	      : gen_rtvec (9, a, b, desc, lhs_md, rhs_md,
 			   const0_rtx, variant, steps, mask);
 	    rtx slot = gen_rtx_MEM (mode, gen_rtx_REG (Pmode, 11));
 	    pat = gen_rtx_PARALLEL (VOIDmode, gen_rtvec
@@ -17991,12 +18005,15 @@ run_md_reuse_selftests ()
 	  append (gen_rtx_ASM_INPUT (VOIDmode, "# state boundary"));
 	local_md_state state;
 	bool valid = md_loop_exit (bb, state);
-	ASSERT_EQ (test == 0 || test == 4 || test == 9, valid);
+	ASSERT_EQ (test == 0 || test == 4 || test == 9
+		   || ((test == 2 || test == 13)
+		       && code != UNSPECV_ZTT_STATE_GATHER_REUSE_BOTH
+		       && code != UNSPECV_ZTT_STATE_SCATTER_REUSE_RIGHT), valid);
 	if (valid)
 	  {
 	    ASSERT_TRUE (state.matches (dest, GEN_INT (32)));
 	    ASSERT_TRUE (state.matches (a, GEN_INT (32)));
-	    ASSERT_TRUE (state.matches (b, GEN_INT (32)));
+	    ASSERT_TRUE (state.matches (b, GEN_INT (different ? 64 : 32)));
 	  }
 	reload_completed = saved_reload;
 	riscv_ztt_profile_string = profile;

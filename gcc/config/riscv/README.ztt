@@ -708,17 +708,18 @@ intersection with the entry state can remove repeated input preparation.
 Calls, asm, unknown operations and other loop shapes discard loop facts.
 After cleanup refreshes liveness, a dead prologue scale result triggers one
 final DCE pass.  N validation, fixed register saves and CFI remain intact.
-The loop proof also accepts complete common binary groups with matching
-constant descriptors. Skipped input preparation requires an independent
-body fact; mixed types and partial group overlap remain boundaries.
+The loop proof also accepts complete common binary groups with constant
+descriptors. Disjoint groups may have different Md; exact aliases require
+equal Md, and partial group overlap remains a boundary. Skipped input
+preparation requires an independent body fact.
 Full row/column preparation and scalar binary envelopes also establish
 matrix facts in the loop scan. Scalar type availability is not inferred;
 amestype writes remain under the existing local rules.
 Full old-destination envelopes follow destination-first setup order and
 require the tied old value to match the result. Full copies establish Md;
 recognized raw transfers only preserve existing facts.
-Gather and scatter use the same complete-group loop proof when result,
-data and indices have matching constant Md. Index routing and scatter
+Gather and scatter use the same complete-group loop proof for result,
+data and index Md. Index routing and scatter
 accumulation order remain unchanged.
 Md queries compare the physical register number and mode directly, without
 allocating temporary REG nodes for packet, zip or M/ACC transfer queries.
