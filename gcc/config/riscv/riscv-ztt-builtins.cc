@@ -8584,14 +8584,11 @@ structure_integer_constant (tree value, type_index type, gimple **producers,
   return arg;
 }
 
-/* A reduction broadcasts its result along the reduced axis.  Keep the fold
-   and its conversions, rounding and status effects as the producer.  */
 static bool
-reduced_axis_producer_p (gimple *producer, type_index type,
-			expansion_index expansion, gimple **producers,
-			unsigned int &count)
+describe_structure_unary (gimple *&call, type_index type,
+			  builtin_description &d,
+			  conversion_description &operation)
 {
-  gimple *call = producer;
   if (is_gimple_assign (call)
       && gimple_assign_rhs_code (call) == VIEW_CONVERT_EXPR
       && !gimple_vuse (call) && !gimple_has_side_effects (call))
@@ -8603,8 +8600,6 @@ reduced_axis_producer_p (gimple *producer, type_index type,
 	return false;
       call = SSA_NAME_DEF_STMT (value);
     }
-  builtin_description d;
-  conversion_description operation;
   unsigned int code = structure_builtin_code (call, 1);
   if (decode_conversion_builtin (code, operation))
     d = builtin_description_for (operation.canonical);
@@ -8618,7 +8613,20 @@ reduced_axis_producer_p (gimple *producer, type_index type,
       if (!describe_floating_unary (code, 3, args, d, operation))
 	return false;
     }
-  if (d.type != type)
+  return d.type == type;
+}
+
+/* A reduction broadcasts its result along the reduced axis.  Keep the fold
+   and its conversions, rounding and status effects as the producer.  */
+static bool
+reduced_axis_producer_p (gimple *producer, type_index type,
+			expansion_index expansion, gimple **producers,
+			unsigned int &count)
+{
+  gimple *call = producer;
+  builtin_description d;
+  conversion_description operation;
+  if (!describe_structure_unary (call, type, d, operation))
     return false;
   switch (d.expansion)
     {
@@ -8653,11 +8661,45 @@ reduced_axis_producer_p (gimple *producer, type_index type,
 static bool
 axis_invariant_structure_producer_p (gimple *producer, type_index type,
 				    expansion_index expansion,
-				    gimple **producers, unsigned int &count)
+				    gimple **producers, unsigned int &count,
+				    bool through_unary = true)
 {
   if (uniform_structure_producer_p (producer, type)
       || reduced_axis_producer_p (producer, type, expansion, producers, count))
     return true;
+  /* One elementwise conversion preserves equality along the source axis.  */
+  if (through_unary && type != TYPE_MAX && !types[type].accumulator
+      && types[type].rows == 1 && types[type].columns == 1
+      && type_nregs (type)
+      && (types[type].descriptor & 0xff) >= active_profile ()->uds)
+    {
+      gimple *call = producer;
+      builtin_description d;
+      conversion_description operation;
+      if (describe_structure_unary (call, type, d, operation)
+	  && (d.expansion == EXPAND_MCONV_EW || d.expansion == EXPAND_MABS_EW)
+	  && operation.source != TYPE_MAX
+	  && !types[operation.source].accumulator
+	  && types[operation.source].rows == 1
+	  && types[operation.source].columns == 1
+	  && type_nregs (operation.source)
+	  && (types[operation.source].descriptor & 0xff) >= active_profile ()->uds)
+	{
+	  tree input = gimple_call_arg (call, 0);
+	  unsigned int end = count;
+	  if (strip_structure_view (input, operation.source, producers, end)
+	      && axis_invariant_structure_producer_p
+		   (SSA_NAME_DEF_STMT (input), operation.source, expansion,
+		    producers, end, false))
+	    {
+	      producers[end++] = SSA_NAME_DEF_STMT (input);
+	      if (call != producer)
+		producers[end++] = call;
+	      count = end;
+	      return true;
+	    }
+	}
+    }
   unsigned int code = structure_builtin_code (producer, 0);
   if (code >= ZTT_BUILTIN_MAX)
     code = structure_builtin_code (producer);
@@ -9009,7 +9051,7 @@ repeated_unary_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
       || TREE_CODE (value) != SSA_NAME
       || type_for_tree (TREE_TYPE (value)) != carrier)
     return NULL_TREE;
-  gimple *producers[7];
+  gimple *producers[16];
   unsigned int count = 0;
   if (!floating
       || !floating_unary_code_p
@@ -9187,8 +9229,8 @@ identity_indexed_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stm
 	{
 	  count = 0;
 	  reusable = !scatter && carrier
-	    && reduced_axis_producer_p (SSA_NAME_DEF_STMT (value), d.type,
-					d.expansion, producers, count);
+	    && axis_invariant_structure_producer_p
+		 (SSA_NAME_DEF_STMT (value), d.type, d.expansion, producers, count);
 	  if (!reusable)
 	    reusable = strip_structure_view (value, d.type, producers, count)
 	      && strip_structure_copies (value, d.type, producers, count,
@@ -9290,7 +9332,7 @@ repeated_broadcast_value (const builtin_description &d,
       || type_for_tree (TREE_TYPE (value)) != d.type)
     return NULL_TREE;
   tree result = value;
-  gimple *producers[6];
+  gimple *producers[16];
   unsigned int count = 0;
   if (!strip_structure_copies (value, d.type, producers, count, true))
     return NULL_TREE;
