@@ -55,6 +55,7 @@ with GCC; see the file COPYING3.  If not see
 #include "tm_p.h"
 #include "backend.h"
 #include "regs.h"
+#include "function-abi.h"
 #include "tree-pass.h"
 #include "cfgrtl.h"
 #include "cfghooks.h"
@@ -13624,6 +13625,19 @@ public:
 	}
   }
 
+  /* Calls invalidate AME state, but not ABI-preserved GPR values.  */
+  void clear_call (const function_abi &abi)
+  {
+    clear_ame ();
+    for (unsigned int i = 0; i < GP_REG_NUM; ++i)
+      if (abi.clobbers_reg_p (Pmode, GP_REG_FIRST + i))
+	{
+	  constants[i] = nullptr;
+	  identities[i] = 0;
+	  descriptor_used &= ~(1U << i);
+	}
+  }
+
   /* Dynamic identities and definition order are local to each path.  */
   void intersect_constants (const local_md_state &other,
 			    const HARD_REG_SET *loop_writes = nullptr)
@@ -13991,6 +14005,21 @@ invalidate_asm_md (rtx_insn *insn, local_md_state &state)
 	     memory_barrier_p (PATTERN (insn)) ? "memory barrier" : "scalar empty asm",
 	     INSN_UID (insn));
   note_stores (insn, invalidate_md_store, &state);
+  return true;
+}
+
+static bool
+invalidate_call_md (rtx_insn *insn, local_md_state &state)
+{
+  if (!CALL_P (insn))
+    return false;
+  if (SIBLING_CALL_P (insn) || find_reg_note (insn, REG_SETJMP, NULL_RTX))
+    state.clear ();
+  else
+    {
+      state.clear_call (insn_callee_abi (insn));
+      note_stores (insn, invalidate_md_store, &state);
+    }
   return true;
 }
 
@@ -15907,6 +15936,8 @@ reuse_cleaned_descriptors (bool &spill_cleanup)
 	    }
 	  if (md_preserving_branch_p (insn))
 	    continue;
+	  if (invalidate_call_md (insn, state))
+	    continue;
 	  if (invalidate_asm_md (insn, state))
 	    continue;
 	  if (code == CODE_FOR_stack_tiesi || code == CODE_FOR_stack_tiedi
@@ -16571,6 +16602,8 @@ reuse_local_md ()
 	    continue;
 	  if (CALL_P (insn) || JUMP_P (insn))
 	    {
+	      if (invalidate_call_md (insn, state))
+		continue;
 	      if (md_preserving_branch_p (insn))
 		continue;
 	      state.clear ();
@@ -18191,6 +18224,84 @@ run_loop_spill_selftests ()
 }
 
 static void
+run_call_constant_selftests ()
+{
+  using namespace selftest;
+  for (unsigned int test = 0; test != 12; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      local_md_state state;
+      rtx saved = gen_rtx_REG (Pmode, 18), arg = gen_rtx_REG (Pmode, 10);
+      rtx value = GEN_INT (0x40000020);
+      rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      for (unsigned int i = 1; i < GP_REG_NUM; ++i)
+	{
+	  rtx reg = gen_rtx_REG (Pmode, GP_REG_FIRST + i);
+	  state.record_constant (reg, value);
+	  state.note_descriptor_use (reg);
+	}
+      state.remember (group, saved);
+      state.record_scalar_type (saved);
+      rtx target = test == 1 ? arg
+	: gen_rtx_SYMBOL_REF (Pmode, "ztt_constant_call");
+      rtx call = gen_rtx_CALL (test == 2 ? Pmode : VOIDmode,
+			      gen_rtx_MEM (QImode, target), const0_rtx);
+      if (test == 2)
+	call = gen_rtx_SET (saved, call);
+      if (test == 5)
+	call = gen_rtx_PARALLEL (VOIDmode, gen_rtvec
+	  (2, call, gen_rtx_CLOBBER (VOIDmode, saved)));
+      rtx_insn *insn = emit_call_insn (call);
+      if (test == 3 || test == 4)
+	CALL_INSN_FUNCTION_USAGE (insn) = gen_rtx_EXPR_LIST
+	  (VOIDmode, gen_rtx_CLOBBER (VOIDmode,
+	    test == 3 ? saved : gen_rtx_REG (QImode, 18)), nullptr);
+      if (test == 6) add_reg_note (insn, REG_SETJMP, const0_rtx);
+      if (test == 7) SIBLING_CALL_P (insn) = 1;
+      auto fixed = fixed_regs[18], global = global_regs[18];
+      if (test == 8) fixed_regs[18] = 1;
+      if (test == 9) global_regs[18] = 1;
+      ASSERT_TRUE (invalidate_call_md (insn, state));
+      if (test == 10)
+	{
+	  CALL_INSN_FUNCTION_USAGE (insn) = gen_rtx_EXPR_LIST
+	    (VOIDmode, gen_rtx_CLOBBER (VOIDmode, saved), nullptr);
+	  ASSERT_TRUE (invalidate_call_md (insn, state));
+	}
+      if (test == 11) state.invalidate (gen_rtx_REG (QImode, 18));
+      for (unsigned int i = 1; i < GP_REG_NUM; ++i)
+	{
+	  unsigned int regno = GP_REG_FIRST + i;
+	  rtx reg = gen_rtx_REG (Pmode, regno);
+	  bool keep = test != 6 && test != 7 && !fixed_regs[regno]
+	    && !global_regs[regno]
+	    && !insn_callee_abi (insn).clobbers_reg_p (Pmode, regno)
+	    && (regno != 18 || test < 2);
+	  ASSERT_RTX_EQ (state.descriptor_value (reg), keep ? value : reg);
+	  ASSERT_EQ (state.redundant_descriptor_p (reg, value), keep);
+	}
+      ASSERT_TRUE (state.empty_p ());
+      ASSERT_FALSE (state.matches (group, value));
+      ASSERT_FALSE (state.record_scalar_type (value));
+      fixed_regs[18] = fixed;
+      global_regs[18] = global;
+    }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    local_md_state state;
+    rtx saved = gen_rtx_REG (Pmode, 18), other = gen_rtx_REG (Pmode, 19);
+    rtx value = GEN_INT (32);
+    state.record_constant (saved, value);
+    state.record_constant (other, value);
+    predefined_function_abi abi = default_function_abi;
+    abi.add_full_reg_clobber (18);
+    state.clear_call (function_abi (abi));
+    ASSERT_RTX_EQ (state.descriptor_value (saved), saved);
+    ASSERT_RTX_EQ (state.descriptor_value (other), value);
+  }
+}
+
+static void
 run_constant_base_selftests ()
 {
   using namespace selftest;
@@ -18236,6 +18347,7 @@ static void
 run_md_reuse_selftests ()
 {
   using namespace selftest;
+  run_call_constant_selftests ();
   run_constant_base_selftests ();
   run_scalar_zero_path_selftests ();
   run_scalar_spill_path_selftests ();
