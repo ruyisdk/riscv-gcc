@@ -640,7 +640,8 @@ reloads instead of saving and reloading that group again at the consumer.
 A 64-instruction same-block scan requires every member to be overwritten,
 an unchanged descriptor, and compatible input groups. Only private nontrapping
 loads, plain GPR address calculations and register-only CPU floating-point
-operations may intervene. Descriptor dependencies remain checked; floating
+operations may intervene, including recognized min/max, copysign and rounding
+patterns. Descriptor dependencies remain checked; floating
 operations retain their order and status effects. Calls, state access,
 stores, frame changes and non-call exceptions retain the original preparation.
 Identical common inputs with the same packet step and descriptor share one

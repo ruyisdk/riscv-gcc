@@ -14437,13 +14437,16 @@ class local_raw_spill
       && !contains_mem_rtx_p (PATTERN (insn));
   }
 
-  static bool register_fp_p (rtx pat)
+  static bool register_fp_p (rtx_insn *insn)
   {
+    rtx pat = PATTERN (insn);
     if (GET_CODE (pat) != SET || !REG_P (SET_DEST (pat))
 	|| fixed_regs[REGNO (SET_DEST (pat))]
 	|| global_regs[REGNO (SET_DEST (pat))]
 	|| REGNO (SET_DEST (pat)) == HARD_FRAME_POINTER_REGNUM
-	|| !md_scalar_insn_p (pat) || contains_mem_rtx_p (pat)
+	|| (!md_scalar_insn_p (pat)
+	    && !md_preserving_fp_p (recog_memoized (insn), pat))
+	|| contains_mem_rtx_p (pat)
 	|| side_effects_p (pat))
       return false;
     bool fp = false;
@@ -14734,7 +14737,7 @@ public:
 	if (private_scalar_reload_p (p)
 	    && MEM_ADDR_SPACE (SET_SRC (pat)) == ADDR_SPACE_GENERIC)
 	  continue;
-	if (register_fp_p (pat))
+	if (register_fp_p (p))
 	  continue;
 	if (GET_CODE (pat) != SET
 	    || !local_md_state::full_gpr_p (SET_DEST (pat))
@@ -18554,14 +18557,14 @@ run_md_reuse_selftests ()
       flag_non_call_exceptions = non_call;
       riscv_ztt_profile_string = profile;
     }
-  for (unsigned int test = 0; test != 16; ++test)
+  for (unsigned int test = 0; test != 28; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       const char *profile = riscv_ztt_profile_string;
       riscv_ztt_profile_string = "gcc-runtime-u8-m32-a16";
       int saved_reload = reload_completed, non_call = flag_non_call_exceptions;
       reload_completed = 1;
-      flag_non_call_exceptions = test == 9;
+      flag_non_call_exceptions = test == 9 || test == 25;
       rtx group = gen_rtx_REG (ZTTMR8mode, M_REG_FIRST);
       rtx a = gen_rtx_REG (Pmode, 10), d = gen_rtx_REG (Pmode, 11);
       rtx b = gen_rtx_REG (Pmode, 12);
@@ -18585,6 +18588,25 @@ run_md_reuse_selftests ()
 	  value = gen_rtx_MEM (DFmode, a);
 	  if (test == 7) set_mem_attrs_for_spill (value);
 	}
+      if (test >= 16)
+	{
+	  value = gen_rtx_UNSPEC
+	    (DFmode, gen_rtvec (2, gen_rtx_USE (VOIDmode, f),
+			       gen_rtx_USE (VOIDmode, g)),
+	     test == 17 ? UNSPEC_FMAX : UNSPEC_FMIN);
+	  if (test == 18)
+	    value = gen_rtx_UNSPEC
+	      (DFmode, gen_rtvec (2, f, g), UNSPEC_COPYSIGN);
+	  if (test >= 19 && test <= 21)
+	    {
+	      dest = test == 20 ? d : b;
+	      value = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, g), UNSPEC_LRINT);
+	    }
+	  if (test == 26) XINT (value, 1) = UNSPEC_TLS;
+	  if (test == 27)
+	    value = gen_rtx_UNSPEC_VOLATILE
+	      (DFmode, gen_rtvec (1, g), UNSPECV_FSNVSNAN);
+	}
       rtx slot = gen_rtx_MEM (ZTTMR1mode, a);
       set_mem_attrs_for_spill (slot);
       rtx_insn *first = emit_insn
@@ -18592,8 +18614,8 @@ run_md_reuse_selftests ()
       rtx_insn *gap = emit_insn
 	(test == 15 ? gen_rtx_ASM_INPUT (VOIDmode, "")
 	 : gen_rtx_SET (dest, value));
-      if (test == 8) RTX_FRAME_RELATED_P (gap) = 1;
-      if (test == 11)
+      if (test == 8 || test == 24) RTX_FRAME_RELATED_P (gap) = 1;
+      if (test == 11 || test == 21)
 	emit_insn (gen_rtx_SET (d, gen_rtx_PLUS (Pmode, b, GEN_INT (32))));
       for (unsigned int i = 1; i != 8; ++i)
 	emit_insn (gen_rtx_SET
@@ -18601,15 +18623,16 @@ run_md_reuse_selftests ()
       rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
       unsigned int regno = REGNO (f);
       int saved_fixed = fixed_regs[regno], saved_global = global_regs[regno];
-      if (test == 12) fixed_regs[regno] = 1;
-      if (test == 13) global_regs[regno] = 1;
+      if (test == 12 || test == 22) fixed_regs[regno] = 1;
+      if (test == 13 || test == 23) global_regs[regno] = 1;
       auto plan = local_raw_spill::reload_preparation_point (use, group, d, 8);
       fixed_regs[regno] = saved_fixed;
       global_regs[regno] = saved_global;
       char context[64];
       snprintf (context, sizeof context, "reload FP gap %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
-      bool expected = TARGET_ZTT && TARGET_DOUBLE_FLOAT && test < 6;
+      bool expected = TARGET_ZTT && TARGET_DOUBLE_FLOAT
+	&& (test < 6 || (test >= 16 && test <= 19));
       ASSERT_EQ_AT (loc, expected ? first : nullptr, plan.point);
       reload_completed = saved_reload;
       flag_non_call_exceptions = non_call;
