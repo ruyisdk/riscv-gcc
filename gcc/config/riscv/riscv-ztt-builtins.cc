@@ -2525,7 +2525,20 @@ registration_function_type (prototype_index prototype, type_index type)
     vec_safe_grow_cleared (entries, TYPE_MAX, true);
   tree &result = (*entries)[type];
   if (!result)
-    result = build_function_type (prototype, type);
+    {
+      if (key == PROTO_M_M_M || key == PROTO_M_SCATTER)
+	{
+	  prototype_index shorter = key == PROTO_M_M_M
+	    ? PROTO_M_M : PROTO_M_M_M;
+	  tree tail = registration_function_type (shorter, type);
+	  tree m = ztt_m_type_nodes[type];
+	  /* Prepend one M parameter to the immutable shorter signature.  */
+	  tree args = tree_cons (NULL_TREE, m, TYPE_ARG_TYPES (tail));
+	  result = ::build_function_type (m, args);
+	}
+      else
+	result = build_function_type (prototype, type);
+    }
   return result;
 }
 
