@@ -3,8 +3,7 @@
 /* { dg-additional-options "-march=rv32imafd_zicsr_ztt0p6 -mabi=ilp32d" { target rv32 } } */
 /* { dg-additional-options "-march=rv64imafd_zicsr_ztt0p6 -mabi=lp64d" { target rv64 } } */
 #include "../../../../gcc.target/riscv/ame/state/ztt-reload-fp-intrinsics.h"
-/* { dg-final { scan-rtl-dump-times "Prepare Md before private reload" 4 "ztt_md_reuse" { target rv32 } } } */
-/* { dg-final { scan-rtl-dump-times "Prepare Md before private reload" 5 "ztt_md_reuse" { target rv64 } } } */
+/* { dg-final { scan-rtl-dump-times "Prepare Md before private reload" 8 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {\tmmulacc\.ew\.x\t} 4 } } */
 /* { dg-final { scan-assembler-times {\tfmin\.d\t} 1 } } */
 /* { dg-final { scan-assembler-times {\tfmax\.d\t} 1 } } */

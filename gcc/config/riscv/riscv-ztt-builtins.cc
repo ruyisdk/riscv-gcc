@@ -14415,12 +14415,14 @@ class local_raw_spill
   rtx mem = nullptr;
   rtx_insn *store = nullptr;
 
-  static bool private_scalar_reload_p (rtx_insn *insn)
+  static bool private_scalar_transfer_p (rtx_insn *insn, bool store_p = false)
   {
     if (!insn || !NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
 	|| recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET)
       return false;
     rtx dest = SET_DEST (PATTERN (insn)), src = SET_SRC (PATTERN (insn));
+    if (store_p)
+      std::swap (dest, src);
     return local_md_state::full_gpr_p (dest)
       && !fixed_regs[REGNO (dest)] && !global_regs[REGNO (dest)]
       && REGNO (dest) != HARD_FRAME_POINTER_REGNUM
@@ -14554,7 +14556,7 @@ class local_raw_spill
 	  {
 	    rtx pat = PATTERN (p);
 	    if (interleaved
-		&& (register_vector_p (p) || private_scalar_reload_p (p)))
+		&& (register_vector_p (p) || private_scalar_transfer_p (p)))
 	      {
 		if (modified_in_p (lhs, p) || modified_in_p (rhs, p))
 		  return false;
@@ -14734,8 +14736,11 @@ public:
 	      return { p, definition, step };
 	    continue;
 	  }
-	if (private_scalar_reload_p (p)
+	if (private_scalar_transfer_p (p)
 	    && MEM_ADDR_SPACE (SET_SRC (pat)) == ADDR_SPACE_GENERIC)
+	  continue;
+	if (private_scalar_transfer_p (p, true)
+	    && MEM_ADDR_SPACE (SET_DEST (pat)) == ADDR_SPACE_GENERIC)
 	  continue;
 	if (register_fp_p (p))
 	  continue;
@@ -14768,7 +14773,7 @@ public:
 	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p))
 	  return false;
 	rtx pat = PATTERN (p);
-	if (register_vector_p (p) || private_scalar_reload_p (p))
+	if (register_vector_p (p) || private_scalar_transfer_p (p))
 	  continue;
 	if (md_raw_transfer_p (pat))
 	  {
@@ -18455,7 +18460,7 @@ run_md_reuse_selftests ()
 	flag_strict_aliasing = strict;
 	riscv_ztt_profile_string = profile;
       }
-  for (unsigned int test = 0; test != 39; ++test)
+  for (unsigned int test = 0; test != 49; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       const char *profile = riscv_ztt_profile_string;
@@ -18538,16 +18543,33 @@ run_md_reuse_selftests ()
 	    emit_insn (gen_rtx_SET (test == 26 ? d : b, read));
 	    break;
 	  }
+	case 39: case 40: case 41: case 42: case 43:
+	case 44: case 45: case 46: case 47: case 48:
+	  {
+	    rtx save = gen_rtx_MEM (Pmode, a);
+	    set_mem_attrs_for_spill (save);
+	    if (test == 40) MEM_VOLATILE_P (save) = 1;
+	    if (test == 41) MEM_NOTRAP_P (save) = 0;
+	    if (test == 42) set_mem_expr (save, NULL_TREE);
+	    if (test == 43) clear_mem_size (save);
+	    if (test == 44) clear_mem_offset (save);
+	    if (test == 45) set_mem_size (save, GET_MODE_SIZE (Pmode) - 1);
+	    if (test == 47) set_mem_addr_space (save, 1);
+	    rtx_insn *saved = emit_insn (gen_rtx_SET (save, test == 48 ? d : b));
+	    if (test == 46) RTX_FRAME_RELATED_P (saved) = 1;
+	    break;
+	  }
 	}
       rtx_insn *use = emit_insn (gen_rtx_USE (VOIDmode, group));
       unsigned int step = test == 31 ? 4 : test == 34 ? 0 : test == 35 ? 3
-	: test == 36 ? 16 : test >= 37 ? 1 : nregs;
+	: test == 36 ? 16 : test == 37 || test == 38 ? 1 : nregs;
       auto plan = local_raw_spill::reload_preparation_point
 	(use, group, descriptor, step);
       rtx_insn *point = plan.point;
       bool expected = TARGET_ZTT && (test <= 3 || test == 11 || test == 22
 				     || test == 24 || test == 31 || test == 32
-				     || test == 33 || test >= 37);
+				     || test == 33 || test == 37 || test == 38
+				     || test == 39 || test == 48);
       char context[64];
       snprintf (context, sizeof context, "private reload preparation %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
@@ -18638,7 +18660,7 @@ run_md_reuse_selftests ()
       flag_non_call_exceptions = non_call;
       riscv_ztt_profile_string = profile;
     }
-  for (unsigned int test = 0; test != 16; ++test)
+  for (unsigned int test = 0; test != 20; ++test)
     {
       rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
       const char *profile = riscv_ztt_profile_string;
@@ -18666,6 +18688,12 @@ run_md_reuse_selftests ()
 	emit_insn (gen_rtx_SET (d, const1_rtx));
       if (test == 13)
 	emit_insn (gen_rtx_SET (c, b));
+      if (test == 16 || test == 18)
+	{
+	  rtx save = gen_rtx_MEM (Pmode, test == 18 ? d : a);
+	  set_mem_attrs_for_spill (save);
+	  emit_insn (gen_rtx_SET (save, test == 16 ? d : b));
+	}
       rtx value = test == 0 || test == 14 ? GEN_INT (32)
 	: test == 8 ? gen_rtx_MEM (Pmode, a)
 	: test == 15 ? gen_rtx_MULT (Pmode, b, GEN_INT (32))
@@ -18675,6 +18703,13 @@ run_md_reuse_selftests ()
 	: emit_insn (gen_rtx_SET (dest, test == 12 ? const0_rtx : value));
       if (test == 10)
 	RTX_FRAME_RELATED_P (definition) = 1;
+      if (test == 17 || test == 19)
+	{
+	  rtx save = gen_rtx_MEM (Pmode, a);
+	  set_mem_attrs_for_spill (save);
+	  if (test == 19) MEM_NOTRAP_P (save) = 0;
+	  emit_insn (gen_rtx_SET (save, d));
+	}
       for (unsigned int i = 1; i != 8; ++i)
 	emit_insn (gen_rtx_SET
 	  (gen_rtx_REG (ZTTMR1mode, M_REG_FIRST + (test == 11 ? 0 : i)), slot));
@@ -18682,7 +18717,7 @@ run_md_reuse_selftests ()
       rtx_insn *next = NEXT_INSN (first);
       auto plan = local_raw_spill::reload_preparation_point (use, group, d, 8);
       bool expected = TARGET_ZTT
-	&& (test == 0 || test == 1 || test == 13 || test == 14);
+	&& (test == 0 || test == 1 || test == 13 || test == 14 || test == 17);
       char context[64];
       snprintf (context, sizeof context, "reload descriptor motion %u", test);
       selftest::location loc (__FILE__, __LINE__, context);
