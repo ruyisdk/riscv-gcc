@@ -425,8 +425,10 @@ protects a distinct index; source preparation supplies the shared Md.
 When both sources have that full type, either may supply the destination.
 Optimized runtime gathers offer independent and matching destinations for
 a dying complete data input distinct from the index.  Bank-limited groups
-retain their tied early-clobber alternative.  Live inputs and shared
-data/index values retain their existing allocation choices.
+retain their tied early-clobber alternative.  In leaf functions, a dying
+index with the same complete type as live data permits either source to
+supply the destination without forcing a tie.  Calls and shared data/index
+values retain their existing allocation choices.
 Fixed-exponent accumulation can also reuse a dying input shared with the
 old destination on optimized runtime profiles.  The complete mode and Md
 must match; distinct inputs are not unified.

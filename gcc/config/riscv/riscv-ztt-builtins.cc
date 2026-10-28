@@ -11844,6 +11844,7 @@ static unsigned int
 lower_explicit_state ()
 {
   bool matrix_state = riscv_ztt_explicit_state_p ();
+  bool leaf_index_reuse = optimize && runtime_profile_p () && leaf_function_p ();
   rtx state_slots[6] = {};
   for (rtx_insn *insn = get_insns (); insn; )
     {
@@ -12380,11 +12381,22 @@ lower_explicit_state ()
 		bool dead_data = optimize && runtime_profile_p ()
 		  && !rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
 		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 0));
-		bool reuse = code == UNSPEC_ZTT_GATHER && (bank_reuse || dead_data)
+		bool dead_index = code == UNSPEC_ZTT_GATHER
+		  && leaf_index_reuse && !dead_data && !bank_reuse
+		  && !rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
+		  && find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 1))
+		  && mode == GET_MODE (XVECEXP (src, 0, 1))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4))
+		  && groups[0] == groups[2]
 		  && mode == GET_MODE (XVECEXP (src, 0, 0))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
 		  && groups[0] == groups[1];
-		bool reuse_both = reuse && bank_reuse
+		bool reuse = code == UNSPEC_ZTT_GATHER
+		  && (bank_reuse || dead_data || dead_index)
+		  && mode == GET_MODE (XVECEXP (src, 0, 0))
+		  && rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+		  && groups[0] == groups[1];
+		bool reuse_both = reuse && (bank_reuse || dead_index)
 		  && mode == GET_MODE (XVECEXP (src, 0, 1))
 		  && rtx_equal_p (dtype, XVECEXP (src, 0, 4))
 		  && groups[0] == groups[2];
