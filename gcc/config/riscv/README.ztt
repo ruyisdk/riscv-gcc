@@ -181,6 +181,8 @@ destinations in this interval have wide TC entries only.  Narrow Scalar
 records use four historical intervals and a family-order map over the same
 operation descriptors and type axis.  Compact stored indices map back to
 public codes without changing either narrow or wide interval boundaries.
+Lookup partitions codes at the wide interval: later entries bypass the
+narrow interval scan and subtract its complete prefix directly.
 
 Structural folding
 ------------------

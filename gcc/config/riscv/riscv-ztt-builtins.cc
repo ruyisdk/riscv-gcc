@@ -1066,6 +1066,9 @@ static_assert (ZTT_BUILTIN_MMULSUB_EW_X_U32_ROD_32X1_U32_ROD
 	       == narrow_scalar_ranges[2].first + narrow_scalar_ranges[2].count - 1);
 static_assert (ZTT_BUILTIN_MCMPLT_EW_X_U32_ROD_32X1_U32_ROD
 	       == narrow_scalar_ranges[3].first + narrow_scalar_ranges[3].count - 1);
+static_assert (narrow_scalar_ranges[3].first + narrow_scalar_ranges[3].count
+	       <= wide_scalar_first);
+static_assert (wide_scalar_first + wide_scalar_count <= exponent_first);
 
 static constexpr unsigned int
 stored_builtin_code (unsigned int index)
@@ -1131,51 +1134,55 @@ static constexpr builtin_description
 builtin_description_for (unsigned int code)
 {
   unsigned int index = code;
-  for (const auto &range : narrow_scalar_ranges)
+  if (code >= wide_scalar_first)
     {
-      if (code < range.first)
-	break;
-      if (code < range.first + range.count)
+      if (code < wide_scalar_first + wide_scalar_count)
 	{
-	  unsigned int offset = code - range.first;
-	  unsigned int op = range.family + offset / narrow_scalar_per_operation;
-	  const auto &f = wide_scalar_families[narrow_scalar_order[op]];
-	  offset %= narrow_scalar_per_operation;
-	  return { f.name, static_cast<prototype_index> (f.narrow + offset % 24),
-		   f.expansion, exponent_types[wide_scalar_type_first + offset / 24] };
+	  unsigned int offset = code - wide_scalar_first;
+	  const auto &f = wide_scalar_families[offset / wide_scalar_per_operation];
+	  offset %= wide_scalar_per_operation;
+	  unsigned int dst = 0, tc = 0;
+	  if (offset < wide_scalar_narrow_part)
+	    {
+	      dst = offset / 16;
+	      tc = 24 + offset % 16;
+	    }
+	  else
+	    {
+	      offset -= wide_scalar_narrow_part;
+	      dst = wide_scalar_narrow_types + offset / 40;
+	      tc = offset % 40;
+	    }
+	  unsigned int prototype = tc < 24 ? f.narrow + tc : f.wide + tc - 24;
+	  return { f.name, static_cast<prototype_index> (prototype), f.expansion,
+		   exponent_types[wide_scalar_type_first + dst] };
 	}
-      index -= range.count;
-    }
-  if (code >= wide_scalar_first && code < wide_scalar_first + wide_scalar_count)
-    {
-      unsigned int offset = code - wide_scalar_first;
-      const auto &f = wide_scalar_families[offset / wide_scalar_per_operation];
-      offset %= wide_scalar_per_operation;
-      unsigned int dst = 0, tc = 0;
-      if (offset < wide_scalar_narrow_part)
+      if (code >= exponent_first && code < exponent_first + exponent_count)
 	{
-	  dst = offset / 16;
-	  tc = 24 + offset % 16;
+	  unsigned int offset = code - exponent_first;
+	  builtin_description d = exponent_families[offset / exponent_type_count];
+	  d.type = exponent_types[offset % exponent_type_count];
+	  return d;
 	}
-      else
-	{
-	  offset -= wide_scalar_narrow_part;
-	  dst = wide_scalar_narrow_types + offset / 40;
-	  tc = offset % 40;
-	}
-      unsigned int prototype = tc < 24 ? f.narrow + tc : f.wide + tc - 24;
-      return { f.name, static_cast<prototype_index> (prototype), f.expansion,
-	       exponent_types[wide_scalar_type_first + dst] };
+      index -= narrow_scalar_count + wide_scalar_count
+	+ (code < exponent_first ? 0 : exponent_count);
     }
-  if (code >= exponent_first && code < exponent_first + exponent_count)
-    {
-      unsigned int offset = code - exponent_first;
-      builtin_description d = exponent_families[offset / exponent_type_count];
-      d.type = exponent_types[offset % exponent_type_count];
-      return d;
-    }
-  index -= (code < wide_scalar_first ? 0 : wide_scalar_count)
-    + (code < exponent_first ? 0 : exponent_count);
+  else
+    for (const auto &range : narrow_scalar_ranges)
+      {
+	if (code < range.first)
+	  break;
+	if (code < range.first + range.count)
+	  {
+	    unsigned int offset = code - range.first;
+	    unsigned int op = range.family + offset / narrow_scalar_per_operation;
+	    const auto &f = wide_scalar_families[narrow_scalar_order[op]];
+	    offset %= narrow_scalar_per_operation;
+	    return { f.name, static_cast<prototype_index> (f.narrow + offset % 24),
+		     f.expansion, exponent_types[wide_scalar_type_first + offset / 24] };
+	  }
+	index -= range.count;
+      }
   const auto &d = stored_builtin_descriptions[index];
   return { d.name, static_cast<prototype_index> (d.prototype),
 	   static_cast<expansion_index> (d.expansion),
