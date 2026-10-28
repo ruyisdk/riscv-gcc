@@ -705,6 +705,10 @@ tracking remains confined to each block.
 For a single-block loop with one adjacent external entry, an independent
 scan from empty state establishes the backedge facts.  Their constant
 intersection with the entry state can remove repeated input preparation.
+The scan also collects hard-register writes. Ordinary constant descriptor
+GPRs untouched by the loop retain their use marks, allowing consumers to
+reuse them instead of rebuilding the same constant. Fixed and global
+registers are excluded; Md still requires independent backedge facts.
 Calls, asm, unknown operations and other loop shapes discard loop facts.
 After cleanup refreshes liveness, a dead prologue scale result triggers one
 final DCE pass.  N validation, fixed register saves and CFI remain intact.

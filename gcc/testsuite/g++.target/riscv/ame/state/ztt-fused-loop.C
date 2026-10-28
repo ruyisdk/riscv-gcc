@@ -4,3 +4,4 @@
 /* { dg-additional-options "-march=rv64im_zicsr_ztt0p6 -mabi=lp64" { target rv64 } } */
 #include "../../../../gcc.target/riscv/ame/state/ztt-fused-loop.h"
 /* { dg-final { scan-rtl-dump-times "Intersect Md on self loop" 5 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Retain loop descriptor registers" 1 "ztt_md_reuse" } } */

@@ -13625,7 +13625,8 @@ public:
   }
 
   /* Dynamic identities and definition order are local to each path.  */
-  void intersect_constants (const local_md_state &other)
+  void intersect_constants (const local_md_state &other,
+			    const HARD_REG_SET *loop_writes = nullptr)
   {
     for (unsigned int mask = occupied; mask; mask &= mask - 1)
       {
@@ -13639,13 +13640,25 @@ public:
 	  }
       }
     register_descriptors = false;
+    unsigned int retained = descriptor_used;
     for (unsigned int i = 0; i < GP_REG_NUM; ++i)
-      if (constants[i] && (!other.constants[i]
-			  || !rtx_equal_p (constants[i], other.constants[i])))
-	constants[i] = nullptr;
+      {
+	unsigned int regno = GP_REG_FIRST + i;
+	bool invariant = loop_writes && !TEST_HARD_REG_BIT (*loop_writes, regno)
+	  && !fixed_regs[regno] && !global_regs[regno];
+	if (!invariant)
+	  {
+	    retained &= ~(1U << i);
+	    if (constants[i] && (!other.constants[i]
+		|| !rtx_equal_p (constants[i], other.constants[i])))
+	      constants[i] = nullptr;
+	  }
+      }
     memset (identities, 0, sizeof (identities));
     memset (definition, 0, sizeof (definition));
-    descriptor_used = 0;
+    descriptor_used = retained;
+    if (loop_writes && retained && dump_file)
+      fprintf (dump_file, "Retain loop descriptor registers 0x%x\n", retained);
     next_identity = next_definition = 0;
     if (scalar_type && (!other.scalar_type
 		       || !rtx_equal_p (scalar_type, other.scalar_type)))
@@ -14158,14 +14171,23 @@ md_loop_common_p (rtx set, bool scalar, local_md_state &state)
 
 /* Compute a backedge state without assuming any loop-entry facts.  */
 static bool
-md_loop_exit (basic_block bb, local_md_state &state)
+md_loop_exit (basic_block bb, local_md_state &state,
+	      HARD_REG_SET *writes = nullptr)
 {
   state.clear ();
+  if (writes)
+    CLEAR_HARD_REG_SET (*writes);
   rtx_insn *insn;
   FOR_BB_INSNS (bb, insn)
     {
       if (!NONDEBUG_INSN_P (insn))
 	continue;
+      if (writes)
+	{
+	  HARD_REG_SET insn_writes;
+	  find_all_hard_reg_sets (insn, &insn_writes, true);
+	  *writes |= insn_writes;
+	}
       if (JUMP_P (insn) && insn == BB_END (bb)
 	  && md_preserving_branch_p (insn))
 	continue;
@@ -14313,9 +14335,10 @@ public:
 	    && md_preserving_branch_p (BB_END (bb)))
 	  {
 	    local_md_state backedge;
-	    if (md_loop_exit (bb, backedge))
+	    HARD_REG_SET writes;
+	    if (md_loop_exit (bb, backedge, &writes))
 	      {
-		state.intersect_constants (backedge);
+		state.intersect_constants (backedge, &writes);
 		joined = true;
 		if (dump_file)
 		  fprintf (dump_file, "Intersect Md on self loop block %d\n",
@@ -17649,6 +17672,64 @@ run_md_reuse_selftests ()
     left.record_constant (b, GEN_INT (32));
     left.note_descriptor_use (a);
     ASSERT_TRUE (left.redundant_descriptor_p (a, GEN_INT (32)));
+  }
+  for (unsigned int test = 0; test != 10; ++test)
+    {
+      rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+      local_md_state entry, backedge;
+      rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+      rtx group = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+      entry.record_constant (a, GEN_INT (32));
+      if (test != 2) entry.note_descriptor_use (a);
+      entry.remember (group, a);
+      entry.record_scalar_type (a);
+      HARD_REG_SET writes;
+      CLEAR_HARD_REG_SET (writes);
+      if (test == 1 || test == 3 || test == 8) SET_HARD_REG_BIT (writes, 10);
+      if (test == 3) backedge.record_constant (a, GEN_INT (64));
+      if (test == 8) backedge.record_constant (a, GEN_INT (32));
+      auto fixed = fixed_regs[10], global = global_regs[10];
+      if (test == 4) fixed_regs[10] = 1;
+      if (test == 5) global_regs[10] = 1;
+      if (test == 6)
+	{
+	  entry.invalidate (a);
+	  entry.descriptor_identity (a);
+	}
+      entry.intersect_constants (backedge, test == 7 ? nullptr : &writes);
+      if (test == 9)
+	{
+	  entry.invalidate (a);
+	  entry.record_constant (a, GEN_INT (32));
+	}
+      bool kept = test == 0;
+      ASSERT_EQ (entry.redundant_descriptor_p (a, GEN_INT (32)), kept);
+      ASSERT_EQ (CONST_INT_P (entry.descriptor_value (a)),
+		 kept || test == 2 || test == 8 || test == 9);
+      ASSERT_FALSE (entry.matches (group, GEN_INT (32)));
+      ASSERT_FALSE (entry.record_scalar_type (a));
+      entry.record_constant (b, GEN_INT (32));
+      rtx_insn *use = make_insn_raw (gen_rtx_USE (VOIDmode, b));
+      ASSERT_RTX_EQ (entry.descriptor_register (b, use), kept ? a : b);
+      fixed_regs[10] = fixed;
+      global_regs[10] = global;
+    }
+  {
+    rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+    basic_block bb = BASIC_BLOCK_FOR_FN (cfun, 2);
+    rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+    start_sequence ();
+    emit_insn (gen_rtx_SET (a, GEN_INT (32)));
+    emit_insn (gen_rtx_SET (b, GEN_INT (64)));
+    BB_HEAD (bb) = get_insns ();
+    BB_END (bb) = get_last_insn ();
+    local_md_state state;
+    HARD_REG_SET writes;
+    ASSERT_TRUE (md_loop_exit (bb, state, &writes));
+    ASSERT_TRUE (TEST_HARD_REG_BIT (writes, 10));
+    ASSERT_TRUE (TEST_HARD_REG_BIT (writes, 11));
+    ASSERT_FALSE (TEST_HARD_REG_BIT (writes, 12));
+    end_sequence ();
   }
   {
     rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
