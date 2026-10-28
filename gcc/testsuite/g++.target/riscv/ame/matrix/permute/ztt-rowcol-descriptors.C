@@ -6,4 +6,4 @@
 /* { dg-final { scan-rtl-dump-times "Reuse Md for rowcol" 29 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {\tm(row|col)(bcast|shift)\.ew\.x\t} 29 } } */
 /* { dg-final { scan-assembler-times {\tmadd\.ew\t} 14 } } */
-/* { dg-final { scan-rtl-dump-times "Remove unused AME workspace" 12 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Remove unused AME workspace" 13 "ztt_md_reuse" } } */

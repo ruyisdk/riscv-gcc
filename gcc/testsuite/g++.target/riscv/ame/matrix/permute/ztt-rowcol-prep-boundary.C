@@ -5,5 +5,6 @@
 
 #include "../../../../../gcc.target/riscv/ame/matrix/permute/ztt-rowcol-prep-boundary.h"
 
-/* { dg-final { scan-rtl-dump-not "Reuse Md for rowcol" "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Reuse Md for rowcol" 3 "ztt_md_reuse" } } */
+/* { dg-final { scan-rtl-dump-times "Prepare Md before layout reload" 1 "ztt_md_reuse" } } */
 /* { dg-final { scan-assembler-times {m(row|col)(bcast|shift)\.ew\.x} 3 } } */

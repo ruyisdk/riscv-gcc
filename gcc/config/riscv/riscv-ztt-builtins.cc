@@ -15194,30 +15194,52 @@ reuse_local_md ()
 		  continue;
 		case UNSPECV_ZTT_STATE_ROWCOL:
 		case UNSPECV_ZTT_STATE_ROWCOL_REUSE:
-		  if (shorten_rowcol_control (insn, XVECEXP (src, 0, 1), state))
-		    cleanup = descriptor_cleanup = true;
-		  group = XVECEXP (src, 0, 0);
-		  descriptor = XVECEXP (src, 0, 2);
-		  if (XVECLEN (src, 0) == 5 && state.matches (group, descriptor))
-		    {
-		      rtx setup = state.matches (SET_DEST (set), descriptor)
-			? const0_rtx : descriptor;
-		      rtx prepared = gen_ztt_state_rowcol_prepared
-			(GET_MODE (group), Pmode, SET_DEST (set), group,
-			 XVECEXP (src, 0, 1), setup, XVECEXP (src, 0, 4));
-		      bool changed = validate_change
-			(insn, &PATTERN (insn), prepared, false);
-		      gcc_assert (changed);
-		      df_insn_rescan (insn);
-		      cleanup = true;
-		      if (dump_file)
-			fprintf (dump_file, "Reuse Md for rowcol at insn %d\n",
-				 INSN_UID (insn));
-		    }
-		  note_stores (insn, invalidate_md_store, &state);
-		  state.remember (group, descriptor);
-		  state.remember (SET_DEST (set), descriptor);
-		  continue;
+		  {
+		    if (shorten_rowcol_control (insn, XVECEXP (src, 0, 1), state))
+		      cleanup = descriptor_cleanup = true;
+		    group = XVECEXP (src, 0, 0);
+		    descriptor = XVECEXP (src, 0, 2);
+		    bool pending = XVECLEN (src, 0) == 5;
+		    bool ready = pending && state.matches (group, descriptor);
+		    rtx_insn *reload_before = nullptr;
+		    if (pending && !ready)
+		      reload_before = local_raw_spill::reload_preparation_point
+			(insn, group, descriptor, m_nregs (GET_MODE (group)));
+		    if (pending && (ready || reload_before))
+		      {
+			if (reload_before)
+			  state.invalidate (group);
+			rtx setup = state.matches (SET_DEST (set), descriptor)
+			  ? const0_rtx : descriptor;
+			rtx prepared = gen_ztt_state_rowcol_prepared
+			  (GET_MODE (group), Pmode, SET_DEST (set), group,
+			   XVECEXP (src, 0, 1), setup, XVECEXP (src, 0, 4));
+			bool changed = validate_change
+			  (insn, &PATTERN (insn), prepared, false);
+			gcc_assert (changed);
+			if (changed && reload_before)
+			  {
+			    rtx_insn *setup = emit_insn_before
+			      (gen_ztt_typed_msettyp_p0
+			       (GET_MODE (group), Pmode, group, descriptor), reload_before);
+			    df_insn_rescan (setup);
+			    descriptor_cleanup = true;
+			    if (dump_file)
+			      fprintf (dump_file,
+				       "Prepare Md before layout reload %d for insn %d\n",
+				       INSN_UID (reload_before), INSN_UID (insn));
+			  }
+			df_insn_rescan (insn);
+			cleanup = true;
+			if (dump_file)
+			  fprintf (dump_file, "Reuse Md for rowcol at insn %d\n",
+				   INSN_UID (insn));
+		      }
+		    note_stores (insn, invalidate_md_store, &state);
+		    state.remember (group, descriptor);
+		    state.remember (SET_DEST (set), descriptor);
+		    continue;
+		  }
 		case UNSPECV_ZTT_STATE_ZIP_VALUE:
 		  {
 		    if (XVECLEN (src, 0) != 5)

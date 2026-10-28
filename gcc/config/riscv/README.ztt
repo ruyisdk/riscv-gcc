@@ -592,6 +592,9 @@ and position; only its private preservation sequence is replaced.
 Conversions and structural unary operations also use this proof for a
 single complete source packet. Destination setup still follows the unary
 overlap and datatype rules; multi-packet sources retain their preparation.
+Row/column broadcasts and shifts use the same complete-reload
+proof. Their data operation, control operand and destination setup rules
+remain unchanged.
 
 msettyp/asettyp clear data, so equal descriptors alone do not justify
 removing a clear.  Shared-source reuse is confined to one composite and
