@@ -8812,17 +8812,30 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     : build1 (VIEW_CONVERT_EXPR, lhs_type, result);
 }
 
-/* Same-type integer abs and extremum folds are idempotent.  Retain the
-   first operation and its status effects, including saturation of INT_MIN.  */
+/* Same-type abs and extremum folds retain their first operation, including
+   saturation, NaN canonicalization and sticky status effects.  */
 static tree
-repeated_integer_unary_value (unsigned int code, gimple_stmt_iterator *gsi,
-			      gcall *stmt)
+repeated_unary_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
 {
-  conversion_description operation;
-  if (gimple_call_num_args (stmt) != 1
-      || !decode_conversion_builtin (code, operation))
+  bool floating = floating_unary_code_p (code);
+  unsigned int nargs = floating ? 3 : 1;
+  if (gimple_call_num_args (stmt) != nargs)
     return NULL_TREE;
-  const auto d = builtin_description_for (operation.canonical);
+  conversion_description operation;
+  builtin_description d;
+  if (floating)
+    {
+      tree args[] = { gimple_call_arg (stmt, 0), gimple_call_arg (stmt, 1),
+		      gimple_call_arg (stmt, 2) };
+      if (!describe_floating_unary (code, nargs, args, d, operation))
+	return NULL_TREE;
+    }
+  else
+    {
+      if (!decode_conversion_builtin (code, operation))
+	return NULL_TREE;
+      d = builtin_description_for (operation.canonical);
+    }
   if (operation.source != d.type || !type_nregs (d.type))
     return NULL_TREE;
   switch (d.expansion)
@@ -8839,17 +8852,41 @@ repeated_integer_unary_value (unsigned int code, gimple_stmt_iterator *gsi,
       return NULL_TREE;
     }
   tree result = gimple_call_arg (stmt, 0), value = result;
-  if (type_for_tree (TREE_TYPE (gimple_call_lhs (stmt))) != d.type)
+  type_index carrier = type_for_tree (TREE_TYPE (gimple_call_lhs (stmt)));
+  if ((!floating && carrier != d.type)
+      || TREE_CODE (value) != SSA_NAME
+      || type_for_tree (TREE_TYPE (value)) != carrier)
     return NULL_TREE;
-  gimple *producers[5];
+  gimple *producers[7];
   unsigned int count = 0;
-  if (!strip_structure_copies (value, d.type, producers, count, false, true))
-    return NULL_TREE;
+  if (!floating || structure_builtin_code (SSA_NAME_DEF_STMT (value), nargs)
+		   != code)
+    {
+      if (!strip_structure_view (value, d.type, producers, count)
+	  || !strip_structure_copies (value, d.type, producers, count,
+				      false, true)
+	  || (floating && !strip_structure_view (value, carrier, producers,
+						count)))
+	return NULL_TREE;
+    }
   gimple *producer = SSA_NAME_DEF_STMT (value);
-  conversion_description source;
-  if (!decode_conversion_builtin (structure_builtin_code (producer, 1), source)
-      || source.canonical != operation.canonical || source.source != d.type)
-    return NULL_TREE;
+  unsigned int source_code = structure_builtin_code (producer, nargs);
+  if (floating)
+    {
+      if (source_code != code
+	  || !operand_equal_p (gimple_call_arg (producer, 1),
+			       gimple_call_arg (stmt, 1), 0)
+	  || !operand_equal_p (gimple_call_arg (producer, 2),
+			       gimple_call_arg (stmt, 2), 0))
+	return NULL_TREE;
+    }
+  else
+    {
+      conversion_description source;
+      if (!decode_conversion_builtin (source_code, source)
+	  || source.canonical != operation.canonical || source.source != d.type)
+	return NULL_TREE;
+    }
   producers[count++] = producer;
   return local_structure_producers_p (gsi, producers, count) ? result : NULL_TREE;
 }
@@ -9131,7 +9168,7 @@ gimple_fold_builtin (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt)
   tree lhs = gimple_call_lhs (stmt);
   tree value = binary_identity_value (code, gsi, stmt);
   if (!value)
-    value = repeated_integer_unary_value (code, gsi, stmt);
+    value = repeated_unary_value (code, gsi, stmt);
   if (!value && code >= ZTT_BUILTIN_MAX)
     value = identity_indexed_value (code, gsi, stmt);
   else if (!value)

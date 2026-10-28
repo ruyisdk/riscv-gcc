@@ -366,10 +366,12 @@ The same proof handles AND with a full all-one mask and unsigned min with
 the maximum value.  All-one broadcasts must fit XLEN; a wider Scalar is
 zero-extended and cannot supply the high mask bits.
 
-Repeated integer abs, prefix-max and min/max reductions reuse the first
+Repeated same-type abs, prefix-max and min/max reductions reuse the first
 result when the complete type and operation match.  The bounded local copy
-proof retains the first operation and its status effects.  Different axes,
-datatype conversions, floating operations and state boundaries do not match.
+proof retains the first operation and its status effects, including floating
+NaN canonicalization and NV.  Floating carrier views preserve exact datatype
+and rounding-mode identity.  Different axes, datatype conversions and state
+boundaries do not match.
 
 Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently
