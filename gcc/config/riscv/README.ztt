@@ -850,7 +850,8 @@ live ACC values and fixed M registers prevent this choice.  The separate
 copy has an independent destination and can reuse known source Md.  Calls,
 bank pressure and ordinary untyped moves retain their existing paths.
 Scalar forms also require no live M values beyond their inputs and result
-to limit descriptor pressure on GPRs.  Wide scalar exponent operations
-with identical input and old destination retain their shared reload path.
+to limit descriptor pressure on GPRs.  A scalar exponent operation uses
+the copied old value as its tied destination when available; otherwise
+identical wide inputs retain their shared reload path.
 The old value and dying matrix inputs count toward simultaneous bank
 capacity as well, with equal inputs counted once.
