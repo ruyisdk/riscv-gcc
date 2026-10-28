@@ -206,6 +206,9 @@ compact Scalar families do not enter these redirect domains.
 Extended integer unary anchors use the same stored-record traversal.
 Compact Scalar and exponent families cannot supply unary anchors; the
 numeric cache retains original first-match codes and missing results.
+Wide anchor lookup still includes Scalar families, but checks only the first
+TC of each compact destination group.  Later TC variants cannot match the
+canonical prototype; group boundaries and public anchor codes stay intact.
 
 Structural folding
 ------------------

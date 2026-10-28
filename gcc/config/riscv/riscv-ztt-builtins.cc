@@ -3721,7 +3721,9 @@ decode_wide_builtin (unsigned int code, unsigned int &canonical,
     {
       while (scanned < ZTT_BUILTIN_MAX)
 	{
-	  unsigned int i = scanned++;
+	  unsigned int i = scanned;
+	  /* Only the first TC in a compact group can have the anchor prototype.  */
+	  scanned = scalar_destination_end (i);
 	  const auto &d = builtin_description_for (i);
 	  int operation = wide_operation (d.expansion);
 	  if (operation < 0 || d.prototype != wide_operations[operation].prototype
@@ -4009,7 +4011,7 @@ run_decoder_anchor_selftests ()
 
   auto_vec<unsigned int> wide, unary;
   unsigned int matmul_limit = 0, elementwise_limit = 0;
-  unsigned int stored_index = 0, scalar_end = 0;
+  unsigned int stored_index = 0, scalar_begin = 0, scalar_end = 0;
   type_index scalar_type = TYPE_MAX;
   builtin_catalog_cursor sequential, jumps;
   wide.safe_grow_cleared (WIDE_MAX * wide_shape_count * wide_dtype_count);
@@ -4035,6 +4037,7 @@ run_decoder_anchor_selftests ()
       ASSERT_TRUE (end > i && end <= ZTT_BUILTIN_MAX);
       if (i == scalar_end)
 	{
+	  scalar_begin = i;
 	  scalar_end = end;
 	  scalar_type = d.type;
 	}
@@ -4071,6 +4074,7 @@ run_decoder_anchor_selftests ()
       if (d.prototype == wide_operations[op].prototype
 	  && !extended_integer_p (t.descriptor))
 	{
+	  ASSERT_EQ (i, scalar_begin);
 	  unsigned int key = (op * wide_shape_count + shape) * wide_dtype_count
 	    + mixed_dtype_number (t.descriptor);
 	  if (!wide[key])
