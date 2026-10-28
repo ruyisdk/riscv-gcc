@@ -49,6 +49,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "dbgcnt.h"
 #include "insn-codes.h"
 #include "optabs-tree.h"
+#include "selftest.h"
 
 /* TODO:  Support for predicated code motion.  I.e.
 
@@ -162,7 +163,7 @@ record_loop_dependence (class loop *loop, im_mem_ref *ref,
 			dep_kind kind, dep_state state)
 {
   gcc_assert (state != dep_unknown);
-  unsigned bit = 6 * loop->num + kind * 2 + state == dep_dependent ? 1 : 0;
+  unsigned bit = 6 * loop->num + kind * 2 + (state == dep_dependent);
   bitmap_set_bit (&ref->dep_loop, bit);
 }
 
@@ -3922,3 +3923,57 @@ make_pass_lim (gcc::context *ctxt)
   return new pass_lim (ctxt);
 }
 
+#if CHECKING_P
+namespace selftest {
+
+/* Keep loop IDs, dependence kinds and both cached states independent.  */
+
+void
+tree_ssa_loop_im_cc_tests ()
+{
+  bitmap_obstack obstack;
+  bitmap_obstack_initialize (&obstack);
+  im_mem_ref ref = {};
+  bitmap_initialize (&ref.dep_loop, &obstack);
+  class loop loop = {};
+  const unsigned ids[] = { 0, 1, 2, 21, 22, 100 };
+
+  for (unsigned phase = 0; phase < 2; ++phase)
+    {
+      for (unsigned i = 0; i < ARRAY_SIZE (ids); ++i)
+	{
+	  loop.num = ids[i];
+	  for (unsigned k = lim_raw; k <= sm_waw; ++k)
+	    {
+	      dep_kind kind = static_cast<dep_kind> (k);
+	      ASSERT_EQ (dep_unknown, query_loop_dependence (&loop, &ref, kind));
+	      dep_state state = (i + k + phase) % 2
+		? dep_dependent : dep_independent;
+	      record_loop_dependence (&loop, &ref, kind, state);
+	      record_loop_dependence (&loop, &ref, kind, state);
+	      ASSERT_EQ (state, query_loop_dependence (&loop, &ref, kind));
+	    }
+	}
+      ASSERT_EQ (3 * ARRAY_SIZE (ids), bitmap_count_bits (&ref.dep_loop));
+      for (unsigned i = 0; i < ARRAY_SIZE (ids); ++i)
+	{
+	  loop.num = ids[i];
+	  for (unsigned k = lim_raw; k <= sm_waw; ++k)
+	    {
+	      dep_state state = (i + k + phase) % 2
+		? dep_dependent : dep_independent;
+	      ASSERT_EQ (state, query_loop_dependence
+		(&loop, &ref, static_cast<dep_kind> (k)));
+	    }
+	}
+      loop.num = 101;
+      for (unsigned k = lim_raw; k <= sm_waw; ++k)
+	ASSERT_EQ (dep_unknown, query_loop_dependence
+	  (&loop, &ref, static_cast<dep_kind> (k)));
+      bitmap_clear (&ref.dep_loop);
+    }
+  bitmap_obstack_release (&obstack);
+}
+
+} // namespace selftest
+#endif

@@ -267,6 +267,7 @@ extern void sreal_cc_tests ();
 extern void store_merging_cc_tests ();
 extern void tree_cc_tests ();
 extern void tree_cfg_cc_tests ();
+extern void tree_ssa_loop_im_cc_tests ();
 extern void tristate_cc_tests ();
 extern void typed_splay_tree_cc_tests ();
 extern void vec_cc_tests ();
