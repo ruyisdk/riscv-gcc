@@ -359,6 +359,10 @@ An exact-type carrier view of the other input is included in the local
 proof before checking its complete store.  Floating and mixed datatypes
 retain their arithmetic.
 
+Integer multiplication by an exact same-datatype broadcast of one reuses
+the other complete value.  The bounded local proof retains the broadcast
+and copy witnesses; floating, mixed-type and negate-multiply calls remain.
+
 Same-input integer XOR, AND-NOT and subtraction on complete multi-part tuples
 use typed zero construction.  A bounded local proof requires an independently
 stored input and preserves its producer.  Single-part and packed values retain

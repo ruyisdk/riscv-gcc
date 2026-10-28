@@ -8474,6 +8474,31 @@ uniform_structure_producer_p (gimple *producer, type_index type)
   return false;
 }
 
+/* Require an exact integer one, without a Scalar datatype conversion.  */
+static bool
+structure_one_p (tree value, type_index type, gimple **producers,
+		 unsigned int &count)
+{
+  unsigned int end = count;
+  if (!strip_structure_view (value, type, producers, end)
+      || !strip_structure_copies (value, type, producers, end, false, true))
+    return false;
+  gimple *producer = SSA_NAME_DEF_STMT (value);
+  unsigned int code = structure_builtin_code (producer, 1);
+  if (!nominal_raw_broadcast_p (code))
+    return false;
+  unsigned int n = code - nominal_broadcast_base;
+  type_index scalar = nominal_scalar_type_index (n % numeric_scalar_dtype_count);
+  tree arg = gimple_call_arg (producer, 0);
+  if (n / numeric_scalar_dtype_count != type
+      || types[scalar].descriptor != types[type].descriptor
+      || !integer_onep (arg) || !check_nominal_call (code, 1, &arg))
+    return false;
+  producers[end++] = producer;
+  count = end;
+  return true;
+}
+
 static bool
 axis_invariant_structure_producer_p (gimple *producer, type_index type,
 				    expansion_index expansion,
@@ -8724,6 +8749,19 @@ binary_identity_value (unsigned int code, gimple_stmt_iterator *gsi, gcall *stmt
     if (tree repeated = combined_binary_value (stmt, d, gsi))
       return useless_type_conversion_p (lhs_type, TREE_TYPE (repeated))
 	? repeated : build1 (VIEW_CONVERT_EXPR, lhs_type, repeated);
+  if (d.expansion == EXPAND_MMUL_EW)
+    for (unsigned int side = 0; side < 2; ++side)
+      {
+	count = 0;
+	if (structure_one_p (gimple_call_arg (stmt, side), d.type,
+			     producers, count)
+	    && local_structure_producers_p (gsi, producers, count))
+	  {
+	    tree other = gimple_call_arg (stmt, 1 - side);
+	    return useless_type_conversion_p (lhs_type, TREE_TYPE (other))
+	      ? other : build1 (VIEW_CONVERT_EXPR, lhs_type, other);
+	  }
+      }
   if (!same && (product || d.expansion == EXPAND_MAND_EW
 		|| d.expansion == EXPAND_MANDNOT_EW
 		|| (d.expansion == EXPAND_MMIN_EW
