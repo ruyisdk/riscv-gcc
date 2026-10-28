@@ -8747,13 +8747,13 @@ static bool
 axis_invariant_structure_producer_p (gimple *producer, type_index type,
 				    expansion_index expansion,
 				    gimple **producers, unsigned int &count,
-				    bool through_unary = true)
+				    bool through_elementwise = true)
 {
   if (uniform_structure_producer_p (producer, type)
       || reduced_axis_producer_p (producer, type, expansion, producers, count))
     return true;
-  /* One elementwise conversion preserves equality along the source axis.  */
-  if (through_unary && type != TYPE_MAX && !types[type].accumulator
+  /* One elementwise operation preserves equality along the source axis.  */
+  if (through_elementwise && type != TYPE_MAX && !types[type].accumulator
       && types[type].rows == 1 && types[type].columns == 1
       && type_nregs (type)
       && (types[type].descriptor & 0xff) >= active_profile ()->uds)
@@ -8782,6 +8782,55 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 		producers[end++] = call;
 	      count = end;
 	      return true;
+	    }
+	}
+      unsigned int code = structure_builtin_code (producer);
+      elementwise_description binary;
+      bool decoded = code < ZTT_BUILTIN_MAX;
+      if (decoded)
+	d = builtin_description_for (code);
+      else if (decode_elementwise_builtin (code, binary))
+	{
+	  d = builtin_description_for (binary.canonical);
+	  decoded = binary.data == type && binary.count == type;
+	}
+      if (decoded && d.type == type
+	  && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M)
+	  && !floating_descriptor_p (types[type].descriptor) && count <= 6)
+	{
+	  switch (d.expansion)
+	    {
+	    case EXPAND_MADD_EW:
+	    case EXPAND_MSUB_EW:
+	    case EXPAND_MMUL_EW:
+	    case EXPAND_MMULNEG_EW:
+	    case EXPAND_MMIN_EW:
+	    case EXPAND_MMAX_EW:
+	    case EXPAND_MAND_EW:
+	    case EXPAND_MOR_EW:
+	    case EXPAND_MXOR_EW:
+	    case EXPAND_MANDNOT_EW:
+	      {
+		unsigned int end = count, side;
+		for (side = 0; side < 2; ++side)
+		  {
+		    tree input = gimple_call_arg (producer, side);
+		    if (!strip_structure_view (input, type, producers, end)
+			|| !axis_invariant_structure_producer_p
+			     (SSA_NAME_DEF_STMT (input), type, expansion,
+			      producers, end, false))
+		      break;
+		    producers[end++] = SSA_NAME_DEF_STMT (input);
+		  }
+		if (side == 2)
+		  {
+		    count = end;
+		    return true;
+		  }
+		break;
+	      }
+	    default:
+	      break;
 	    }
 	}
     }
