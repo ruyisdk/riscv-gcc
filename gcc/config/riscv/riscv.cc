@@ -9948,6 +9948,40 @@ riscv_ztt_stack_clobber (rtx x, const_rtx, void *data)
     regs[i - GP_REG_FIRST] = {};
 }
 
+static rtx
+riscv_ztt_stack_address (riscv_ztt_stack_value value, riscv_ztt_stack_value sp)
+{
+  if (!sp.known || !sp.scale || !value.known || value.fp != 1
+      || value.scale != sp.scale)
+    return NULL_RTX;
+  HOST_WIDE_INT offset = trunc_int_for_mode (value.offset - sp.offset, Pmode);
+  return SMALL_OPERAND (offset)
+    ? plus_constant (Pmode, stack_pointer_rtx, offset) : NULL_RTX;
+}
+
+/* Return the MEM operand of an ordinary GPR load or store.  */
+static rtx *
+riscv_ztt_stack_mem (rtx set)
+{
+  if (GET_CODE (set) != SET)
+    return nullptr;
+  rtx *loc;
+  rtx dest = SET_DEST (set), src = SET_SRC (set);
+  if (REG_P (dest) && GP_REG_P (REGNO (dest)))
+    {
+      loc = &SET_SRC (set);
+      if (GET_CODE (src) == SIGN_EXTEND || GET_CODE (src) == ZERO_EXTEND)
+	loc = &XEXP (src, 0);
+    }
+  else if (MEM_P (dest)
+	   && ((REG_P (src) && GP_REG_P (REGNO (src))) || src == const0_rtx))
+    loc = &SET_DEST (set);
+  else
+    return nullptr;
+  return MEM_P (*loc) && SCALAR_INT_MODE_P (GET_MODE (*loc))
+    && known_le (GET_MODE_SIZE (GET_MODE (*loc)), UNITS_PER_WORD) ? loc : nullptr;
+}
+
 /* Track SP from actual adjustments.  Only its FP/scale relation crosses
    blocks; ordinary address values are local to each block.  */
 static riscv_ztt_stack_value
@@ -9979,25 +10013,36 @@ riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
       bool fp_changed = modified_in_p (hard_frame_pointer_rtx, insn);
       bool scale_changed = modified_in_p (scale, insn);
       bool sp_changed = modified_in_p (stack_pointer_rtx, insn);
-      if (rewrite && full_set && !fp_changed && !scale_changed && !sp_changed
-	  && !RTX_FRAME_RELATED_P (insn) && !prologue_epilogue_contains (insn)
-	  && sp.known && sp.scale && value.known && value.fp == 1
-	  && value.scale == sp.scale
-	  && (GET_CODE (SET_SRC (set)) == PLUS
-	      || GET_CODE (SET_SRC (set)) == MINUS))
+
+      if (rewrite && !fp_changed && !scale_changed && !sp_changed
+	  && !RTX_FRAME_RELATED_P (insn) && !prologue_epilogue_contains (insn))
 	{
-	  HOST_WIDE_INT offset = trunc_int_for_mode (value.offset - sp.offset,
-						   Pmode);
-	  if (SMALL_OPERAND (offset))
+	  rtx addr = riscv_ztt_stack_address (value, sp);
+	  if (addr && full_set
+	      && (GET_CODE (SET_SRC (set)) == PLUS
+		  || GET_CODE (SET_SRC (set)) == MINUS)
+	      && !rtx_equal_p (addr, SET_SRC (set))
+	      && validate_change (insn, &SET_SRC (set), addr, false))
 	    {
-	      rtx addr = plus_constant (Pmode, stack_pointer_rtx, offset);
-	      if (!rtx_equal_p (addr, SET_SRC (set))
-		  && validate_change (insn, &SET_SRC (set), addr, false))
+	      df_insn_rescan (insn);
+	      changed = true;
+	      if (dump_file)
+		fprintf (dump_file, "Rebase AME stack address at insn %d\n",
+			 INSN_UID (insn));
+	    }
+	  rtx *mem = riscv_ztt_stack_mem (set);
+	  if (mem)
+	    {
+	      auto address = riscv_ztt_stack_expr (XEXP (*mem, 0), regs);
+	      addr = riscv_ztt_stack_address (address, sp);
+	      if (addr && !rtx_equal_p (addr, XEXP (*mem, 0))
+		  && validate_change (insn, mem,
+				      replace_equiv_address_nv (*mem, addr), false))
 		{
 		  df_insn_rescan (insn);
 		  changed = true;
 		  if (dump_file)
-		    fprintf (dump_file, "Rebase AME stack address at insn %d\n",
+		    fprintf (dump_file, "Fold AME stack memory address at insn %d\n",
 			     INSN_UID (insn));
 		}
 	    }
@@ -10065,6 +10110,33 @@ riscv_ztt_stack_selftests (basic_block bb)
   riscv_ztt_stack_clobber (gen_rtx_REG (QImode, 5), nullptr, regs);
   ASSERT_FALSE (regs[5].known);
   ASSERT_TRUE (regs[REGNO (fp)].known);
+
+  auto stack = expected;
+  stack.offset = -HOST_WIDE_INT_1U * 208;
+  ASSERT_RTX_EQ (riscv_ztt_stack_address (expected, stack),
+		 plus_constant (Pmode, sp, 152));
+  auto outside = expected;
+  outside.offset = stack.offset + 2048;
+  ASSERT_EQ (riscv_ztt_stack_address (outside, stack), NULL_RTX);
+  outside = expected;
+  outside.scale += 1;
+  ASSERT_EQ (riscv_ztt_stack_address (outside, stack), NULL_RTX);
+  ASSERT_EQ (riscv_ztt_stack_address ({}, stack), NULL_RTX);
+  rtx mem = gen_rtx_MEM (QImode, plus_constant (Pmode, addr, -56));
+  MEM_VOLATILE_P (mem) = 1;
+  MEM_NOTRAP_P (mem) = 1;
+  rtx load = gen_rtx_SET (a, gen_rtx_SIGN_EXTEND (Pmode, mem));
+  ASSERT_EQ (riscv_ztt_stack_mem (load), &XEXP (SET_SRC (load), 0));
+  rtx replacement = replace_equiv_address_nv
+    (mem, riscv_ztt_stack_address (expected, stack));
+  ASSERT_EQ (GET_MODE (replacement), GET_MODE (mem));
+  ASSERT_EQ (MEM_ATTRS (replacement), MEM_ATTRS (mem));
+  ASSERT_TRUE (MEM_VOLATILE_P (replacement) && MEM_NOTRAP_P (replacement));
+  rtx store = gen_rtx_SET (mem, const0_rtx);
+  ASSERT_EQ (riscv_ztt_stack_mem (store), &SET_DEST (store));
+  ASSERT_EQ (riscv_ztt_stack_mem (gen_rtx_SET (a, b)), nullptr);
+  ASSERT_EQ (riscv_ztt_stack_mem
+	     (gen_rtx_SET (a, gen_rtx_MEM (BLKmode, sp))), nullptr);
 
   rtx_insn *head = BB_HEAD (bb), *end = BB_END (bb);
   auto append = [bb] (rtx pat) {

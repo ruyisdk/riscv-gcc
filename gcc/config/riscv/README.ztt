@@ -950,7 +950,9 @@ In runtime-profile leaf functions, full-width address arithmetic can use
 SP plus an immediate when it equals the tracked FP/scale expression.
 Actual stack adjustments establish the relation; conflicting CFG joins
 reject it, and other register values stay local to each block.  Allocation,
-memory operations and CFA rules are unchanged.
+memory operations and CFA rules are unchanged.  Ordinary GPR loads/stores
+can use the same proven SP-relative address directly, retaining the MEM
+mode and attributes; dead intermediate address registers are then removed.
 After DCE, leaf functions with no live stack references can
 drop an unused AME workspace allocation/release pair.  Both adjustments
 use the proven frame-size coefficient.
