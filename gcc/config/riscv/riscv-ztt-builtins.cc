@@ -16216,6 +16216,35 @@ load_path_md_p (rtx_insn *load, rtx group, rtx value,
     }
 }
 
+/* Block duplication can expose byte zero stores after GPR propagation.  */
+static bool
+fold_scalar_zero_store (rtx_insn *insn, local_md_state &state)
+{
+  rtx pat = PATTERN (insn);
+  if (GET_CODE (pat) != SET || RTX_FRAME_RELATED_P (insn)
+      || recog_memoized (insn) < 0 || side_effects_p (pat))
+    return false;
+  rtx dest = SET_DEST (pat), src = SET_SRC (pat);
+  if (!MEM_P (dest) || !REG_P (src) || !GP_REG_P (REGNO (src))
+      || fixed_regs[REGNO (src)] || global_regs[REGNO (src)]
+      || GET_MODE (src) != QImode
+      || GET_MODE (dest) != GET_MODE (src)
+      || state.broadcast_value (src) != const0_rtx)
+    return false;
+  int length = get_attr_length (insn);
+  validate_change (insn, &SET_SRC (pat), const0_rtx, true);
+  if (!verify_changes (0) || get_attr_length (insn) > length)
+    {
+      cancel_changes (0);
+      return false;
+    }
+  confirm_change_group ();
+  df_insn_rescan (insn);
+  if (dump_file)
+    fprintf (dump_file, "Use x0 for scalar store at insn %d\n", INSN_UID (insn));
+  return true;
+}
+
 /* Reuse Md along proven paths and constant-state joins after allocation.  */
 static unsigned int
 reuse_local_md ()
@@ -17086,7 +17115,10 @@ reuse_local_md ()
 		}
 	    }
 	  if (md_scalar_insn_p (PATTERN (insn)))
-	    record_scalar_md (insn, state);
+	    {
+	      cleanup |= fold_scalar_zero_store (insn, state);
+	      record_scalar_md (insn, state);
+	    }
 	  else
 	    state.clear ();
 	}
