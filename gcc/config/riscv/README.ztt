@@ -842,7 +842,7 @@ also removes its setter and descriptor dependency.  The row/column operation
 and control argument remain, with the same state invalidation boundaries
 as other consumers.
 
-Leaf scatter operations with one shared, live old/data/index value can copy
+Leaf scatter and matrix ternary operations with one shared, live input can copy
 the old destination with mmov.m.m after establishing matching complete Md.
 The operands must have the same non-packed basic-Square type.  A backward
 DF liveness scan admits only sites whose live M groups fit the profile;

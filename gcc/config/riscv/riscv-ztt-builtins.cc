@@ -11906,7 +11906,7 @@ acc_mmul_length (rtx *operands, bool mixed_p)
 /* A separate copy is profitable only while the complete live M bank fits.
    Calls retain their existing spill/coalescing policy.  */
 static void
-scatter_copy_sites (bitmap sites)
+shared_old_copy_sites (bitmap sites)
 {
   for (rtx_insn *insn = get_insns (); insn; insn = NEXT_INSN (insn))
     if (NONDEBUG_INSN_P (insn))
@@ -11914,9 +11914,11 @@ scatter_copy_sites (bitmap sites)
 	{
 	  rtx src = SET_SRC (set);
 	  if (((GET_CODE (src) == UNSPEC
-		&& XINT (src, 1) == UNSPEC_ZTT_SCATTER)
+		&& (XINT (src, 1) == UNSPEC_ZTT_SCATTER
+		    || XINT (src, 1) == UNSPEC_ZTT_TERNARY))
 	       || (GET_CODE (src) == UNSPEC_VOLATILE
-		   && XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS))
+		   && (XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS
+		       || XINT (src, 1) == UNSPECV_ZTT_TERNARY_FLAGS)))
 	      && REG_P (SET_DEST (set))
 	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1))
 	      && rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5))
@@ -11969,7 +11971,7 @@ lower_explicit_state ()
   bool leaf_index_reuse = optimize && runtime_profile_p () && leaf_function_p ();
   auto_bitmap copy_sites;
   if (leaf_index_reuse)
-    scatter_copy_sites (copy_sites);
+    shared_old_copy_sites (copy_sites);
   rtx state_slots[6] = {};
   for (rtx_insn *insn = get_insns (); insn; )
     {
@@ -12406,6 +12408,25 @@ lower_explicit_state ()
 			    const0_rtx));
 		break;
 	      }
+	    rtx copied_old = NULL_RTX;
+	    if ((code == UNSPEC_ZTT_TERNARY || code == UNSPEC_ZTT_SCATTER)
+		&& bitmap_bit_p (copy_sites, INSN_UID (insn))
+		&& !ternary_bank_reuse && !scatter_bank_reuse
+		&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
+		&& m_nregs (mode) == groups[0]
+		&& mode == GET_MODE (XVECEXP (src, 0, 0))
+		&& mode == GET_MODE (XVECEXP (src, 0, 1))
+		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
+		&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
+		&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0))
+		&& rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1))
+		&& !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
+	      {
+		copied_old = gen_reg_rtx (mode);
+		emit_insn (gen_ztt_state_copy
+		  (mode, Pmode, copied_old, XVECEXP (src, 0, 5), descriptor,
+		   copy_rtx (scratch), stride ? stride : const0_rtx));
+	      }
 	    if (code == UNSPEC_ZTT_TERNARY)
 	      {
 		bool dead_old = optimize && runtime_profile_p ()
@@ -12458,7 +12479,8 @@ lower_explicit_state ()
 			    reuse ? descriptor : force_reg (Pmode, XVECEXP (src, 0, 4)),
 			    scratch, stride ? stride : const0_rtx,
 			    XVECEXP (src, 0, 2), GEN_INT (steps),
-			    gen_rtx_SCRATCH (Pmode), XVECEXP (src, 0, 5),
+			    gen_rtx_SCRATCH (Pmode),
+			    copied_old ? copied_old : XVECEXP (src, 0, 5),
 			    const0_rtx));
 		break;
 	      }
@@ -12539,25 +12561,7 @@ lower_explicit_state ()
 		  : force_reg (Pmode, XVECEXP (src, 0, 4));
 		if (code == UNSPEC_ZTT_SCATTER)
 		  {
-		    rtx old = XVECEXP (src, 0, 5);
-		    if (bitmap_bit_p (copy_sites, INSN_UID (insn))
-			&& !scatter_bank_reuse
-			&& (UINTVAL (dtype) & 0xff) >= active_profile ()->uds
-			&& m_nregs (mode) == groups[0]
-			&& mode == GET_MODE (XVECEXP (src, 0, 0))
-			&& mode == GET_MODE (XVECEXP (src, 0, 1))
-			&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
-			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
-			&& rtx_equal_p (old, XVECEXP (src, 0, 0))
-			&& rtx_equal_p (old, XVECEXP (src, 0, 1))
-			&& !find_reg_note (insn, REG_DEAD, old))
-		      {
-			rtx copy = gen_reg_rtx (mode);
-			emit_insn (gen_ztt_state_copy
-			  (mode, Pmode, copy, old, descriptor, copy_rtx (scratch),
-			   stride ? stride : const0_rtx));
-			old = copy;
-		      }
+		    rtx old = copied_old ? copied_old : XVECEXP (src, 0, 5);
 		    emit_insn (gen_ztt_state_scatter
 			     (mode, Pmode, dest, XVECEXP (src, 0, 0),
 			      XVECEXP (src, 0, 1), descriptor, data_descriptor,
