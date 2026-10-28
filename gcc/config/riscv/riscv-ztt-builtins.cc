@@ -11926,9 +11926,7 @@ live_old_copy_sites (bitmap sites)
 	       || (GET_CODE (src) == UNSPEC_VOLATILE
 		   && XINT (src, 1) == UNSPECV_ZTT_SCATTER_FLAGS))
 	      && REG_P (SET_DEST (set))
-	      && (scalar || matrix
-		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 1)))
-	      && (matrix
+	      && (!scalar
 		  || rtx_equal_p (XVECEXP (src, 0, 0), XVECEXP (src, 0, 5)))
 	      && !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	    bitmap_set_bit (sites, INSN_UID (insn));
@@ -12411,13 +12409,11 @@ lower_explicit_state ()
 		&& m_nregs (mode) == groups[0]
 		&& mode == GET_MODE (XVECEXP (src, 0, 0))
 		&& rtx_equal_p (dtype, XVECEXP (src, 0, 3))
-		&& (code == UNSPEC_ZTT_TERNARY
+		&& (code != UNSPEC_ZTT_TERNARY_X
 		    || rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 0)))
 		&& (scalar
 		    || (mode == GET_MODE (XVECEXP (src, 0, 1))
-			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))
-			&& (code == UNSPEC_ZTT_TERNARY
-			    || rtx_equal_p (XVECEXP (src, 0, 5), XVECEXP (src, 0, 1)))))
+			&& rtx_equal_p (dtype, XVECEXP (src, 0, 4))))
 		&& !find_reg_note (insn, REG_DEAD, XVECEXP (src, 0, 5)))
 	      {
 		copied_old = gen_reg_rtx (mode);
