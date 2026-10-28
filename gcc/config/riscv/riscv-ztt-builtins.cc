@@ -13996,6 +13996,19 @@ class local_raw_spill
   rtx mem = nullptr;
   rtx_insn *store = nullptr;
 
+  static bool private_scalar_reload_p (rtx_insn *insn)
+  {
+    if (!insn || !NONJUMP_INSN_P (insn) || RTX_FRAME_RELATED_P (insn)
+	|| recog_memoized (insn) < 0 || GET_CODE (PATTERN (insn)) != SET)
+      return false;
+    rtx dest = SET_DEST (PATTERN (insn)), src = SET_SRC (PATTERN (insn));
+    return local_md_state::full_gpr_p (dest)
+      && !fixed_regs[REGNO (dest)] && !global_regs[REGNO (dest)]
+      && REGNO (dest) != HARD_FRAME_POINTER_REGNUM
+      && GET_MODE (src) == Pmode && private_slot_p (src)
+      && !side_effects_p (PATTERN (insn));
+  }
+
   static bool register_vector_p (rtx_insn *insn)
   {
     return TARGET_VECTOR && !TARGET_XTHEADVECTOR
@@ -14096,7 +14109,8 @@ class local_raw_spill
 	else
 	  {
 	    rtx pat = PATTERN (p);
-	    if (interleaved && register_vector_p (p))
+	    if (interleaved
+		&& (register_vector_p (p) || private_scalar_reload_p (p)))
 	      {
 		if (modified_in_p (lhs, p) || modified_in_p (rhs, p))
 		  return false;
@@ -14189,7 +14203,7 @@ public:
 	if (++count > 64 || !NONJUMP_INSN_P (p) || RTX_FRAME_RELATED_P (p))
 	  return false;
 	rtx pat = PATTERN (p);
-	if (register_vector_p (p))
+	if (register_vector_p (p) || private_scalar_reload_p (p))
 	  continue;
 	if (md_raw_transfer_p (pat))
 	  {
@@ -17450,6 +17464,65 @@ run_md_reuse_selftests ()
 		     && TARGET_VECTOR && !TARGET_XTHEADVECTOR),
 		 local_raw_spill::interleaved_reload_p (load));
     }
+  for (unsigned int test = 0; test != 18; ++test)
+      {
+	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("riscv/empty-func.rtl"));
+	const char *profile = riscv_ztt_profile_string;
+	riscv_ztt_profile_string = "gcc-runtime-u32-m32-a16";
+	int saved_reload = reload_completed, strict = flag_strict_aliasing;
+	reload_completed = 1;
+	flag_strict_aliasing = test != 6;
+	rtx a = gen_rtx_REG (Pmode, 10), b = gen_rtx_REG (Pmode, 11);
+	rtx c = gen_rtx_REG (Pmode, 12), d = gen_rtx_REG (Pmode, 13);
+	rtx value = gen_rtx_REG (ZTTMR1mode, M_REG_FIRST);
+	rtx slot = gen_rtx_MEM (ZTTMR1mode, a), source = copy_rtx (slot);
+	set_mem_attrs_for_spill (slot);
+	set_mem_attrs_for_spill (source);
+	emit_insn (gen_rtx_SET (d, a));
+	emit_insn (gen_rtx_SET (slot, value));
+	rtx read = gen_rtx_MEM (Pmode, b), dest = c;
+	set_mem_attrs_for_spill (read);
+	switch (test)
+	  {
+	  case 1: dest = a; break;
+	  case 2: dest = d; XEXP (source, 0) = d; break;
+	  case 3: set_mem_expr (read, NULL_TREE); break;
+	  case 4: MEM_VOLATILE_P (read) = 1; break;
+	  case 5: MEM_NOTRAP_P (read) = 0; break;
+	  case 7: clear_mem_size (read); break;
+	  case 8: clear_mem_offset (read); break;
+	  case 9: dest = hard_frame_pointer_rtx; break;
+	  case 10: dest = stack_pointer_rtx; break;
+	  case 11: XEXP (source, 0) = c; break;
+	  case 15:
+	    read = gen_rtx_MEM (Pmode, b);
+	    set_mem_alias_set (read, new_alias_set ());
+	    break;
+	  case 16: set_mem_size (read, GET_MODE_SIZE (Pmode) - 1); break;
+	  case 17:
+	    read = gen_rtx_MEM (QImode, b);
+	    set_mem_attrs_for_spill (read);
+	    dest = gen_rtx_REG (QImode, 12);
+	    break;
+	  }
+	rtx gap = test == 13 ? gen_rtx_SET (read, dest)
+	  : gen_rtx_SET (dest, read);
+	if (test == 14)
+	  gap = gen_rtx_SET (gen_rtx_MEM (ZTTMR1mode, b),
+	    gen_rtx_UNSPEC_VOLATILE (ZTTMR1mode, gen_rtvec (1, value),
+				    UNSPECV_ZTT_STATE_STORE));
+	rtx_insn *gap_insn = emit_insn (gap);
+	if (test == 12) RTX_FRAME_RELATED_P (gap_insn) = 1;
+	rtx_insn *load = emit_insn (gen_rtx_SET (value, source));
+	char context[64];
+	snprintf (context, sizeof context, "reload scalar gap %u", test);
+	selftest::location loc (__FILE__, __LINE__, context);
+	ASSERT_EQ_AT (loc, test == 0 || test == 6,
+		      local_raw_spill::interleaved_reload_p (load));
+	reload_completed = saved_reload;
+	flag_strict_aliasing = strict;
+	riscv_ztt_profile_string = profile;
+      }
   for (unsigned int steps : { 6U, 7U, 11U, 15U })
     for (unsigned int test = 0; test != 8; ++test)
       {
