@@ -8470,6 +8470,8 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
     return true;
   unsigned int code = structure_builtin_code (producer, 0);
   if (code >= ZTT_BUILTIN_MAX)
+    code = structure_builtin_code (producer);
+  if (code >= ZTT_BUILTIN_MAX)
     return false;
   const auto d = builtin_description_for (code);
   if (d.type != type)
@@ -8478,10 +8480,12 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
     {
     case EXPAND_MROWBCAST_EW_X:
     case EXPAND_MROWGATHER_EW:
-      return d.expansion == EXPAND_MCOLID_EW;
+      return d.expansion == EXPAND_MCOLID_EW
+	|| d.expansion == EXPAND_MROWBCAST_EW_X;
     case EXPAND_MCOLBCAST_EW_X:
     case EXPAND_MCOLGATHER_EW:
-      return d.expansion == EXPAND_MROWID_EW;
+      return d.expansion == EXPAND_MROWID_EW
+	|| d.expansion == EXPAND_MCOLBCAST_EW_X;
     default:
       return false;
     }
