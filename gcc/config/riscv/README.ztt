@@ -949,7 +949,8 @@ its private operands.
 In runtime-profile leaf functions, full-width address arithmetic can use
 SP plus an immediate when it equals the tracked FP/scale expression.
 Actual stack adjustments establish the relation; conflicting CFG joins
-reject it, and other register values stay local to each block.  Allocation,
+reject it.  Other register values follow the immediately preceding layout
+block only when it is the sole predecessor.  Allocation,
 memory operations and CFA rules are unchanged.  Ordinary GPR loads/stores
 can use the same proven SP-relative address directly, retaining the MEM
 mode and attributes; dead intermediate address registers are then removed.

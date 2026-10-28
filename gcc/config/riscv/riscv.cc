@@ -9982,13 +9982,15 @@ riscv_ztt_stack_mem (rtx set)
     && known_le (GET_MODE_SIZE (GET_MODE (*loc)), UNITS_PER_WORD) ? loc : nullptr;
 }
 
-/* Track SP from actual adjustments.  Only its FP/scale relation crosses
-   blocks; ordinary address values are local to each block.  */
+/* Track SP from actual adjustments and optionally retain register facts.  */
 static riscv_ztt_stack_value
 riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
-		       bool rewrite, bool &changed)
+		       bool rewrite, bool &changed,
+		       riscv_ztt_stack_value *values = nullptr)
 {
   riscv_ztt_stack_value regs[32] = {};
+  if (values)
+    memcpy (regs, values, sizeof regs);
   const unsigned int fp_reg = HARD_FRAME_POINTER_REGNUM - GP_REG_FIRST;
   const unsigned int sp_reg = STACK_POINTER_REGNUM - GP_REG_FIRST;
   const unsigned int scale_reg = RISCV_ZTT_SCALE_REGNUM - GP_REG_FIRST;
@@ -10075,7 +10077,16 @@ riscv_ztt_stack_block (basic_block bb, riscv_ztt_stack_value sp,
 	}
       anchors ();
     }
+  if (values)
+    memcpy (values, regs, sizeof regs);
   return sp;
+}
+
+/* A single cache follows layout order, without retaining branch snapshots.  */
+static bool
+riscv_ztt_stack_continuation_p (basic_block bb, basic_block previous)
+{
+  return previous && single_pred_p (bb) && single_pred (bb) == previous;
 }
 
 #if CHECKING_P
@@ -10143,11 +10154,12 @@ riscv_ztt_stack_selftests (basic_block bb)
     rtx_insn *insn = emit_insn (pat);
     set_block_for_insn (insn, bb);
   };
-  auto finish = [bb, head, end] (riscv_ztt_stack_value initial) {
+  auto finish = [bb, head, end] (riscv_ztt_stack_value initial,
+			       riscv_ztt_stack_value *values = nullptr) {
     BB_HEAD (bb) = get_insns ();
     BB_END (bb) = get_last_insn ();
     bool changed = false;
-    auto result = riscv_ztt_stack_block (bb, initial, false, changed);
+    auto result = riscv_ztt_stack_block (bb, initial, false, changed, values);
     ASSERT_FALSE (changed);
     BB_HEAD (bb) = head;
     BB_END (bb) = end;
@@ -10178,6 +10190,46 @@ riscv_ztt_stack_selftests (basic_block bb)
   start_sequence ();
   append (gen_rtx_CLOBBER (VOIDmode, a));
   ASSERT_TRUE (finish (expected) == expected);
+
+  memset (regs, 0, sizeof regs);
+  start_sequence ();
+  append (gen_rtx_SET (a, size));
+  ASSERT_TRUE (finish (expected, regs) == expected);
+  start_sequence ();
+  append (gen_rtx_SET (b, gen_rtx_NEG (Pmode, a)));
+  append (gen_rtx_SET (a, gen_rtx_PLUS (Pmode, fp, b)));
+  ASSERT_TRUE (finish (expected, regs) == expected);
+  ASSERT_RTX_EQ (riscv_ztt_stack_address (regs[5], expected),
+		 plus_constant (Pmode, sp, 208));
+  start_sequence ();
+  append (gen_rtx_SET (gen_rtx_REG (QImode, 5), const0_rtx));
+  append (gen_rtx_SET (b, a));
+  ASSERT_TRUE (finish (expected, regs) == expected);
+  ASSERT_FALSE (regs[5].known || regs[6].known);
+  start_sequence ();
+  append (gen_rtx_SET (a, size));
+  append (gen_rtx_SET (scale, b));
+  ASSERT_FALSE (finish (expected, regs).known);
+  ASSERT_FALSE (regs[5].known);
+  start_sequence ();
+  append (gen_rtx_SET (a, size));
+  append (gen_rtx_SET (fp, b));
+  ASSERT_FALSE (finish (expected, regs).known);
+  ASSERT_FALSE (regs[5].known);
+
+  basic_block_def pred = {}, other = {}, dest = {};
+  edge_def e = {}, extra = {};
+  e.src = &pred;
+  e.dest = &dest;
+  vec_safe_push (dest.preds, &e);
+  ASSERT_TRUE (riscv_ztt_stack_continuation_p (&dest, &pred));
+  ASSERT_FALSE (riscv_ztt_stack_continuation_p (&dest, nullptr));
+  ASSERT_FALSE (riscv_ztt_stack_continuation_p (&dest, &other));
+  extra.src = &other;
+  extra.dest = &dest;
+  vec_safe_push (dest.preds, &extra);
+  ASSERT_FALSE (riscv_ztt_stack_continuation_p (&dest, &pred));
+  vec_free (dest.preds);
 }
 #endif
 
@@ -10225,10 +10277,18 @@ riscv_ztt_rebase_stack_addresses ()
 	    return false;
 	}
     }
-  basic_block bb;
+  basic_block bb, previous = nullptr;
+  riscv_ztt_stack_value regs[32] = {};
   FOR_EACH_BB_FN (bb, cfun)
     if (seen[bb->index])
-      riscv_ztt_stack_block (bb, states[bb->index], true, changed);
+      {
+	if (!riscv_ztt_stack_continuation_p (bb, previous))
+	  memset (regs, 0, sizeof regs);
+	riscv_ztt_stack_block (bb, states[bb->index], true, changed, regs);
+	previous = bb;
+      }
+    else
+      previous = nullptr;
   return changed;
 }
 
