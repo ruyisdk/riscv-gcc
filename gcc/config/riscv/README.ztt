@@ -462,6 +462,9 @@ inputs are invariant along that axis.  Generic carrier calls revalidate their
 explicit datatype metadata; equal physical modes alone do not establish this
 proof.  The operation remains, including rounding, saturation and floating
 flags; neither input's live range is extended.
+Matrix shifts and OR-NOT use the same proof.  Both data and shift-amount
+matrices must be invariant on the selected axis and have the result type;
+the shift operation and its full-width count interpretation remain unchanged.
 The same proof covers three-input elementwise multiply/add/subtract operations
 when all inputs, including the old destination, have that invariant layout.
 The arithmetic remains unchanged; only a following redundant layout operation

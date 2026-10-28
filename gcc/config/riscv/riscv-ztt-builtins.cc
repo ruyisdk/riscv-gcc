@@ -8969,7 +8969,8 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
       call = producer;
       if (describe_structure_elementwise (call, type, d, values)
 	  && ((values == 2 && count <= 6
-	       && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M))
+	       && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M
+		   || d.prototype == PROTO_M_SHIFT_M))
 	      || (values == 3 && count <= 2 && d.prototype == PROTO_M_TERNARY_M)))
 	{
 	  switch (d.expansion)
@@ -8984,6 +8985,10 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    case EXPAND_MOR_EW:
 	    case EXPAND_MXOR_EW:
 	    case EXPAND_MANDNOT_EW:
+	    case EXPAND_MORNOT_EW:
+	    case EXPAND_MSLL_EW:
+	    case EXPAND_MSRL_EW:
+	    case EXPAND_MSRA_EW:
 	    case EXPAND_MMULACC_EW:
 	    case EXPAND_MMULACCNEG_EW:
 	    case EXPAND_MMULADD_EW:
