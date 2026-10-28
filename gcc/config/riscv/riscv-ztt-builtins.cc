@@ -8734,24 +8734,30 @@ describe_structure_unary (gimple *&call, type_index type,
 }
 
 static bool
-describe_structure_binary (gimple *&call, type_index type,
-			   builtin_description &d)
+describe_structure_elementwise (gimple *&call, type_index type,
+				builtin_description &d, unsigned int &values)
 {
-  if (!strip_structure_call_view (call, type))
+  if (!strip_structure_call_view (call, type) || !is_gimple_call (call))
     return false;
+  unsigned int nargs = gimple_call_num_args (call);
+  if (nargs != 2 && nargs != 3 && nargs != 5 && nargs != 6)
+    return false;
+  values = nargs > 3 ? nargs - 3 : nargs;
   elementwise_description operation;
-  unsigned int code = structure_builtin_code (call, 5);
+  unsigned int code = structure_builtin_code (call, nargs);
   if (integer_matrix_code_p (code) || floating_matrix_code_p (code))
     {
-      tree args[5];
-      for (unsigned int i = 0; i < 5; ++i)
+
+      tree args[6];
+      for (unsigned int i = 0; i < nargs; ++i)
 	args[i] = gimple_call_arg (call, i);
-      if (!describe_integer_matrix (code, 5, args, d, operation))
+      if (!describe_integer_matrix (code, nargs, args, d, operation))
 	return false;
     }
   else
     {
-      code = structure_builtin_code (call);
+      if (nargs != values)
+	return false;
       if (code < ZTT_BUILTIN_MAX)
 	{
 	  d = builtin_description_for (code);
@@ -8882,8 +8888,11 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    }
 	}
       call = producer;
-      if (count <= 6 && describe_structure_binary (call, type, d)
-	  && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M))
+      unsigned int values;
+      if (describe_structure_elementwise (call, type, d, values)
+	  && ((values == 2 && count <= 6
+	       && (d.prototype == PROTO_M_M_M || d.prototype == PROTO_M_BINARY_M))
+	      || (values == 3 && count <= 2 && d.prototype == PROTO_M_TERNARY_M)))
 	{
 	  switch (d.expansion)
 	    {
@@ -8897,9 +8906,13 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 	    case EXPAND_MOR_EW:
 	    case EXPAND_MXOR_EW:
 	    case EXPAND_MANDNOT_EW:
+	    case EXPAND_MMULACC_EW:
+	    case EXPAND_MMULACCNEG_EW:
+	    case EXPAND_MMULADD_EW:
+	    case EXPAND_MMULSUB_EW:
 	      {
 		unsigned int end = count, side;
-		for (side = 0; side < 2; ++side)
+		for (side = 0; side < values; ++side)
 		  {
 		    tree input = gimple_call_arg (call, side);
 		    if (!strip_structure_view (input, type, producers, end)
@@ -8909,7 +8922,7 @@ axis_invariant_structure_producer_p (gimple *producer, type_index type,
 		      break;
 		    producers[end++] = SSA_NAME_DEF_STMT (input);
 		  }
-		if (side == 2)
+		if (side == values)
 		  {
 		    if (call != producer)
 		      producers[end++] = call;

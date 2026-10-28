@@ -454,6 +454,10 @@ inputs are invariant along that axis.  Generic carrier calls revalidate their
 explicit datatype metadata; equal physical modes alone do not establish this
 proof.  The operation remains, including rounding, saturation and floating
 flags; neither input's live range is extended.
+The same proof covers three-input elementwise multiply/add/subtract operations
+when all inputs, including the old destination, have that invariant layout.
+The arithmetic remains unchanged; only a following redundant layout operation
+is removed, within the existing local statement and witness bounds.
 One data-Scalar operation also preserves the source axis when its M input and
 result have the same logical type.  The validated scalar may have a different
 TC/RM; its conversion and the original operation remain.  Old-destination
