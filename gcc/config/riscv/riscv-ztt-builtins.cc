@@ -13886,6 +13886,9 @@ public:
       case UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED:
       case UNSPECV_ZTT_STATE_ROWCOL: case UNSPECV_ZTT_STATE_COPY:
       case UNSPECV_ZTT_STATE_ZIP_VALUE:
+      case UNSPECV_ZTT_SETTYP_P0:
+      case UNSPECV_ZTT_STATE_ZERO: case UNSPECV_ZTT_BROADCAST:
+      case UNSPECV_ZTT_INDEX_CONSTRUCT:
 	return true;
       default:
 	return false;
@@ -16467,7 +16470,9 @@ run_md_reuse_selftests ()
 		    UNSPECV_ZTT_STATE_CONVERT_PREPARED,
 		    UNSPECV_ZTT_STATE_STRUCTURAL_PREPARED,
 		    UNSPECV_ZTT_STATE_ROWCOL, UNSPECV_ZTT_STATE_COPY,
-		    UNSPECV_ZTT_STATE_ZIP_VALUE })
+		    UNSPECV_ZTT_STATE_ZIP_VALUE, UNSPECV_ZTT_SETTYP_P0,
+		    UNSPECV_ZTT_STATE_ZERO,
+		    UNSPECV_ZTT_BROADCAST, UNSPECV_ZTT_INDEX_CONSTRUCT })
     for (unsigned int test = 0; test != 10; ++test)
       {
 	rtl_dump_test t (SELFTEST_LOCATION, locate_file ("cfg-test.rtl"));
@@ -16491,7 +16496,13 @@ run_md_reuse_selftests ()
 	};
 	append (gen_rtx_SET (slot, m));
 	rtvec args;
-	if (code == UNSPECV_ZTT_STATE_COPY)
+	if (code == UNSPECV_ZTT_STATE_ZERO || code == UNSPECV_ZTT_SETTYP_P0)
+	  args = gen_rtvec (1, desc);
+	else if (code == UNSPECV_ZTT_BROADCAST)
+	  args = gen_rtvec (3, addr, desc, desc);
+	else if (code == UNSPECV_ZTT_INDEX_CONSTRUCT)
+	  args = gen_rtvec (2, desc, const0_rtx);
+	else if (code == UNSPECV_ZTT_STATE_COPY)
 	  args = gen_rtvec (2, a, desc);
 	else if (code == UNSPECV_ZTT_STATE_ROWCOL)
 	  args = gen_rtvec (4, a, const0_rtx, desc, const0_rtx);
