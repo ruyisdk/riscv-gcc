@@ -119,9 +119,7 @@
 /*
 ** memory_u:
 **	lw	a5,0\(a0\)
-**	mulu.w00	a1, a1, a2
-**	srli	a1,a1,32
-**	addw	a5,a5,a1
+**	pmhaccu.w	a5,a1,a2
 **	sw	a5,0\(a0\)
 **	ret
 */

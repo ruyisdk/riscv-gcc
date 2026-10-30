@@ -4000,7 +4000,7 @@
 ;; be confused with Q-format saturation or a full-width accumulator.
 ;; Identify the complete fused operation for instruction costing without
 ;; changing its scheduling type or charging for the implicit rounding bias.
-(define_attr "rvp_mulhi_acc" "no,yes" (const_string "no"))
+(define_attr "rvp_mulhi_acc" "no,yes,word" (const_string "no"))
 
 (define_insn "*rvp_mulh<u>_acc_si"
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -4139,6 +4139,55 @@
   emit_insn (gen_riscv_p_<rvp_word_acc>_pv2si (result, operands[1],
 					   operands[2], operands[3]));
   emit_move_insn (operands[0], gen_lowpart (SImode, result));
+  DONE;
+})
+
+;; Keep the complete unsigned word sum at the addition until splitting.
+;; A direct combine split can place its first instruction before an
+;; intervening accumulator load.  Explicit extensions record signedness
+;; without relying on range information after combine.
+(define_insn_and_split "*rvp_umulhi_acc_word"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+	(sign_extend:DI
+	  (plus:SI
+	    (subreg:SI
+	      (zero_extract:DI
+		(mult:DI
+		  (zero_extend:DI (match_operand:SI 1 "register_operand" "r"))
+		  (zero_extend:DI (match_operand:SI 2 "register_operand" "r")))
+		(const_int 32) (const_int 32)) 0)
+	    (match_operand:SI 3 "register_operand" "r"))))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  "#"
+  "&& 1"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi_acc (operands[0], operands[1], operands[2],
+			    operands[3], false, 1);
+  DONE;
+}
+  [(set_attr "type" "simd")
+   (set_attr "rvp_mulhi_acc" "word")
+   (set_attr "mode" "DI")
+   (set_attr "length" "8")])
+
+(define_split
+  [(set (match_operand:SI 0 "nonimmediate_operand")
+	(plus:SI
+	  (subreg:SI
+	    (zero_extract:DI
+	      (mult:DI
+		(zero_extend:DI (match_operand:SI 1 "register_operand"))
+		(zero_extend:DI (match_operand:SI 2 "register_operand")))
+	      (const_int 32) (const_int 32)) 0)
+	  (match_operand:SI 3 "register_operand")))]
+  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN
+   && can_create_pseudo_p ()"
+  [(const_int 0)]
+{
+  riscv_p_expand_mulhi_acc (operands[0], operands[1], operands[2],
+			    operands[3], false, 1);
   DONE;
 })
 

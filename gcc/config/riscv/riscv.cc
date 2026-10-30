@@ -5421,6 +5421,29 @@ riscv_insn_cost (rtx_insn *insn, bool speed)
 	  && recog_memoized (insn) >= 0
 	  && get_attr_rvp_mulhi_acc (insn) == RVP_MULHI_ACC_YES)
 	return speed ? tune_param->int_mul[0] : COSTS_N_INSNS (1);
+
+      /* The unsigned RV64 word sum splits into a packed multiply-add
+	 and a scalar sign extension.  Use the same costs as that sequence,
+	 rather than recursing into the unexecuted scalar product and shift.
+	 Include any full-register input normalizations emitted by the
+	 splitter; a low word of a DI register needs none.  */
+      if (TARGET_64BIT && !TARGET_BIG_ENDIAN
+	  && GET_MODE (SET_DEST (x)) == DImode
+	  && GET_CODE (SET_SRC (x)) == SIGN_EXTEND
+	  && recog_memoized (insn) >= 0
+	  && get_attr_rvp_mulhi_acc (insn) == RVP_MULHI_ACC_WORD)
+	{
+	  rtx sum = XEXP (SET_SRC (x), 0);
+	  rtx product = XEXP (SUBREG_REG (XEXP (sum, 0)), 0);
+	  rtx inputs[] = { XEXP (XEXP (product, 0), 0),
+			   XEXP (XEXP (product, 1), 0), XEXP (sum, 1) };
+	  int cost = COSTS_N_INSNS (2);
+	  for (rtx input : inputs)
+	    if (!SUBREG_P (input) || !subreg_lowpart_p (input)
+		|| GET_MODE (SUBREG_REG (input)) != DImode)
+	      cost += COSTS_N_INSNS (1);
+	  return cost;
+	}
     }
   int cost = pattern_cost (x, speed);
 
