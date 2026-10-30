@@ -31,6 +31,12 @@
 ;; Halfword vectors with selected modular products on RV32.
 (define_mode_iterator RVP_EXTRACT_H [PV2HI PV4HI])
 
+;; Cross add/subtract within each complex pair.  RV32 has a register-pair
+;; halfword instruction, but no cross-word instruction.
+(define_mode_iterator RVP_CADD [PV2HI PV4HI (PV2SI "TARGET_64BIT")])
+(define_int_iterator RVP_CADD_OP [UNSPEC_PAS UNSPEC_PSA])
+(define_int_attr rvp_cadd_rot [(UNSPEC_PAS "90") (UNSPEC_PSA "270")])
+
 ;; Signed halfword and word vectors with saturating scaled products.
 (define_mode_iterator RVP_QMUL [PV2HI PV4HI PV2SI])
 (define_int_iterator RVP_QMUL_OP [UNSPEC_PMULQ UNSPEC_PMULQR])

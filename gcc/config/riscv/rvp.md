@@ -5169,11 +5169,18 @@
   [(set_attr "type" "arith")
    (set_attr "mode" "<MODE>")])
 
-;; PAS/PSA instructions are cross add-subtract operations (PAS.HX:
-;; rd[even] = rs1[even] - rs2[odd], rd[odd] = rs1[odd] + rs2[even], per the
-;; P-extension proposal).  There is no P instruction for same-lane mixed
-;; add/subtract, so no combine patterns are provided here; the intrinsics
-;; (__riscv_pas_x/psa_x, p.md) are the only producers.
+;; Complex addition with the second input rotated by 90 or 270 degrees.
+;; PAS subtracts the odd second-input lane from the even first-input lane
+;; and adds the even second-input lane to the odd first-input lane.  PSA
+;; reverses the add/subtract operations.  Reuse the intrinsic patterns,
+;; including their register-pair constraints on RV32.
+(define_expand "cadd<rvp_cadd_rot><mode>3"
+  [(set (match_operand:RVP_CADD 0 "register_operand")
+	(unspec:RVP_CADD
+	  [(match_operand:RVP_CADD 1 "register_operand")
+	   (match_operand:RVP_CADD 2 "register_operand")]
+	  RVP_CADD_OP))]
+  "TARGET_RVP && !TARGET_BIG_ENDIAN")
 
 ;; SRARI rounds without wrapping the intermediate biased sum.  Do not
 ;; match an arbitrary PLUS followed by ASHIFTRT: the RTL addition can wrap.
