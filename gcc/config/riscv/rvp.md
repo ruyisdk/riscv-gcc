@@ -3016,7 +3016,10 @@
                             (parallel [(const_int 0) (const_int 0)]))
           (const_int 2)))]
   "TARGET_RVP"
-  "ppaire.h\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairo.h\t%0, %2,%1"
+			   : "ppaire.h\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3029,7 +3032,10 @@
                             (parallel [(const_int 0) (const_int 0)]))
           (const_int 2)))]
   "TARGET_RVP"
-  "ppaireo.h\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaireo.h\t%0, %2,%1"
+			   : "ppaireo.h\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3042,7 +3048,10 @@
                             (parallel [(const_int 1) (const_int 1)]))
           (const_int 2)))]
   "TARGET_RVP"
-  "ppairoe.h\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairoe.h\t%0, %2,%1"
+			   : "ppairoe.h\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3055,7 +3064,10 @@
                             (parallel [(const_int 1) (const_int 1)]))
           (const_int 2)))]
   "TARGET_RVP"
-  "ppairo.h\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaire.h\t%0, %2,%1"
+			   : "ppairo.h\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3068,7 +3080,10 @@
                             (parallel [(const_int 0) (const_int 0)]))
           (const_int 2)))]
   "TARGET_RVP && TARGET_64BIT"
-  "pack\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairo.w\t%0,%2,%1"
+			   : "pack\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3081,7 +3096,10 @@
                             (parallel [(const_int 0) (const_int 0)]))
           (const_int 2)))]
   "TARGET_RVP && TARGET_64BIT"
-  "ppaireo.w\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaireo.w\t%0, %2,%1"
+			   : "ppaireo.w\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3094,7 +3112,10 @@
                             (parallel [(const_int 1) (const_int 1)]))
           (const_int 2)))]
   "TARGET_RVP && TARGET_64BIT"
-  "ppairoe.w\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairoe.w\t%0, %2,%1"
+			   : "ppairoe.w\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3107,7 +3128,10 @@
                             (parallel [(const_int 1) (const_int 1)]))
           (const_int 2)))]
   "TARGET_RVP && TARGET_64BIT"
-  "ppairo.w\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaire.w\t%0, %2,%1"
+			   : "ppairo.w\t%0, %1, %2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3130,7 +3154,10 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaire.b\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairo.b\t%0,%2,%1"
+			   : "ppaire.b\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3149,7 +3176,10 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaire.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairo.%d0\t%0,%2,%1"
+			   : "ppaire.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -3168,7 +3198,10 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaireo.b\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaireo.b\t%0,%2,%1"
+			   : "ppaireo.b\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3187,7 +3220,10 @@
                                        (const_int 2) (const_int 2)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppaireo.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaireo.%d0\t%0,%2,%1"
+			   : "ppaireo.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -3206,7 +3242,10 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairoe.b\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairoe.b\t%0,%2,%1"
+			   : "ppairoe.b\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3225,7 +3264,10 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairoe.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairoe.%d0\t%0,%2,%1"
+			   : "ppairoe.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -3244,7 +3286,10 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairo.b\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaire.b\t%0,%2,%1"
+			   : "ppairo.b\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "SI")])
 
@@ -3263,7 +3308,10 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP"
-  "ppairo.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaire.%d0\t%0,%2,%1"
+			   : "ppairo.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV4HI")])
 
@@ -3291,7 +3339,10 @@
                                        (const_int 6) (const_int 6)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppaire.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairo.%d0\t%0,%2,%1"
+			   : "ppaire.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -3316,7 +3367,10 @@
                                        (const_int 6) (const_int 6)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppaireo.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaireo.%d0\t%0,%2,%1"
+			   : "ppaireo.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -3341,7 +3395,10 @@
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppairoe.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppairoe.%d0\t%0,%2,%1"
+			   : "ppairoe.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -3366,7 +3423,10 @@
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
   "TARGET_RVP"
-  "ppairo.%d0\t%0,%1,%2"
+{
+  return TARGET_BIG_ENDIAN ? "ppaire.%d0\t%0,%2,%1"
+			   : "ppairo.%d0\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "PV8QI")])
 
@@ -3388,7 +3448,9 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 170)))]
   "TARGET_RVP && TARGET_64BIT"
-  "zip8p\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "zip8hp\t%0,%2,%1" : "zip8p\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3407,7 +3469,9 @@
                                        (const_int 7) (const_int 7)]))
           (const_int 170)))]
   "TARGET_RVP && TARGET_64BIT"
-  "zip8hp\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "zip8p\t%0,%2,%1" : "zip8hp\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3416,7 +3480,34 @@
 ;; source -- and differ only in whether the 64-bit result is one register or an
 ;; even-odd pair, which the PV8QI mode already expresses.  The PV4QI zip
 ;; permutes take the low or high half of this result.
-(define_insn "riscv_zip8p_pv4qi"
+(define_expand "riscv_zip8p_pv4qi"
+  [(set (match_operand:PV8QI 0 "register_operand")
+	(vec_select:PV8QI
+	  (vec_concat:PV8QI (match_operand:PV4QI 1 "register_operand")
+			    (match_operand:PV4QI 2 "register_operand"))
+	  (parallel [(const_int 0) (const_int 4)
+		     (const_int 1) (const_int 5)
+		     (const_int 2) (const_int 6)
+		     (const_int 3) (const_int 7)])))]
+  "TARGET_RVP"
+{
+  if (!TARGET_64BIT && TARGET_BIG_ENDIAN)
+    {
+      /* WZIP writes its low word to the even register.  Adapt that
+	 physical pair to GCC's big-endian vector word order.  */
+      rtx raw = gen_reg_rtx (PV8QImode);
+      rtx result = gen_reg_rtx (PV8QImode);
+      emit_insn (gen_riscv_pzip_i8x8_rv32 (raw, operands[2], operands[1]));
+      emit_move_insn (gen_highpart (PV4QImode, result),
+		     gen_lowpart (PV4QImode, raw));
+      emit_move_insn (gen_lowpart (PV4QImode, result),
+		     gen_highpart (PV4QImode, raw));
+      emit_move_insn (operands[0], result);
+      DONE;
+    }
+})
+
+(define_insn "*riscv_zip8p_pv4qi"
   [(set (match_operand:PV8QI 0 "register_operand" "=r")
 	(vec_select:PV8QI
 	  (vec_concat:PV8QI (match_operand:PV4QI 1 "register_operand" "r")
@@ -3425,10 +3516,10 @@
 		     (const_int 1) (const_int 5)
 		     (const_int 2) (const_int 6)
 		     (const_int 3) (const_int 7)])))]
-  "TARGET_RVP"
+  "TARGET_RVP && (TARGET_64BIT || !TARGET_BIG_ENDIAN)"
   {
     if (TARGET_64BIT)
-      return "zip8p\t%0, %1, %2";
+      return TARGET_BIG_ENDIAN ? "zip8p\t%0,%2,%1" : "zip8p\t%0,%1,%2";
     return "wzip8p\t%0, %1, %2";
   }
   [(set_attr "type" "arith")
@@ -3448,7 +3539,9 @@
                                        (const_int 1) (const_int 1)]))
           (const_int 10)))]
   "TARGET_RVP && TARGET_64BIT"
-  "zip16p\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "zip16hp\t%0,%2,%1" : "zip16p\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3463,7 +3556,9 @@
                                        (const_int 3) (const_int 3)]))
           (const_int 10)))]
   "TARGET_RVP && TARGET_64BIT"
-  "zip16hp\t%0, %1, %2"
+{
+  return TARGET_BIG_ENDIAN ? "zip16p\t%0,%2,%1" : "zip16hp\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3479,8 +3574,10 @@
           (vec_select:PV4QI (match_operand:PV8QI 2 "register_operand" "r")
                             (parallel [(const_int 0) (const_int 2)
                                        (const_int 4) (const_int 6)]))))]
-  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
-  "unzip8p\t%0, %1, %2"
+  "TARGET_RVP && TARGET_64BIT"
+{
+  return TARGET_BIG_ENDIAN ? "unzip8hp\t%0,%2,%1" : "unzip8p\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3493,8 +3590,10 @@
           (vec_select:PV4QI (match_operand:PV8QI 2 "register_operand" "r")
                             (parallel [(const_int 1) (const_int 3)
                                        (const_int 5) (const_int 7)]))))]
-  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
-  "unzip8hp\t%0, %1, %2"
+  "TARGET_RVP && TARGET_64BIT"
+{
+  return TARGET_BIG_ENDIAN ? "unzip8p\t%0,%2,%1" : "unzip8hp\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3508,8 +3607,10 @@
                             (parallel [(const_int 0) (const_int 2)]))
           (vec_select:PV2HI (match_operand:PV4HI 2 "register_operand" "r")
                             (parallel [(const_int 0) (const_int 2)]))))]
-  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
-  "unzip16p\t%0, %1, %2"
+  "TARGET_RVP && TARGET_64BIT"
+{
+  return TARGET_BIG_ENDIAN ? "unzip16hp\t%0,%2,%1" : "unzip16p\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 
@@ -3520,8 +3621,10 @@
                             (parallel [(const_int 1) (const_int 3)]))
           (vec_select:PV2HI (match_operand:PV4HI 2 "register_operand" "r")
                             (parallel [(const_int 1) (const_int 3)]))))]
-  "TARGET_RVP && TARGET_64BIT && !TARGET_BIG_ENDIAN"
-  "unzip16hp\t%0, %1, %2"
+  "TARGET_RVP && TARGET_64BIT"
+{
+  return TARGET_BIG_ENDIAN ? "unzip16p\t%0,%2,%1" : "unzip16hp\t%0,%1,%2";
+}
   [(set_attr "type" "arith")
    (set_attr "mode" "DI")])
 

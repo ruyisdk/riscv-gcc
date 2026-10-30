@@ -1175,6 +1175,15 @@ void emit_vec_concat_with_select (rtx target, machine_mode vmode,
                                  gen_rtx_VEC_SELECT (sel_mode, op1, sel1))));
 }
 
+/* Return the first or second logical half of a packed vector.  */
+
+static rtx
+riscv_pext_logical_half (machine_mode mode, rtx value, bool second)
+{
+  return second != TARGET_BIG_ENDIAN ? gen_highpart (mode, value)
+				    : gen_lowpart (mode, value);
+}
+
 /* Emit ppair RTL pattern for 2-element vectors using vec_merge/vec_select.
    Supports both PV2HI and PV2SI modes.
    op0_odd/op1_odd: false = even selector {0,0}, true = odd selector {1,1}
@@ -1192,10 +1201,12 @@ riscv_emit_ppair_2_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
   /* On RV32, PV2SI is a register pair; implement as two SImode moves. */
   if (!TARGET_64BIT && vmode == PV2SImode)
     {
-      rtx src0 = op0_odd ? gen_highpart (SImode, op0) : gen_lowpart (SImode, op0);
-      rtx src1 = op1_odd ? gen_highpart (SImode, op1) : gen_lowpart (SImode, op1);
-      emit_move_insn (gen_lowpart (SImode, target), src0);
-      emit_move_insn (gen_highpart (SImode, target), src1);
+      rtx result = gen_reg_rtx (vmode);
+      rtx src0 = riscv_pext_logical_half (SImode, op0, op0_odd);
+      rtx src1 = riscv_pext_logical_half (SImode, op1, op1_odd);
+      emit_move_insn (riscv_pext_logical_half (SImode, result, false), src0);
+      emit_move_insn (riscv_pext_logical_half (SImode, result, true), src1);
+      emit_move_insn (target, result);
       return;
     }
 
@@ -1229,6 +1240,15 @@ static void
 riscv_emit_ppair_rv32_unspec (rtx target, machine_mode vmode, rtx op0, rtx op1,
                               bool op0_odd, bool op1_odd)
 {
+  /* Hardware pairs are ordered from the low lane, whereas logical lanes
+     start at the high end of each word on big-endian targets.  */
+  if (TARGET_BIG_ENDIAN)
+    {
+      std::swap (op0, op1);
+      bool old_op0_odd = op0_odd;
+      op0_odd = !op1_odd;
+      op1_odd = !old_op0_odd;
+    }
   rtx (*gen) (rtx, rtx, rtx);
   if (vmode == PV8QImode)
     gen = (!op0_odd && !op1_odd) ? gen_riscv_ppaire_u8x8_rv32
@@ -1337,23 +1357,25 @@ riscv_emit_zip_4_elem (rtx target, machine_mode vmode, rtx op0, rtx op1,
     {
       rtx wide = gen_reg_rtx (PV8QImode);
       emit_insn (gen_riscv_zip8p_pv4qi (wide, op0, op1));
-      emit_move_insn (target, indices[0] >= 2 ? riscv_pv8qi_highpart (wide)
-					      : gen_lowpart (PV4QImode, wide));
+      bool high = (indices[0] >= 2) != TARGET_BIG_ENDIAN;
+      emit_move_insn (target, high ? riscv_pv8qi_highpart (wide)
+				  : gen_lowpart (PV4QImode, wide));
       return;
     }
 
   /* On RV32, PV4HI is a register pair; zip from lower or upper halfword halves. */
   if (!TARGET_64BIT && vmode == PV4HImode)
     {
-      /* zip16p (indices[0]==0): from lower halves; zip16hp (indices[0]==2): upper. */
-      bool use_hi = (indices[0] >= 2);
+      bool second = indices[0] >= 2;
       machine_mode hmode = PV2HImode;
-      rtx a_half = use_hi ? gen_highpart (hmode, op0) : gen_lowpart (hmode, op0);
-      rtx b_half = use_hi ? gen_highpart (hmode, op1) : gen_lowpart (hmode, op1);
-      rtx res_lo = gen_lowpart (hmode, target);
-      rtx res_hi = gen_highpart (hmode, target);
-      riscv_emit_ppair_2_elem (res_lo, hmode, a_half, b_half, false, false);
-      riscv_emit_ppair_2_elem (res_hi, hmode, a_half, b_half, true, true);
+      rtx a_half = riscv_pext_logical_half (hmode, op0, second);
+      rtx b_half = riscv_pext_logical_half (hmode, op1, second);
+      rtx result = gen_reg_rtx (vmode);
+      rtx first = riscv_pext_logical_half (hmode, result, false);
+      rtx last = riscv_pext_logical_half (hmode, result, true);
+      riscv_emit_ppair_2_elem (first, hmode, a_half, b_half, false, false);
+      riscv_emit_ppair_2_elem (last, hmode, a_half, b_half, true, true);
+      emit_move_insn (target, result);
       return;
     }
   const int mask = 0b1010;
@@ -1369,6 +1391,21 @@ riscv_emit_unzip_4_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
      the odd unzip is the high byte.  */
   if (vmode == PV4QImode)
     {
+      if (TARGET_BIG_ENDIAN)
+	{
+	  /* Use physical narrowing explicitly: a logical TRUNCATE would
+	     describe different halfword values on a big-endian target.
+	     RV32 puts the numeric high word in the first hardware register;
+	     RV64 instead needs the sources exchanged before concatenation.  */
+	  if (TARGET_64BIT)
+	    std::swap (op0, op1);
+	  rtx wide = gen_lowpart (PV4HImode, riscv_concat_pv4qi (op0, op1));
+	  if (indices[0] == 0)
+	    emit_insn (gen_riscv_pncvth_u8x4 (target, wide));
+	  else
+	    emit_insn (gen_riscv_pncvt_u8x4 (target, wide));
+	  return;
+	}
       rtx wide = gen_lowpart (PV4HImode, riscv_concat_pv4qi (op0, op1));
       if (indices[0] != 0)
 	emit_insn (gen_riscv_pncvth_b (target, wide));
@@ -1383,14 +1420,18 @@ riscv_emit_unzip_4_elem (rtx target, machine_mode vmode, machine_mode sel_mode,
       /* unzip16p (indices[0]==0): even halfwords; unzip16hp (indices[0]==1): odd. */
       bool use_odd = (indices[0] != 0);
       machine_mode hmode = PV2HImode;
-      rtx a_lo = gen_lowpart (hmode, op0);
-      rtx a_hi = gen_highpart (hmode, op0);
-      rtx b_lo = gen_lowpart (hmode, op1);
-      rtx b_hi = gen_highpart (hmode, op1);
-      rtx res_lo = gen_lowpart (hmode, target);
-      rtx res_hi = gen_highpart (hmode, target);
-      riscv_emit_ppair_2_elem (res_lo, hmode, a_lo, a_hi, use_odd, use_odd);
-      riscv_emit_ppair_2_elem (res_hi, hmode, b_lo, b_hi, use_odd, use_odd);
+      rtx a_first = riscv_pext_logical_half (hmode, op0, false);
+      rtx a_last = riscv_pext_logical_half (hmode, op0, true);
+      rtx b_first = riscv_pext_logical_half (hmode, op1, false);
+      rtx b_last = riscv_pext_logical_half (hmode, op1, true);
+      rtx result = gen_reg_rtx (vmode);
+      rtx first = riscv_pext_logical_half (hmode, result, false);
+      rtx last = riscv_pext_logical_half (hmode, result, true);
+      riscv_emit_ppair_2_elem (first, hmode, a_first, a_last,
+			      use_odd, use_odd);
+      riscv_emit_ppair_2_elem (last, hmode, b_first, b_last,
+			      use_odd, use_odd);
+      emit_move_insn (target, result);
       return;
     }
   emit_vec_concat_with_select<4> (target, vmode, sel_mode, op0, op1, indices);
@@ -1405,8 +1446,9 @@ riscv_emit_rev_4_elem (rtx target, machine_mode vmode, rtx op, const int *indice
       machine_mode hmode = PV2HImode;
       rtx op_lo = gen_lowpart (hmode, op);
       rtx op_hi = gen_highpart (hmode, op);
-      rtx res_lo = gen_lowpart (hmode, target);
-      rtx res_hi = gen_highpart (hmode, target);
+      rtx result = gen_reg_rtx (vmode);
+      rtx res_lo = gen_lowpart (hmode, result);
+      rtx res_hi = gen_highpart (hmode, result);
       if (indices[0] == 3)
 	{
 	  /* Full reverse {3,2,1,0}: swap halves and reverse within each half.
@@ -1420,6 +1462,7 @@ riscv_emit_rev_4_elem (rtx target, machine_mode vmode, rtx op, const int *indice
 	  emit_move_insn (res_lo, op_hi);
 	  emit_move_insn (res_hi, op_lo);
 	}
+      emit_move_insn (target, result);
       return;
     }
   rtx sel = build_sel_parallel (4, indices);
@@ -1505,8 +1548,9 @@ riscv_emit_rev_8_elem (rtx target, machine_mode vmode, rtx op, const int *indice
       machine_mode hmode = PV4QImode;
       rtx op_lo = gen_lowpart (hmode, op);
       rtx op_hi = gen_highpart (hmode, op);
-      rtx res_lo = gen_lowpart (hmode, target);
-      rtx res_hi = gen_highpart (hmode, target);
+      rtx result = gen_reg_rtx (vmode);
+      rtx res_lo = gen_lowpart (hmode, result);
+      rtx res_hi = gen_highpart (hmode, result);
       /* rev8 {7..0}: swap halves and byte-reverse each (needs Zbb rev8).
 	 rev16 {6,7,4,5,2,3,0,1}: swap halves and halfword-swap each.  */
       const int rev8_idx[] = {3, 2, 1, 0};
@@ -1514,6 +1558,7 @@ riscv_emit_rev_8_elem (rtx target, machine_mode vmode, rtx op, const int *indice
       const int *half_idx = (indices[0] == 7) ? rev8_idx : rev16_idx;
       riscv_emit_rev_4_elem (res_lo, hmode, op_hi, half_idx);
       riscv_emit_rev_4_elem (res_hi, hmode, op_lo, half_idx);
+      emit_move_insn (target, result);
       return;
     }
   rtx sel = build_sel_parallel (8, indices);
@@ -1770,7 +1815,8 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, machine_mode op_mode,
                   {
                     const int idx[4] = {pattern.indices[0], pattern.indices[1],
                                         pattern.indices[2], pattern.indices[3]};
-                    riscv_emit_rev_4_elem (target, vmode, op0, idx);
+		    riscv_emit_rev_4_elem (target, vmode,
+					  swap_operands ? op1 : op0, idx);
                   }
                   break;
               }
@@ -1844,7 +1890,8 @@ riscv_expand_pext_vec_perm_const (machine_mode vmode, machine_mode op_mode,
                                          pattern.indices[2], pattern.indices[3],
                                          pattern.indices[4], pattern.indices[5],
                                          pattern.indices[6], pattern.indices[7]};
-                    riscv_emit_rev_8_elem (target, vmode, op0, idx);                   
+		    riscv_emit_rev_8_elem (target, vmode,
+					  swap_operands ? op1 : op0, idx);
                   }
                   break;
               }
