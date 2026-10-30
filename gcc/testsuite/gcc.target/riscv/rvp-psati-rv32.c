@@ -16,41 +16,42 @@ typedef unsigned int   uint32x2_t __attribute__((vector_size (8)));
 /* Vector conditional select using -1/0 mask from comparison.  */
 #define VSEL(cond, a, b)  (((cond) & (a)) | (~(cond) & (b)))
 
-/* PV2HI: single register => psati.h imm=7.  */
-int16x2_t psati_h_imm7 (int16x2_t a)
+/* PV2HI: single register => psati.h width=8.  */
+int16x2_t psati_h_width8 (int16x2_t a)
 {
   int16x2_t hi = {127, 127}, lo = {-128, -128};
   int16x2_t t = VSEL (a > hi, hi, a);
   return VSEL (t < lo, lo, t);
 }
-/* { dg-final { scan-assembler {\mpsati\.h\M.*, 7} } } */
+/* { dg-final { scan-assembler {\mpsati\.h\M.*, 8} } } */
 
-/* PV4HI: register pair => psati.dh imm=7.  */
-int16x4_t psati_dh_imm7 (int16x4_t a)
+/* PV4HI: register pair => psati.dh width=8.  */
+int16x4_t psati_dh_width8 (int16x4_t a)
 {
   int16x4_t hi = {127, 127, 127, 127}, lo = {-128, -128, -128, -128};
   int16x4_t t = VSEL (a > hi, hi, a);
   return VSEL (t < lo, lo, t);
 }
-/* { dg-final { scan-assembler {\mpsati\.dh\M.*, 7} } } */
+/* { dg-final { scan-assembler {\mpsati\.dh\M.*, 8} } } */
 
-/* PV2SI: register pair => psati.dw imm=7.  */
-int32x2_t psati_dw_imm7 (int32x2_t a)
+/* PV2SI: register pair => psati.dw width=8.  */
+int32x2_t psati_dw_width8 (int32x2_t a)
 {
   int32x2_t hi = {127, 127}, lo = {-128, -128};
   int32x2_t t = VSEL (a > hi, hi, a);
   return VSEL (t < lo, lo, t);
 }
-/* { dg-final { scan-assembler {\mpsati\.dw\M.*, 7} } } */
+/* { dg-final { scan-assembler {\mpsati\.dw\M.*, 8} } } */
 
-/* PV2SI: register pair => psati.dw imm=15 (exercises large broadcast bounds).  */
-int32x2_t psati_dw_imm15 (int32x2_t a)
+/* PV2SI: register pair => psati.dw width=16.
+   This exercises large broadcast bounds.  */
+int32x2_t psati_dw_width16 (int32x2_t a)
 {
   int32x2_t hi = {32767, 32767}, lo = {-32768, -32768};
   int32x2_t t = VSEL (a > hi, hi, a);
   return VSEL (t < lo, lo, t);
 }
-/* { dg-final { scan-assembler {\mpsati\.dw\M.*, 15} } } */
+/* { dg-final { scan-assembler {\mpsati\.dw\M.*, 16} } } */
 
 /* PV2HI: unsigned single-register clamp uses PMINU.H.  */
 uint16x2_t pusati_h_imm8 (uint16x2_t a)

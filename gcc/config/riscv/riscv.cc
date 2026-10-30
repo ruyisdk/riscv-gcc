@@ -18150,8 +18150,9 @@ riscv_const_vector_broadcast_val_p (rtx op, HOST_WIDE_INT val)
   return CONST_INT_P (elt) && INTVAL (elt) == val;
 }
 
-/* For a PSATI/PSATI.DH/PSATI.DW bound const_vector of the form {2^N-1, ...},
-   return N (the instruction immediate).  Returns 0 if not a valid bound.  */
+/* For a saturation bound CONST_VECTOR of the form {2^N-1, ...}, return N.
+   Signed PSATI uses textual width N+1; unsigned PUSATI uses N.
+   Return 0 if the bound is invalid or N is zero.  */
 int
 riscv_psati_imm (rtx max_op)
 {

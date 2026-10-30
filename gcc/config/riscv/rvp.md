@@ -4963,8 +4963,8 @@
 ;; PSATI.H / PSATI.DH / PSATI.W / PSATI.DW - Signed saturation clipping
 ;; PUSATI.H / PUSATI.DH / PUSATI.W / PUSATI.DW - Unsigned saturation clipping
 ;;
-;; psati.h rd, rs1, N  -- saturate each halfword to [-(1<<N), (1<<N)-1]
-;;   N is the immediate; the smin bound is max = 2^N - 1.
+;; psati.h rd, rs1, W  -- saturate each halfword to [-2^(W-1), 2^(W-1)-1].
+;; For an smin bound of 2^N-1, the signed textual width W is N+1.
 ;; pusati.h rd, rs1, N -- clamp each signed halfword to [0, (1<<N)-1].
 ;; An unsigned UMIN must use PMINU instead: PUSATI maps negative signed
 ;; inputs to zero, not to the upper bound.
@@ -4981,7 +4981,8 @@
    && riscv_psati_bounds_p (operands[2], operands[3], 15)"
   {
     static char buf[32];
-    snprintf (buf, sizeof (buf), "psati.h\t%%0, %%1, %d", riscv_psati_imm (operands[2]));
+    snprintf (buf, sizeof (buf), "psati.h\t%%0, %%1, %d",
+	      riscv_psati_imm (operands[2]) + 1);
     return buf;
   }
   [(set_attr "type" "arith")
@@ -4999,7 +5000,8 @@
   {
     static char buf[32];
     const char *insn = TARGET_64BIT ? "psati.h" : "psati.dh";
-    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn,
+	      riscv_psati_imm (operands[2]) + 1);
     return buf;
   }
   [(set_attr "type" "arith")
@@ -5017,7 +5019,8 @@
   {
     static char buf[32];
     const char *insn = TARGET_64BIT ? "psati.w" : "psati.dw";
-    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn, riscv_psati_imm (operands[2]));
+    snprintf (buf, sizeof (buf), "%s\t%%0, %%1, %d", insn,
+	      riscv_psati_imm (operands[2]) + 1);
     return buf;
   }
   [(set_attr "type" "arith")
